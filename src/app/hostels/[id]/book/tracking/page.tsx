@@ -1,7 +1,7 @@
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { Header } from '@/components/header';
 import { hostels, agents } from '@/lib/data';
 import { notFound } from 'next/navigation';
@@ -12,10 +12,10 @@ import { Phone, MessageSquare, Star, Loader2, UserCheck } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 
-export default function TrackingPage({ params }: { params: { id: string } }) {
+export default function TrackingPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const [status, setStatus] = useState('matching'); // matching, accepted
     const [matchedAgent, setMatchedAgent] = useState<typeof agents[0] | null>(null);
-    const { id } = params;
 
     const hostel = hostels.find((h) => h.id === id);
 
