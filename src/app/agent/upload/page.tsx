@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -82,7 +83,7 @@ export default function AgentUploadPage() {
             }));
 
             const input = {
-                photosDataUris,
+                photosDataUris: photoDataUris,
                 gpsLocation,
                 nearbyLandmarks,
                 amenities: selectedAmenities.join(', '),
@@ -288,7 +289,7 @@ export default function AgentUploadPage() {
                             )}
                         </CardContent>
                         <CardFooter className="flex justify-between mt-8">
-                            <Button variant="outline" onClick={prevStep} disabled={step === 1 || isSubmitting}>Previous</Button>
+                            <Button variant="outline" onClick={prevStep} disabled={isSubmitting}>Previous</Button>
                             {step < totalSteps ? (
                                 <Button onClick={nextStep} disabled={isSubmitting}>Next</Button>
                             ) : (
