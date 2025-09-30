@@ -3,30 +3,41 @@
 
 import { useState, useEffect, use } from 'react';
 import { Header } from '@/components/header';
-import { hostels, agents, Agent } from '@/lib/data';
+import { getHostel, getAgent, Agent, Hostel } from '@/lib/data';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Star, Loader2, UserCheck, Home, BedDouble, Calendar } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 export default function TrackingPage({ params }: { params: { id: string } }) {
     const { id } = use(params);
     const [status, setStatus] = useState('matching'); // matching, accepted
     const [matchedAgent, setMatchedAgent] = useState<Agent | null>(null);
+    const [hostel, setHostel] = useState<Hostel | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    const hostel = hostels.find((h) => h.id === id);
+    useEffect(() => {
+        const fetchHostelData = async () => {
+            const hostelData = await getHostel(id);
+            if (hostelData) {
+                setHostel(hostelData);
+            }
+            setLoading(false);
+        };
+
+        fetchHostelData();
+    }, [id]);
 
     useEffect(() => {
         if (status === 'matching') {
             const matchingTimeout = setTimeout(async () => {
                 // In a real app, you would fetch this from your backend/firestore
-                const onlineAgents: Agent[] = agents.filter(a => a.status === 'online');
-                if (onlineAgents.length > 0) {
-                    // Simulate matching with the first online agent
-                    setMatchedAgent(onlineAgents[0]);
+                // For now, we'll simulate by fetching from our static data
+                const agentData = await getAgent('agent-1');
+                if (agentData && agentData.status === 'online') {
+                    setMatchedAgent(agentData);
                     setStatus('accepted');
                 }
             }, 5000); // 5-second delay to simulate matching
@@ -35,6 +46,17 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
         }
     }, [status]);
     
+    if (loading) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-16 w-16 animate-spin" />
+                </main>
+            </div>
+        )
+    }
+
     if (!hostel) {
         notFound();
     }
@@ -127,3 +149,4 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
         </div>
     );
 }
+    

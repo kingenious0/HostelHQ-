@@ -227,3 +227,16 @@ export async function getAgent(agentId: string): Promise<Agent | null> {
     }
     return { id: agentDoc.id, ...agentDoc.data() } as Agent;
 }
+
+export async function getHostel(hostelId: string): Promise<Hostel | null> {
+    const hostelDocRef = doc(db, 'hostels', hostelId);
+    const hostelDoc = await getDoc(hostelDocRef);
+    if (!hostelDoc.exists()) {
+        // Fallback to static data if not in firestore for now
+        const staticHostel = hostels.find(h => h.id === hostelId);
+        return staticHostel || null;
+    }
+    return { id: hostelDoc.id, ...hostelDoc.data() } as Hostel;
+}
+
+    
