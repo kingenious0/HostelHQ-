@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { db } from './firebase';
 
 export type Hostel = {
   id: string;
@@ -13,6 +14,27 @@ export type Hostel = {
   lat: number;
   lng: number;
 };
+
+export type Agent = {
+    id: string;
+    name: string;
+    rating: number;
+    vehicle: string;
+    status: 'online' | 'offline';
+    location: { lat: number; lng: number; };
+    imageUrl: string;
+    phone: string;
+};
+
+export type Visit = {
+    id: string;
+    studentId: string;
+    agentId: string;
+    hostelId: string;
+    roomId: string;
+    visitDate: Date;
+    status: 'pending' | 'accepted' | 'declined' | 'completed';
+}
 
 export const hostels: Hostel[] = [
   {
@@ -146,7 +168,8 @@ export const adminStats = {
   ]
 };
 
-export const agents = [
+// Seed data for agents, will be moved to Firestore
+export const agents: Agent[] = [
     {
         id: 'agent-1',
         name: 'Kofi Mensah',
@@ -178,3 +201,24 @@ export const agents = [
         phone: '233244123458'
     }
 ];
+
+export async function getVisit(visitId: string): Promise<Visit | null> {
+    const visitDoc = await db.collection('visits').doc(visitId).get();
+    if (!visitDoc.exists) {
+        return null;
+    }
+    const data = visitDoc.data() as Omit<Visit, 'id' | 'visitDate'> & { visitDate: import('firebase-admin/firestore').Timestamp };
+    return {
+        id: visitDoc.id,
+        ...data,
+        visitDate: data.visitDate.toDate(),
+    };
+}
+
+export async function getAgent(agentId: string): Promise<Agent | null> {
+    const agentDoc = await db.collection('agents').doc(agentId).get();
+    if (!agentDoc.exists) {
+        return null;
+    }
+    return { id: agentDoc.id, ...agentDoc.data() } as Agent;
+}

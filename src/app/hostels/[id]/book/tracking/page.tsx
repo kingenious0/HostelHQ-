@@ -3,7 +3,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { Header } from '@/components/header';
-import { hostels, agents } from '@/lib/data';
+import { hostels, agents, Agent } from '@/lib/data';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,17 +15,18 @@ import { Separator } from '@/components/ui/separator';
 export default function TrackingPage({ params }: { params: { id: string } }) {
     const { id } = use(params);
     const [status, setStatus] = useState('matching'); // matching, accepted
-    const [matchedAgent, setMatchedAgent] = useState<typeof agents[0] | null>(null);
+    const [matchedAgent, setMatchedAgent] = useState<Agent | null>(null);
 
     const hostel = hostels.find((h) => h.id === id);
 
     useEffect(() => {
         if (status === 'matching') {
-            const matchingTimeout = setTimeout(() => {
-                // Simulate finding and matching the first online agent
-                const onlineAgent = agents.find(a => a.status === 'online');
-                if (onlineAgent) {
-                    setMatchedAgent(onlineAgent);
+            const matchingTimeout = setTimeout(async () => {
+                // In a real app, you would fetch this from your backend/firestore
+                const onlineAgents: Agent[] = agents.filter(a => a.status === 'online');
+                if (onlineAgents.length > 0) {
+                    // Simulate matching with the first online agent
+                    setMatchedAgent(onlineAgents[0]);
                     setStatus('accepted');
                 }
             }, 5000); // 5-second delay to simulate matching
@@ -53,7 +54,7 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
                             </CardTitle>
                              <CardDescription>
                                 {status === 'matching' && "We're finding the best agent for your tour."}
-                                {status === 'accepted' && `Your agent, ${matchedAgent?.name}, is heading to the hostel.`}
+                                {status === 'accepted' && matchedAgent && `Your agent, ${matchedAgent.name}, is heading to the hostel.`}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
