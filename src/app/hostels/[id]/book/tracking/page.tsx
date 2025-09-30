@@ -15,8 +15,9 @@ import { Separator } from '@/components/ui/separator';
 export default function TrackingPage({ params }: { params: { id: string } }) {
     const [status, setStatus] = useState('matching'); // matching, accepted
     const [matchedAgent, setMatchedAgent] = useState<typeof agents[0] | null>(null);
+    const { id } = params;
 
-    const hostel = hostels.find((h) => h.id === params.id);
+    const hostel = hostels.find((h) => h.id === id);
 
     useEffect(() => {
         if (status === 'matching') {
