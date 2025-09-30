@@ -145,3 +145,33 @@ export const adminStats = {
     { name: 'Yaw Frimpong', sales: 22 },
   ]
 };
+
+export const agents = [
+    {
+        id: 'agent-1',
+        name: 'Kofi Mensah',
+        rating: 4.8,
+        vehicle: 'Toyota Corolla',
+        status: 'online',
+        location: { lat: 5.63, lng: -0.19 },
+        imageUrl: 'https://picsum.photos/seed/agent1/200/200'
+    },
+    {
+        id: 'agent-2',
+        name: 'Esi Parker',
+        rating: 4.9,
+        vehicle: 'Honda Civic',
+        status: 'online',
+        location: { lat: 5.61, lng: -0.21 },
+        imageUrl: 'https://picsum.photos/seed/agent2/200/200'
+    },
+    {
+        id: 'agent-3',
+        name: 'Femi Adebayo',
+        rating: 4.7,
+        vehicle: 'Motorbike',
+        status: 'offline',
+        location: { lat: 5.62, lng: -0.20 },
+        imageUrl: 'https://picsum.photos/seed/agent3/200/200'
+    }
+];
