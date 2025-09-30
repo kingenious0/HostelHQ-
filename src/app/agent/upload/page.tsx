@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -14,9 +14,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, Sparkles, MapPin, Loader2 } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { addDoc, collection } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import Image from 'next/image';
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
@@ -41,9 +42,33 @@ export default function AgentUploadPage() {
     // UI State
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentUser, setCurrentUser] = useState(auth.currentUser);
 
     const totalSteps = 5;
     const progress = (step / totalSteps) * 100;
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setCurrentUser(user);
+            } else {
+                try {
+                    const userCredential = await signInAnonymously(auth);
+                    setCurrentUser(userCredential.user);
+                } catch (error) {
+                    console.error("Anonymous sign-in failed: ", error);
+                    toast({
+                        title: 'Authentication Failed',
+                        description: 'Could not connect to the service. Please refresh the page.',
+                        variant: 'destructive',
+                    });
+                }
+            }
+        });
+
+        return () => unsubscribe();
+    }, [toast]);
+
 
     const handleAmenityChange = (amenity: string, checked: boolean) => {
         setSelectedAmenities(prev => 
@@ -109,6 +134,11 @@ export default function AgentUploadPage() {
     };
     
     const handleSubmit = async () => {
+        if (!currentUser) {
+            toast({ title: 'Not authenticated', description: 'Please wait for authentication to complete.', variant: 'destructive' });
+            return;
+        }
+
         setIsSubmitting(true);
         toast({ title: 'Submitting hostel...', description: 'Please wait while we upload the data.' });
 
@@ -116,7 +146,7 @@ export default function AgentUploadPage() {
             // 1. Upload images to Firebase Storage
             const imageUrls = await Promise.all(
                 photos.map(async (photo) => {
-                    const storageRef = ref(storage, `hostel-images/${Date.now()}-${photo.name}`);
+                    const storageRef = ref(storage, `hostel-images/${currentUser.uid}/${Date.now()}-${photo.name}`);
                     await uploadBytes(storageRef, photo);
                     const downloadUrl = await getDownloadURL(storageRef);
                     return downloadUrl;
@@ -136,12 +166,12 @@ export default function AgentUploadPage() {
                 images: imageUrls,
                 description: enhancedDescription || description,
                 status: 'pending',
-                agentId: 'mock-agent-id', // Replace with actual agent ID from Auth
+                agentId: currentUser.uid,
                 dateSubmitted: new Date().toISOString(),
             });
 
             toast({ title: 'Submission Successful!', description: 'The hostel has been sent for admin approval.' });
-            router.push('/agent/dashboard'); // Redirect to an agent dashboard
+            router.push('/'); // Redirect to home or an agent dashboard
         } catch (error) {
             console.error("Submission error: ", error);
             setIsSubmitting(false);
@@ -291,9 +321,9 @@ export default function AgentUploadPage() {
                         <CardFooter className="flex justify-between mt-8">
                             <Button variant="outline" onClick={prevStep} disabled={isSubmitting}>Previous</Button>
                             {step < totalSteps ? (
-                                <Button onClick={nextStep} disabled={isSubmitting}>Next</Button>
+                                <Button onClick={nextStep} disabled={isSubmitting || !currentUser}>Next</Button>
                             ) : (
-                                <Button onClick={handleSubmit} disabled={isSubmitting}>
+                                <Button onClick={handleSubmit} disabled={isSubmitting || !currentUser}>
                                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                   {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
                                 </Button>
