@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { db } from './firebase';
+import { doc, getDoc } from "firebase/firestore";
 
 export type Hostel = {
   id: string;
@@ -202,22 +203,26 @@ export const agents: Agent[] = [
     }
 ];
 
+
 export async function getVisit(visitId: string): Promise<Visit | null> {
-    const visitDoc = await db.collection('visits').doc(visitId).get();
-    if (!visitDoc.exists) {
+    const visitDocRef = doc(db, 'visits', visitId);
+    const visitDoc = await getDoc(visitDocRef);
+    if (!visitDoc.exists()) {
         return null;
     }
-    const data = visitDoc.data() as Omit<Visit, 'id' | 'visitDate'> & { visitDate: import('firebase-admin/firestore').Timestamp };
+    const data = visitDoc.data();
+    // Assuming the visitDate is stored as a Timestamp
     return {
         id: visitDoc.id,
         ...data,
-        visitDate: data.visitDate.toDate(),
-    };
+        visitDate: (data.visitDate as any).toDate(),
+    } as Visit;
 }
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
-    const agentDoc = await db.collection('agents').doc(agentId).get();
-    if (!agentDoc.exists) {
+    const agentDocRef = doc(db, 'agents', agentId);
+    const agentDoc = await getDoc(agentDocRef);
+    if (!agentDoc.exists()) {
         return null;
     }
     return { id: agentDoc.id, ...agentDoc.data() } as Agent;
