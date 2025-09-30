@@ -1,6 +1,14 @@
 import Link from 'next/link';
-import { Hotel } from 'lucide-react';
+import { Hotel, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function Header() {
   return (
@@ -21,7 +29,33 @@ export function Header() {
             Admin
           </Link>
         </nav>
-        <Button>Login / Sign Up</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon">
+              <User className="h-5 w-5" />
+              <span className="sr-only">Switch Role</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <Link href="/">
+              <DropdownMenuItem>
+                Student
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/agent/upload">
+              <DropdownMenuItem>
+                Agent
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/admin/dashboard">
+              <DropdownMenuItem>
+                Admin
+              </DropdownMenuItem>
+            </Link>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
