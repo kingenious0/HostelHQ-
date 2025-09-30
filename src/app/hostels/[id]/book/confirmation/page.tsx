@@ -8,14 +8,15 @@ import { Loader2 } from 'lucide-react';
 
 export default function BookingConfirmationPage({ params }: { params: { id: string } }) {
     const router = useRouter();
+    const { id } = params;
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            router.push(`/hostels/${params.id}/book/tracking`);
+            router.push(`/hostels/${id}/book/tracking`);
         }, 3000); // Simulate a delay for finding an agent
 
         return () => clearTimeout(timer);
-    }, [router, params.id]);
+    }, [router, id]);
 
     return (
         <div className="flex flex-col min-h-screen">
