@@ -1,14 +1,14 @@
 // src/app/hostels/[id]/book/confirmation/page.tsx
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 
 export default function BookingConfirmationPage({ params }: { params: { id: string } }) {
     const router = useRouter();
-    const { id } = params;
+    const { id } = use(params);
 
     useEffect(() => {
         const timer = setTimeout(() => {
