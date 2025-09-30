@@ -8,11 +8,11 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Star, Loader2, UserCheck } from 'lucide-react';
+import { Phone, MessageSquare, Star, Loader2, UserCheck, Home, BedDouble, Calendar } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 
-export default function TrackingPage({ params }: { params: Promise<{ id: string }> }) {
+export default function TrackingPage({ params }: { params: { id: string } }) {
     const { id } = use(params);
     const [status, setStatus] = useState('matching'); // matching, accepted
     const [matchedAgent, setMatchedAgent] = useState<typeof agents[0] | null>(null);
@@ -38,20 +38,22 @@ export default function TrackingPage({ params }: { params: Promise<{ id: string 
         notFound();
     }
 
+    const agentPhoneNumber = matchedAgent?.phone || '1234567890'; // Placeholder phone
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 grid md:grid-cols-2">
-                <div className="flex flex-col items-center justify-center p-8 bg-gray-50/50">
+                <div className="flex flex-col items-center justify-center p-4 md:p-8 bg-gray-50/50">
                      <Card className="w-full max-w-md shadow-xl">
                         <CardHeader>
-                            <CardTitle className="font-headline text-2xl">
-                                {status === 'matching' && "Matching in Progress"}
-                                {status === 'accepted' && "Agent on the way!"}
+                            <CardTitle className="font-headline text-2xl flex items-center gap-2">
+                                {status === 'matching' && <><Loader2 className="h-6 w-6 animate-spin" /> Matching in Progress</>}
+                                {status === 'accepted' && <span className="text-green-600">✅ Visit Confirmed</span>}
                             </CardTitle>
                              <CardDescription>
                                 {status === 'matching' && "We're finding the best agent for your tour."}
-                                {status === 'accepted' && `Your agent, ${matchedAgent?.name}, is heading to ${hostel.name}.`}
+                                {status === 'accepted' && `Your agent, ${matchedAgent?.name}, is heading to the hostel.`}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -62,44 +64,61 @@ export default function TrackingPage({ params }: { params: Promise<{ id: string 
                                 </div>
                             )}
                             {status === 'accepted' && matchedAgent && (
-                                <div className="space-y-6">
-                                    <div className="flex items-center gap-4">
-                                        <Avatar className="h-16 w-16">
-                                            <AvatarImage src={matchedAgent.imageUrl} alt={matchedAgent.name} />
-                                            <AvatarFallback>{matchedAgent.name.charAt(0)}</AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                            <h3 className="text-lg font-bold">{matchedAgent.name}</h3>
-                                            <div className="flex items-center text-sm text-muted-foreground">
-                                                <Star className="h-4 w-4 mr-1 text-yellow-400 fill-yellow-400" />
-                                                <span>{matchedAgent.rating.toFixed(1)} Rating</span>
+                                <div className="space-y-4">
+                                    <div className="space-y-3 rounded-lg border bg-card text-card-foreground p-4">
+                                        <div className="flex items-center gap-3">
+                                            <Home className="h-5 w-5 text-muted-foreground"/>
+                                            <div>
+                                                <p className="text-sm text-muted-foreground">Hostel</p>
+                                                <p className="font-semibold">{hostel.name}</p>
+                                            </div>
+                                        </div>
+                                         <div className="flex items-center gap-3">
+                                            <BedDouble className="h-5 w-5 text-muted-foreground"/>
+                                            <div>
+                                                <p className="text-sm text-muted-foreground">Room</p>
+                                                <p className="font-semibold">Room 12A (4-in-a-room)</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <Calendar className="h-5 w-5 text-muted-foreground"/>
+                                            <div>
+                                                <p className="text-sm text-muted-foreground">Date</p>
+                                                <p className="font-semibold">15 Sept 2025 – 14:00</p>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm">
-                                      <p><strong>ETA:</strong> 5 mins</p>
-                                      <p><strong>Vehicle:</strong> {matchedAgent.vehicle}</p>
+
+                                    <div className="text-center">
+                                      <p className="text-sm text-muted-foreground">Agent ETA to hostel gate</p>
+                                      <p className="text-3xl font-bold">5 mins</p>
                                     </div>
+                                    
                                     <Separator />
-                                    <p className="text-sm text-muted-foreground">{`Agent ${matchedAgent.name} will call you via WhatsApp to confirm the exact meeting point.`}</p>
+                                    
                                     <div className="flex w-full gap-2">
-                                        <Button className="flex-1" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
-                                        <Button className="flex-1" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> Message</Button>
+                                        <a href={`tel:${agentPhoneNumber}`} className="flex-1">
+                                            <Button className="w-full" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
+                                        </a>
+                                        <a href={`https://wa.me/${agentPhoneNumber}`} className="flex-1">
+                                            <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
+                                        </a>
                                     </div>
-                                     <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                                        <UserCheck className="mr-2 h-4 w-4"/> Mark as Visited
+                                     <Button className="w-full" disabled>
+                                        Agent has arrived
                                     </Button>
                                 </div>
                             )}
                         </CardContent>
                     </Card>
                 </div>
-                <div className="relative bg-muted">
+                <div className="relative bg-muted h-96 md:h-full">
                     <Image src="https://picsum.photos/seed/map/1200/1200" alt="Map" fill style={{ objectFit: 'cover' }} className="opacity-50" data-ai-hint="street map" />
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center p-4 bg-background/80 rounded-lg shadow-lg">
                            <h2 className="text-lg font-semibold">Live Map</h2>
-                           <p className="text-muted-foreground">Agent location will be displayed here.</p>
+                           <p className="text-muted-foreground">🏠 Hostel Gate</p>
+                           <p className="text-muted-foreground">● Agent (moving)</p>
                         </div>
                     </div>
                 </div>

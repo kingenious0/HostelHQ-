@@ -154,7 +154,8 @@ export const agents = [
         vehicle: 'Toyota Corolla',
         status: 'online',
         location: { lat: 5.63, lng: -0.19 },
-        imageUrl: 'https://picsum.photos/seed/agent1/200/200'
+        imageUrl: 'https://picsum.photos/seed/agent1/200/200',
+        phone: '233244123456'
     },
     {
         id: 'agent-2',
@@ -163,7 +164,8 @@ export const agents = [
         vehicle: 'Honda Civic',
         status: 'online',
         location: { lat: 5.61, lng: -0.21 },
-        imageUrl: 'https://picsum.photos/seed/agent2/200/200'
+        imageUrl: 'https://picsum.photos/seed/agent2/200/200',
+        phone: '233244123457'
     },
     {
         id: 'agent-3',
@@ -172,6 +174,7 @@ export const agents = [
         vehicle: 'Motorbike',
         status: 'offline',
         location: { lat: 5.62, lng: -0.20 },
-        imageUrl: 'https://picsum.photos/seed/agent3/200/200'
+        imageUrl: 'https://picsum.photos/seed/agent3/200/200',
+        phone: '233244123458'
     }
 ];
