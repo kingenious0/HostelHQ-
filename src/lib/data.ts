@@ -1,6 +1,6 @@
-import type { LucideIcon } from "lucide-react";
+
 import { db } from './firebase';
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 
 export type Hostel = {
   id: string;
@@ -12,8 +12,8 @@ export type Hostel = {
   amenities: string[];
   images: string[];
   description: string;
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
 };
 
 export type Agent = {
@@ -37,7 +37,7 @@ export type Visit = {
     status: 'pending' | 'accepted' | 'declined' | 'completed';
 }
 
-export const hostels: Hostel[] = [
+export const staticHostels: Hostel[] = [
   {
     id: '1',
     name: 'Pioneer Hall',
@@ -142,22 +142,6 @@ export const hostels: Hostel[] = [
   },
 ];
 
-export const pendingHostels = [
-  {
-    id: '7',
-    name: 'Scholars Den',
-    location: 'Kumasi, Ghana',
-    agent: 'John Doe',
-    dateSubmitted: '2023-10-26',
-  },
-  {
-    id: '8',
-    name: 'Uni Residences',
-    location: 'Accra, Ghana',
-    agent: 'Jane Smith',
-    dateSubmitted: '2023-10-25',
-  },
-];
 
 export const adminStats = {
   revenue: 'GH₵ 12,500',
@@ -220,23 +204,52 @@ export async function getVisit(visitId: string): Promise<Visit | null> {
 }
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
-    const agentDocRef = doc(db, 'agents', agentId);
-    const agentDoc = await getDoc(agentDocRef);
-    if (!agentDoc.exists()) {
-        return null;
+    try {
+        const agentDocRef = doc(db, 'agents', agentId);
+        const agentDoc = await getDoc(agentDocRef);
+        if (agentDoc.exists()) {
+            return { id: agentDoc.id, ...agentDoc.data() } as Agent;
+        }
+    } catch (e) {
+        console.error("Error fetching agent from firestore: ", e);
     }
-    return { id: agentDoc.id, ...agentDoc.data() } as Agent;
+    
+    // Fallback to static data
+    console.log("Falling back to static agent data for agentId: ", agentId);
+    return agents.find(a => a.id === agentId) || null;
 }
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
-    const hostelDocRef = doc(db, 'hostels', hostelId);
-    const hostelDoc = await getDoc(hostelDocRef);
-    if (!hostelDoc.exists()) {
-        // Fallback to static data if not in firestore for now
-        const staticHostel = hostels.find(h => h.id === hostelId);
-        return staticHostel || null;
+    try {
+        const hostelDocRef = doc(db, 'hostels', hostelId);
+        const hostelDoc = await getDoc(hostelDocRef);
+        if (hostelDoc.exists()) {
+            return { id: hostelDoc.id, ...hostelDoc.data() } as Hostel;
+        }
+    } catch(e) {
+        console.error("Error fetching hostel from firestore: ", e);
     }
-    return { id: hostelDoc.id, ...hostelDoc.data() } as Hostel;
+
+    // Fallback to static data if not in firestore for now
+    console.log("Falling back to static hostel data for hostelId: ", hostelId);
+    const staticHostel = staticHostels.find(h => h.id === hostelId);
+    return staticHostel || null;
 }
 
+export async function getHostels(): Promise<Hostel[]> {
+    try {
+        const hostelsCollectionRef = collection(db, 'hostels');
+        const querySnapshot = await getDocs(hostelsCollectionRef);
+        const firestoreHostels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
+        
+        if (firestoreHostels.length > 0) {
+            return firestoreHostels;
+        }
+    } catch (e) {
+        console.error("Error fetching hostels from firestore: ", e);
+    }
     
+    // Fallback to static data
+    console.log("Falling back to static hostel data.");
+    return staticHostels;
+}

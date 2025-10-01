@@ -1,13 +1,16 @@
+
 import { Header } from '@/components/header';
 import { HostelCard } from '@/components/hostel-card';
-import { hostels } from '@/lib/data';
+import { getHostels } from '@/lib/data';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import Image from 'next/image';
 
-export default function Home() {
+export default async function Home() {
+  const hostels = await getHostels();
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <Header />

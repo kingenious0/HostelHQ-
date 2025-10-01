@@ -1,5 +1,6 @@
+
 import { Header } from '@/components/header';
-import { hostels } from '@/lib/data';
+import { getHostel } from '@/lib/data';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,8 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 
-export default function BookingPage({ params }: { params: { id: string } }) {
-    const hostel = hostels.find((h) => h.id === params.id);
+export default async function BookingPage({ params }: { params: { id: string } }) {
+    const hostel = await getHostel(params.id);
 
     if (!hostel) {
         notFound();

@@ -1,5 +1,6 @@
+
 import { Header } from '@/components/header';
-import { hostels } from '@/lib/data';
+import { getHostel } from '@/lib/data';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen } from 'lucide-react';
@@ -18,8 +19,8 @@ const amenityIcons = {
   'study-area': <BookOpen className="h-5 w-5" />,
 };
 
-export default function HostelDetailPage({ params }: { params: { id: string } }) {
-  const hostel = hostels.find((h) => h.id === params.id);
+export default async function HostelDetailPage({ params }: { params: { id: string } }) {
+  const hostel = await getHostel(params.id);
 
   if (!hostel) {
     notFound();
@@ -33,7 +34,7 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
           <div>
             <Carousel className="w-full rounded-lg overflow-hidden shadow-lg">
               <CarouselContent>
-                {hostel.images.map((img, index) => (
+                {hostel.images.map((img: string, index: number) => (
                   <CarouselItem key={index}>
                     <div className="relative h-96 w-full">
                       <Image src={img} alt={`${hostel.name} image ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="hostel interior" />
@@ -63,9 +64,9 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
             <div className="mt-8">
               <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
               <div className="flex flex-wrap gap-4">
-                {hostel.amenities.map((amenity) => (
+                {hostel.amenities.map((amenity: string) => (
                   <Badge key={amenity} variant="outline" className="text-base p-2 capitalize flex items-center gap-2">
-                     {amenityIcons[amenity as keyof typeof amenityIcons]} {amenity.replace('-', ' ')}
+                     {amenityIcons[amenity.toLowerCase().replace(' ', '-') as keyof typeof amenityIcons]} {amenity}
                   </Badge>
                 ))}
               </div>
