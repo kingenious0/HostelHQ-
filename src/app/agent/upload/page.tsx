@@ -11,14 +11,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2 } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, storage, auth } from '@/lib/firebase';
 import { addDoc, collection } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import Image from 'next/image';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
 
@@ -42,32 +43,19 @@ export default function AgentUploadPage() {
     // UI State
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [currentUser, setCurrentUser] = useState(auth.currentUser);
+    const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+    const [loadingAuth, setLoadingAuth] = useState(true);
 
     const totalSteps = 5;
     const progress = (step / totalSteps) * 100;
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                setCurrentUser(user);
-            } else {
-                try {
-                    const userCredential = await signInAnonymously(auth);
-                    setCurrentUser(userCredential.user);
-                } catch (error) {
-                    console.error("Anonymous sign-in failed: ", error);
-                    toast({
-                        title: 'Authentication Failed',
-                        description: 'Could not connect to the service. Please refresh the page.',
-                        variant: 'destructive',
-                    });
-                }
-            }
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+            setLoadingAuth(false);
         });
-
         return () => unsubscribe();
-    }, [toast]);
+    }, []);
 
 
     const handleAmenityChange = (amenity: string, checked: boolean) => {
@@ -135,7 +123,7 @@ export default function AgentUploadPage() {
     
     const handleSubmit = async () => {
         if (!currentUser) {
-            toast({ title: 'Not authenticated', description: 'Please wait for authentication to complete.', variant: 'destructive' });
+            toast({ title: 'Not authenticated', description: 'Please log in as an agent to submit.', variant: 'destructive' });
             return;
         }
 
@@ -195,6 +183,34 @@ export default function AgentUploadPage() {
             setStep(s => s - 1);
         }
     };
+
+    if (loadingAuth) {
+        return (
+             <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                </main>
+            </div>
+        );
+    }
+
+    if (!currentUser) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
+                     <Alert variant="destructive" className="max-w-lg">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Access Denied</AlertTitle>
+                        <AlertDescription>
+                            You must be logged in as an Agent to access this page. Please use the menu in the top right to log in.
+                        </AlertDescription>
+                    </Alert>
+                </main>
+            </div>
+        )
+    }
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -335,5 +351,3 @@ export default function AgentUploadPage() {
         </div>
     );
 }
-
-    
