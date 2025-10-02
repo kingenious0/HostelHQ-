@@ -1,3 +1,4 @@
+
 import type { Hostel } from '@/lib/data';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -48,8 +49,8 @@ export function HostelCard({ hostel }: HostelCardProps) {
             <span className="text-xl font-bold">GH₵{hostel.price}</span>
             <span className="text-sm text-muted-foreground">/month</span>
             </div>
-            <Link href={`/hostels/${hostel.id}/book`}>
-            <Button>Book Visit</Button>
+            <Link href={`/hostels/${hostel.id}`}>
+              <Button>View Details</Button>
             </Link>
         </CardFooter>
     </Card>
