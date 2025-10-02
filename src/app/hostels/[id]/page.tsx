@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { Header } from '@/components/header';
 import { getHostel, Hostel } from '@/lib/data';
 import { notFound, useRouter } from 'next/navigation';
@@ -145,13 +145,14 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 
 
 export default function HostelDetailPage({ params }: { params: { id: string } }) {
+  const { id } = use(params);
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
       const fetchHostelData = async () => {
-          const hostelData = await getHostel(params.id);
+          const hostelData = await getHostel(id);
           if (hostelData) {
               setHostel(hostelData);
           } else {
@@ -165,7 +166,7 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
           setCurrentUser(user);
       });
       return () => unsubscribe();
-  }, [params.id]);
+  }, [id]);
 
 
   if (loading) {
@@ -194,4 +195,3 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
     </div>
   );
 }
-
