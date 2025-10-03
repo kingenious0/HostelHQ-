@@ -41,7 +41,7 @@ export const staticHostels: Hostel[] = [
   {
     id: '1',
     name: 'Doku Hostel',
-    location: 'AAMUSTED, Kumasi (~5-10 min walk)',
+    location: 'AAMUSTED, Kumasi (~5 min walk)',
     price: 3700,
     rating: 4.5,
     reviews: 12,
@@ -50,7 +50,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-1/800/600',
       'https://picsum.photos/seed/hostel-room-1/800/600',
     ],
-    description: 'A more comfortable option with private rooms. Approx. walking time: ~5–10 minutes. Route: Leave AAMUSTED via the main exit and walk along Sunyani Road / Denkyembuoso Road. Price: GHC ~3,000–4,400. Amenities: Balconies, TV/common area, comfortable rooms.',
+    description: "Approx. walking time: ~5–10 minutes. Route: Leave AAMUSTED via the main exit and walk along Sunyani Road / Denkyembuoso Road. Price: GHC ~3,000–4,400. Amenities: Balconies, TV/common area, comfortable rooms. Click here for directions: https://www.google.com/maps/dir/?api=1&origin=AAMUSTED+Tanoso+Kumasi+Ghana&destination=Doku+Kaakyire+Hostel+Denkyembuoso+Road+Kumasi+Ghana&travelmode=walking",
     lat: 6.69,
     lng: -1.66
   },
@@ -66,7 +66,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-2/800/600',
       'https://picsum.photos/seed/hostel-room-2/800/600',
     ],
-    description: 'Mid-range option with 2-in-1 rooms available. Approx. walking time: ~5–8 minutes. Route: Exit campus and head to the Kumasi–Sunyani (IPT) roadside. Walk along the highway toward IPT. Price: ~GHC 2,700/year for a 2-bed example. Rooms: single, 2-in-1, 3-in-1, 4-in-1. Usually fenced with gate security and near shops/supermarket.',
+    description: "Approx. walking time: ~5–8 minutes. Route: Exit campus and head to the Kumasi–Sunyani (IPT) roadside. Walk along the highway toward IPT. Price: ~GHC 2,700/year for a 2-bed example. Rooms: single, 2-in-1, 3-in-1, 4-in-1. Usually fenced with gate security and near shops/supermarket. Click here for directions: https://www.google.com/maps/dir/?api=1&origin=AAMUSTED+Tanoso+Kumasi+Ghana&destination=Kesewaa+Hostel+IPT+Tanoso+Kumasi+Ghana&travelmode=walking",
     lat: 6.70,
     lng: -1.65
   },
@@ -82,7 +82,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-3/800/600',
       'https://picsum.photos/seed/hostel-room-3/800/600',
     ],
-    description: 'Clean, secure, and budget-friendly hostel located directly on campus. A great option if you prefer minimal walking.',
+    description: 'Clean, secure, and budget-friendly hostel located directly on campus. A great option if you prefer minimal walking. Price: GHC ~3,500–4,000+.',
     lat: 6.69,
     lng: -1.66
   },
@@ -98,7 +98,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-4/800/600',
       'https://picsum.photos/seed/hostel-room-4/800/600',
     ],
-    description: 'Budget-friendly with shared options. Approx. walking time: ~5 minutes. Route: Exit AAMUSTED main gate, walk toward the Total fuel station area. Amansie is behind the Total station. Price: From approx GHC ~1,400/year. Rooms: shared 2-in-1, 3/4-in-1 and private options. Bills often include water & refuse.',
+    description: "Approx. walking time: ~5 minutes. Route: Exit AAMUSTED main gate, walk toward the Total fuel station area. Amansie is behind the Total station. Price: From approx GHC ~1,400/year. Rooms: shared 2-in-1, 3/4-in-1 and private options. Bills often include water & refuse. Click here for directions: https://www.google.com/maps/dir/?api=1&origin=AAMUSTED+Tanoso+Kumasi+Ghana&destination=Amansie+Hostel+Tanoso+Kumasi+Ghana&travelmode=walking",
     lat: 6.71,
     lng: -1.67
   },
@@ -114,7 +114,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-5/800/600',
       'https://picsum.photos/seed/hostel-room-5/800/600',
     ],
-    description: 'Located adjacent to Amansie Hostel, offering both private and shared 2-in-1 rooms.',
+    description: 'Located adjacent to Amansie Hostel, offering both private and shared 2-in-1 rooms. Price range GHC ~1,400–3,500+.',
     lat: 6.71,
     lng: -1.67
   },
@@ -130,7 +130,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-6/800/600',
       'https://picsum.photos/seed/hostel-room-6/800/600',
     ],
-    description: 'Located behind the timber weighing center, about a 10-minute distance from campus. Offers 2-in-1 and shared rooms.',
+    description: 'Located behind the timber weighing center, about a 10-minute distance from campus. Offers 2-in-1 and shared rooms. One of several small hostels in the Tanoso area.',
     lat: 6.71,
     lng: -1.67
   },
@@ -146,6 +146,16 @@ export const adminStats = {
     { name: 'Yaw Frimpong', sales: 22 },
   ]
 };
+
+export const bookingsChartData = [
+  { month: "Jan", bookings: 82 },
+  { month: "Feb", bookings: 95 },
+  { month: "Mar", bookings: 110 },
+  { month: "Apr", bookings: 98 },
+  { month: "May", bookings: 120 },
+  { month: "Jun", bookings: 135 },
+];
+
 
 // Seed data for agents, will be moved to Firestore
 export const agents: Agent[] = [
@@ -251,5 +261,3 @@ export async function getHostels(): Promise<Hostel[]> {
     console.log("Falling back to only static hostel data.");
     return staticHostels;
 }
-
-

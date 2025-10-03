@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { adminStats } from '@/lib/data';
+import { adminStats, bookingsChartData } from '@/lib/data';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { BookingsChart } from '@/components/bookings-chart';
 
 type PendingHostel = {
   id: string;
@@ -56,14 +57,12 @@ export default function AdminDashboard() {
       if (pendingDocSnap.exists()) {
         const hostelData = pendingDocSnap.data();
         
-        // Add to main 'hostels' collection
         await setDoc(doc(db, 'hostels', hostelId), {
           ...hostelData,
           status: 'approved',
           approvedAt: new Date().toISOString(),
         });
         
-        // Delete from 'pendingHostels' collection
         await deleteDoc(pendingDocRef);
 
         toast({ title: "Hostel Approved", description: `${hostelData.name} is now live.` });
@@ -138,76 +137,79 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Hostel Approvals</CardTitle>
-              <CardDescription>Review and approve or reject new hostel listings.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center p-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <p className="ml-4 text-muted-foreground">Loading pending hostels...</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Hostel Name</TableHead>
-                      <TableHead className="hidden md:table-cell">Agent ID</TableHead>
-                      <TableHead className="hidden lg:table-cell">Location</TableHead>
-                      <TableHead className="hidden md:table-cell">Date Submitted</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingHostels.length > 0 ? (
-                      pendingHostels.map(hostel => (
-                        <TableRow key={hostel.id}>
-                          <TableCell className="font-medium">{hostel.name}</TableCell>
-                          <TableCell className="hidden md:table-cell">{hostel.agentId}</TableCell>
-                          <TableCell className="hidden lg:table-cell">{hostel.location}</TableCell>
-                          <TableCell className="hidden md:table-cell">{hostel.dateSubmitted}</TableCell>
-                          <TableCell className="text-right space-x-2">
-                             <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-primary hover:text-primary/80"
-                                onClick={() => handleApprove(hostel.id)}
-                                disabled={processingId === hostel.id}
-                              >
-                                {processingId === hostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-                                <span className="sr-only">Approve</span>
-                             </Button>
-                             <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-destructive hover:text-destructive/80"
-                                onClick={() => handleReject(hostel.id)}
-                                disabled={processingId === hostel.id}
-                             >
-                                {processingId === hostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <XCircle className="h-5 w-5" />}
-                                <span className="sr-only">Reject</span>
-                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                        <TableRow>
-                            <TableCell colSpan={5} className="text-center h-24">
-                                No pending approvals.
+          <div className="grid gap-8 lg:grid-cols-5">
+            <Card className="lg:col-span-3">
+              <CardHeader>
+                  <CardTitle>Bookings Overview</CardTitle>
+                  <CardDescription>A summary of hostel bookings over the past few months.</CardDescription>
+              </CardHeader>
+              <CardContent className="pl-2">
+                  <BookingsChart data={bookingsChartData} />
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Pending Hostel Approvals</CardTitle>
+                <CardDescription>Review and approve or reject new hostel listings.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex items-center justify-center p-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <p className="ml-4 text-muted-foreground">Loading pending hostels...</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Hostel Name</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingHostels.length > 0 ? (
+                        pendingHostels.map(hostel => (
+                          <TableRow key={hostel.id}>
+                            <TableCell className="font-medium">{hostel.name}</TableCell>
+                            <TableCell className="text-right space-x-2">
+                               <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="text-primary hover:text-primary/80"
+                                  onClick={() => handleApprove(hostel.id)}
+                                  disabled={processingId === hostel.id}
+                                >
+                                  {processingId === hostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
+                                  <span className="sr-only">Approve</span>
+                               </Button>
+                               <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="text-destructive hover:text-destructive/80"
+                                  onClick={() => handleReject(hostel.id)}
+                                  disabled={processingId === hostel.id}
+                               >
+                                  {processingId === hostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <XCircle className="h-5 w-5" />}
+                                  <span className="sr-only">Reject</span>
+                               </Button>
                             </TableCell>
-                        </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                          </TableRow>
+                        ))
+                      ) : (
+                          <TableRow>
+                              <TableCell colSpan={2} className="text-center h-24">
+                                  No pending approvals.
+                              </TableCell>
+                          </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
   );
 }
-
-    
