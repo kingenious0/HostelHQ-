@@ -22,7 +22,7 @@ export function HostelCard({ hostel }: HostelCardProps) {
                 alt={hostel.name}
                 fill
                 style={{ objectFit: 'cover' }}
-                data-ai-hint="hostel room"
+                data-ai-hint="hostel exterior"
                 className="transition-transform duration-300 group-hover:scale-105"
                 />
             </div>
