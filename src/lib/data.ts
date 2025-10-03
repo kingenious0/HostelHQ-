@@ -251,3 +251,4 @@ export async function getHostels(): Promise<Hostel[]> {
     console.log("Falling back to only static hostel data.");
     return staticHostels;
 }
+
