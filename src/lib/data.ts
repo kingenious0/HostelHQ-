@@ -47,8 +47,8 @@ export const staticHostels: Hostel[] = [
     reviews: 12,
     amenities: ['Balconies', 'TV Room'],
     images: [
-      'https://picsum.photos/seed/doku1/800/600',
-      'https://picsum.photos/seed/doku2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-1/800/600',
+      'https://picsum.photos/seed/ghana-room-1/800/600',
     ],
     description: 'Comfortable rooms with balconies and a common TV room, located just a 5-minute walk from AAMUSTED campus.',
     lat: 6.69,
@@ -63,8 +63,8 @@ export const staticHostels: Hostel[] = [
     reviews: 21,
     amenities: ['Security', 'Water', 'Electricity'],
     images: [
-      'https://picsum.photos/seed/kesewaa1/800/600',
-      'https://picsum.photos/seed/kesewaa2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-2/800/600',
+      'https://picsum.photos/seed/ghana-room-2/800/600',
     ],
     description: 'Roadside location with good security features. Near supermarkets and shops, with various shared/private room options.',
     lat: 6.70,
@@ -79,8 +79,8 @@ export const staticHostels: Hostel[] = [
     reviews: 18,
     amenities: ['WiFi', 'Wardrobes', 'Security'],
     images: [
-      'https://picsum.photos/seed/white1/800/600',
-      'https://picsum.photos/seed/white2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-3/800/600',
+      'https://picsum.photos/seed/ghana-room-3/800/600',
     ],
     description: 'Clean, secure, and budget-friendly hostel located directly on campus. A great option if you prefer minimal walking.',
     lat: 6.69,
@@ -95,14 +95,14 @@ export const staticHostels: Hostel[] = [
     reviews: 35,
     amenities: ['Modern', 'Security', 'Water'],
     images: [
-      'https://picsum.photos/seed/amansie1/800/600',
-      'https://picsum.photos/seed/amansie2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-4/800/600',
+      'https://picsum.photos/seed/ghana-room-4/800/600',
     ],
     description: 'A modern facility located behind the Total fuel station, just 5 minutes from campus. Close to other hostels and shops.',
     lat: 6.71,
     lng: -1.67
   },
-    {
+  {
     id: '5',
     name: 'Agyeiwaa Hostel',
     location: 'Tanoso, AAMUSTED',
@@ -111,8 +111,8 @@ export const staticHostels: Hostel[] = [
     reviews: 15,
     amenities: ['Private rooms', 'Shared rooms'],
     images: [
-      'https://picsum.photos/seed/agyeiwaa1/800/600',
-      'https://picsum.photos/seed/agyeiwaa2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-5/800/600',
+      'https://picsum.photos/seed/ghana-room-5/800/600',
     ],
     description: 'Located adjacent to Amansie Hostel, offering both private and shared 2-in-1 rooms.',
     lat: 6.71,
@@ -127,8 +127,8 @@ export const staticHostels: Hostel[] = [
     reviews: 9,
     amenities: ['Shared rooms', '2-in-1 rooms'],
     images: [
-      'https://picsum.photos/seed/degina1/800/600',
-      'https://picsum.photos/seed/degina2/800/600',
+      'https://picsum.photos/seed/ghana-hostel-6/800/600',
+      'https://picsum.photos/seed/ghana-room-6/800/600',
     ],
     description: 'Located behind the timber weighing center, about a 10-minute distance from campus. Offers 2-in-1 and shared rooms.',
     lat: 6.71,
