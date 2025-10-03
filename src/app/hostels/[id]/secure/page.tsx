@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -40,6 +41,7 @@ const formSchema = z.object({
 
 export default function SecureHostelPage() {
     const { toast } = useToast();
+    const router = useRouter();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -56,17 +58,20 @@ export default function SecureHostelPage() {
     function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
         console.log(values);
-        toast({ title: "Submitting Application..." });
+        toast({ title: "Processing Application..." });
 
-        // Simulate API call
+        // In a real app, you would first save the application data to your database.
+        // Then, you would generate a unique payment link with the Paystack API.
+        // For this demo, we'll redirect to a generic Paystack test page.
+
         setTimeout(() => {
             toast({
-                title: "Application Submitted!",
-                description: "Your hostel application has been received. You will be contacted shortly.",
+                title: "Redirecting to Payment",
+                description: "Please complete your payment on Paystack.",
             });
-            setIsSubmitting(false);
-             form.reset();
-        }, 2000);
+            // This would be a dynamically generated Paystack link
+            router.push("https://paystack.shop/demo-store");
+        }, 1500);
     }
 
   return (
@@ -77,7 +82,7 @@ export default function SecureHostelPage() {
                 <CardHeader>
                     <CardTitle className="text-2xl font-headline">Secure Your Hostel Room</CardTitle>
                     <CardDescription>
-                        Complete this form to finalize your application. A payment link will be sent to the phone number you provide.
+                        Complete this form to proceed to payment. You will be redirected to Paystack to finalize your booking.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -168,7 +173,7 @@ export default function SecureHostelPage() {
                                         <Input placeholder="+233 XX XXX XXXX" {...field} />
                                     </FormControl>
                                     <FormDescription>
-                                        A payment link will be sent to this number.
+                                        The payment will be linked to this number.
                                     </FormDescription>
                                     <FormMessage />
                                     </FormItem>
@@ -177,7 +182,7 @@ export default function SecureHostelPage() {
                              <CardFooter className="px-0 pt-6">
                                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Submit Application
+                                    Proceed to Payment
                                 </Button>
                             </CardFooter>
                         </form>
