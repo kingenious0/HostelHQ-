@@ -41,23 +41,23 @@ export const staticHostels: Hostel[] = [
   {
     id: '1',
     name: 'Doku Hostel',
-    location: 'AAMUSTED, Kumasi',
+    location: 'AAMUSTED, Kumasi (~5-10 min walk)',
     price: 3700,
     rating: 4.5,
     reviews: 12,
-    amenities: ['Balconies', 'TV Room'],
+    amenities: ['Balconies', 'TV Room', 'Comfortable'],
     images: [
       'https://picsum.photos/seed/hostel-building-1/800/600',
       'https://picsum.photos/seed/hostel-room-1/800/600',
     ],
-    description: 'Comfortable rooms with balconies and a common TV room, located just a 5-minute walk from AAMUSTED campus.',
+    description: 'A more comfortable option with private rooms. Approx. walking time: ~5–10 minutes. Route: Leave AAMUSTED via the main exit and walk along Sunyani Road / Denkyembuoso Road. Price: GHC ~3,000–4,400. Amenities: Balconies, TV/common area, comfortable rooms.',
     lat: 6.69,
     lng: -1.66
   },
   {
     id: '2',
     name: 'Kesewaa Hostel',
-    location: 'IPT, Kumasi-Sunyani Highway',
+    location: 'IPT, Kumasi-Sunyani Highway (~5-8 min walk)',
     price: 2700,
     rating: 4.2,
     reviews: 21,
@@ -66,7 +66,7 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-2/800/600',
       'https://picsum.photos/seed/hostel-room-2/800/600',
     ],
-    description: 'Roadside location with good security features. Near supermarkets and shops, with various shared/private room options.',
+    description: 'Mid-range option with 2-in-1 rooms available. Approx. walking time: ~5–8 minutes. Route: Exit campus and head to the Kumasi–Sunyani (IPT) roadside. Walk along the highway toward IPT. Price: ~GHC 2,700/year for a 2-bed example. Rooms: single, 2-in-1, 3-in-1, 4-in-1. Usually fenced with gate security and near shops/supermarket.',
     lat: 6.70,
     lng: -1.65
   },
@@ -89,7 +89,7 @@ export const staticHostels: Hostel[] = [
   {
     id: '4',
     name: 'Amansie Hostel',
-    location: 'Tanoso, AAMUSTED',
+    location: 'Tanoso, AAMUSTED (~5 min walk)',
     price: 1400,
     rating: 4.3,
     reviews: 35,
@@ -98,14 +98,14 @@ export const staticHostels: Hostel[] = [
       'https://picsum.photos/seed/hostel-building-4/800/600',
       'https://picsum.photos/seed/hostel-room-4/800/600',
     ],
-    description: 'A modern facility located behind the Total fuel station, just 5 minutes from campus. Close to other hostels and shops.',
+    description: 'Budget-friendly with shared options. Approx. walking time: ~5 minutes. Route: Exit AAMUSTED main gate, walk toward the Total fuel station area. Amansie is behind the Total station. Price: From approx GHC ~1,400/year. Rooms: shared 2-in-1, 3/4-in-1 and private options. Bills often include water & refuse.',
     lat: 6.71,
     lng: -1.67
   },
   {
     id: '5',
     name: 'Agyeiwaa Hostel',
-    location: 'Tanoso, AAMUSTED',
+    location: 'Tanoso, AAMUSTED (~5-10 min walk)',
     price: 2800,
     rating: 4.1,
     reviews: 15,
@@ -121,7 +121,7 @@ export const staticHostels: Hostel[] = [
   {
     id: '6',
     name: 'Degina Hostel',
-    location: 'Tanoso, AAMUSTED',
+    location: 'Tanoso, AAMUSTED (~10 min walk)',
     price: 2500,
     rating: 3.9,
     reviews: 9,
@@ -251,4 +251,5 @@ export async function getHostels(): Promise<Hostel[]> {
     console.log("Falling back to only static hostel data.");
     return staticHostels;
 }
+
 
