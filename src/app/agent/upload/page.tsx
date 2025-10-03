@@ -14,10 +14,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, Sparkles, MapPin, Loader2, AlertTriangle } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
-import { db, storage, auth } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { addDoc, collection } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -79,11 +79,20 @@ export default function AgentUploadPage() {
             return;
         }
 
+        if (photos.length === 0) {
+            toast({ title: 'No Photos', description: 'Please upload at least one photo.', variant: 'destructive' });
+            return;
+        }
+
         setIsSubmitting(true);
-        toast({ title: 'Submitting hostel...', description: 'Enhancing description and uploading files.' });
+        toast({ title: 'Submitting hostel...', description: 'Uploading images and enhancing description.' });
 
         try {
-            // 1. Enhance description with AI
+            // 1. Upload images to Cloudinary
+            const imageUrls = await Promise.all(photos.map(uploadImage));
+            toast({ title: 'Images Uploaded!', description: 'Your photos have been compressed and saved.' });
+            
+            // 2. Enhance description with AI
             let finalDescription = description;
             if (photos.length > 0 && description) {
                 try {
@@ -120,16 +129,6 @@ export default function AgentUploadPage() {
                 }
             }
             
-            // 2. Upload images to Firebase Storage
-            const imageUrls = await Promise.all(
-                photos.map(async (photo) => {
-                    const storageRef = ref(storage, `hostel-images/${currentUser.uid}/${Date.now()}-${photo.name}`);
-                    await uploadBytes(storageRef, photo);
-                    const downloadUrl = await getDownloadURL(storageRef);
-                    return downloadUrl;
-                })
-            );
-
             // 3. Add hostel data to Firestore 'pendingHostels' collection
             await addDoc(collection(db, 'pendingHostels'), {
                 name: hostelName,
@@ -319,6 +318,3 @@ export default function AgentUploadPage() {
         </div>
     );
 }
-
-
-    
