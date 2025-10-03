@@ -26,13 +26,18 @@ const amenityIcons = {
   'study-area': <BookOpen className="h-5 w-5" />,
 };
 
-function FullHostelDetails({ hostel }: { hostel: Hostel }) {
+function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: User | null }) {
     const router = useRouter();
 
     const handleApply = () => {
-        // For now, this will always lead to booking a visit.
-        // Later, we can add logic to check if a visit has been completed.
-        router.push(`/hostels/${hostel.id}/book`);
+        // This is where we'd check if a visit has been completed.
+        // For now, we assume if logged in, they can secure the hostel.
+        if (currentUser) {
+            router.push(`/hostels/${hostel.id}/secure`);
+        } else {
+            // This case should ideally not be hit if logic is correct, but as a fallback
+            router.push(`/hostels/${hostel.id}/book`);
+        }
     };
 
     return (
@@ -190,7 +195,7 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 md:px-6 py-12">
-        {isStudent ? <FullHostelDetails hostel={hostel} /> : <LimitedHostelDetails hostel={hostel} />}
+        {isStudent ? <FullHostelDetails hostel={hostel} currentUser={currentUser} /> : <LimitedHostelDetails hostel={hostel} />}
       </main>
     </div>
   );
