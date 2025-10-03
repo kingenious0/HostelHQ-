@@ -10,7 +10,6 @@ import Image from 'next/image';
 
 export default async function Home() {
   const hostels = await getHostels();
-  console.log('DEBUG: Firebase Storage Bucket:', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
