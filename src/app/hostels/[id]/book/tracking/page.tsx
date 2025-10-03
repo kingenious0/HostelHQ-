@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, use } from 'react';
+import Link from 'next/link';
 import { Header } from '@/components/header';
 import { getHostel, getAgent, Agent, Hostel } from '@/lib/data';
 import { notFound } from 'next/navigation';
@@ -127,9 +128,9 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
                                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                                         </a>
                                     </div>
-                                     <Button className="w-full" disabled>
-                                        Agent has arrived
-                                    </Button>
+                                     <Link href={`/hostels/${id}/book/rating`} className="w-full">
+                                        <Button className="w-full">Agent has arrived</Button>
+                                     </Link>
                                 </div>
                             )}
                         </CardContent>
