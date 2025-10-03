@@ -47,7 +47,7 @@ export function HostelCard({ hostel }: HostelCardProps) {
         <CardFooter className="p-4 pt-0 flex justify-between items-center mt-auto">
             <div>
             <span className="text-xl font-bold">GH₵{hostel.price}</span>
-            <span className="text-sm text-muted-foreground">/month</span>
+            <span className="text-sm text-muted-foreground">/year</span>
             </div>
             <Link href={`/hostels/${hostel.id}`}>
               <Button>View Details</Button>

@@ -84,7 +84,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 </div>
                 <div className="mt-8 flex items-baseline gap-4">
                     <span className="text-4xl font-bold text-primary">GH₵{hostel.price}</span>
-                    <span className="text-lg text-muted-foreground">/ month</span>
+                    <span className="text-lg text-muted-foreground">/year</span>
                 </div>
                 <Button size="lg" className="w-full mt-6 bg-accent hover:bg-accent/90 text-accent-foreground text-lg" onClick={handleApply}>
                     Apply to Secure Hostel
