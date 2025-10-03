@@ -40,105 +40,99 @@ export type Visit = {
 export const staticHostels: Hostel[] = [
   {
     id: '1',
-    name: 'Pioneer Hall',
-    location: 'Accra, Ghana',
-    price: 500,
+    name: 'Doku Hostel',
+    location: 'AAMUSTED, Kumasi',
+    price: 3700,
     rating: 4.5,
-    reviews: 120,
-    amenities: ['wifi', 'kitchen', 'laundry', 'ac'],
+    reviews: 12,
+    amenities: ['Balconies', 'TV Room'],
     images: [
-      'https://picsum.photos/seed/pioneer1/800/600',
-      'https://picsum.photos/seed/pioneer2/800/600',
-      'https://picsum.photos/seed/pioneer3/800/600',
+      'https://picsum.photos/seed/doku1/800/600',
+      'https://picsum.photos/seed/doku2/800/600',
     ],
-    description: 'A modern and spacious hostel located in the heart of Accra. Perfect for students looking for comfort and convenience. Close to major universities and public transport.',
-    lat: 5.6037,
-    lng: -0.1870
+    description: 'Comfortable rooms with balconies and a common TV room, located just a 5-minute walk from AAMUSTED campus.',
+    lat: 6.69,
+    lng: -1.66
   },
   {
     id: '2',
-    name: 'Campus Cribs',
-    location: 'Kumasi, Ghana',
-    price: 450,
+    name: 'Kesewaa Hostel',
+    location: 'IPT, Kumasi-Sunyani Highway',
+    price: 2700,
     rating: 4.2,
-    reviews: 95,
-    amenities: ['wifi', 'kitchen', 'parking'],
+    reviews: 21,
+    amenities: ['Security', 'Water', 'Electricity'],
     images: [
-      'https://picsum.photos/seed/cribs1/800/600',
-      'https://picsum.photos/seed/cribs2/800/600',
-      'https://picsum.photos/seed/cribs3/800/600',
+      'https://picsum.photos/seed/kesewaa1/800/600',
+      'https://picsum.photos/seed/kesewaa2/800/600',
     ],
-    description: 'Affordable and cozy, Campus Cribs offers a great community feel. Located near KNUST, it is an ideal choice for students of the university.',
-    lat: 6.6745,
-    lng: -1.5716
+    description: 'Roadside location with good security features. Near supermarkets and shops, with various shared/private room options.',
+    lat: 6.70,
+    lng: -1.65
   },
   {
     id: '3',
-    name: 'Student Hub',
-    location: 'Cape Coast, Ghana',
-    price: 400,
+    name: 'White Hostel (Inside Campus)',
+    location: 'On AAMUSTED campus',
+    price: 3750,
     rating: 4.0,
-    reviews: 80,
-    amenities: ['wifi', 'laundry', 'study-area'],
+    reviews: 18,
+    amenities: ['WiFi', 'Wardrobes', 'Security'],
     images: [
-      'https://picsum.photos/seed/hub1/800/600',
-      'https://picsum.photos/seed/hub2/800/600',
-      'https://picsum.photos/seed/hub3/800/600',
+      'https://picsum.photos/seed/white1/800/600',
+      'https://picsum.photos/seed/white2/800/600',
     ],
-    description: 'A quiet and conducive environment for studying. Student Hub is just a walking distance from the University of Cape Coast, offering all essential amenities.',
-    lat: 5.1053,
-    lng: -1.2466
+    description: 'Clean, secure, and budget-friendly hostel located directly on campus. A great option if you prefer minimal walking.',
+    lat: 6.69,
+    lng: -1.66
   },
   {
     id: '4',
-    name: 'The Nest',
-    location: 'Accra, Ghana',
-    price: 600,
-    rating: 4.8,
-    reviews: 150,
-    amenities: ['wifi', 'kitchen', 'laundry', 'ac', 'gym'],
+    name: 'Amansie Hostel',
+    location: 'Tanoso, AAMUSTED',
+    price: 1400,
+    rating: 4.3,
+    reviews: 35,
+    amenities: ['Modern', 'Security', 'Water'],
     images: [
-      'https://picsum.photos/seed/nest1/800/600',
-      'https://picsum.photos/seed/nest2/800/600',
-      'https://picsum.photos/seed/nest3/800/600',
+      'https://picsum.photos/seed/amansie1/800/600',
+      'https://picsum.photos/seed/amansie2/800/600',
     ],
-    description: 'Luxury student living with top-notch facilities. The Nest provides a premium experience with a gym, AC rooms, and 24/7 security.',
-    lat: 5.6148,
-    lng: -0.2058
+    description: 'A modern facility located behind the Total fuel station, just 5 minutes from campus. Close to other hostels and shops.',
+    lat: 6.71,
+    lng: -1.67
   },
     {
     id: '5',
-    name: 'Scholars Abode',
-    location: 'Accra, Ghana',
-    price: 520,
-    rating: 4.6,
-    reviews: 110,
-    amenities: ['wifi', 'kitchen', 'study-area', 'ac'],
+    name: 'Agyeiwaa Hostel',
+    location: 'Tanoso, AAMUSTED',
+    price: 2800,
+    rating: 4.1,
+    reviews: 15,
+    amenities: ['Private rooms', 'Shared rooms'],
     images: [
-      'https://picsum.photos/seed/abode1/800/600',
-      'https://picsum.photos/seed/abode2/800/600',
-      'https://picsum.photos/seed/abode3/800/600',
+      'https://picsum.photos/seed/agyeiwaa1/800/600',
+      'https://picsum.photos/seed/agyeiwaa2/800/600',
     ],
-    description: 'A serene and studious environment, perfect for scholars. Located near the University of Ghana with easy access to libraries and academic resources.',
-    lat: 5.6506,
-    lng: -0.187
+    description: 'Located adjacent to Amansie Hostel, offering both private and shared 2-in-1 rooms.',
+    lat: 6.71,
+    lng: -1.67
   },
   {
     id: '6',
-    name: 'Ghartey Hall',
-    location: 'Winneba, Ghana',
-    price: 350,
+    name: 'Degina Hostel',
+    location: 'Tanoso, AAMUSTED',
+    price: 2500,
     rating: 3.9,
-    reviews: 75,
-    amenities: ['wifi', 'laundry'],
+    reviews: 9,
+    amenities: ['Shared rooms', '2-in-1 rooms'],
     images: [
-      'https://picsum.photos/seed/ghartey1/800/600',
-      'https://picsum.photos/seed/ghartey2/800/600',
-      'https://picsum.photos/seed/ghartey3/800/600',
+      'https://picsum.photos/seed/degina1/800/600',
+      'https://picsum.photos/seed/degina2/800/600',
     ],
-    description: 'An economical option for students at the University of Education, Winneba. Offers basic amenities and a strong student community.',
-    lat: 5.3534,
-    lng: -0.6231
+    description: 'Located behind the timber weighing center, about a 10-minute distance from campus. Offers 2-in-1 and shared rooms.',
+    lat: 6.71,
+    lng: -1.67
   },
 ];
 
@@ -242,14 +236,18 @@ export async function getHostels(): Promise<Hostel[]> {
         const querySnapshot = await getDocs(hostelsCollectionRef);
         const firestoreHostels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
         
-        if (firestoreHostels.length > 0) {
-            return firestoreHostels;
+        // Combine and remove duplicates, giving priority to firestore data
+        const combined = [...firestoreHostels, ...staticHostels];
+        const uniqueHostels = Array.from(new Map(combined.map(h => [h.id, h])).values());
+
+        if (uniqueHostels.length > 0) {
+            return uniqueHostels;
         }
     } catch (e) {
         console.error("Error fetching hostels from firestore: ", e);
     }
     
-    // Fallback to static data
-    console.log("Falling back to static hostel data.");
+    // Fallback to static data if firestore fails or is empty
+    console.log("Falling back to only static hostel data.");
     return staticHostels;
 }

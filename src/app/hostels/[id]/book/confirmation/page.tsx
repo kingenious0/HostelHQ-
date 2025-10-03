@@ -1,18 +1,21 @@
 // src/app/hostels/[id]/book/confirmation/page.tsx
 "use client";
 
-import { useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 
-export default function BookingConfirmationPage({ params }: { params: { id: string } }) {
+export default function BookingConfirmationPage() {
     const router = useRouter();
-    const { id } = use(params);
+    const params = useParams();
+    const { id } = params;
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            router.push(`/hostels/${id}/book/tracking`);
+            if (id) {
+                router.push(`/hostels/${id}/book/tracking`);
+            }
         }, 3000); // Simulate a delay for finding an agent
 
         return () => clearTimeout(timer);

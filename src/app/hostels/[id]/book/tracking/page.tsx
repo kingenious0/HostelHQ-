@@ -1,19 +1,20 @@
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
 import { getHostel, getAgent, Agent, Hostel } from '@/lib/data';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-export default function TrackingPage({ params }: { params: { id: string } }) {
-    const { id } = use(params);
+export default function TrackingPage() {
+    const params = useParams();
+    const { id } = params;
     const [status, setStatus] = useState('matching'); // matching, accepted
     const [matchedAgent, setMatchedAgent] = useState<Agent | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
@@ -21,9 +22,11 @@ export default function TrackingPage({ params }: { params: { id: string } }) {
 
     useEffect(() => {
         const fetchHostelData = async () => {
-            const hostelData = await getHostel(id);
-            if (hostelData) {
-                setHostel(hostelData);
+            if (typeof id === 'string') {
+              const hostelData = await getHostel(id);
+              if (hostelData) {
+                  setHostel(hostelData);
+              }
             }
             setLoading(false);
         };
