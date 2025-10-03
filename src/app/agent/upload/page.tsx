@@ -38,15 +38,13 @@ export default function AgentUploadPage() {
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
     const [gpsLocation, setGpsLocation] = useState('');
     const [description, setDescription] = useState('');
-    const [enhancedDescription, setEnhancedDescription] = useState('');
     
     // UI State
-    const [isEnhancing, setIsEnhancing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
     const [loadingAuth, setLoadingAuth] = useState(true);
 
-    const totalSteps = 5;
+    const totalSteps = 4;
     const progress = (step / totalSteps) * 100;
 
     useEffect(() => {
@@ -75,52 +73,6 @@ export default function AgentUploadPage() {
         }
     };
 
-    const handleEnhance = async () => {
-        if (!description) {
-            toast({
-                title: "Description is empty",
-                description: "Please write a description first before enhancing.",
-                variant: 'destructive',
-            });
-            return;
-        }
-        setIsEnhancing(true);
-        try {
-             const photoDataUris = await Promise.all(photos.map(file => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-            }));
-
-            const input = {
-                photosDataUris: photoDataUris,
-                gpsLocation,
-                nearbyLandmarks,
-                amenities: selectedAmenities.join(', '),
-                roomFeatures: `${beds} beds, ${bathrooms} bathrooms`,
-                currentDescription: description,
-            };
-            const result = await enhanceHostelDescription(input);
-            setEnhancedDescription(result.enhancedDescription);
-            toast({
-                title: "Description Enhanced!",
-                description: "The AI has generated a new description for your hostel.",
-            });
-        } catch (error) {
-            console.error(error);
-            toast({
-                title: "Enhancement Failed",
-                description: "There was an error enhancing the description.",
-                variant: 'destructive',
-            });
-        } finally {
-            setIsEnhancing(false);
-        }
-    };
-    
     const handleSubmit = async () => {
         if (!currentUser) {
             toast({ title: 'Not authenticated', description: 'Please log in as an agent to submit.', variant: 'destructive' });
@@ -128,10 +80,47 @@ export default function AgentUploadPage() {
         }
 
         setIsSubmitting(true);
-        toast({ title: 'Submitting hostel...', description: 'Please wait while we upload the data.' });
+        toast({ title: 'Submitting hostel...', description: 'Enhancing description and uploading files.' });
 
         try {
-            // 1. Upload images to Firebase Storage
+            // 1. Enhance description with AI
+            let finalDescription = description;
+            if (photos.length > 0 && description) {
+                try {
+                    const photoDataUris = await Promise.all(photos.map(file => {
+                        return new Promise<string>((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(file);
+                        });
+                    }));
+
+                    const input = {
+                        photosDataUris: photoDataUris,
+                        gpsLocation,
+                        nearbyLandmarks,
+                        amenities: selectedAmenities.join(', '),
+                        roomFeatures: `${beds} beds, ${bathrooms} bathrooms`,
+                        currentDescription: description,
+                    };
+                    const result = await enhanceHostelDescription(input);
+                    finalDescription = result.enhancedDescription;
+                    toast({
+                        title: "Description Enhanced!",
+                        description: "The AI has improved the listing description.",
+                    });
+                } catch (error) {
+                    console.error("AI Enhancement failed, using original description.", error);
+                    toast({
+                        title: "AI Enhancement Failed",
+                        description: "Could not enhance description, using original text.",
+                        variant: 'destructive',
+                    });
+                }
+            }
+            
+            // 2. Upload images to Firebase Storage
             const imageUrls = await Promise.all(
                 photos.map(async (photo) => {
                     const storageRef = ref(storage, `hostel-images/${currentUser.uid}/${Date.now()}-${photo.name}`);
@@ -141,7 +130,7 @@ export default function AgentUploadPage() {
                 })
             );
 
-            // 2. Add hostel data to Firestore 'pendingHostels' collection
+            // 3. Add hostel data to Firestore 'pendingHostels' collection
             await addDoc(collection(db, 'pendingHostels'), {
                 name: hostelName,
                 location: gpsLocation,
@@ -152,7 +141,7 @@ export default function AgentUploadPage() {
                 amenities: selectedAmenities,
                 roomFeatures: { beds, bathrooms },
                 images: imageUrls,
-                description: enhancedDescription || description,
+                description: finalDescription,
                 status: 'pending',
                 agentId: currentUser.uid,
                 dateSubmitted: new Date().toISOString(),
@@ -225,8 +214,7 @@ export default function AgentUploadPage() {
                             <CardDescription>{
                                 step === 1 ? 'Hostel Information' :
                                 step === 2 ? 'Room Features & Amenities' :
-                                step === 3 ? 'Upload Photos' :
-                                step === 4 ? 'Location' : 'Description'
+                                step === 3 ? 'Upload Photos & Location' : 'Description & Submission'
                             }</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -271,71 +259,51 @@ export default function AgentUploadPage() {
                                 </div>
                             )}
                             {step === 3 && (
-                                <div className="space-y-4">
-                                     <Label htmlFor="photos-input">Upload up to 5 Photos</Label>
-                                    <div 
-                                        className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-accent/10"
-                                        onClick={() => document.getElementById('photos-input')?.click()}
-                                    >
-                                        <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                                        <p className="mt-2 text-sm text-muted-foreground">Drag & drop photos here, or click to select files</p>
-                                        <Input id="photos-input" type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photos.length >= 5} />
+                                <div className="space-y-6">
+                                     <div>
+                                        <Label htmlFor="photos-input">Upload up to 5 Photos</Label>
+                                        <div 
+                                            className="mt-2 border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-accent/10"
+                                            onClick={() => document.getElementById('photos-input')?.click()}
+                                        >
+                                            <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                                            <p className="mt-2 text-sm text-muted-foreground">Drag & drop photos here, or click to select files</p>
+                                            <Input id="photos-input" type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={photos.length >= 5} />
+                                        </div>
+                                        <div className="grid grid-cols-5 gap-2 mt-2">
+                                            {photoPreviews.map((preview, i) => (
+                                                <div key={i} className="relative bg-muted aspect-square rounded-md flex items-center justify-center overflow-hidden">
+                                                    <Image src={preview} alt={`Preview ${i+1}`} fill style={{objectFit: 'cover'}}/>
+                                                </div>
+                                            ))}
+                                            {[...Array(5 - photoPreviews.length)].map((_, i) => (
+                                                <div key={i} className="bg-muted aspect-square rounded-md flex items-center justify-center">
+                                                    <span className="text-xs text-muted-foreground">Photo {photoPreviews.length + i + 1}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-5 gap-2 mt-2">
-                                        {photoPreviews.map((preview, i) => (
-                                            <div key={i} className="relative bg-muted aspect-square rounded-md flex items-center justify-center overflow-hidden">
-                                                <Image src={preview} alt={`Preview ${i+1}`} fill style={{objectFit: 'cover'}}/>
-                                            </div>
-                                        ))}
-                                        {[...Array(5 - photoPreviews.length)].map((_, i) => (
-                                            <div key={i} className="bg-muted aspect-square rounded-md flex items-center justify-center">
-                                                <span className="text-xs text-muted-foreground">Photo {photoPreviews.length + i + 1}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                             {step === 4 && (
-                                <div className="space-y-4">
-                                    <Label htmlFor="gps">GPS Location</Label>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input id="gps" placeholder="e.g., 5.6037, -0.1870" className="pl-10" value={gpsLocation} onChange={e => setGpsLocation(e.target.value)} />
-                                    </div>
-                                    <div className="h-64 bg-muted rounded-lg flex items-center justify-center">
-                                        <p className="text-muted-foreground">Map Preview</p>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="gps">GPS Location</Label>
+                                        <div className="relative">
+                                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input id="gps" placeholder="e.g., 5.6037, -0.1870" className="pl-10" value={gpsLocation} onChange={e => setGpsLocation(e.target.value)} />
+                                        </div>
                                     </div>
                                 </div>
                             )}
-                            {step === 5 && (
+                            {step === 4 && (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="description">Current Description</Label>
-                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students." rows={6} />
+                                        <Label htmlFor="description">Hostel Description</Label>
+                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students. The AI will automatically enhance this on submission." rows={8} />
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Sparkles className="h-3 w-3" /> An AI will enhance this description upon submission to make it more appealing.</p>
                                     </div>
-                                    <Button onClick={handleEnhance} disabled={isEnhancing || photos.length === 0} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
-                                        <Sparkles className="mr-2 h-4 w-4" />
-                                        {isEnhancing ? 'Enhancing...' : 'Enhance with AI'}
-                                    </Button>
-                                    {enhancedDescription && (
-                                        <Card className="bg-muted/50">
-                                            <CardHeader>
-                                                <CardTitle className="text-lg">AI Enhanced Description</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <Textarea value={enhancedDescription} onChange={e => setEnhancedDescription(e.target.value)} rows={6} />
-                                                <div className="flex gap-2 mt-4">
-                                                    <Button onClick={() => { setDescription(enhancedDescription); setEnhancedDescription(''); }}>Use this</Button>
-                                                    <Button variant="outline" onClick={() => setEnhancedDescription('')}>Keep Original</Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )}
                                 </div>
                             )}
                         </CardContent>
                         <CardFooter className="flex justify-between mt-8">
-                            <Button variant="outline" onClick={prevStep} disabled={isSubmitting}>Previous</Button>
+                            <Button variant="outline" onClick={prevStep} disabled={isSubmitting || step === 1}>Previous</Button>
                             {step < totalSteps ? (
                                 <Button onClick={nextStep} disabled={isSubmitting || !currentUser}>Next</Button>
                             ) : (
@@ -351,3 +319,6 @@ export default function AgentUploadPage() {
         </div>
     );
 }
+
+
+    
