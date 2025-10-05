@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Hotel, User, LogOut, Loader2 } from 'lucide-react';
+import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const roles = {
   student: { email: 'student@test.com', password: 'password', redirect: '/' },
-  agent: { email: 'agent@test.com', password: 'password', redirect: '/agent/upload' },
+  agent: { email: 'agent@test.com', password: 'password', redirect: '/agent/listings' },
   admin: { email: 'admin@test.com', password: 'password', redirect: '/admin/dashboard' },
 };
 
@@ -70,6 +70,9 @@ export function Header() {
     }
   };
 
+  const isAgent = currentUser?.email === roles.agent.email;
+  const isAdmin = currentUser?.email === roles.admin.email;
+
 
   return (
     <header className="bg-card shadow-sm sticky top-0 z-40">
@@ -83,12 +86,21 @@ export function Header() {
             <Link href="/" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
               Hostels
             </Link>
-            <Link href="/agent/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-              For Agents
-            </Link>
-            <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-              Admin
-            </Link>
+            {(isAgent || isAdmin) && (
+              <Link href="/agent/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                List a Hostel
+              </Link>
+            )}
+            {isAgent && (
+               <Link href="/agent/listings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                My Listings
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                Admin Dashboard
+              </Link>
+            )}
           </nav>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -103,6 +115,22 @@ export function Header() {
                   <DropdownMenuLabel>
                     {currentUser.email}
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {isAgent && (
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link href="/agent/listings"><ListPlus className="mr-2 h-4 w-4"/>My Listings</Link>
+                      </DropdownMenuItem>
+                       <DropdownMenuItem asChild>
+                        <Link href="/agent/upload"><ListPlus className="mr-2 h-4 w-4"/>Add New</Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                   {isAdmin && (
+                    <DropdownMenuItem asChild>
+                        <Link href="/admin/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} disabled={authAction === 'logout'}>
                     <LogOut className="mr-2 h-4 w-4" />
@@ -131,3 +159,5 @@ export function Header() {
     </header>
   );
 }
+
+    

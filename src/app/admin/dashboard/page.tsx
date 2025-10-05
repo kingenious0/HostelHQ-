@@ -7,10 +7,9 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { adminStats, bookingsChartData } from '@/lib/data';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { BookingsChart } from '@/components/bookings-chart';
 import {
@@ -25,23 +24,26 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from '@/components/ui/badge';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
+import { bookingsChartData } from '@/lib/data'; // Keep chart data for now
 
-type PendingHostel = {
+type Hostel = {
   id: string;
   name: string;
   agentId: string;
   location: string;
-  dateSubmitted: string;
   price: number;
-  description: string;
-  images: string[];
-  amenities: string[];
-  roomFeatures: { beds: string; bathrooms: string };
   [key: string]: any;
 };
 
+type PendingHostel = Hostel & {
+  dateSubmitted: string;
+};
+
+
 export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
+  const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
+  const [stats, setStats] = useState({ revenue: 0, occupancyRate: '0%', totalListings: 0 });
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedHostel, setSelectedHostel] = useState<PendingHostel | null>(null);
@@ -49,7 +51,8 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'pendingHostels'), (snapshot) => {
+    // Real-time pending hostels
+    const unsubPending = onSnapshot(collection(db, 'pendingHostels'), (snapshot) => {
       const hostelsData = snapshot.docs.map(doc => {
         const data = doc.data();
         const date = (data.dateSubmitted as Timestamp)?.toDate ? (data.dateSubmitted as Timestamp).toDate().toLocaleDateString() : new Date(data.dateSubmitted).toLocaleDateString();
@@ -70,7 +73,41 @@ export default function AdminDashboard() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Real-time approved hostels
+    const unsubApproved = onSnapshot(collection(db, 'hostels'), (snapshot) => {
+      const hostelsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
+      setApprovedHostels(hostelsData);
+    });
+
+    // Fetch stats
+    const fetchStats = async () => {
+        const approvedSnapshot = await getDocs(collection(db, 'hostels'));
+        const pendingSnapshot = await getDocs(collection(db, 'pendingHostels'));
+        
+        const totalApproved = approvedSnapshot.size;
+        const totalPending = pendingSnapshot.size;
+        const totalListings = totalApproved + totalPending;
+
+        // Simplified revenue and occupancy for demonstration
+        const totalRevenue = approvedSnapshot.docs.reduce((sum, doc) => sum + (doc.data().price || 0), 0);
+        const occupancy = totalListings > 0 ? (totalApproved / totalListings) * 100 : 0;
+
+        setStats({
+            revenue: totalRevenue,
+            occupancyRate: `${occupancy.toFixed(0)}%`,
+            totalListings: totalApproved,
+        });
+    };
+
+    fetchStats();
+    const unsubStats = onSnapshot(collection(db, 'hostels'), fetchStats);
+
+
+    return () => {
+      unsubPending();
+      unsubApproved();
+      unsubStats();
+    };
   }, []);
 
   const handleApprove = async (hostelId: string) => {
@@ -109,8 +146,6 @@ export default function AdminDashboard() {
     setProcessingId(hostelId);
     toast({ title: "Rejecting Hostel..." });
     try {
-      // In a real app, you might move this to a 'rejectedHostels' collection
-      // and notify the agent. For now, we just delete it.
       await deleteDoc(doc(db, 'pendingHostels', hostelId));
       toast({ title: "Hostel Rejected", description: "The submission has been removed." });
       setIsDialogOpen(false);
@@ -122,6 +157,23 @@ export default function AdminDashboard() {
       setProcessingId(null);
     }
   };
+
+  const handleDeleteApproved = async (hostelId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this hostel? This action cannot be undone.")) {
+        return;
+    }
+    setProcessingId(hostelId);
+    toast({ title: "Deleting Hostel..." });
+    try {
+        await deleteDoc(doc(db, 'hostels', hostelId));
+        toast({ title: "Hostel Deleted", description: "The listing has been permanently removed." });
+    } catch (error) {
+        console.error("Error deleting hostel: ", error);
+        toast({ title: "Deletion Failed", description: "An error occurred.", variant: "destructive" });
+    } finally {
+        setProcessingId(null);
+    }
+};
 
   const openReviewDialog = (hostel: PendingHostel) => {
     setSelectedHostel(hostel);
@@ -138,12 +190,12 @@ export default function AdminDashboard() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Potential Revenue</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{adminStats.revenue}</div>
-                <p className="text-xs text-muted-foreground">+20.1% from last month</p>
+                <div className="text-2xl font-bold">GH₵{stats.revenue.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">Based on approved listings</p>
               </CardContent>
             </Card>
             <Card>
@@ -152,42 +204,27 @@ export default function AdminDashboard() {
                 <BarChart className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{adminStats.occupancyRate}</div>
-                <p className="text-xs text-muted-foreground">+2% from last month</p>
+                <div className="text-2xl font-bold">{stats.occupancyRate}</div>
+                <p className="text-xs text-muted-foreground">{stats.totalListings} approved listings</p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Performing Agents</CardTitle>
+              <CardHeader>
+                <CardTitle>Total Approved Listings</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {adminStats.topAgents.map(agent => (
-                    <div key={agent.name} className="flex justify-between text-sm">
-                      <span>{agent.name}</span>
-                      <span className="font-semibold">{agent.sales} bookings</span>
-                    </div>
-                  ))}
-                </div>
+                <div className="text-2xl font-bold">{approvedHostels.length}</div>
+                 <p className="text-xs text-muted-foreground">Live on the platform</p>
               </CardContent>
             </Card>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-5">
+          <div className="grid gap-8 lg:grid-cols-5 mb-8">
             <Card className="lg:col-span-3">
               <CardHeader>
-                  <CardTitle>Bookings Overview</CardTitle>
-                  <CardDescription>A summary of hostel bookings over the past few months.</CardDescription>
-              </CardHeader>
-              <CardContent className="pl-2">
-                  <BookingsChart data={bookingsChartData} />
-              </CardContent>
-            </Card>
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Pending Hostel Approvals</CardTitle>
-                <CardDescription>Review and approve or reject new hostel listings.</CardDescription>
+                  <CardTitle>Pending Hostel Approvals</CardTitle>
+                  <CardDescription>Review and approve or reject new hostel listings.</CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -226,6 +263,47 @@ export default function AdminDashboard() {
                   </Table>
                 )}
               </CardContent>
+            </Card>
+             <Card className="lg:col-span-2">
+                <CardHeader>
+                    <CardTitle>Live Hostel Listings</CardTitle>
+                    <CardDescription>Manage approved hostels on the platform.</CardDescription>
+                </CardHeader>
+                <CardContent className="max-h-[400px] overflow-y-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Hostel Name</TableHead>
+                                <TableHead className="text-right">Action</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {approvedHostels.length > 0 ? (
+                                approvedHostels.map(hostel => (
+                                    <TableRow key={hostel.id}>
+                                        <TableCell className="font-medium">{hostel.name}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => handleDeleteApproved(hostel.id)}
+                                                disabled={processingId === hostel.id}
+                                            >
+                                                {processingId === hostel.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center h-24">
+                                        No approved hostels.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
             </Card>
           </div>
         </div>
