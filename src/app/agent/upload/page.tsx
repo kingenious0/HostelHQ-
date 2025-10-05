@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
@@ -31,6 +31,7 @@ export default function AgentUploadPage() {
     // Form State
     const [hostelName, setHostelName] = useState('');
     const [nearbyLandmarks, setNearbyLandmarks] = useState('');
+    const [price, setPrice] = useState('');
     const [beds, setBeds] = useState('');
     const [bathrooms, setBathrooms] = useState('');
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
@@ -134,7 +135,7 @@ export default function AgentUploadPage() {
                 name: hostelName,
                 location: gpsLocation,
                 nearbyLandmarks,
-                price: 0, // Set a default or have a field for it
+                price: Number(price) || 0,
                 rating: 0,
                 reviews: 0,
                 amenities: selectedAmenities,
@@ -211,7 +212,7 @@ export default function AgentUploadPage() {
                         <CardHeader>
                             <CardTitle className="text-2xl font-headline">List a New Hostel</CardTitle>
                             <CardDescription>{
-                                step === 1 ? 'Hostel Information' :
+                                step === 1 ? 'Hostel Information & Price' :
                                 step === 2 ? 'Room Features & Amenities' :
                                 step === 3 ? 'Upload Photos & Location' : 'Description & Submission'
                             }</CardDescription>
@@ -226,6 +227,13 @@ export default function AgentUploadPage() {
                                     <div className="space-y-2">
                                         <Label htmlFor="landmarks">Nearby Landmarks</Label>
                                         <Input id="landmarks" placeholder="e.g., Accra Mall, University of Ghana" value={nearbyLandmarks} onChange={(e) => setNearbyLandmarks(e.target.value)} />
+                                    </div>
+                                     <div className="space-y-2">
+                                        <Label htmlFor="price">Price per Year (GH₵)</Label>
+                                        <div className="relative">
+                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input id="price" type="number" placeholder="e.g., 3500" className="pl-10" value={price} onChange={(e) => setPrice(e.target.value)} />
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -318,3 +326,5 @@ export default function AgentUploadPage() {
         </div>
     );
 }
+
+    
