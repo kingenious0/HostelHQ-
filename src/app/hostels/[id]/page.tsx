@@ -6,7 +6,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel } from '@/lib/data';
 import { notFound, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const amenityIcons = {
   wifi: <Wifi className="h-5 w-5" />,
@@ -23,20 +24,24 @@ const amenityIcons = {
   laundry: <Droplets className="h-5 w-5" />,
   ac: <Snowflake className="h-5 w-5" />,
   gym: <Dumbbell className="h-5 w-5" />,
-  'study-area': <BookOpen className="h-5 w-5" />,
+  'study area': <BookOpen className="h-5 w-5" />,
+};
+
+const availabilityInfo: Record<Hostel['availability'], { text: string, icon: React.ReactNode, className: string }> = {
+    'Available': { text: 'Rooms Available', icon: <DoorOpen />, className: 'bg-green-100 text-green-800 border-green-200'},
+    'Limited': { text: 'Limited Rooms', icon: <Clock />, className: 'bg-yellow-100 text-yellow-800 border-yellow-200'},
+    'Full': { text: 'Hostel Full', icon: <Lock />, className: 'bg-red-100 text-red-800 border-red-200'},
 };
 
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: User | null }) {
     const router = useRouter();
+    const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
     const handleApply = () => {
-        // This is where we'd check if a visit has been completed.
-        // For now, we assume if logged in, they can secure the hostel.
         if (currentUser) {
-            router.push(`/hostels/${hostel.id}/secure`);
+             router.push(`/hostels/${hostel.id}/secure`);
         } else {
-            // This case should ideally not be hit if logic is correct, but as a fallback
-            router.push(`/hostels/${hostel.id}/book`);
+             router.push(`/hostels/${hostel.id}/book`);
         }
     };
 
@@ -58,6 +63,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 </Carousel>
             </div>
             <div className="flex flex-col justify-center">
+                <Badge 
+                    variant="outline"
+                    className={cn("text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}
+                >
+                    {currentAvailability.icon} {currentAvailability.text}
+                </Badge>
                 <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
                 <div className="flex items-center text-muted-foreground mt-2">
                     <MapPin className="h-5 w-5 mr-2" />
@@ -77,7 +88,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <div className="flex flex-wrap gap-4">
                         {hostel.amenities.map((amenity: string) => (
                         <Badge key={amenity} variant="outline" className="text-base p-2 capitalize flex items-center gap-2">
-                            {amenityIcons[amenity.toLowerCase().replace(' ', '-') as keyof typeof amenityIcons]} {amenity}
+                            {amenityIcons[amenity.toLowerCase().replace(' ', '-') as keyof typeof amenityIcons] || <div className="h-5 w-5" />} {amenity}
                         </Badge>
                         ))}
                     </div>
@@ -135,7 +146,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                             <li>Full Photo Gallery</li>
                             <li>Available Amenities</li>
                             <li>Pricing and Room Options</li>
-                            <li>Contact Information</li>
+                            <li>Live Availability Status</li>
                         </ul>
                     </CardContent>
                 </Card>

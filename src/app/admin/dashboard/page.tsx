@@ -7,9 +7,9 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { BookingsChart } from '@/components/bookings-chart';
 import {
@@ -19,12 +19,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog"
 import { Badge } from '@/components/ui/badge';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
-import { bookingsChartData } from '@/lib/data'; // Keep chart data for now
 
 type Hostel = {
   id: string;
@@ -32,12 +29,26 @@ type Hostel = {
   agentId: string;
   location: string;
   price: number;
+  availability: 'Available' | 'Limited' | 'Full';
   [key: string]: any;
 };
 
-type PendingHostel = Hostel & {
+type PendingHostel = Omit<Hostel, 'availability'> & {
   dateSubmitted: string;
 };
+
+
+const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
+  'Available': 'Limited',
+  'Limited': 'Full',
+  'Full': 'Available',
+};
+
+const availabilityVariant: Record<Hostel['availability'], "default" | "secondary" | "destructive"> = {
+    'Available': 'default',
+    'Limited': 'secondary',
+    'Full': 'destructive'
+}
 
 
 export default function AdminDashboard() {
@@ -67,7 +78,7 @@ export default function AdminDashboard() {
           images: data.images || [],
           amenities: data.amenities || [],
           roomFeatures: data.roomFeatures || { beds: 'N/A', bathrooms: 'N/A' },
-        }
+        } as PendingHostel
       });
       setPendingHostels(hostelsData);
       setLoading(false);
@@ -124,6 +135,7 @@ export default function AdminDashboard() {
           ...hostelData,
           status: 'approved',
           approvedAt: new Date().toISOString(),
+          availability: 'Available', // Set default availability on approval
         });
         
         await deleteDoc(pendingDocRef);
@@ -175,6 +187,22 @@ export default function AdminDashboard() {
     }
 };
 
+  const handleToggleAvailability = async (hostel: Hostel) => {
+      setProcessingId(hostel.id);
+      const newAvailability = availabilityCycle[hostel.availability || 'Full'];
+      try {
+          const hostelRef = doc(db, 'hostels', hostel.id);
+          await updateDoc(hostelRef, { availability: newAvailability });
+          toast({ title: "Status Updated", description: `${hostel.name} is now set to ${newAvailability}.`});
+      } catch (error) {
+          console.error("Error updating availability:", error);
+          toast({ title: "Update Failed", description: "Could not update status.", variant: "destructive"});
+      } finally {
+          setProcessingId(null);
+      }
+  }
+
+
   const openReviewDialog = (hostel: PendingHostel) => {
     setSelectedHostel(hostel);
     setIsDialogOpen(true);
@@ -200,17 +228,7 @@ export default function AdminDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Occupancy Rate</CardTitle>
-                <BarChart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.occupancyRate}</div>
-                <p className="text-xs text-muted-foreground">{stats.totalListings} approved listings</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Total Approved Listings</CardTitle>
+                <CardTitle className="text-sm font-medium">Approved Listings</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -218,10 +236,20 @@ export default function AdminDashboard() {
                  <p className="text-xs text-muted-foreground">Live on the platform</p>
               </CardContent>
             </Card>
+             <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+                <Loader2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{pendingHostels.length}</div>
+                 <p className="text-xs text-muted-foreground">Waiting for review</p>
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-5 mb-8">
-            <Card className="lg:col-span-3">
+          <div className="grid gap-8 lg:grid-cols-2 mb-8">
+            <Card>
               <CardHeader>
                   <CardTitle>Pending Hostel Approvals</CardTitle>
                   <CardDescription>Review and approve or reject new hostel listings.</CardDescription>
@@ -264,17 +292,18 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
-             <Card className="lg:col-span-2">
+             <Card>
                 <CardHeader>
                     <CardTitle>Live Hostel Listings</CardTitle>
-                    <CardDescription>Manage approved hostels on the platform.</CardDescription>
+                    <CardDescription>Manage approved hostels and their availability.</CardDescription>
                 </CardHeader>
                 <CardContent className="max-h-[400px] overflow-y-auto">
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Hostel Name</TableHead>
-                                <TableHead className="text-right">Action</TableHead>
+                                <TableHead>Availability</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -282,12 +311,30 @@ export default function AdminDashboard() {
                                 approvedHostels.map(hostel => (
                                     <TableRow key={hostel.id}>
                                         <TableCell className="font-medium">{hostel.name}</TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell>
+                                            <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
+                                                {hostel.availability || 'N/A'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right space-x-2">
+                                            <Button 
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                onClick={() => handleToggleAvailability(hostel)}
+                                                disabled={processingId === hostel.id}
+                                                title="Cycle availability status"
+                                            >
+                                                {processingId === hostel.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                                                {processingId !== hostel.id && <Repeat className="h-4 w-4" />}
+                                            </Button>
                                             <Button
                                                 variant="destructive"
-                                                size="sm"
+                                                size="icon"
+                                                className="h-8 w-8"
                                                 onClick={() => handleDeleteApproved(hostel.id)}
                                                 disabled={processingId === hostel.id}
+                                                title="Delete hostel"
                                             >
                                                 {processingId === hostel.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                             </Button>
@@ -296,7 +343,7 @@ export default function AdminDashboard() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={2} className="text-center h-24">
+                                    <TableCell colSpan={3} className="text-center h-24">
                                         No approved hostels.
                                     </TableCell>
                                 </TableRow>
@@ -395,5 +442,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
-    

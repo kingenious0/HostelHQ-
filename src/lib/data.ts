@@ -15,6 +15,7 @@ export type Hostel = {
   agentId?: string;
   lat?: number;
   lng?: number;
+  availability: 'Available' | 'Limited' | 'Full';
 };
 
 export type Agent = {
@@ -54,7 +55,8 @@ export const staticHostels: Hostel[] = [
     ],
     description: "Approx. walking time: ~5–10 minutes. Route: Leave AAMUSTED via the main exit and walk along Sunyani Road / Denkyembuoso Road. Price: GHC ~3,000–4,400. Amenities: Balconies, TV/common area, comfortable rooms. Click here for directions: https://www.google.com/maps/dir/?api=1&origin=AAMUSTED+Tanoso+Kumasi+Ghana&destination=Doku+Kaakyire+Hostel+Denkyembuoso+Road+Kumasi+Ghana&travelmode=walking",
     lat: 6.69,
-    lng: -1.66
+    lng: -1.66,
+    availability: 'Available',
   },
   // Other static hostels are removed for brevity in this example but would be here.
 ];
@@ -151,5 +153,3 @@ export async function getHostels(): Promise<Hostel[]> {
     console.log("Falling back to only static hostel data.");
     return staticHostels;
 }
-
-    

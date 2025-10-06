@@ -11,21 +11,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Edit, PlusCircle } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-type Hostel = {
+type Listing = {
     id: string;
     name: string;
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'pending' | 'approved';
     price: number;
     location: string;
+    availability?: 'Available' | 'Limited' | 'Full';
 };
 
 export default function AgentListingsPage() {
-    const [myListings, setMyListings] = useState<Hostel[]>([]);
+    const [myListings, setMyListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -47,34 +48,50 @@ export default function AgentListingsPage() {
         if (!currentUser) return;
 
         setLoading(true);
-        const q = query(
-            collection(db, "pendingHostels"),
-            where("agentId", "==", currentUser.uid)
-        );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const listingsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as Hostel));
+        const fetchListings = async () => {
+            const pendingQuery = query(collection(db, "pendingHostels"), where("agentId", "==", currentUser.uid));
+            const approvedQuery = query(collection(db, "hostels"), where("agentId", "==", currentUser.uid));
+            
+            const [pendingSnapshot, approvedSnapshot] = await Promise.all([
+                getDocs(pendingQuery),
+                getDocs(approvedQuery)
+            ]);
+
+            const listingsData: Listing[] = [];
+            pendingSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data() } as Listing));
+            approvedSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data() } as Listing));
+            
             setMyListings(listingsData);
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching listings: ", error);
-            toast({ title: "Error", description: "Could not fetch your listings.", variant: "destructive" });
-            setLoading(false);
-        });
+        };
+        
+        // Initial fetch
+        fetchListings();
 
-        return () => unsubscribe();
+        // Listen for real-time updates
+        const unsubPending = onSnapshot(query(collection(db, "pendingHostels"), where("agentId", "==", currentUser.uid)), () => fetchListings());
+        const unsubApproved = onSnapshot(query(collection(db, "hostels"), where("agentId", "==", currentUser.uid)), () => fetchListings());
+
+        return () => {
+            unsubPending();
+            unsubApproved();
+        };
+
     }, [currentUser, toast]);
     
-    const getStatusVariant = (status: Hostel['status']) => {
+    const getStatusVariant = (status: Listing['status']) => {
         switch (status) {
             case 'approved': return 'default';
             case 'pending': return 'secondary';
-            case 'rejected': return 'destructive';
             default: return 'outline';
         }
+    }
+    
+    const availabilityVariant: Record<string, "default" | "secondary" | "destructive"> = {
+        'Available': 'default',
+        'Limited': 'secondary',
+        'Full': 'destructive'
     }
 
 
@@ -135,9 +152,8 @@ export default function AgentListingsPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Hostel Name</TableHead>
-                                            <TableHead>Location</TableHead>
-                                            <TableHead>Price/Year</TableHead>
-                                            <TableHead>Status</TableHead>
+                                            <TableHead>Approval</TableHead>
+                                            <TableHead>Availability</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -146,15 +162,22 @@ export default function AgentListingsPage() {
                                             myListings.map(listing => (
                                                 <TableRow key={listing.id}>
                                                     <TableCell className="font-medium">{listing.name}</TableCell>
-                                                    <TableCell>{listing.location}</TableCell>
-                                                    <TableCell>GH₵{listing.price.toLocaleString()}</TableCell>
                                                     <TableCell>
                                                         <Badge variant={getStatusVariant(listing.status)} className="capitalize">
                                                             {listing.status}
                                                         </Badge>
                                                     </TableCell>
+                                                    <TableCell>
+                                                        {listing.availability ? (
+                                                            <Badge variant={availabilityVariant[listing.availability]} className="capitalize">
+                                                                {listing.availability}
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-xs">N/A</span>
+                                                        )}
+                                                    </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/agent/listings/edit/${listing.id}`)}>
+                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/agent/listings/edit/${listing.id}`)} disabled={listing.status === 'approved'}>
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
                                                     </TableCell>
@@ -177,5 +200,3 @@ export default function AgentListingsPage() {
         </div>
     );
 }
-
-    
