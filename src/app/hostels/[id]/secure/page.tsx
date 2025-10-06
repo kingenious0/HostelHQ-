@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -37,11 +37,17 @@ const formSchema = z.object({
   departmentName: z.string().min(3, { message: "Department is required." }),
   level: z.enum(["100", "200", "300", "400"]),
   phoneNumber: z.string().regex(/^\+?[0-9]{10,13}$/, { message: "Invalid phone number." }),
+  email: z.string().email({ message: "Invalid email address." }),
 })
+
+const PAYSTACK_PUBLIC_KEY = "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260";
+
 
 export default function SecureHostelPage() {
     const { toast } = useToast();
     const router = useRouter();
+    const params = useParams();
+    const { id: hostelId } = params;
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -52,26 +58,49 @@ export default function SecureHostelPage() {
             ghanaCardNumber: "",
             departmentName: "",
             phoneNumber: "",
+            email: "",
         },
     });
 
     function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
-        console.log(values);
         toast({ title: "Processing Application..." });
 
-        // In a real app, you would first save the application data to your database.
-        // Then, you would generate a unique payment link with the Paystack API.
-        // For this demo, we'll redirect to a generic Paystack test page.
-
-        setTimeout(() => {
+        const paymentData = {
+          key: PAYSTACK_PUBLIC_KEY,
+          email: values.email,
+          amount: 10 * 100, // Paystack amount is in pesewas (10 GH₵)
+          ref: `hostel-visit-${hostelId}-${Date.now()}`,
+          label: "Hostel Visit Fee",
+          currency: 'GHS',
+          callback: function(response: any) {
+            console.log('Paystack response:', response);
             toast({
-                title: "Redirecting to Payment",
-                description: "Please complete your payment on Paystack.",
+              title: "Payment Successful!",
+              description: "Redirecting to confirmation page...",
             });
-            // This would be a dynamically generated Paystack link
-            router.push("https://paystack.shop/demo-store");
-        }, 1500);
+            // On successful payment, redirect to the agent tracking page
+            router.push(`/hostels/${hostelId}/book/confirmation`);
+          },
+          onClose: function() {
+            toast({
+              title: "Payment Cancelled",
+              description: "You can try again anytime.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+          },
+        };
+
+        // Construct the Paystack URL
+        const queryParams = new URLSearchParams(paymentData as any).toString();
+        const paystackUrl = `https://paystack.com/pay/${queryParams}`;
+        
+        // In a real app, you would save application data before redirecting
+        console.log("Application data:", values);
+        
+        // Redirect to Paystack
+        window.location.href = `https://paystack.com/pay/hostel-visit-booking?${queryParams}`;
     }
 
   return (
@@ -179,6 +208,22 @@ export default function SecureHostelPage() {
                                     </FormItem>
                                 )}
                             />
+                             <FormField
+                                control={form.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel>Email Address</FormLabel>
+                                    <FormControl>
+                                        <Input type="email" placeholder="you@example.com" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        Your payment receipt will be sent here.
+                                    </FormDescription>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                              <CardFooter className="px-0 pt-6">
                                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -193,3 +238,5 @@ export default function SecureHostelPage() {
     </div>
   )
 }
+
+    
