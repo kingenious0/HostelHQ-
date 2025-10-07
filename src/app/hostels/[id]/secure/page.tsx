@@ -42,9 +42,8 @@ const formSchema = z.object({
 })
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260";
-// A general slug for a one-time payment link created in your Paystack dashboard.
-// This is a more robust way than constructing a full payment link on the client.
-const PAYSTACK_PAYMENT_SLUG = "hostel-visit-booking";
+// This is the slug from the "Paystack Shop" link the user created.
+const PAYSTACK_PAYMENT_SLUG = "klbajlc2ol";
 
 
 export default function SecureHostelPage() {
@@ -97,7 +96,7 @@ export default function SecureHostelPage() {
         }).toString();
         
         // Redirect to Paystack for payment
-        const paystackUrl = `https://paystack.com/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
+        const paystackUrl = `https://paystack.shop/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
         window.location.href = paystackUrl;
     }
 
