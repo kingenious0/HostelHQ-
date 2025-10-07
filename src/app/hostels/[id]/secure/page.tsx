@@ -30,6 +30,7 @@ import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
+import { PAYSTACK_PAYMENT_SLUG, PAYSTACK_PUBLIC_KEY } from "@/lib/paystack"
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -40,9 +41,6 @@ const formSchema = z.object({
   phoneNumber: z.string().regex(/^\+?[0-9]{10,13}$/, { message: "Invalid phone number." }),
   email: z.string().email({ message: "Invalid email address." }),
 })
-
-const PAYSTACK_PUBLIC_KEY = "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260";
-const PAYSTACK_PAYMENT_SLUG = "klbajlc2ol";
 
 
 export default function SecureHostelPage() {
@@ -69,13 +67,12 @@ export default function SecureHostelPage() {
         toast({ title: "Redirecting to payment..." });
 
         const queryParams = new URLSearchParams({
-            key: PAYSTACK_PUBLIC_KEY,
             email: values.email,
             amount: (10 * 100).toString(), // Paystack amount is in pesewas (10 GH₵)
             ref: `hostel-visit-${hostelId}-${Date.now()}`,
             label: "Hostel Visit Fee",
             currency: 'GHS',
-            callback_url: `${window.location.origin}/hostels/${hostelId}/book/confirmation`,
+            callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/hostels/${hostelId}/book/confirmation`,
         }).toString();
         
         const paystackUrl = `https://paystack.shop/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;

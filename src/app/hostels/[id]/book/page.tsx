@@ -10,6 +10,7 @@ import { CreditCard, Calendar } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
+import { PAYSTACK_PAYMENT_SLUG } from '@/lib/paystack';
 
 export default async function BookingPage({ params }: { params: { id: string } }) {
     const hostel = await getHostel(params.id);
@@ -17,6 +18,19 @@ export default async function BookingPage({ params }: { params: { id: string } }
     if (!hostel) {
         notFound();
     }
+    
+    // Note: In a real app, email and ref would be dynamic.
+    const queryParams = new URLSearchParams({
+        email: 'student@test.com',
+        amount: (10 * 100).toString(), // Paystack amount is in pesewas (10 GH₵)
+        ref: `hostel-visit-${params.id}-${Date.now()}`,
+        label: "Hostel Visit Fee",
+        currency: 'GHS',
+        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/hostels/${params.id}/book/confirmation`,
+    }).toString();
+
+    const paystackUrl = `https://paystack.shop/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
+
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -62,7 +76,7 @@ export default async function BookingPage({ params }: { params: { id: string } }
 
                     </CardContent>
                     <CardFooter>
-                        <Link href={`/hostels/${hostel.id}/secure`} className="w-full">
+                        <Link href={paystackUrl} className="w-full">
                             <Button className="w-full h-12 text-lg bg-accent hover:bg-accent/90 text-accent-foreground">
                                 <CreditCard className="mr-2 h-5 w-5" />
                                 Proceed to Pay
