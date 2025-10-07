@@ -235,15 +235,19 @@ export async function getHostels(): Promise<Hostel[]> {
         const querySnapshot = await getDocs(hostelsCollectionRef);
         const firestoreHostels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
         
-        // This now prioritizes Firestore data. Static data is only a fallback.
         if (firestoreHostels.length > 0) {
             return firestoreHostels;
         }
-    } catch (e) {
-        console.error("Error fetching hostels from firestore: ", e);
+        // If firestore is empty, fall through to static data
+    } catch (e: any) {
+        console.error("\n--- FIRESTORE FETCH FAILED (DEV) ---");
+        console.error("Could not fetch hostels from Firestore. This is likely due to missing or incorrect Firebase credentials in your local `.env` file.");
+        console.error("Please ensure your `.env` file has the correct NEXT_PUBLIC_FIREBASE_... variables for your project.");
+        console.error("Falling back to static data. Original error:", e.message);
+        console.error("--------------------------------------\n");
     }
     
     // Fallback to static data if firestore fails or is empty
-    console.log("Falling back to only static hostel data.");
+    console.log("Falling back to static hostel data.");
     return staticHostels;
 }
