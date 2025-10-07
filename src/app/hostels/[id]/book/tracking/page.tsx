@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
-import { Agent, Hostel, assignAgentAndSimulate, getAgent } from '@/lib/data';
+import { Agent, Hostel, getAgent } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
-import { MapboxMap } from '@/components/map'; // Changed to MapboxMap
+import { MapboxMap } from '@/components/map';
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 
@@ -68,23 +68,34 @@ export default function TrackingPage() {
                 const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
                 setVisit(visitData);
 
-                // --- Ably Integration ---
+                // If an agent is already assigned, fetch their details and subscribe to GPS
                 if (visitData.agentId && (!agent || agent.id !== visitData.agentId)) {
-                    // 1. Fetch agent details from Firestore
                     const agentDetails = await getAgent(visitData.agentId);
                     setAgent(agentDetails);
                     if(agentDetails?.location) {
                         setAgentLiveLocation(agentDetails.location);
                     }
-
-                    // 2. Subscribe to the agent's specific Ably channel for GPS updates
                     const channel = ably.channels.get(`agent:${visitData.agentId}:gps`);
                     const subscribeCallback = (message: Types.Message) => {
                         setAgentLiveLocation(message.data);
                     };
                     channel.subscribe('location', subscribeCallback);
-                    
                     unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
+                
+                // If no agent is assigned, find one from Ably presence
+                } else if (!visitData.agentId) {
+                    const presenceChannel = ably.channels.get('agents:live');
+                    const onlineAgents = await presenceChannel.presence.get();
+                    
+                    if (onlineAgents.length > 0) {
+                        const assignedAgentMember = onlineAgents[0]; // Choose the first agent for simplicity
+                        
+                        await updateDoc(visitDocRef, {
+                            agentId: assignedAgentMember.clientId,
+                            status: 'accepted'
+                        });
+                        // The onSnapshot listener will then pick up this change and set the agent state
+                    }
                 }
             } else {
                 notFound();
@@ -92,21 +103,11 @@ export default function TrackingPage() {
             setLoading(false);
         });
         unsubscribes.push(unsubVisit);
-        
-        // --- Agent Assignment Simulation ---
-        // This now happens server-side, but we trigger it from the client for this demo
-        const assignmentTimeout = setTimeout(() => {
-            if(hostel) {
-                 assignAgentAndSimulate(visitId, hostel);
-            }
-        }, 5000);
-        unsubscribes.push(() => clearTimeout(assignmentTimeout));
-
 
         return () => {
             unsubscribes.forEach(unsub => unsub());
         };
-    }, [visitId, hostelId, agent, hostel]);
+    }, [visitId, hostelId, agent]);
     
     if (loading || !visit || !hostel) {
         return (
@@ -213,3 +214,4 @@ export default function TrackingPage() {
         </div>
     );
 }
+    
