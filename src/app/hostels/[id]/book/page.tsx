@@ -59,7 +59,8 @@ export default function BookingPage() {
                 amount: 10 * 100, // 10 GHS in pesewas
                 phone,
                 provider,
-                label: `Visit fee for ${hostel.name}`
+                label: `Visit fee for ${hostel.name}`,
+                hostelId: id, // Pass the hostelId
             });
 
             if (result.status && result.authorization_url) {

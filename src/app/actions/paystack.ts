@@ -10,6 +10,7 @@ type MomoPaymentPayload = {
     phone: string;
     provider: 'mtn' | 'vod' | 'tgo';
     label?: string;
+    hostelId: string; // Added hostelId
 }
 
 export async function initializeMomoPayment(payload: MomoPaymentPayload) {
@@ -25,7 +26,8 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     const headersList = headers();
     const host = headersList.get('host') || '';
     const protocol = headersList.get('x-forwarded-proto') || 'http';
-    const callback_url = `${protocol}://${host}/hostels/some-id/book/confirmation`;
+    // Use the dynamic hostelId in the callback_url
+    const callback_url = `${protocol}://${host}/hostels/${payload.hostelId}/book/confirmation`;
 
 
     try {
