@@ -1,4 +1,4 @@
-import Ably from 'ably';
+import { Realtime } from 'ably';
 
 const ablyApiKey = process.env.NEXT_PUBLIC_ABLY_API_KEY;
 
@@ -7,4 +7,4 @@ if (!ablyApiKey) {
 }
 
 // Use a Realtime client for both publishing and subscribing
-export const ably = new Ably.Realtime.Promise({ key: ablyApiKey });
+export const ably = new Realtime({ key: ablyApiKey });
