@@ -4,6 +4,8 @@ import Ably from 'ably';
 
 export async function GET(req: NextRequest) {
   const ablyApiKey = process.env.ABLY_API_KEY;
+  const clientId = req.headers.get('x-ably-clientid') || 'hostel-hq-student';
+
 
   if (!ablyApiKey) {
     return NextResponse.json(
@@ -20,7 +22,10 @@ export async function GET(req: NextRequest) {
   // IMPORTANT: Instantiate the client *inside* the handler for serverless environments.
   // This ensures the API key is read from the environment variables on every request.
   const client = new Ably.Rest(ablyApiKey);
-  const tokenRequestData = await client.auth.createTokenRequest({ clientId: 'hostel-hq-student' });
+  const tokenRequestData = await client.auth.createTokenRequest({ 
+    clientId: clientId,
+    capability: { '*': ['subscribe', 'publish', 'presence'] }
+  });
 
   return NextResponse.json(tokenRequestData);
 }
