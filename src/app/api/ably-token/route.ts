@@ -4,8 +4,8 @@ import Ably from 'ably';
 
 export async function GET(req: NextRequest) {
   const ablyApiKey = process.env.ABLY_API_KEY;
-  const clientId = req.headers.get('x-ably-clientid') || 'hostel-hq-student';
-
+  // Use 'anonymous' as a fallback if the client doesn't provide an ID
+  const clientId = req.headers.get('x-ably-clientid') || 'anonymous';
 
   if (!ablyApiKey) {
     return NextResponse.json(
