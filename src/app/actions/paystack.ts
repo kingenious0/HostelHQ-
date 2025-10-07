@@ -25,9 +25,9 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     // Get the base URL for the callback
     const headersList = headers();
     const host = headersList.get('host') || '';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
     
-    // Use the dynamic hostelId in the callback_url. Using a hardcoded host for reliability in this environment.
+    // Use the dynamic hostelId in the callback_url.
     const callback_url = `${protocol}://${host}/hostels/${payload.hostelId}/book/confirmation`;
 
 
