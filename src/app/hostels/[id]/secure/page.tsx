@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import * as React from "react"
@@ -41,6 +42,9 @@ const formSchema = z.object({
 })
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260";
+// A general slug for a one-time payment link created in your Paystack dashboard.
+// This is a more robust way than constructing a full payment link on the client.
+const PAYSTACK_PAYMENT_SLUG = "hostel-visit-booking";
 
 
 export default function SecureHostelPage() {
@@ -64,7 +68,7 @@ export default function SecureHostelPage() {
 
     function onSubmit(values: z.infer<typeof formSchema>) {
         setIsSubmitting(true);
-        toast({ title: "Processing Application..." });
+        toast({ title: "Redirecting to payment..." });
 
         const paymentData = {
           key: PAYSTACK_PUBLIC_KEY,
@@ -73,34 +77,28 @@ export default function SecureHostelPage() {
           ref: `hostel-visit-${hostelId}-${Date.now()}`,
           label: "Hostel Visit Fee",
           currency: 'GHS',
-          callback: function(response: any) {
-            console.log('Paystack response:', response);
-            toast({
-              title: "Payment Successful!",
-              description: "Redirecting to confirmation page...",
-            });
-            // On successful payment, redirect to the agent tracking page
-            router.push(`/hostels/${hostelId}/book/confirmation`);
-          },
-          onClose: function() {
-            toast({
-              title: "Payment Cancelled",
-              description: "You can try again anytime.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-          },
+          // Use `router.push` for client-side navigation within Next.js
+          // The query params will be available on the confirmation page if needed.
+          callback_url: `${window.location.origin}/hostels/${hostelId}/book/confirmation`,
         };
 
-        // Construct the Paystack URL
-        const queryParams = new URLSearchParams(paymentData as any).toString();
-        const paystackUrl = `https://paystack.com/pay/${queryParams}`;
-        
         // In a real app, you would save application data before redirecting
         console.log("Application data:", values);
         
-        // Redirect to Paystack
-        window.location.href = `https://paystack.com/pay/hostel-visit-booking?${queryParams}`;
+        // Construct the Paystack URL with the correct slug and query parameters
+        const queryParams = new URLSearchParams({
+            key: paymentData.key,
+            email: paymentData.email,
+            amount: paymentData.amount.toString(),
+            ref: paymentData.ref,
+            label: paymentData.label,
+            currency: paymentData.currency,
+            callback_url: paymentData.callback_url,
+        }).toString();
+        
+        // Redirect to Paystack for payment
+        const paystackUrl = `https://paystack.com/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
+        window.location.href = paystackUrl;
     }
 
   return (
@@ -238,5 +236,3 @@ export default function SecureHostelPage() {
     </div>
   )
 }
-
-    
