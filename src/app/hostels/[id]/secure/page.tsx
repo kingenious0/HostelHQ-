@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import * as React from "react"
@@ -30,7 +29,9 @@ import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
-import { PAYSTACK_PAYMENT_SLUG, PAYSTACK_PUBLIC_KEY } from "@/lib/paystack"
+import { PAYSTACK_PUBLIC_KEY } from "@/lib/paystack"
+import { getHostel, Hostel } from "@/lib/data"
+import { notFound } from 'next/navigation';
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -42,6 +43,11 @@ const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
 })
 
+declare global {
+  interface Window {
+    PaystackPop: any;
+  }
+}
 
 export default function SecureHostelPage() {
     const { toast } = useToast();
@@ -49,6 +55,26 @@ export default function SecureHostelPage() {
     const params = useParams();
     const { id: hostelId } = params;
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [hostel, setHostel] = React.useState<Hostel | null>(null);
+
+     React.useEffect(() => {
+        const fetchHostelData = async () => {
+            if(typeof hostelId !== 'string') return;
+            const hostelData = await getHostel(hostelId);
+            if (!hostelData) {
+                notFound();
+            }
+            setHostel(hostelData);
+        };
+        fetchHostelData();
+
+        const script = document.createElement("script");
+        script.src = "https://js.paystack.co/v1/inline.js";
+        document.body.appendChild(script);
+        return () => {
+            document.body.removeChild(script);
+        }
+    }, [hostelId]);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -63,20 +89,30 @@ export default function SecureHostelPage() {
     });
 
     function onSubmit(values: z.infer<typeof formSchema>) {
-        setIsSubmitting(true);
-        toast({ title: "Redirecting to payment..." });
-
-        const queryParams = new URLSearchParams({
-            email: values.email,
-            amount: (10 * 100).toString(), // Paystack amount is in pesewas (10 GH₵)
-            ref: `hostel-visit-${hostelId}-${Date.now()}`,
-            label: "Hostel Visit Fee",
-            currency: 'GHS',
-            callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/hostels/${hostelId}/book/confirmation`,
-        }).toString();
+        if (!hostel) return;
         
-        const paystackUrl = `https://paystack.shop/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
-        window.location.href = paystackUrl;
+        setIsSubmitting(true);
+        toast({ title: "Initializing Payment..." });
+
+        const paystack = new window.PaystackPop();
+
+        paystack.newTransaction({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: values.email,
+            amount: hostel.price * 100, // Amount in pesewas
+            currency: 'GHS',
+            ref: `hostel-secure-${hostelId}-${Date.now()}`,
+            label: `Full payment for ${hostel.name}`,
+            onSuccess: (transaction: any) => {
+                toast({ title: "Payment Successful!", description: "Your room is secured."});
+                // In a real app, we'd update the database here.
+                router.push(`/`); 
+            },
+            onCancel: () => {
+                toast({ title: "Payment Cancelled", variant: "destructive" });
+                setIsSubmitting(false);
+            },
+        });
     }
 
   return (
@@ -87,7 +123,7 @@ export default function SecureHostelPage() {
                 <CardHeader>
                     <CardTitle className="text-2xl font-headline">Secure Your Hostel Room</CardTitle>
                     <CardDescription>
-                        Complete this form to proceed to payment. You will be redirected to Paystack to finalize your booking.
+                        Complete this form to proceed to the final payment for {hostel?.name}.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -203,7 +239,7 @@ export default function SecureHostelPage() {
                              <CardFooter className="px-0 pt-6">
                                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Proceed to Payment
+                                    Pay GH₵{hostel?.price.toLocaleString() || 0} Now
                                 </Button>
                             </CardFooter>
                         </form>
