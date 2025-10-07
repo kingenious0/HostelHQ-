@@ -1,9 +1,9 @@
 
-// src/app/hostels/[id]/book/confirmation/page.tsx
+// src/app/hostels/book/confirmation/page.tsx
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
@@ -13,26 +13,25 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function BookingConfirmationPage() {
     const router = useRouter();
-    const params = useParams();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const { id: hostelId } = params;
+    
+    const hostelId = searchParams.get('hostelId');
+    const reference = searchParams.get('reference');
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    const reference = searchParams.get('reference');
+    const [loadingAuth, setLoadingAuth] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
-            setLoading(false);
+            setLoadingAuth(false);
         });
         return () => unsubscribe();
     }, []);
 
     useEffect(() => {
-        if (loading || !currentUser || !hostelId || !reference) return;
+        if (loadingAuth || !currentUser || !hostelId || !reference) return;
 
         const createVisitRecord = async () => {
             try {
@@ -60,7 +59,7 @@ export default function BookingConfirmationPage() {
 
         createVisitRecord();
 
-    }, [router, hostelId, reference, currentUser, loading, toast]);
+    }, [router, hostelId, reference, currentUser, loadingAuth, toast]);
 
     return (
         <div className="flex flex-col min-h-screen">
