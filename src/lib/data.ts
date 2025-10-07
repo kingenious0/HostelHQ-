@@ -1,6 +1,6 @@
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
 
 export type Hostel = {
   id: string;
@@ -16,6 +16,7 @@ export type Hostel = {
   lat?: number;
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
+  roomFeatures?: { beds: string; bathrooms: string };
 };
 
 export type Agent = {
@@ -34,7 +35,6 @@ export type Visit = {
     studentId: string;
     agentId: string;
     hostelId: string;
-    roomId: string;
     visitDate: Date;
     status: 'pending' | 'accepted' | 'declined' | 'completed';
 }
@@ -85,6 +85,17 @@ export const agents: Agent[] = [
         phone: '233244123456'
     },
 ];
+
+// Seed agent data into Firestore if it doesn't exist.
+const seedAgents = async () => {
+    const agentRef = doc(db, 'agents', 'agent-1');
+    const agentSnap = await getDoc(agentRef);
+    if (!agentSnap.exists()) {
+        console.log("Seeding agent data...");
+        await setDoc(agentRef, agents[0]);
+    }
+};
+seedAgents();
 
 
 export async function getVisit(visitId: string): Promise<Visit | null> {

@@ -12,10 +12,12 @@ import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+
 
 const amenityIcons = {
   wifi: <Wifi className="h-5 w-5" />,
@@ -35,16 +37,31 @@ const availabilityInfo: Record<Hostel['availability'], { text: string, icon: Rea
 
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: User | null }) {
     const router = useRouter();
+    const { toast } = useToast();
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
-    const handleApply = () => {
-        // In a real app, you would check if the user has a completed visit record.
-        const hasVisited = false; // For now, we simulate that the user has not visited.
+    const handleApply = async () => {
+        if (!currentUser) return;
+
+        // Check if the user has a completed visit for this hostel
+        const visitsRef = collection(db, 'visits');
+        const q = query(visitsRef, 
+            where('studentId', '==', currentUser.uid),
+            where('hostelId', '==', hostel.id),
+            where('status', '==', 'completed'),
+            limit(1)
+        );
+        
+        toast({title: "Checking your visit history..."});
+
+        const querySnapshot = await getDocs(q);
+        const hasVisited = !querySnapshot.empty;
 
         if (hasVisited) {
+             toast({title: "Visit confirmed!", description: "Redirecting you to secure your room."});
              router.push(`/hostels/${hostel.id}/secure`);
         } else {
-             // If not visited, send them to the "Book a Visit" page first.
+             toast({title: "Visit Required", description: "You need to book a visit before securing a room.", variant: "destructive"});
              router.push(`/hostels/${hostel.id}/book`);
         }
     };
@@ -164,7 +181,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 }
 
 
-export default function HostelDetailPage({ params }: { params: { id: string } }) {
+export default function HostelDetailPage() {
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -218,3 +235,4 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
     </div>
   );
 }
+
