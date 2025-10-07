@@ -2,7 +2,7 @@
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { addDoc, collection } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
-export default function BookingConfirmationPage() {
+function ConfirmationContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -31,7 +31,19 @@ export default function BookingConfirmationPage() {
     }, []);
 
     useEffect(() => {
-        if (loadingAuth || !currentUser || !hostelId || !reference) return;
+        if (loadingAuth) return;
+
+        if (!currentUser) {
+            toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: "destructive" });
+            router.push('/');
+            return;
+        }
+
+        if (!hostelId || !reference) {
+             toast({ title: "Invalid Confirmation Link", description: "Missing booking details.", variant: "destructive" });
+             router.push('/');
+            return;
+        }
 
         const createVisitRecord = async () => {
             try {
@@ -62,16 +74,30 @@ export default function BookingConfirmationPage() {
     }, [router, hostelId, reference, currentUser, loadingAuth, toast]);
 
     return (
+        <div className="flex flex-col items-center justify-center text-center">
+            <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
+            <h1 className="text-2xl font-bold font-headline mb-2">Payment Confirmed. Saving Your Visit...</h1>
+            <p className="text-muted-foreground max-w-sm">
+                Your payment was successful. Please wait while we create your visit record and find an agent.
+            </p>
+        </div>
+    );
+}
+
+
+export default function BookingConfirmationPage() {
+    return (
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                <div className="flex flex-col items-center justify-center text-center">
-                    <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
-                    <h1 className="text-2xl font-bold font-headline mb-2">Payment Confirmed. Saving Your Visit...</h1>
-                    <p className="text-muted-foreground max-w-sm">
-                        Your payment was successful. Please wait while we create your visit record and find an agent.
-                    </p>
-                </div>
+                <Suspense fallback={
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
+                        <h1 className="text-2xl font-bold font-headline mb-2">Loading Confirmation...</h1>
+                    </div>
+                }>
+                    <ConfirmationContent />
+                </Suspense>
             </main>
         </div>
     );
