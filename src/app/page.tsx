@@ -8,6 +8,8 @@ import { Search, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import Image from 'next/image';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Home() {
   const hostels = await getHostels();
 
