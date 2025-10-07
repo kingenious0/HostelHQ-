@@ -1,6 +1,7 @@
 
 import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
+import { ably } from './ably';
 
 export type Hostel = {
   id: string;
@@ -86,31 +87,47 @@ export const agents: Agent[] = [
     },
 ];
 
-const simulateAgentMovement = (agentId: string, destinationLat: number, destinationLng: number) => {
+let simulationInterval: NodeJS.Timeout | null = null;
+
+const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, destinationLng: number) => {
+    // Clear any existing simulation
+    if (simulationInterval) {
+        clearInterval(simulationInterval);
+    }
+    
+    // Get the agent's Ably channel
+    const channel = ably.channels.get(`agent:${agentId}:gps`);
+
     const agentRef = doc(db, 'agents', agentId);
     let step = 0;
-    const totalSteps = 10; // Move in 10 steps
+    const totalSteps = 20; // 20 steps over 1 minute
 
-    const moveInterval = setInterval(async () => {
+    simulationInterval = setInterval(async () => {
         const agentSnap = await getDoc(agentRef);
         if (!agentSnap.exists()) {
-            clearInterval(moveInterval);
+            clearInterval(simulationInterval!);
             return;
         }
 
         const currentLoc = agentSnap.data().location;
         const newLat = currentLoc.lat + (destinationLat - currentLoc.lat) / (totalSteps - step);
         const newLng = currentLoc.lng + (destinationLng - currentLoc.lng) / (totalSteps - step);
+        const newLocation = { lat: newLat, lng: newLng };
 
-        await updateDoc(agentRef, { location: { lat: newLat, lng: newLng } });
+        // 1. Update location in Firestore (as a persistent record)
+        await updateDoc(agentRef, { location: newLocation });
+
+        // 2. Publish live location to Ably
+        await channel.publish('location', newLocation);
 
         step++;
         if (step >= totalSteps) {
             await updateDoc(agentRef, { location: { lat: destinationLat, lng: destinationLng } });
-            console.log(`Agent ${agentId} has arrived.`);
-            clearInterval(moveInterval);
+            await channel.publish('location', { lat: destinationLat, lng: destinationLng });
+            console.log(`Agent ${agentId} has arrived and simulation ended.`);
+            clearInterval(simulationInterval!);
         }
-    }, 3000); // Update location every 3 seconds
+    }, 2000); // Update location every 2 seconds
 };
 
 
@@ -133,14 +150,28 @@ seedAgents();
 export const assignAgentAndSimulate = async (visitId: string, hostel: Hostel) => {
     const assignedAgentId = 'agent-1'; // Hardcode for simulation
     const visitDocRef = doc(db, 'visits', visitId);
+
+    // Enter Ably presence for the main agent channel
+    const agent = await getAgent(assignedAgentId);
+    if(agent) {
+        const presenceChannel = ably.channels.get('agents:live');
+        presenceChannel.presence.enter({ 
+            id: agent.id, 
+            name: agent.name, 
+            lat: agent.location.lat, 
+            lng: agent.location.lng, 
+            status: 'online' 
+        });
+    }
+
     await updateDoc(visitDocRef, {
         agentId: assignedAgentId,
         status: 'accepted'
     });
 
     if (hostel.lat && hostel.lng) {
-        // Start simulation
-        simulateAgentMovement(assignedAgentId, hostel.lat, hostel.lng);
+        // Start Ably simulation
+        simulateAgentMovementWithAbly(assignedAgentId, hostel.lat, hostel.lng);
     }
 }
 

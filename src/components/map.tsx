@@ -1,74 +1,56 @@
 
 "use client"
-
-import { useEffect, useRef } from 'react';
-import { Loader } from '@googlemaps/js-api-loader';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import * as React from 'react';
+import { Map, Marker } from 'react-map-gl';
 import { Hostel } from '@/lib/data';
+import { Pin, Car } from 'lucide-react';
 
-interface MapProps {
+interface MapboxMapProps {
     agentLocation?: { lat: number; lng: number };
     hostelLocation: Hostel | null;
 }
 
-export function Map({ agentLocation, hostelLocation }: MapProps) {
-    const mapRef = useRef<HTMLDivElement>(null);
-    const agentMarkerRef = useRef<google.maps.Marker | null>(null);
+export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
+    const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || '';
 
-    useEffect(() => {
-        const loader = new Loader({
-            apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-            version: 'weekly',
-        });
+    const initialViewState = {
+        longitude: hostelLocation?.lng || -0.1870,
+        latitude: hostelLocation?.lat || 5.6037,
+        zoom: 14
+    };
 
-        loader.load().then(async () => {
-            const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-            const { AdvancedMarkerElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
+    if (!mapboxToken || mapboxToken === "YOUR_MAPBOX_API_KEY_HERE") {
+        return (
+            <div className="h-full w-full bg-muted flex items-center justify-center text-center p-4">
+                <p className="text-muted-foreground">
+                    Please add your Mapbox API key to the <code className="bg-background p-1 rounded-sm">.env</code> file to enable maps.
+                </p>
+            </div>
+        );
+    }
 
-
-            if (mapRef.current && hostelLocation?.lat && hostelLocation?.lng) {
-                const map = new Map(mapRef.current, {
-                    center: { lat: hostelLocation.lat, lng: hostelLocation.lng },
-                    zoom: 15,
-                    mapId: 'HOSTEL_TRACKING_MAP',
-                    disableDefaultUI: true,
-                });
-
-                // Hostel Marker
-                new AdvancedMarkerElement({
-                    map: map,
-                    position: { lat: hostelLocation.lat, lng: hostelLocation.lng },
-                    title: hostelLocation.name,
-                });
-
-
-                // Agent Marker (initial creation)
-                if (agentLocation) {
-                    agentMarkerRef.current = new google.maps.Marker({
-                        position: agentLocation,
-                        map: map,
-                        title: 'Agent',
-                        icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: 8,
-                            fillColor: '#4285F4',
-                            fillOpacity: 1,
-                            strokeWeight: 2,
-                            strokeColor: 'white',
-                        }
-                    });
-                }
-            }
-        });
-    }, [hostelLocation]); // Re-initialize map only if hostel location changes
-
-
-    useEffect(() => {
-        // Update agent marker position without re-creating the map
-        if (agentMarkerRef.current && agentLocation) {
-            agentMarkerRef.current.setPosition(agentLocation);
-            agentMarkerRef.current.getMap()?.panTo(agentLocation);
-        }
-    }, [agentLocation]);
-
-    return <div className="h-full w-full" ref={mapRef} />;
+    return (
+        <Map
+            mapboxAccessToken={mapboxToken}
+            initialViewState={initialViewState}
+            style={{ width: '100%', height: '100%' }}
+            mapStyle="mapbox://styles/mapbox/streets-v11"
+        >
+            {hostelLocation?.lat && hostelLocation.lng && (
+                <Marker longitude={hostelLocation.lng} latitude={hostelLocation.lat}>
+                    <div className="text-red-500">
+                        <Pin className="h-10 w-10" style={{transform: 'translate(-50%, -100%)'}}/>
+                    </div>
+                </Marker>
+            )}
+            {agentLocation?.lat && agentLocation.lng && (
+                 <Marker longitude={agentLocation.lng} latitude={agentLocation.lat}>
+                    <div className="bg-primary rounded-full p-2 shadow-lg">
+                        <Car className="h-6 w-6 text-primary-foreground" />
+                    </div>
+                </Marker>
+            )}
+        </Map>
+    );
 }

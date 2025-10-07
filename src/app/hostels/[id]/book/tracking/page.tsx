@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
-import { getAgent, Agent, Hostel, assignAgentAndSimulate } from '@/lib/data';
+import { Agent, Hostel, assignAgentAndSimulate, getAgent } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,9 @@ import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
-import { Map } from '@/components/map';
+import { MapboxMap } from '@/components/map'; // Changed to MapboxMap
+import { ably } from '@/lib/ably';
+import { Types } from 'ably';
 
 type Visit = {
     id: string;
@@ -36,6 +38,7 @@ export default function TrackingPage() {
     const [agent, setAgent] = useState<Agent | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [loading, setLoading] = useState(true);
+    const [agentLiveLocation, setAgentLiveLocation] = useState<{ lat: number, lng: number} | undefined>(undefined);
 
     useEffect(() => {
         if (!visitId || !hostelId) {
@@ -52,36 +55,36 @@ export default function TrackingPage() {
              if(hostelSnap.exists()) {
                  const hostelData = {id: hostelSnap.id, ...hostelSnap.data()} as Hostel
                  setHostel(hostelData);
-                 
-                 // Start agent assignment simulation after we have hostel data
-                 if(visit?.status === 'pending' && !visit.agentId) {
-                    const assignmentTimeout = setTimeout(() => {
-                        assignAgentAndSimulate(visitId, hostelData);
-                    }, 5000);
-                    unsubscribes.push(() => clearTimeout(assignmentTimeout));
-                 }
              } else {
                  notFound();
              }
         }
         fetchHostel();
 
-        // Listen to visit document
+        // Listen to visit document for agent assignment
         const visitDocRef = doc(db, 'visits', visitId as string);
-        const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
+        const unsubVisit = onSnapshot(visitDocRef, async (docSnap) => {
             if (docSnap.exists()) {
                 const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
                 setVisit(visitData);
 
-                // If an agent is assigned, start listening to their document
+                // --- Ably Integration ---
                 if (visitData.agentId && (!agent || agent.id !== visitData.agentId)) {
-                    const agentDocRef = doc(db, 'agents', visitData.agentId);
-                    const unsubAgent = onSnapshot(agentDocRef, (agentSnap) => {
-                        if (agentSnap.exists()) {
-                            setAgent({ id: agentSnap.id, ...agentSnap.data() } as Agent);
-                        }
-                    });
-                    unsubscribes.push(unsubAgent);
+                    // 1. Fetch agent details from Firestore
+                    const agentDetails = await getAgent(visitData.agentId);
+                    setAgent(agentDetails);
+                    if(agentDetails?.location) {
+                        setAgentLiveLocation(agentDetails.location);
+                    }
+
+                    // 2. Subscribe to the agent's specific Ably channel for GPS updates
+                    const channel = ably.channels.get(`agent:${visitData.agentId}:gps`);
+                    const subscribeCallback = (message: Types.Message) => {
+                        setAgentLiveLocation(message.data);
+                    };
+                    channel.subscribe('location', subscribeCallback);
+                    
+                    unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
                 }
             } else {
                 notFound();
@@ -89,12 +92,21 @@ export default function TrackingPage() {
             setLoading(false);
         });
         unsubscribes.push(unsubVisit);
+        
+        // --- Agent Assignment Simulation ---
+        // This now happens server-side, but we trigger it from the client for this demo
+        const assignmentTimeout = setTimeout(() => {
+            if(hostel) {
+                 assignAgentAndSimulate(visitId, hostel);
+            }
+        }, 5000);
+        unsubscribes.push(() => clearTimeout(assignmentTimeout));
 
 
         return () => {
             unsubscribes.forEach(unsub => unsub());
         };
-    }, [visitId, hostelId, agent, visit?.status]);
+    }, [visitId, hostelId, agent, hostel]);
     
     if (loading || !visit || !hostel) {
         return (
@@ -111,6 +123,10 @@ export default function TrackingPage() {
     const handleVisitComplete = async () => {
         if(visitId) {
             await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
+            if(agent) {
+                // Remove agent from presence set
+                 ably.channels.get('agents:live').presence.leave({ id: agent.id });
+            }
             router.push(`/hostels/${hostelId}/book/rating`);
         }
     }
@@ -131,7 +147,7 @@ export default function TrackingPage() {
                             </CardTitle>
                              <CardDescription>
                                 {visit.status === 'pending' && "We're finding the best agent for your tour."}
-                                {visit.status === 'accepted' && agent && `Your agent, ${agent.name}, is heading to the hostel.`}
+                                {visit.status === 'accepted' && agent && `Your agent, ${agent.name}, is on the way.`}
                                 {visit.status === 'completed' && "Thank you for using HostelHQ!"}
                             </CardDescription>
                         </CardHeader>
@@ -167,11 +183,6 @@ export default function TrackingPage() {
                                             </div>
                                         </div>
                                     </div>
-
-                                    <div className="text-center">
-                                      <p className="text-sm text-muted-foreground">Agent ETA to hostel gate</p>
-                                      <p className="text-3xl font-bold">5 mins</p>
-                                    </div>
                                     
                                     <Separator />
                                     
@@ -196,7 +207,7 @@ export default function TrackingPage() {
                     </Card>
                 </div>
                 <div className="relative bg-muted h-96 md:h-full">
-                   <Map agentLocation={agent?.location} hostelLocation={hostel} />
+                   <MapboxMap agentLocation={agentLiveLocation} hostelLocation={hostel} />
                 </div>
             </main>
         </div>
