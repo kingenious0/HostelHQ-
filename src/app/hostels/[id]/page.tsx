@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
 import { getHostel, Hostel } from '@/lib/data';
-import { notFound, useRouter } from 'next/navigation';
+import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -168,15 +168,18 @@ export default function HostelDetailPage({ params }: { params: { id: string } })
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const { id } = params;
+  const routeParams = useParams();
+  const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
 
   useEffect(() => {
       const fetchHostelData = async () => {
-          const hostelData = await getHostel(id);
-          if (hostelData) {
-              setHostel(hostelData);
-          } else {
-              notFound();
+          if (id) {
+            const hostelData = await getHostel(id);
+            if (hostelData) {
+                setHostel(hostelData);
+            } else {
+                notFound();
+            }
           }
           setLoading(false);
       };
