@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
 import { getAgent, Agent, Hostel } from '@/lib/data';
-import { notFound, useParams, useSearchParams } from 'next/navigation';
+import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ type Visit = {
 export default function TrackingPage() {
     const params = useParams();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const { id: hostelId } = params;
     const visitId = searchParams.get('visitId');
 
@@ -101,7 +102,6 @@ export default function TrackingPage() {
         }
     }
     
-    const router = useRouter();
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
 
     return (
