@@ -1,6 +1,6 @@
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
 
 export type Hostel = {
   id: string;
@@ -80,22 +80,70 @@ export const agents: Agent[] = [
         rating: 4.8,
         vehicle: 'Toyota Corolla',
         status: 'online',
-        location: { lat: 5.63, lng: -0.19 },
+        location: { lat: 5.6037, lng: -0.1870 }, // Start near Accra
         imageUrl: 'https://picsum.photos/seed/agent1/200/200',
         phone: '233244123456'
     },
 ];
 
+const simulateAgentMovement = (agentId: string, destinationLat: number, destinationLng: number) => {
+    const agentRef = doc(db, 'agents', agentId);
+    let step = 0;
+    const totalSteps = 10; // Move in 10 steps
+
+    const moveInterval = setInterval(async () => {
+        const agentSnap = await getDoc(agentRef);
+        if (!agentSnap.exists()) {
+            clearInterval(moveInterval);
+            return;
+        }
+
+        const currentLoc = agentSnap.data().location;
+        const newLat = currentLoc.lat + (destinationLat - currentLoc.lat) / (totalSteps - step);
+        const newLng = currentLoc.lng + (destinationLng - currentLoc.lng) / (totalSteps - step);
+
+        await updateDoc(agentRef, { location: { lat: newLat, lng: newLng } });
+
+        step++;
+        if (step >= totalSteps) {
+            await updateDoc(agentRef, { location: { lat: destinationLat, lng: destinationLng } });
+            console.log(`Agent ${agentId} has arrived.`);
+            clearInterval(moveInterval);
+        }
+    }, 3000); // Update location every 3 seconds
+};
+
+
 // Seed agent data into Firestore if it doesn't exist.
 const seedAgents = async () => {
-    const agentRef = doc(db, 'agents', 'agent-1');
-    const agentSnap = await getDoc(agentRef);
-    if (!agentSnap.exists()) {
-        console.log("Seeding agent data...");
-        await setDoc(agentRef, agents[0]);
+    try {
+        const agentRef = doc(db, 'agents', 'agent-1');
+        const agentSnap = await getDoc(agentRef);
+        if (!agentSnap.exists()) {
+            console.log("Seeding agent data...");
+            await setDoc(agentRef, agents[0]);
+        }
+    } catch(e) {
+        // This might fail in environments without write access, which is fine for seeding.
+        console.warn("Could not seed agent data:", e);
     }
 };
 seedAgents();
+
+export const assignAgentAndSimulate = async (visitId: string, hostel: Hostel) => {
+    const assignedAgentId = 'agent-1'; // Hardcode for simulation
+    const visitDocRef = doc(db, 'visits', visitId);
+    await updateDoc(visitDocRef, {
+        agentId: assignedAgentId,
+        status: 'accepted'
+    });
+
+    if (hostel.lat && hostel.lng) {
+        // Start simulation
+        simulateAgentMovement(assignedAgentId, hostel.lat, hostel.lng);
+    }
+}
+
 
 
 export async function getVisit(visitId: string): Promise<Visit | null> {
@@ -134,7 +182,11 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         const hostelDocRef = doc(db, 'hostels', hostelId);
         const hostelDoc = await getDoc(hostelDocRef);
         if (hostelDoc.exists()) {
-            return { id: hostelDoc.id, ...hostelDoc.data() } as Hostel;
+            const data = hostelDoc.data();
+            // Ensure lat/lng are numbers, fallback to static if needed
+            const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
+            const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
+            return { id: hostelDoc.id, ...data, lat, lng } as Hostel;
         }
     } catch(e) {
         console.error("Error fetching hostel from firestore: ", e);

@@ -1,11 +1,10 @@
-
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
-import { getAgent, Agent, Hostel } from '@/lib/data';
+import { getAgent, Agent, Hostel, assignAgentAndSimulate } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,6 +13,7 @@ import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
+import { Map } from '@/components/map';
 
 type Visit = {
     id: string;
@@ -38,50 +38,63 @@ export default function TrackingPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!visitId || !hostelId) return;
+        if (!visitId || !hostelId) {
+            notFound();
+            return;
+        };
 
+        const unsubscribes: (() => void)[] = [];
+
+        // Fetch hostel data once
+        const fetchHostel = async () => {
+             const hostelDocRef = doc(db, 'hostels', hostelId as string);
+             const hostelSnap = await getDoc(hostelDocRef);
+             if(hostelSnap.exists()) {
+                 const hostelData = {id: hostelSnap.id, ...hostelSnap.data()} as Hostel
+                 setHostel(hostelData);
+                 
+                 // Start agent assignment simulation after we have hostel data
+                 if(visit?.status === 'pending' && !visit.agentId) {
+                    const assignmentTimeout = setTimeout(() => {
+                        assignAgentAndSimulate(visitId, hostelData);
+                    }, 5000);
+                    unsubscribes.push(() => clearTimeout(assignmentTimeout));
+                 }
+             } else {
+                 notFound();
+             }
+        }
+        fetchHostel();
+
+        // Listen to visit document
         const visitDocRef = doc(db, 'visits', visitId as string);
         const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
                 setVisit(visitData);
-                
-                // If an agent is assigned, fetch their data
+
+                // If an agent is assigned, start listening to their document
                 if (visitData.agentId && (!agent || agent.id !== visitData.agentId)) {
-                    getAgent(visitData.agentId).then(setAgent);
+                    const agentDocRef = doc(db, 'agents', visitData.agentId);
+                    const unsubAgent = onSnapshot(agentDocRef, (agentSnap) => {
+                        if (agentSnap.exists()) {
+                            setAgent({ id: agentSnap.id, ...agentSnap.data() } as Agent);
+                        }
+                    });
+                    unsubscribes.push(unsubAgent);
                 }
             } else {
                 notFound();
             }
             setLoading(false);
         });
-        
-        const fetchHostel = async () => {
-             const hostelDocRef = doc(db, 'hostels', hostelId as string);
-             const hostelSnap = await getDoc(hostelDocRef);
-             if(hostelSnap.exists()) {
-                 setHostel({id: hostelSnap.id, ...hostelSnap.data()} as Hostel);
-             }
-        }
-        fetchHostel();
-
-        // Simulate agent assignment after 5 seconds
-        const assignmentTimeout = setTimeout(() => {
-            if (visit && visit.status === 'pending') {
-                const assignedAgentId = 'agent-1'; // Hardcode for simulation
-                updateDoc(visitDocRef, { 
-                    agentId: assignedAgentId,
-                    status: 'accepted'
-                });
-            }
-        }, 5000);
+        unsubscribes.push(unsubVisit);
 
 
         return () => {
-            unsubVisit();
-            clearTimeout(assignmentTimeout);
+            unsubscribes.forEach(unsub => unsub());
         };
-    }, [visitId, hostelId, agent, visit]);
+    }, [visitId, hostelId, agent, visit?.status]);
     
     if (loading || !visit || !hostel) {
         return (
@@ -114,10 +127,12 @@ export default function TrackingPage() {
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
                                 {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Matching in Progress</>}
                                 {visit.status === 'accepted' && <span className="text-green-600">✅ Visit Confirmed</span>}
+                                 {visit.status === 'completed' && <span className="text-blue-600">🎉 Visit Complete</span>}
                             </CardTitle>
                              <CardDescription>
                                 {visit.status === 'pending' && "We're finding the best agent for your tour."}
                                 {visit.status === 'accepted' && agent && `Your agent, ${agent.name}, is heading to the hostel.`}
+                                {visit.status === 'completed' && "Thank you for using HostelHQ!"}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -171,18 +186,17 @@ export default function TrackingPage() {
                                      <Button className="w-full" onClick={handleVisitComplete}>Agent has arrived</Button>
                                 </div>
                             )}
+                             {visit.status === 'completed' && (
+                                <div className="text-center py-8">
+                                    <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
+                                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating`)}>Rate Your Visit</Button>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
                 <div className="relative bg-muted h-96 md:h-full">
-                    <Image src="https://picsum.photos/seed/map/1200/1200" alt="Map" fill style={{ objectFit: 'cover' }} className="opacity-50" data-ai-hint="street map" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center p-4 bg-background/80 rounded-lg shadow-lg">
-                           <h2 className="text-lg font-semibold">Live Map</h2>
-                           <p className="text-muted-foreground">🏠 Hostel Gate</p>
-                           <p className="text-muted-foreground">● Agent (moving)</p>
-                        </div>
-                    </div>
+                   <Map agentLocation={agent?.location} hostelLocation={hostel} />
                 </div>
             </main>
         </div>
