@@ -64,8 +64,11 @@ export default function BookingPage() {
             });
 
             if (result.status && result.authorization_url) {
-                // Redirect user to Paystack to complete payment
-                router.push(result.authorization_url);
+                // Open the payment link in a new tab to avoid iframe issues
+                window.open(result.authorization_url, '_blank');
+                toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
+                // The user will be redirected to the confirmation page by Paystack.
+                // We don't need to push the router here.
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
@@ -73,6 +76,7 @@ export default function BookingPage() {
         } catch (error: any) {
             console.error("Payment initialization failed:", error);
             toast({ title: "Payment Error", description: error.message || "Could not connect to payment service.", variant: "destructive" });
+        } finally {
             setIsPaying(false);
         }
     };
