@@ -10,22 +10,23 @@ import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { CreditCard, Calendar, Loader2 } from 'lucide-react';
+import { CreditCard, Calendar, Loader2, Phone, Briefcase } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { PAYSTACK_PUBLIC_KEY } from '@/lib/paystack';
 import { useToast } from '@/hooks/use-toast';
-
-declare global {
-  interface Window {
-    PaystackPop: any;
-  }
-}
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { initializeMomoPayment } from '@/app/actions/paystack';
 
 export default function BookingPage() {
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [loading, setLoading] = useState(true);
     const [isPaying, setIsPaying] = useState(false);
+    
+    // Form state
+    const [phone, setPhone] = useState('');
+    const [provider, setProvider] = useState('');
+    const [email, setEmail] = useState('student@test.com'); // Default email
+
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
@@ -43,37 +44,36 @@ export default function BookingPage() {
         fetchHostelData();
     }, [id]);
 
-    useEffect(() => {
-      const script = document.createElement("script");
-      script.src = "https://js.paystack.co/v1/inline.js";
-      document.body.appendChild(script);
-      return () => {
-        document.body.removeChild(script);
-      }
-    }, []);
-
-    const handlePayment = () => {
-        if (!hostel) return;
+    const handlePayment = async () => {
+        if (!hostel || !phone || !provider || !email) {
+            toast({ title: "Missing Information", description: "Please fill in your email, phone, and select a provider.", variant: "destructive" });
+            return;
+        }
 
         setIsPaying(true);
-        const paystack = new window.PaystackPop();
+        toast({ title: "Initializing Payment..." });
+        
+        try {
+            const result = await initializeMomoPayment({
+                email,
+                amount: 10 * 100, // 10 GHS in pesewas
+                phone,
+                provider,
+                label: `Visit fee for ${hostel.name}`
+            });
 
-        paystack.newTransaction({
-            key: PAYSTACK_PUBLIC_KEY,
-            email: 'student@test.com', // In a real app, get this from user's profile
-            amount: 10 * 100, // 10 GHS in pesewas
-            currency: 'GHS',
-            ref: `hostel-visit-${id}-${Date.now()}`,
-            label: `Visit fee for ${hostel.name}`,
-            onSuccess: (transaction: any) => {
-                toast({ title: "Payment Successful!", description: "Redirecting to confirmation..."});
-                router.push(`/hostels/${id}/book/confirmation?reference=${transaction.reference}`);
-            },
-            onCancel: () => {
-                toast({ title: "Payment Cancelled", variant: "destructive" });
-                setIsPaying(false);
-            },
-        });
+            if (result.status && result.authorization_url) {
+                // Redirect user to Paystack to complete payment
+                router.push(result.authorization_url);
+            } else {
+                throw new Error(result.message || "Failed to initialize payment.");
+            }
+
+        } catch (error: any) {
+            console.error("Payment initialization failed:", error);
+            toast({ title: "Payment Error", description: error.message || "Could not connect to payment service.", variant: "destructive" });
+            setIsPaying(false);
+        }
     };
 
     if (loading) {
@@ -124,14 +124,30 @@ export default function BookingPage() {
                         </div>
 
                         <div className="space-y-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="date">Preferred Visit Date</Label>
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email Address</Label>
+                                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="phone">Mobile Money Phone</Label>
                                 <div className="relative">
-                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input id="date" type="date" className="pl-10" defaultValue={new Date().toISOString().split('T')[0]} />
+                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    <Input id="phone" type="tel" className="pl-10" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+233244123456" />
                                 </div>
                             </div>
-                            <p className="text-sm text-muted-foreground text-center pt-2">The Paystack checkout will open in a popup.</p>
+                             <div className="space-y-2">
+                                <Label htmlFor="provider">Provider</Label>
+                                 <Select value={provider} onValueChange={setProvider}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select mobile money provider" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="mtn">MTN</SelectItem>
+                                        <SelectItem value="vod">Telecel (Vodafone)</SelectItem>
+                                        <SelectItem value="tgo">AirtelTigo</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                     </CardContent>
@@ -146,4 +162,3 @@ export default function BookingPage() {
         </div>
     );
 }
-

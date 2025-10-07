@@ -29,7 +29,6 @@ import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
-import { PAYSTACK_PUBLIC_KEY } from "@/lib/paystack"
 import { getHostel, Hostel } from "@/lib/data"
 import { notFound } from 'next/navigation';
 
@@ -70,6 +69,7 @@ export default function SecureHostelPage() {
 
         const script = document.createElement("script");
         script.src = "https://js.paystack.co/v1/inline.js";
+        script.async = true;
         document.body.appendChild(script);
         return () => {
             document.body.removeChild(script);
@@ -89,7 +89,7 @@ export default function SecureHostelPage() {
     });
 
     function onSubmit(values: z.infer<typeof formSchema>) {
-        if (!hostel) return;
+        if (!hostel || !window.PaystackPop) return;
         
         setIsSubmitting(true);
         toast({ title: "Initializing Payment..." });
@@ -97,7 +97,7 @@ export default function SecureHostelPage() {
         const paystack = new window.PaystackPop();
 
         paystack.newTransaction({
-            key: PAYSTACK_PUBLIC_KEY,
+            key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260", // Fallback for safety
             email: values.email,
             amount: hostel.price * 100, // Amount in pesewas
             currency: 'GHS',
