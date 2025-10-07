@@ -67,8 +67,7 @@ export default function BookingPage() {
                 // Open the payment link in a new tab to avoid iframe issues
                 window.open(result.authorization_url, '_blank');
                 toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
-                // The user will be redirected to the confirmation page by Paystack.
-                // We don't need to push the router here.
+                // The user will be redirected to the confirmation page by Paystack in the new tab.
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
