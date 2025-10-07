@@ -58,7 +58,7 @@ export default function BookingPage() {
                 email,
                 amount: 10 * 100, // 10 GHS in pesewas
                 phone,
-                provider,
+                provider: provider as 'mtn' | 'vod' | 'tgo',
                 label: `Visit fee for ${hostel.name}`,
                 hostelId: id, // Pass the hostelId
             });
