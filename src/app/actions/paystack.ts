@@ -22,12 +22,10 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
-    // Get the base URL for the callback
     const headersList = headers();
-    const host = headersList.get('host') || '';
+    const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
-    // Use a static, absolute URL for reliability
     const callback_url = `${protocol}://${host}/hostels/book/confirmation?hostelId=${payload.hostelId}`;
 
 
@@ -45,14 +43,14 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                 callback_url, // URL to redirect to after payment
                 metadata: {
                     label: payload.label || 'HostelHQ Payment',
-                    // In the future, we can add split_code here
                 },
                 channels: ['mobile_money'],
                 mobile_money: {
                     phone: payload.phone,
                     provider: payload.provider,
                 }
-            })
+            }),
+            cache: 'no-store' // Ensure this is a dynamic request on the server
         });
         
         const result = await response.json();
