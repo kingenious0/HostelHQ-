@@ -42,7 +42,6 @@ const formSchema = z.object({
 })
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260";
-// This is the slug from the "Paystack Shop" link the user created.
 const PAYSTACK_PAYMENT_SLUG = "klbajlc2ol";
 
 
@@ -69,33 +68,16 @@ export default function SecureHostelPage() {
         setIsSubmitting(true);
         toast({ title: "Redirecting to payment..." });
 
-        const paymentData = {
-          key: PAYSTACK_PUBLIC_KEY,
-          email: values.email,
-          amount: 10 * 100, // Paystack amount is in pesewas (10 GH₵)
-          ref: `hostel-visit-${hostelId}-${Date.now()}`,
-          label: "Hostel Visit Fee",
-          currency: 'GHS',
-          // Use `router.push` for client-side navigation within Next.js
-          // The query params will be available on the confirmation page if needed.
-          callback_url: `${window.location.origin}/hostels/${hostelId}/book/confirmation`,
-        };
-
-        // In a real app, you would save application data before redirecting
-        console.log("Application data:", values);
-        
-        // Construct the Paystack URL with the correct slug and query parameters
         const queryParams = new URLSearchParams({
-            key: paymentData.key,
-            email: paymentData.email,
-            amount: paymentData.amount.toString(),
-            ref: paymentData.ref,
-            label: paymentData.label,
-            currency: paymentData.currency,
-            callback_url: paymentData.callback_url,
+            key: PAYSTACK_PUBLIC_KEY,
+            email: values.email,
+            amount: (10 * 100).toString(), // Paystack amount is in pesewas (10 GH₵)
+            ref: `hostel-visit-${hostelId}-${Date.now()}`,
+            label: "Hostel Visit Fee",
+            currency: 'GHS',
+            callback_url: `${window.location.origin}/hostels/${hostelId}/book/confirmation`,
         }).toString();
         
-        // Redirect to Paystack for payment
         const paystackUrl = `https://paystack.shop/pay/${PAYSTACK_PAYMENT_SLUG}?${queryParams}`;
         window.location.href = paystackUrl;
     }

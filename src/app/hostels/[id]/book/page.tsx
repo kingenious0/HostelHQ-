@@ -62,7 +62,7 @@ export default async function BookingPage({ params }: { params: { id: string } }
 
                     </CardContent>
                     <CardFooter>
-                        <Link href={`/hostels/${hostel.id}/book/confirmation`} className="w-full">
+                        <Link href={`/hostels/${hostel.id}/secure`} className="w-full">
                             <Button className="w-full h-12 text-lg bg-accent hover:bg-accent/90 text-accent-foreground">
                                 <CreditCard className="mr-2 h-5 w-5" />
                                 Proceed to Pay

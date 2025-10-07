@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
 import { getHostel, Hostel } from '@/lib/data';
 import { notFound, useRouter } from 'next/navigation';
@@ -38,9 +38,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
     const handleApply = () => {
-        if (currentUser) {
+        // In a real app, you would check if the user has a completed visit record.
+        const hasVisited = false; // For now, we simulate that the user has not visited.
+
+        if (hasVisited) {
              router.push(`/hostels/${hostel.id}/secure`);
         } else {
+             // If not visited, send them to the "Book a Visit" page first.
              router.push(`/hostels/${hostel.id}/book`);
         }
     };
@@ -161,10 +165,10 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 
 
 export default function HostelDetailPage({ params }: { params: { id: string } }) {
-  const { id } = use(params);
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { id } = params;
 
   useEffect(() => {
       const fetchHostelData = async () => {
