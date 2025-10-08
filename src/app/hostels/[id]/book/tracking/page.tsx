@@ -1,3 +1,4 @@
+
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
@@ -343,8 +344,8 @@ export default function TrackingPage() {
 
     const getCardTitle = () => {
         if (!visit.agentId) return "Select an Agent";
-        if (visit.status === 'pending' && agent) return "Request Sent";
-        if (visit.status === 'accepted') return <span className="text-green-600">Visit Confirmed!</span>;
+        if (visit.status === 'pending' && agent) return `Request Sent to ${agent.fullName}`;
+        if (visit.status === 'accepted') return <span className="text-green-600">Your visit with {agent?.fullName} is confirmed!</span>;
         if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
         return "Visit Details";
