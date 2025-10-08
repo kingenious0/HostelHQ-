@@ -56,7 +56,7 @@ export default function BookingPage() {
 
 
     const params = useParams();
-    router = useRouter();
+    const router = useRouter();
     const { toast } = useToast();
     const id = params.id as string;
 
@@ -90,7 +90,7 @@ export default function BookingPage() {
                 provider: provider as 'mtn' | 'vod' | 'tgo',
                 label: `Visit fee for ${hostel.name}`,
                 hostelId: id,
-                visitDate: isAgentVisit ? visitDate.toISOString() : new Date().toISOString(), // Use current date for self-visit
+                visitDate: isAgentVisit && visitDate ? visitDate.toISOString() : new Date().toISOString(), // Use current date for self-visit
                 visitTime: isAgentVisit ? visitTime : '',
                 visitType: visitType,
             });
@@ -227,4 +227,3 @@ export default function BookingPage() {
     );
 }
 
-    
