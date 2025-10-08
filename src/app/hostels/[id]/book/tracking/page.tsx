@@ -49,7 +49,7 @@ async function getAddressFromCoordinates(lat: number, lng: number): Promise<stri
         if (data.features && data.features.length > 0) {
             return data.features[0].place_name;
         }
-        return "Near your location";
+        return "Tracking agent...";
     } catch (error) {
         console.error("Error fetching address:", error);
         return "Could not fetch address";
@@ -353,7 +353,7 @@ export default function TrackingPage() {
     const getCardDescription = () => {
         if (!visit.agentId) return "Please select an available agent to begin your tour.";
         if (visit.status === 'pending' && agent) return `Waiting for ${agent.fullName} to accept your request.`;
-        if (visit.status === 'accepted' && agent) return `Your agent, ${agent.fullName}, is on the way.`;
+        if (visit.status === 'accepted' && agent) return `Your tour with agent ${agent.fullName} is confirmed.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
         if (visit.status === 'cancelled') return `The request was cancelled by the agent or timed out.`;
         return "";
