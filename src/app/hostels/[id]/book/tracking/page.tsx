@@ -1,21 +1,22 @@
+
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { Header } from '@/components/header';
-import { Agent, Hostel, getAgent } from '@/lib/data';
+import { Agent, Hostel, getAgent, AppUser } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar } from 'lucide-react';
+import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar, UserCheck } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { MapboxMap } from '@/components/map';
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useToast } from '@/hooks/use-toast';
 
 type Visit = {
     id: string;
@@ -26,11 +27,20 @@ type Visit = {
     createdAt: string;
 };
 
+type OnlineAgent = {
+    clientId: string;
+    data: {
+        id: string;
+        fullName: string;
+        email: string;
+    }
+}
 
 export default function TrackingPage() {
     const params = useParams();
     const searchParams = useSearchParams();
     const router = useRouter();
+    const { toast } = useToast();
     const { id: hostelId } = params;
     const visitId = searchParams.get('visitId');
 
@@ -38,8 +48,10 @@ export default function TrackingPage() {
     const [agent, setAgent] = useState<Agent | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [loading, setLoading] = useState(true);
+    const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
     const [agentLiveLocation, setAgentLiveLocation] = useState<{ lat: number, lng: number} | undefined>(undefined);
     const agentGpsChannelRef = useRef<Types.RealtimeChannelPromise | null>(null);
+    const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
 
     useEffect(() => {
         if (!visitId || !hostelId) {
@@ -63,18 +75,7 @@ export default function TrackingPage() {
 
         const visitDocRef = doc(db, 'visits', visitId as string);
 
-        const assignAgent = async (agentMember: Types.PresenceMessage) => {
-            try {
-                await updateDoc(visitDocRef, {
-                    agentId: agentMember.clientId,
-                    status: 'accepted'
-                });
-            } catch (error) {
-                console.error("Failed to assign agent:", error);
-            }
-        };
-
-        const setupAgentSubscription = async (agentId: string) => {
+        const setupAgentGpsSubscription = async (agentId: string) => {
             if (agentGpsChannelRef.current) {
                 agentGpsChannelRef.current.unsubscribe();
             }
@@ -106,31 +107,24 @@ export default function TrackingPage() {
             setLoading(false);
 
             if (visitData.agentId) {
+                // Agent is assigned, start tracking them
                 if (!agent || agent.id !== visitData.agentId) {
-                    setupAgentSubscription(visitData.agentId);
+                    setupAgentGpsSubscription(visitData.agentId);
                 }
             } else {
-                // If no agent is assigned, listen for one
+                // No agent assigned, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
-                const presenceCallback = (agentMember: Types.PresenceMessage) => {
-                    if (agentMember.action === 'enter' || agentMember.action === 'present') {
-                        // Found an agent, assign them and unsubscribe from presence updates
-                        assignAgent(agentMember);
-                        presenceChannel.unsubscribe(presenceCallback);
-                    }
+                const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
+                     setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
                 };
 
-                // Subscribe to presence updates
-                presenceChannel.subscribe(presenceCallback);
-                unsubscribes.push(() => presenceChannel.unsubscribe(presenceCallback));
-
-                // Also check if any agents are already present
-                presenceChannel.presence.get().then(onlineAgents => {
-                    if (onlineAgents.length > 0) {
-                        assignAgent(onlineAgents[0]);
-                        presenceChannel.unsubscribe(presenceCallback);
-                    }
+                // Get current agents and subscribe to future updates
+                presenceChannel.presence.get().then(updateOnlineAgents);
+                presenceChannel.presence.subscribe(['enter', 'leave'], () => {
+                    presenceChannel.presence.get().then(updateOnlineAgents);
                 });
+
+                unsubscribes.push(() => presenceChannel.presence.unsubscribe());
             }
         });
 
@@ -144,6 +138,33 @@ export default function TrackingPage() {
         };
     }, [visitId, hostelId, agent]);
     
+    const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
+        if (!visitId) return;
+        setAssigningAgent(selectedAgent.clientId);
+        toast({ title: 'Assigning Agent...', description: `Confirming your visit with ${selectedAgent.data.fullName}.` });
+
+        try {
+            const visitDocRef = doc(db, 'visits', visitId as string);
+            await updateDoc(visitDocRef, {
+                agentId: selectedAgent.clientId,
+                status: 'accepted'
+            });
+            // The onSnapshot listener will then take over to display the tracking UI.
+        } catch (error) {
+            console.error("Failed to assign agent:", error);
+            toast({ title: 'Assignment Failed', description: 'Could not assign agent. Please try again.', variant: 'destructive'});
+            setAssigningAgent(null);
+        }
+    }
+
+
+    const handleVisitComplete = async () => {
+        if(visitId) {
+            await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
+            router.push(`/hostels/${hostelId}/book/rating`);
+        }
+    }
+    
     if (loading || !visit || !hostel) {
         return (
             <div className="flex flex-col min-h-screen">
@@ -154,16 +175,6 @@ export default function TrackingPage() {
                 </main>
             </div>
         )
-    }
-
-    const handleVisitComplete = async () => {
-        if(visitId) {
-            await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
-            if(agent) {
-                // Agent presence is handled on login/logout in the header now
-            }
-            router.push(`/hostels/${hostelId}/book/rating`);
-        }
     }
     
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
@@ -176,21 +187,45 @@ export default function TrackingPage() {
                      <Card className="w-full max-w-md shadow-xl">
                         <CardHeader>
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                                {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Matching in Progress</>}
+                                {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Matching You With an Agent</>}
                                 {visit.status === 'accepted' && <span className="text-green-600">✅ Visit Confirmed</span>}
-                                 {visit.status === 'completed' && <span className="text-blue-600">🎉 Visit Complete</span>}
+                                {visit.status === 'completed' && <span className="text-blue-600">🎉 Visit Complete</span>}
                             </CardTitle>
                              <CardDescription>
-                                {visit.status === 'pending' && "We're finding the best agent for your tour."}
+                                {visit.status === 'pending' && "Please select an available agent to begin your tour."}
                                 {visit.status === 'accepted' && agent && `Your agent, ${agent.name}, is on the way.`}
                                 {visit.status === 'completed' && "Thank you for using HostelHQ!"}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             {visit.status === 'pending' && (
-                                <div className="flex flex-col items-center justify-center text-center py-8">
-                                    <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                                    <p className="text-muted-foreground">Searching for available agents...</p>
+                                <div className="space-y-3">
+                                    {onlineAgents.length > 0 ? (
+                                        onlineAgents.map(agent => (
+                                            <div key={agent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    <Avatar>
+                                                        <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                    <div>
+                                                        <p className="font-semibold">{agent.data.fullName}</p>
+                                                        <p className="text-xs text-muted-foreground">Online</p>
+                                                    </div>
+                                                </div>
+                                                <Button 
+                                                    size="sm" 
+                                                    onClick={() => handleSelectAgent(agent)}
+                                                    disabled={assigningAgent === agent.clientId}
+                                                >
+                                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Choose"}
+                                                </Button>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <p className="text-muted-foreground">No agents are available right now. Please check back shortly.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             {visit.status === 'accepted' && agent && (
@@ -204,10 +239,10 @@ export default function TrackingPage() {
                                             </div>
                                         </div>
                                          <div className="flex items-center gap-3">
-                                            <BedDouble className="h-5 w-5 text-muted-foreground"/>
+                                            <UserCheck className="h-5 w-5 text-muted-foreground"/>
                                             <div>
-                                                <p className="text-sm text-muted-foreground">Room</p>
-                                                <p className="font-semibold">{hostel.roomFeatures?.beds || 'N/A'} beds</p>
+                                                <p className="text-sm text-muted-foreground">Your Agent</p>
+                                                <p className="font-semibold">{agent.name}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
@@ -229,7 +264,7 @@ export default function TrackingPage() {
                                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                                         </a>
                                     </div>
-                                     <Button className="w-full" onClick={handleVisitComplete}>Agent has arrived</Button>
+                                     <Button className="w-full" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
                                 </div>
                             )}
                              {visit.status === 'completed' && (
@@ -248,3 +283,4 @@ export default function TrackingPage() {
         </div>
     );
 }
+

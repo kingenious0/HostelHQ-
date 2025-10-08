@@ -37,6 +37,9 @@ export function Header() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Set client ID for Ably auth
+        ably.auth.options.clientId = user.uid;
+
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
@@ -54,6 +57,8 @@ export function Header() {
             setAppUser(null);
         }
       } else {
+        // Clear client ID on logout
+        ably.auth.options.clientId = undefined;
         setAppUser(null);
       }
       setLoading(false);
@@ -63,22 +68,25 @@ export function Header() {
   }, []);
 
   useEffect(() => {
-    // This effect handles Ably presence for the current user.
+    // This effect handles Ably presence for agents.
     if (appUser?.role === 'agent') {
       const agentChannel = ably.channels.get('agents:live');
       const enterPresence = async () => {
         try {
-          await agentChannel.presence.enter({ id: appUser.uid });
+          await agentChannel.presence.enter({ 
+            id: appUser.uid, 
+            fullName: appUser.fullName, 
+            email: appUser.email 
+          });
         } catch (e) {
           console.error('Error entering Ably presence:', e);
         }
       };
       enterPresence();
 
-      // The cleanup function for this effect will leave presence.
-      // This runs when the component unmounts or when appUser changes.
       return () => {
-        agentChannel.presence.leave({ id: appUser.uid });
+        // Leave presence when component unmounts or user changes
+        agentChannel.presence.leave();
       };
     }
   }, [appUser]);
@@ -87,8 +95,10 @@ export function Header() {
   const handleLogout = async () => {
     setAuthAction(true);
     try {
-      // The useEffect cleanup will handle leaving presence automatically
-      // when the appUser state is set to null by onAuthStateChanged.
+      if (appUser?.role === 'agent') {
+        const agentChannel = ably.channels.get('agents:live');
+        await agentChannel.presence.leave();
+      }
       await signOut(auth);
       toast({ title: "Logged out successfully" });
       router.push('/');

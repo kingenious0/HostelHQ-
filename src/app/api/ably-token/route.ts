@@ -4,8 +4,11 @@ import Ably from 'ably';
 
 export async function GET(req: NextRequest) {
   const ablyApiKey = process.env.ABLY_SERVER_KEY;
-  // Use 'anonymous' as a fallback if the client doesn't provide an ID
-  const clientId = req.headers.get('x-ably-clientid') || 'anonymous';
+  // IMPORTANT: The Ably library on the client will send the clientId it was configured with.
+  // We MUST use this clientId to generate the token.
+  const url = new URL(req.url);
+  const clientId = url.searchParams.get('clientId') || 'anonymous';
+
 
   if (!ablyApiKey) {
     return NextResponse.json(
@@ -19,14 +22,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // IMPORTANT: Instantiate the client *inside* the handler for serverless environments.
-  // This ensures the API key is read from the environment variables on every request.
+  // Instantiate the client *inside* the handler for serverless environments.
   const client = new Ably.Rest(ablyApiKey);
   const tokenRequestData = await client.auth.createTokenRequest({ 
     clientId: clientId,
-    capability: { '*': ['subscribe', 'publish', 'presence'] }
+    // Add capabilities for the client
+    capability: { '*': ['subscribe', 'publish', 'presence', 'history'] }
   });
 
   return NextResponse.json(tokenRequestData);
 }
-

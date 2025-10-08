@@ -6,4 +6,6 @@ import { Realtime } from 'ably';
 // We use a root-relative path to ensure it always points to the correct endpoint.
 const authUrl = '/api/ably-token';
 
+// We initialize Ably without a clientId here.
+// The clientId will be set dynamically in the Header component after user authentication.
 export const ably = new Realtime({ authUrl });
