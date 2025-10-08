@@ -50,7 +50,7 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
                     source: 'hostel-pin-source',
                     paint: {
                         'circle-radius': 8,
-                        'circle-color': 'hsl(var(--primary))', // Use primary theme color
+                        'circle-color': '#800000', // Use a literal color, not CSS variable
                         'circle-stroke-color': 'white',
                         'circle-stroke-width': 2,
                     }
