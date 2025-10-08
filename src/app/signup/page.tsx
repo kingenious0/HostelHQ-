@@ -37,15 +37,21 @@ export default function SignupPage() {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
+            // Determine role. If email is admin@hostelhq.com, set role to admin.
+            const userRole = email.toLowerCase() === 'admin@hostelhq.com' ? 'admin' : role;
+
             // Step 2: Create user document in Firestore
             await setDoc(doc(db, "users", user.uid), {
                 fullName: fullName,
                 email: email,
-                role: role,
+                role: userRole,
                 createdAt: new Date().toISOString(),
             });
 
             toast({ title: 'Account Created Successfully!' });
+            if (userRole === 'admin') {
+                 toast({ title: 'Admin Account Detected!', description: 'You have been assigned admin privileges.' });
+            }
             router.push('/');
 
         } catch (error: any) {
@@ -131,5 +137,3 @@ export default function SignupPage() {
         </div>
     );
 }
-
-    

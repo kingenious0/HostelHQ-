@@ -118,38 +118,6 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
 };
 
 
-const seedInitialUsers = async () => {
-    try {
-        // IMPORTANT: Replace this with your actual admin UID from Firebase Authentication
-        const adminUid = 'REPLACE_WITH_YOUR_ADMIN_UID'; 
-        if(adminUid === 'REPLACE_WITH_YOUR_ADMIN_UID') {
-            console.warn("Admin user seeding skipped. Please replace the placeholder UID in src/lib/data.ts.");
-            return;
-        }
-
-        const adminRef = doc(db, 'users', adminUid); 
-        const adminSnap = await getDoc(adminRef);
-        if (!adminSnap.exists()) {
-            console.log("Seeding admin user data...");
-            await setDoc(adminRef, {
-                fullName: 'Admin User',
-                email: 'admin@test.com', // The email used for the admin account
-                role: 'admin'
-            });
-        } else if (adminSnap.data().role !== 'admin') {
-             console.log("Updating user to admin...");
-             await updateDoc(adminRef, { role: 'admin' });
-        }
-
-    } catch(e) {
-        console.warn("Could not seed admin user data:", e);
-    }
-};
-
-// Run this function once locally after creating the admin user in Firebase Auth and adding the UID.
-// After the first successful run, you can comment this out to prevent it from running on every server start.
-seedInitialUsers();
-
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
         const agentDocRef = doc(db, 'users', agentId);
