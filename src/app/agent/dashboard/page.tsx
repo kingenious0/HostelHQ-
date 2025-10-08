@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Check, X, Phone, CheckCheck, Eye, User, Home, Calendar, Clock } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -37,7 +37,7 @@ type EnrichedVisit = Visit & {
 export default function AgentDashboard() {
     const [myVisits, setMyVisits] = useState<EnrichedVisit[]>([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [selectedVisit, setSelectedVisit] = useState<EnrichedVisit | null>(null);
@@ -63,8 +63,7 @@ export default function AgentDashboard() {
 
         const visitsQuery = query(
             collection(db, "visits"), 
-            where("agentId", "==", currentUser.uid),
-            where("status", "in", ["pending", "accepted"])
+            where("agentId", "==", currentUser.uid)
         );
 
         const unsubscribeVisits = onSnapshot(visitsQuery, async (querySnapshot) => {
@@ -92,8 +91,17 @@ export default function AgentDashboard() {
 
                 return { ...visit, hostelName, studentName, studentPhone };
             }));
+            
+            // Sort by pending first, then by date
+            const sortedVisits = enrichedVisits.sort((a,b) => {
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                if (a.status === 'accepted' && b.status !== 'accepted') return -1;
+                if (a.status !== 'accepted' && b.status === 'accepted') return 1;
+                return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime();
+            });
 
-            setMyVisits(enrichedVisits.sort((a,b) => a.status === 'pending' ? -1 : 1));
+            setMyVisits(sortedVisits);
             setLoading(false);
         });
 
@@ -116,9 +124,13 @@ export default function AgentDashboard() {
                 description: "The student has been notified."
             });
 
+            // Close dialog only if rejecting or completing a visit
             if(newStatus === 'cancelled' || newStatus === 'completed'){
                 setIsDetailsOpen(false);
                 setSelectedVisit(null);
+            } else {
+                // If accepting, just update the state locally to reflect the change
+                setSelectedVisit(prev => prev ? {...prev, status: 'accepted'} : null);
             }
 
         } catch (error) {
@@ -161,6 +173,16 @@ export default function AgentDashboard() {
             </div>
         )
     }
+    
+    const getStatusVariant = (status: Visit['status']): 'default' | 'secondary' | 'outline' | 'destructive' => {
+        switch(status) {
+            case 'completed': return 'default';
+            case 'accepted': return 'secondary';
+            case 'pending': return 'outline';
+            case 'cancelled': return 'destructive';
+            default: return 'outline';
+        }
+    }
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -170,7 +192,7 @@ export default function AgentDashboard() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
-                            <CardDescription>Manage your incoming visit requests from students.</CardDescription>
+                            <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {loading ? (
@@ -201,7 +223,7 @@ export default function AgentDashboard() {
                                                         {format(new Date(visit.visitDate), "PPP")} at {visit.visitTime}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge variant={visit.status === 'accepted' ? 'secondary' : 'outline'} className="capitalize">
+                                                        <Badge variant={getStatusVariant(visit.status)} className="capitalize">
                                                             {visit.status}
                                                         </Badge>
                                                     </TableCell>
@@ -216,7 +238,7 @@ export default function AgentDashboard() {
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={5} className="text-center h-24">
-                                                    You have no pending or active visit requests.
+                                                    You have no visit requests.
                                                 </TableCell>
                                             </TableRow>
                                         )}
@@ -303,6 +325,11 @@ export default function AgentDashboard() {
                                     {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
                                     Mark as Complete
                                 </Button>
+                            )}
+                             {selectedVisit.status === 'completed' && (
+                                <div className="text-center w-full text-sm text-muted-foreground">
+                                    This visit has been completed.
+                                </div>
                             )}
                         </DialogFooter>
                     </DialogContent>

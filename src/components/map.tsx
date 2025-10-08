@@ -46,12 +46,13 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
              if(!map.getLayer('hostel-pin-layer')) {
                 map.addLayer({
                     id: 'hostel-pin-layer',
-                    type: 'symbol',
+                    type: 'circle',
                     source: 'hostel-pin-source',
-                    layout: {
-                        'icon-image': 'custom-marker',
-                        'icon-size': 0.07,
-                        'icon-allow-overlap': true
+                    paint: {
+                        'circle-radius': 8,
+                        'circle-color': 'hsl(var(--primary))', // Use primary theme color
+                        'circle-stroke-color': 'white',
+                        'circle-stroke-width': 2,
                     }
                 });
              }
@@ -78,7 +79,7 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
                 source: 'agent-location-source',
                 paint: {
                     'circle-radius': 10,
-                    'circle-color': '#008080',
+                    'circle-color': '#008080', // Teal color for agent
                     'circle-stroke-color': 'white',
                     'circle-stroke-width': 2,
                 }
@@ -106,30 +107,14 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
         mapRef.current.on('load', () => {
              const map = mapRef.current;
              if (!map) return;
-             
-             // Load custom marker image
-             map.loadImage(
-                '/marker-icon.png', 
-                (error, image) => {
-                    if (error) throw error;
-                    if (!map.hasImage('custom-marker') && image) {
-                         map.addImage('custom-marker', image);
-                    }
-                    addSourcesAndLayers(map);
-                    setMapLoaded(true);
-                }
-             );
+             addSourcesAndLayers(map);
+             setMapLoaded(true);
         });
         
          // When style changes, 'styledata' event is fired. Re-add sources and layers.
         mapRef.current.on('styledata', () => {
             if (mapRef.current?.isStyleLoaded()) {
-                const map = mapRef.current;
-                map.loadImage('/marker-icon.png', (error, image) => {
-                    if (error) throw error;
-                    if (!map.hasImage('custom-marker') && image) map.addImage('custom-marker', image);
-                    addSourcesAndLayers(map);
-                });
+                addSourcesAndLayers(mapRef.current);
             }
         });
 

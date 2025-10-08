@@ -24,6 +24,7 @@ type Visit = {
     agentId: string | null;
     hostelId: string;
     status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    studentCompleted: boolean;
     createdAt: string;
     visitDate: string;
     visitTime: string;
@@ -191,7 +192,7 @@ export default function TrackingPage() {
 
     const handleVisitComplete = async () => {
         if(visitId) {
-            await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
+            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true });
             toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
             router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
         }
@@ -309,7 +310,9 @@ export default function TrackingPage() {
                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                         </a>
                     </div>
-                     <Button className="w-full bg-primary text-primary-foreground" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
+                     <Button className="w-full bg-primary text-primary-foreground" onClick={handleVisitComplete} disabled={visit.studentCompleted}>
+                        {visit.studentCompleted ? "Waiting for Agent to Confirm" : "Mark Visit as Complete"}
+                     </Button>
                 </div>
             );
         }
@@ -383,5 +386,3 @@ export default function TrackingPage() {
         </div>
     );
 }
-
-    
