@@ -38,7 +38,9 @@ export function Header() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Set client ID for Ably auth
-        ably.auth.options.clientId = user.uid;
+        if (ably.auth.options) {
+          ably.auth.options.clientId = user.uid;
+        }
 
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
@@ -58,7 +60,9 @@ export function Header() {
         }
       } else {
         // Clear client ID on logout
-        ably.auth.options.clientId = undefined;
+        if (ably.auth.options) {
+          ably.auth.options.clientId = undefined;
+        }
         setAppUser(null);
       }
       setLoading(false);
