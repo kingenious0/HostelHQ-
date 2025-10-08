@@ -75,6 +75,8 @@ export default function SignupPage() {
         }
     };
 
+    const isAdminEmail = email.toLowerCase() === 'admin@hostelhq.com';
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -106,19 +108,21 @@ export default function SignupPage() {
                                 <Input id="password" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} />
                             </div>
                         </div>
-                        <div className="space-y-3">
-                            <Label>I am a...</Label>
-                            <RadioGroup defaultValue="student" value={role} onValueChange={(value) => setRole(value as 'student' | 'agent')} className="flex gap-4">
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="student" id="role-student" />
-                                    <Label htmlFor="role-student">Student</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="agent" id="role-agent" />
-                                    <Label htmlFor="role-agent">Agent</Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
+                        {!isAdminEmail && (
+                            <div className="space-y-3">
+                                <Label>I am a...</Label>
+                                <RadioGroup defaultValue="student" value={role} onValueChange={(value) => setRole(value as 'student' | 'agent')} className="flex gap-4">
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="student" id="role-student" />
+                                        <Label htmlFor="role-student">Student</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="agent" id="role-agent" />
+                                        <Label htmlFor="role-agent">Agent</Label>
+                                    </div>
+                                </RadioGroup>
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
                         <Button onClick={handleSignup} className="w-full" disabled={isSubmitting}>
