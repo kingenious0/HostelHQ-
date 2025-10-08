@@ -344,7 +344,7 @@ export default function TrackingPage() {
 
     const getCardTitle = () => {
         if (!visit.agentId) return "Select an Agent";
-        if (visit.status === 'pending' && agent) return `Request Sent to ${agent.fullName}`;
+        if (visit.status === 'pending' && agent) return `Your visit with ${agent.fullName} is confirmed!`;
         if (visit.status === 'accepted') return <span className="text-green-600">Your visit with {agent?.fullName} is confirmed!</span>;
         if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
@@ -353,7 +353,7 @@ export default function TrackingPage() {
     
     const getCardDescription = () => {
         if (!visit.agentId) return "Please select an available agent to begin your tour.";
-        if (visit.status === 'pending' && agent) return `Waiting for ${agent.fullName} to accept your request.`;
+        if (visit.status === 'pending' && agent) return `Your assigned agent, ${agent.fullName}, will meet you at the scheduled time.`;
         if (visit.status === 'accepted' && agent) return `Your tour with agent ${agent.fullName} is confirmed.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
         if (visit.status === 'cancelled') return `The request was cancelled by the agent or timed out.`;
