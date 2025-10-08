@@ -201,12 +201,15 @@ export default function AdminDashboard() {
         toast({ title: "Approving Agent..." });
         try {
             const batch = writeBatch(db);
-
             const pendingAgentRef = doc(db, 'pendingUsers', agent.id);
             const userRef = doc(db, 'users', agent.id);
             
+            // Create a new object for the user, excluding the 'id' field to avoid undefined values.
+            const { id, ...agentDataForUser } = agent;
+
             // Set the final user document with the 'agent' role
-            batch.set(userRef, { ...agent, role: 'agent', id: undefined });
+            batch.set(userRef, { ...agentDataForUser, role: 'agent' });
+            
             // Delete the pending user document
             batch.delete(pendingAgentRef);
 
@@ -699,4 +702,6 @@ export default function AdminDashboard() {
     </div>
   );
 }
+    
+
     
