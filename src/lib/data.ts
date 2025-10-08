@@ -148,7 +148,7 @@ const seedInitialUsers = async () => {
 
 // Run this function once locally after creating the admin user in Firebase Auth and adding the UID.
 // After the first successful run, you can comment this out to prevent it from running on every server start.
-// seedInitialUsers();
+seedInitialUsers();
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
