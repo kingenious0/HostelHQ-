@@ -148,7 +148,7 @@ export default function AgentUploadPage() {
             });
 
             toast({ title: 'Submission Successful!', description: 'The hostel has been sent for admin approval.' });
-            router.push('/'); // Redirect to home or an agent dashboard
+            router.push('/agent/listings'); 
         } catch (error) {
             console.error("Submission error: ", error);
             setIsSubmitting(false);
