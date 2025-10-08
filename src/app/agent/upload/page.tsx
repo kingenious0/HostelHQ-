@@ -16,7 +16,7 @@ import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description'
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { addDoc, collection } from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -326,5 +326,4 @@ export default function AgentUploadPage() {
         </div>
     );
 }
-
     

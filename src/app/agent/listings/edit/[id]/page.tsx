@@ -14,7 +14,7 @@ import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2 } 
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -286,5 +286,4 @@ export default function EditListingPage() {
         </div>
     );
 }
-
     
