@@ -7,11 +7,10 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { BookingsChart } from '@/components/bookings-chart';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +36,12 @@ type PendingHostel = Omit<Hostel, 'availability'> & {
   dateSubmitted: string;
 };
 
+type User = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'student' | 'agent';
+}
 
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
   'Available': 'Limited',
@@ -54,6 +59,7 @@ const availabilityVariant: Record<Hostel['availability'], "default" | "secondary
 export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState({ revenue: 0, occupancyRate: '0%', totalListings: 0 });
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -90,6 +96,12 @@ export default function AdminDashboard() {
       setApprovedHostels(hostelsData);
     });
 
+    // Fetch all users
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(usersData);
+    });
+
     // Fetch stats
     const fetchStats = async () => {
         const approvedSnapshot = await getDocs(collection(db, 'hostels'));
@@ -99,7 +111,6 @@ export default function AdminDashboard() {
         const totalPending = pendingSnapshot.size;
         const totalListings = totalApproved + totalPending;
 
-        // Simplified revenue and occupancy for demonstration
         const totalRevenue = approvedSnapshot.docs.reduce((sum, doc) => sum + (doc.data().price || 0), 0);
         const occupancy = totalListings > 0 ? (totalApproved / totalListings) * 100 : 0;
 
@@ -117,6 +128,7 @@ export default function AdminDashboard() {
     return () => {
       unsubPending();
       unsubApproved();
+      unsubUsers();
       unsubStats();
     };
   }, []);
@@ -135,7 +147,7 @@ export default function AdminDashboard() {
           ...hostelData,
           status: 'approved',
           approvedAt: new Date().toISOString(),
-          availability: 'Available', // Set default availability on approval
+          availability: 'Available', 
         });
         
         await deleteDoc(pendingDocRef);
@@ -202,11 +214,32 @@ export default function AdminDashboard() {
       }
   }
 
+  const toggleUserRole = async (user: User) => {
+    const newRole = user.role === 'student' ? 'agent' : 'student';
+    if(!confirm(`Are you sure you want to change ${user.fullName}'s role to ${newRole}?`)) return;
+
+    setProcessingId(user.id);
+    toast({ title: 'Updating user role...'});
+    try {
+        const userRef = doc(db, 'users', user.id);
+        await updateDoc(userRef, { role: newRole });
+        toast({ title: 'Role Updated', description: `${user.fullName} is now an ${newRole}.`});
+    } catch (error) {
+        console.error("Error updating user role:", error);
+        toast({ title: 'Update Failed', description: "Could not update user role.", variant: "destructive"});
+    } finally {
+        setProcessingId(null);
+    }
+  }
+
 
   const openReviewDialog = (hostel: PendingHostel) => {
     setSelectedHostel(hostel);
     setIsDialogOpen(true);
   }
+
+  const students = users.filter(u => u.role === 'student');
+  const agents = users.filter(u => u.role === 'agent');
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -215,21 +248,31 @@ export default function AdminDashboard() {
         <div className="container mx-auto">
           <h1 className="text-3xl font-bold font-headline mb-6">Admin Dashboard</h1>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Potential Revenue</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Students</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">GH₵{stats.revenue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Based on approved listings</p>
+                <div className="text-2xl font-bold">{students.length}</div>
+                <p className="text-xs text-muted-foreground">Registered students</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Agents</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{agents.length}</div>
+                 <p className="text-xs text-muted-foreground">Registered agents</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Approved Listings</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{approvedHostels.length}</div>
@@ -353,6 +396,61 @@ export default function AdminDashboard() {
                 </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+                <CardTitle>User Management</CardTitle>
+                <CardDescription>View all registered users and manage their roles.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Full Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {users.length > 0 ? (
+                            users.map(user => (
+                                <TableRow key={user.id}>
+                                    <TableCell className="font-medium">{user.fullName}</TableCell>
+                                    <TableCell>{user.email}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
+                                            {user.role}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => toggleUserRole(user)}
+                                            disabled={processingId === user.id}
+                                            title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
+                                        >
+                                            {processingId === user.id ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
+                                            )}
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                             <TableRow>
+                                <TableCell colSpan={4} className="text-center h-24">
+                                    No users found.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+          </Card>
         </div>
       </main>
 
@@ -442,3 +540,5 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
+    

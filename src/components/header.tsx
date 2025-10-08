@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus } from 'lucide-react';
+import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -12,67 +12,72 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
-const roles = {
-  student: { email: 'student@test.com', password: 'password', redirect: '/' },
-  agent: { email: 'agent@test.com', password: 'password', redirect: '/agent/listings' },
-  admin: { email: 'admin@test.com', password: 'password', redirect: '/admin/dashboard' },
-};
+type AppUser = {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: 'student' | 'agent' | 'admin';
+}
 
 export function Header() {
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authAction, setAuthAction] = useState<string | null>(null);
+  const [authAction, setAuthAction] = useState<boolean>(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // User is signed in, get their role from Firestore.
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            setAppUser({
+                uid: user.uid,
+                email: user.email!,
+                fullName: userData.fullName,
+                role: userData.role
+            });
+        } else {
+            // This case can happen if a user is in Auth but not in Firestore.
+            // For now, we sign them out to maintain consistency.
+            await signOut(auth);
+            setAppUser(null);
+        }
+      } else {
+        // User is signed out.
+        setAppUser(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async (role: keyof typeof roles) => {
-    setAuthAction(role);
-    try {
-      await signInWithEmailAndPassword(auth, roles[role].email, roles[role].password);
-      toast({ title: `Logged in as ${role}` });
-      // Quick navigation, Next.js Link will handle the rest
-      window.location.href = roles[role].redirect;
-    } catch (error) {
-      console.error(`Error logging in as ${role}:`, error);
-      toast({
-        title: `Login Failed for ${role}`,
-        description: `Please ensure user '${roles[role].email}' exists in Firebase Auth with password 'password'.`,
-        variant: 'destructive',
-      });
-    } finally {
-      setAuthAction(null);
-    }
-  };
-
   const handleLogout = async () => {
-    setAuthAction('logout');
+    setAuthAction(true);
     try {
       await signOut(auth);
       toast({ title: "Logged out successfully" });
-      window.location.href = '/';
+      router.push('/');
     } catch (error) {
       console.error("Error logging out:", error);
       toast({ title: "Logout failed", variant: 'destructive' });
     } finally {
-      setAuthAction(null);
+      setAuthAction(false);
     }
   };
-
-  const isAgent = currentUser?.email === roles.agent.email;
-  const isAdmin = currentUser?.email === roles.admin.email;
-
+  
+  const isAgent = appUser?.role === 'agent';
+  const isAdmin = appUser?.role === 'admin';
 
   return (
     <header className="bg-card shadow-sm sticky top-0 z-40">
@@ -86,12 +91,12 @@ export function Header() {
             <Link href="/" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
               Hostels
             </Link>
-            {(isAgent || isAdmin) && (
+            {isAgent && (
               <Link href="/agent/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                 List a Hostel
               </Link>
             )}
-            {isAgent && (
+             {isAgent && (
                <Link href="/agent/listings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                 My Listings
               </Link>
@@ -110,10 +115,11 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {currentUser ? (
+              {appUser ? (
                 <>
                   <DropdownMenuLabel>
-                    {currentUser.email}
+                    {appUser.fullName}
+                    <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {isAgent && (
@@ -132,23 +138,20 @@ export function Header() {
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} disabled={authAction === 'logout'}>
+                  <DropdownMenuItem onClick={handleLogout} disabled={authAction}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>
                   </DropdownMenuItem>
                 </>
               ) : (
                 <>
-                  <DropdownMenuLabel>Login As</DropdownMenuLabel>
+                  <DropdownMenuLabel>Welcome</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleLogin('student')} disabled={!!authAction}>
-                    Student
+                  <DropdownMenuItem asChild>
+                    <Link href="/login"><User className="mr-2 h-4 w-4" />Login</Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleLogin('agent')} disabled={!!authAction}>
-                    Agent
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleLogin('admin')} disabled={!!authAction}>
-                    Admin
+                  <DropdownMenuItem asChild>
+                    <Link href="/signup"><UserPlus className="mr-2 h-4 w-4" />Sign Up</Link>
                   </DropdownMenuItem>
                 </>
               )}

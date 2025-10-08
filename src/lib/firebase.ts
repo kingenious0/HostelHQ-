@@ -1,3 +1,4 @@
+
 // Client-side Firebase SDK (no Admin SDK)
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
@@ -14,7 +15,7 @@ const firebaseConfig = {
 
 // Check if all required environment variables are present
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    throw new Error('Firebase configuration is missing. Make sure you have a .env file with all the required NEXT_PUBLIC_FIREBASE_... variables.');
+    console.warn('Firebase configuration is missing. Make sure you have a .env file with all the required NEXT_PUBLIC_FIREBASE_... variables.');
 }
 
 // Initialize Firebase
@@ -24,15 +25,21 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // Enable persistence
-if (typeof window !== 'undefined') {
-    enableIndexedDbPersistence(db).catch((err) => {
-        if (err.code == 'failed-precondition') {
-            // Multiple tabs open, persistence can only be enabled in one tab at a a time.
-            console.warn('Firestore persistence failed: multiple tabs open.');
-        } else if (err.code == 'unimplemented') {
-            // The current browser does not support all of the
-            // features required to enable persistence
-            console.warn('Firestore persistence not available in this browser.');
-        }
-    });
+if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
+    try {
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code == 'failed-precondition') {
+                // Multiple tabs open, persistence can only be enabled in one tab at a a time.
+                console.warn('Firestore persistence failed: multiple tabs open.');
+            } else if (err.code == 'unimplemented') {
+                // The current browser does not support all of the
+                // features required to enable persistence
+                console.warn('Firestore persistence not available in this browser.');
+            }
+        });
+    } catch (e) {
+        console.error("Firebase persistence error", e);
+    }
 }
+
+    

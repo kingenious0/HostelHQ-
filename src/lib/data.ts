@@ -1,6 +1,6 @@
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where } from "firebase/firestore";
 import { ably } from './ably';
 
 export type Hostel = {
@@ -20,9 +20,15 @@ export type Hostel = {
   roomFeatures?: { beds: string; bathrooms: string };
 };
 
-export type Agent = {
-    id: string;
-    name: string;
+export type AppUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'student' | 'agent' | 'admin';
+};
+
+export type Agent = AppUser & {
+    role: 'agent';
     rating: number;
     vehicle: string;
     status: 'online' | 'offline';
@@ -59,7 +65,6 @@ export const staticHostels: Hostel[] = [
     lng: -1.66,
     availability: 'Available',
   },
-  // Other static hostels are removed for brevity in this example but would be here.
 ];
 
 
@@ -73,20 +78,6 @@ export const bookingsChartData = [
 ];
 
 
-// Seed data for agents, will be moved to Firestore
-export const agents: Agent[] = [
-    {
-        id: 'agent-1',
-        name: 'Kofi Mensah',
-        rating: 4.8,
-        vehicle: 'Toyota Corolla',
-        status: 'online',
-        location: { lat: 5.6037, lng: -0.1870 }, // Start near Accra
-        imageUrl: 'https://picsum.photos/seed/agent1/200/200',
-        phone: '233244123456'
-    },
-];
-
 let simulationInterval: NodeJS.Timeout | null = null;
 
 const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, destinationLng: number) => {
@@ -95,12 +86,11 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
         clearInterval(simulationInterval);
     }
     
-    // Get the agent's Ably channel
     const channel = ably.channels.get(`agent:${agentId}:gps`);
 
-    const agentRef = doc(db, 'agents', agentId);
+    const agentRef = doc(db, 'users', agentId);
     let step = 0;
-    const totalSteps = 20; // 20 steps over 1 minute
+    const totalSteps = 20;
 
     simulationInterval = setInterval(async () => {
         const agentSnap = await getDoc(agentRef);
@@ -114,10 +104,7 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
         const newLng = currentLoc.lng + (destinationLng - currentLoc.lng) / (totalSteps - step);
         const newLocation = { lat: newLat, lng: newLng };
 
-        // 1. Update location in Firestore (as a persistent record)
         await updateDoc(agentRef, { location: newLocation });
-
-        // 2. Publish live location to Ably
         await channel.publish('location', newLocation);
 
         step++;
@@ -127,86 +114,45 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
             console.log(`Agent ${agentId} has arrived and simulation ended.`);
             clearInterval(simulationInterval!);
         }
-    }, 2000); // Update location every 2 seconds
+    }, 2000); 
 };
 
 
-// Seed agent data into Firestore if it doesn't exist.
-const seedAgents = async () => {
+const seedInitialUsers = async () => {
     try {
-        const agentRef = doc(db, 'agents', 'agent-1');
-        const agentSnap = await getDoc(agentRef);
-        if (!agentSnap.exists()) {
-            console.log("Seeding agent data...");
-            await setDoc(agentRef, agents[0]);
+        const adminRef = doc(db, 'users', 'admin-user-id'); // Use a fixed ID for admin
+        const adminSnap = await getDoc(adminRef);
+        if (!adminSnap.exists()) {
+            console.log("Seeding admin user data...");
+            // IMPORTANT: You must create this user in Firebase Authentication manually
+            // with email 'admin@test.com' and a password.
+            // The UID from Firebase Auth must replace 'admin-user-id' here.
+            await setDoc(adminRef, {
+                fullName: 'Admin User',
+                email: 'admin@test.com',
+                role: 'admin'
+            });
         }
     } catch(e) {
-        // This might fail in environments without write access, which is fine for seeding.
-        console.warn("Could not seed agent data:", e);
+        console.warn("Could not seed admin user data:", e);
     }
 };
-seedAgents();
-
-export const assignAgentAndSimulate = async (visitId: string, hostel: Hostel) => {
-    const assignedAgentId = 'agent-1'; // Hardcode for simulation
-    const visitDocRef = doc(db, 'visits', visitId);
-
-    // Enter Ably presence for the main agent channel
-    const agent = await getAgent(assignedAgentId);
-    if(agent) {
-        const presenceChannel = ably.channels.get('agents:live');
-        presenceChannel.presence.enter({ 
-            id: agent.id, 
-            name: agent.name, 
-            lat: agent.location.lat, 
-            lng: agent.location.lng, 
-            status: 'online' 
-        });
-    }
-
-    await updateDoc(visitDocRef, {
-        agentId: assignedAgentId,
-        status: 'accepted'
-    });
-
-    if (hostel.lat && hostel.lng) {
-        // Start Ably simulation
-        simulateAgentMovementWithAbly(assignedAgentId, hostel.lat, hostel.lng);
-    }
-}
-
-
-
-export async function getVisit(visitId: string): Promise<Visit | null> {
-    const visitDocRef = doc(db, 'visits', visitId);
-    const visitDoc = await getDoc(visitDocRef);
-    if (!visitDoc.exists()) {
-        return null;
-    }
-    const data = visitDoc.data();
-    // Assuming the visitDate is stored as a Timestamp
-    return {
-        id: visitDoc.id,
-        ...data,
-        visitDate: (data.visitDate as any).toDate(),
-    } as Visit;
-}
+//seedInitialUsers();
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
-        const agentDocRef = doc(db, 'agents', agentId);
+        const agentDocRef = doc(db, 'users', agentId);
         const agentDoc = await getDoc(agentDocRef);
-        if (agentDoc.exists()) {
+        if (agentDoc.exists() && agentDoc.data().role === 'agent') {
             return { id: agentDoc.id, ...agentDoc.data() } as Agent;
         }
+        return null;
     } catch (e) {
         console.error("Error fetching agent from firestore: ", e);
+        return null;
     }
-    
-    // Fallback to static data
-    console.log("Falling back to static agent data for agentId: ", agentId);
-    return agents.find(a => a.id === agentId) || null;
 }
+
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
     try {
@@ -214,7 +160,6 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         const hostelDoc = await getDoc(hostelDocRef);
         if (hostelDoc.exists()) {
             const data = hostelDoc.data();
-            // Ensure lat/lng are numbers, fallback to static if needed
             const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
             return { id: hostelDoc.id, ...data, lat, lng } as Hostel;
@@ -223,14 +168,13 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         console.error("Error fetching hostel from firestore: ", e);
     }
 
-    // Fallback to static data if not in firestore for now
     console.log("Falling back to static hostel data for hostelId: ", hostelId);
     const staticHostel = staticHostels.find(h => h.id === hostelId);
     return staticHostel || null;
 }
 
 export async function getHostels(): Promise<Hostel[]> {
-    try {
+     try {
         const hostelsCollectionRef = collection(db, 'hostels');
         const querySnapshot = await getDocs(hostelsCollectionRef);
         const firestoreHostels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
@@ -238,7 +182,6 @@ export async function getHostels(): Promise<Hostel[]> {
         if (firestoreHostels.length > 0) {
             return firestoreHostels;
         }
-        // If firestore is empty, fall through to static data
     } catch (e: any) {
         console.error("\n--- FIRESTORE FETCH FAILED (DEV) ---");
         console.error("Could not fetch hostels from Firestore. This is likely due to missing or incorrect Firebase credentials in your local `.env` file.");
@@ -247,7 +190,8 @@ export async function getHostels(): Promise<Hostel[]> {
         console.error("--------------------------------------\n");
     }
     
-    // Fallback to static data if firestore fails or is empty
     console.log("Falling back to static hostel data.");
     return staticHostels;
 }
+
+    
