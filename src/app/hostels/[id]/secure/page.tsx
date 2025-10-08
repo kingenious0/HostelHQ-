@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
 import { getHostel, Hostel } from "@/lib/data"
 import { notFound } from 'next/navigation';
+import { initializeHostelPayment } from "@/app/actions/paystack"
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -42,11 +43,6 @@ const formSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
 })
 
-declare global {
-  interface Window {
-    PaystackPop: any;
-  }
-}
 
 export default function SecureHostelPage() {
     const { toast } = useToast();
@@ -66,14 +62,6 @@ export default function SecureHostelPage() {
             setHostel(hostelData);
         };
         fetchHostelData();
-
-        const script = document.createElement("script");
-        script.src = "https://js.paystack.co/v1/inline.js";
-        script.async = true;
-        document.body.appendChild(script);
-        return () => {
-            document.body.removeChild(script);
-        }
     }, [hostelId]);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -88,31 +76,32 @@ export default function SecureHostelPage() {
         },
     });
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
-        if (!hostel || !window.PaystackPop) return;
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (!hostel) return;
         
         setIsSubmitting(true);
         toast({ title: "Initializing Payment..." });
 
-        const paystack = new window.PaystackPop();
+        try {
+            const result = await initializeHostelPayment({
+                email: values.email,
+                amount: hostel.price * 100, // Amount in pesewas
+                hostelName: hostel.name,
+                studentName: values.studentName,
+            });
 
-        paystack.newTransaction({
-            key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_17604a077cca0215c1f0ab76909a6b76b0a70260", // Fallback for safety
-            email: values.email,
-            amount: hostel.price * 100, // Amount in pesewas
-            currency: 'GHS',
-            ref: `hostel-secure-${hostelId}-${Date.now()}`,
-            label: `Full payment for ${hostel.name}`,
-            onSuccess: (transaction: any) => {
-                toast({ title: "Payment Successful!", description: "Your room is secured."});
-                // In a real app, we'd update the database here.
-                router.push(`/`); 
-            },
-            onCancel: () => {
-                toast({ title: "Payment Cancelled", variant: "destructive" });
-                setIsSubmitting(false);
-            },
-        });
+            if (result.status && result.authorization_url) {
+                toast({ title: "Redirecting to Payment", description: "You will be redirected to a secure payment page."});
+                // Redirect user to the returned authorization URL
+                router.push(result.authorization_url);
+            } else {
+                throw new Error(result.message || "Failed to initialize payment.");
+            }
+
+        } catch (error: any) {
+             toast({ title: "Payment Error", description: error.message || "Could not connect to payment service.", variant: "destructive" });
+             setIsSubmitting(false);
+        }
     }
 
   return (
@@ -214,7 +203,7 @@ export default function SecureHostelPage() {
                                         <Input placeholder="+233 XX XXX XXXX" {...field} />
                                     </FormControl>
                                     <FormDescription>
-                                        The payment will be linked to this number.
+                                        This can be any number for the transaction.
                                     </FormDescription>
                                     <FormMessage />
                                     </FormItem>
@@ -239,7 +228,7 @@ export default function SecureHostelPage() {
                              <CardFooter className="px-0 pt-6">
                                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Pay GH₵{hostel?.price.toLocaleString() || 0} Now
+                                    Proceed to Pay GH₵{hostel?.price.toLocaleString() || 0}
                                 </Button>
                             </CardFooter>
                         </form>
