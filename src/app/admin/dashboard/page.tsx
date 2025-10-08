@@ -484,7 +484,7 @@ export default function AdminDashboard() {
                             <TableBody>
                                 {onlineAgents.length > 0 ? (
                                     onlineAgents.map(agent => (
-                                        <TableRow key={agent.clientId}>
+                                        <TableRow key={`${agent.clientId}-${agent.data.id}`}>
                                             <TableCell className="font-medium flex items-center gap-2">
                                                  <Avatar className="h-8 w-8">
                                                     <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
