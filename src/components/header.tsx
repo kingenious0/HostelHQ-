@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { auth, db } from '@/lib/firebase';
 import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { useState, useEffect } from 'react';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { ably } from '@/lib/ably';
+import { Types } from 'ably';
 
 type AppUser = {
   uid: string;
@@ -33,13 +34,14 @@ export function Header() {
   const [authAction, setAuthAction] = useState<boolean>(false);
   const { toast } = useToast();
   const router = useRouter();
+  const locationWatcherId = useRef<number | null>(null);
+  const agentPresenceChannel = useRef<Types.RealtimeChannelPromise | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Set client ID for Ably auth
         if (ably.auth) {
-          // Ensure auth.options exists before setting clientId
           if (!ably.auth.options) {
             (ably.auth.options as any) = {};
           }
@@ -58,12 +60,10 @@ export function Header() {
             };
             setAppUser(currentUser);
         } else {
-            // If user exists in Auth but not in Firestore, log them out.
             await signOut(auth);
             setAppUser(null);
         }
       } else {
-        // Clear client ID on logout
         if (ably.auth && ably.auth.options) {
           ably.auth.options.clientId = undefined;
         }
@@ -76,12 +76,13 @@ export function Header() {
   }, []);
 
   useEffect(() => {
-    // This effect handles Ably presence for agents.
+    // This effect handles Ably presence and location tracking for agents.
     if (appUser?.role === 'agent') {
-      const agentChannel = ably.channels.get('agents:live');
+      // --- Enter Presence ---
+      agentPresenceChannel.current = ably.channels.get('agents:live');
       const enterPresence = async () => {
         try {
-          await agentChannel.presence.enter({ 
+          await agentPresenceChannel.current?.presence.enter({ 
             id: appUser.uid, 
             fullName: appUser.fullName, 
             email: appUser.email 
@@ -92,21 +93,54 @@ export function Header() {
       };
       enterPresence();
 
-      return () => {
-        // Leave presence when component unmounts or user changes
-        agentChannel.presence.leave();
-      };
+      // --- Start Location Tracking ---
+      if ('geolocation' in navigator) {
+        locationWatcherId.current = navigator.geolocation.watchPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            const agentGpsChannel = ably.channels.get(`agent:${appUser.uid}:gps`);
+            
+            // Publish to Ably for real-time map updates
+            agentGpsChannel.publish('location', { lat: latitude, lng: longitude });
+
+            // Also update Firestore for initial location fetching
+            const userDocRef = doc(db, "users", appUser.uid);
+            await updateDoc(userDocRef, {
+              location: { lat: latitude, lng: longitude }
+            });
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            if(error.code === 1) { // PERMISSION_DENIED
+              toast({ title: 'Location Access Denied', description: 'Please enable location services to be visible to students.', variant: 'destructive'});
+            }
+          },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        );
+      }
+      
     }
-  }, [appUser]);
+
+    // --- Cleanup function ---
+    return () => {
+      // Leave presence when component unmounts or user changes
+      if (agentPresenceChannel.current) {
+        agentPresenceChannel.current.presence.leave();
+        agentPresenceChannel.current = null;
+      }
+      // Stop watching location
+      if (locationWatcherId.current !== null) {
+        navigator.geolocation.clearWatch(locationWatcherId.current);
+        locationWatcherId.current = null;
+      }
+    };
+  }, [appUser, toast]);
 
 
   const handleLogout = async () => {
     setAuthAction(true);
     try {
-      if (appUser?.role === 'agent') {
-        const agentChannel = ably.channels.get('agents:live');
-        await agentChannel.presence.leave();
-      }
+      // The useEffect cleanup will handle leaving presence and clearing watchers
       await signOut(auth);
       toast({ title: "Logged out successfully" });
       router.push('/');
