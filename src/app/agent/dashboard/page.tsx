@@ -6,16 +6,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Check, X, Phone, CheckCheck } from 'lucide-react';
+import { Loader2, AlertTriangle, Check, X, Phone, CheckCheck, Eye, User, Home, Calendar, Clock } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import { Separator } from '@/components/ui/separator';
 
 type Visit = {
     id: string;
@@ -29,7 +31,7 @@ type Visit = {
 type EnrichedVisit = Visit & {
     hostelName: string;
     studentName: string;
-    studentPhone?: string; // It might not always exist
+    studentPhone?: string;
 };
 
 export default function AgentDashboard() {
@@ -38,6 +40,8 @@ export default function AgentDashboard() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
+    const [selectedVisit, setSelectedVisit] = useState<EnrichedVisit | null>(null);
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
 
@@ -82,14 +86,14 @@ export default function AgentDashboard() {
                     const studentSnap = await getDoc(studentRef);
                     if (studentSnap.exists()) {
                         studentName = studentSnap.data().fullName;
-                        studentPhone = studentSnap.data().phoneNumber; // Assuming phone is stored
+                        studentPhone = studentSnap.data().phoneNumber;
                     }
                 } catch (e) { console.error("Error fetching student", e); }
 
                 return { ...visit, hostelName, studentName, studentPhone };
             }));
 
-            setMyVisits(enrichedVisits.sort((a,b) => a.status === 'pending' ? -1 : 1)); // Show pending first
+            setMyVisits(enrichedVisits.sort((a,b) => a.status === 'pending' ? -1 : 1));
             setLoading(false);
         });
 
@@ -111,12 +115,23 @@ export default function AgentDashboard() {
                 title: title,
                 description: "The student has been notified."
             });
+
+            if(newStatus === 'cancelled' || newStatus === 'completed'){
+                setIsDetailsOpen(false);
+                setSelectedVisit(null);
+            }
+
         } catch (error) {
             toast({ title: "Update Failed", description: "Could not update the request.", variant: "destructive" });
             console.error("Error updating visit status:", error);
         } finally {
             setProcessingId(null);
         }
+    }
+    
+    const openDetailsDialog = (visit: EnrichedVisit) => {
+        setSelectedVisit(visit);
+        setIsDetailsOpen(true);
     }
 
     if (loadingAuth) {
@@ -180,12 +195,6 @@ export default function AgentDashboard() {
                                                 <TableRow key={visit.id} className={visit.status === 'pending' ? 'bg-blue-50/50' : ''}>
                                                     <TableCell className="font-medium">
                                                         <div>{visit.studentName}</div>
-                                                        {visit.studentPhone && (
-                                                            <a href={`tel:${visit.studentPhone}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-1">
-                                                                <Phone className="h-3 w-3" />
-                                                                {visit.studentPhone}
-                                                            </a>
-                                                        )}
                                                     </TableCell>
                                                     <TableCell>{visit.hostelName}</TableCell>
                                                     <TableCell>
@@ -197,38 +206,10 @@ export default function AgentDashboard() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right space-x-2">
-                                                        {visit.status === 'pending' && (
-                                                            <>
-                                                                <Button 
-                                                                    variant="outline" size="sm" 
-                                                                    onClick={() => handleUpdateRequest(visit.id, 'cancelled')}
-                                                                    disabled={processingId === visit.id}
-                                                                >
-                                                                    {processingId === visit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <X className="mr-1 h-4 w-4" />}
-                                                                    Decline
-                                                                </Button>
-                                                                <Button 
-                                                                    size="sm" 
-                                                                    onClick={() => handleUpdateRequest(visit.id, 'accepted')}
-                                                                    disabled={processingId === visit.id}
-                                                                >
-                                                                    {processingId === visit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="mr-1 h-4 w-4" />}
-                                                                    Accept
-                                                                </Button>
-                                                            </>
-                                                        )}
-                                                        {visit.status === 'accepted' && (
-                                                            <Button 
-                                                                variant="default" 
-                                                                size="sm"
-                                                                className="bg-green-600 hover:bg-green-700"
-                                                                onClick={() => handleUpdateRequest(visit.id, 'completed')}
-                                                                disabled={processingId === visit.id}
-                                                            >
-                                                                {processingId === visit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
-                                                                Mark as Complete
-                                                            </Button>
-                                                        )}
+                                                        <Button variant="outline" size="sm" onClick={() => openDetailsDialog(visit)}>
+                                                            <Eye className="mr-2 h-4 w-4" />
+                                                            View Details
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -246,9 +227,88 @@ export default function AgentDashboard() {
                     </Card>
                 </div>
             </main>
+            
+            {selectedVisit && (
+                <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="font-headline text-2xl">Visit Details</DialogTitle>
+                            <DialogDescription>
+                                Review and respond to the visit request from {selectedVisit.studentName}.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="flex items-center gap-4 p-3 border rounded-lg">
+                                <User className="h-6 w-6 text-muted-foreground" />
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Student Name</p>
+                                    <p className="font-semibold">{selectedVisit.studentName}</p>
+                                </div>
+                            </div>
+                            {selectedVisit.studentPhone && (
+                                <div className="flex items-center gap-4 p-3 border rounded-lg">
+                                    <Phone className="h-6 w-6 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Contact Number</p>
+                                        <a href={`tel:${selectedVisit.studentPhone}`} className="font-semibold text-primary hover:underline">
+                                            {selectedVisit.studentPhone}
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                             <div className="flex items-center gap-4 p-3 border rounded-lg">
+                                <Home className="h-6 w-6 text-muted-foreground" />
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Hostel</p>
+                                    <p className="font-semibold">{selectedVisit.hostelName}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 p-3 border rounded-lg">
+                                <Calendar className="h-6 w-6 text-muted-foreground" />
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Date & Time</p>
+                                    <p className="font-semibold">{format(new Date(selectedVisit.visitDate), "PPP")} at {selectedVisit.visitTime}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-4 border-t">
+                            {selectedVisit.status === 'pending' && (
+                                <div className="flex w-full gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        className="flex-1"
+                                        onClick={() => handleUpdateRequest(selectedVisit.id, 'cancelled')}
+                                        disabled={processingId === selectedVisit.id}
+                                    >
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <X className="mr-1 h-4 w-4" />}
+                                        Decline
+                                    </Button>
+                                    <Button 
+                                        className="flex-1"
+                                        onClick={() => handleUpdateRequest(selectedVisit.id, 'accepted')}
+                                        disabled={processingId === selectedVisit.id}
+                                    >
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="mr-1 h-4 w-4" />}
+                                        Accept
+                                    </Button>
+                                </div>
+                            )}
+                            {selectedVisit.status === 'accepted' && (
+                                <Button 
+                                    className="w-full bg-green-600 hover:bg-green-700"
+                                    onClick={() => handleUpdateRequest(selectedVisit.id, 'completed')}
+                                    disabled={processingId === selectedVisit.id}
+                                >
+                                    {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
+                                    Mark as Complete
+                                </Button>
+                            )}
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
+
         </div>
     );
 }
-    
-
-    
