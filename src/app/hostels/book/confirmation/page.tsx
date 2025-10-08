@@ -18,6 +18,8 @@ function ConfirmationContent() {
     
     const hostelId = searchParams.get('hostelId');
     const reference = searchParams.get('reference');
+    const visitDate = searchParams.get('visitDate');
+    const visitTime = searchParams.get('visitTime');
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -39,7 +41,7 @@ function ConfirmationContent() {
             return;
         }
 
-        if (!hostelId || !reference) {
+        if (!hostelId || !reference || !visitDate || !visitTime) {
              toast({ title: "Invalid Confirmation Link", description: "Missing booking details.", variant: "destructive" });
              router.push('/');
             return;
@@ -55,9 +57,11 @@ function ConfirmationContent() {
                     status: 'pending', // Initial status after payment
                     paymentReference: reference,
                     createdAt: new Date().toISOString(),
+                    visitDate: visitDate,
+                    visitTime: visitTime,
                 });
                 
-                toast({ title: "Visit confirmed!", description: "We're finding an agent for you." });
+                toast({ title: "Payment Confirmed!", description: "We're finding an agent for you." });
                 
                 // Redirect to the tracking page, passing the new visit ID
                 router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
@@ -71,7 +75,7 @@ function ConfirmationContent() {
 
         createVisitRecord();
 
-    }, [router, hostelId, reference, currentUser, loadingAuth, toast]);
+    }, [router, hostelId, reference, currentUser, loadingAuth, toast, visitDate, visitTime]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">

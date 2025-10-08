@@ -8,7 +8,7 @@ import { Agent, Hostel, getAgent, AppUser } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Loader2, Home, BedDouble, Calendar, UserCheck } from 'lucide-react';
+import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
@@ -17,6 +17,7 @@ import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 type Visit = {
     id: string;
@@ -25,6 +26,8 @@ type Visit = {
     hostelId: string;
     status: 'pending' | 'accepted' | 'completed' | 'cancelled';
     createdAt: string;
+    visitDate: string;
+    visitTime: string;
 };
 
 type OnlineAgent = {
@@ -118,11 +121,15 @@ export default function TrackingPage() {
                      setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
                 };
 
-                // Get current agents and subscribe to future updates
-                presenceChannel.presence.get().then(updateOnlineAgents);
-                presenceChannel.presence.subscribe(['enter', 'leave'], () => {
-                    presenceChannel.presence.get().then(updateOnlineAgents);
-                });
+                const setupPresenceListener = async () => {
+                    await presenceChannel.presence.subscribe(['enter', 'present', 'leave'], () => {
+                         presenceChannel.presence.get().then(updateOnlineAgents);
+                    });
+                    const initialAgents = await presenceChannel.presence.get();
+                    updateOnlineAgents(initialAgents);
+                };
+
+                setupPresenceListener();
 
                 unsubscribes.push(() => presenceChannel.presence.unsubscribe());
             }
@@ -141,12 +148,12 @@ export default function TrackingPage() {
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
         setAssigningAgent(selectedAgent.clientId);
-        toast({ title: 'Assigning Agent...', description: `Confirming your visit with ${selectedAgent.data.fullName}.` });
+        toast({ title: 'Assigning Agent...', description: `You have been successfully assigned to ${selectedAgent.data.fullName}. Their details have been sent to you.` });
 
         try {
             const visitDocRef = doc(db, 'visits', visitId as string);
             await updateDoc(visitDocRef, {
-                agentId: selectedAgent.clientId,
+                agentId: selectedAgent.data.id,
                 status: 'accepted'
             });
             // The onSnapshot listener will then take over to display the tracking UI.
@@ -161,6 +168,7 @@ export default function TrackingPage() {
     const handleVisitComplete = async () => {
         if(visitId) {
             await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
+            toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
             router.push(`/hostels/${hostelId}/book/rating`);
         }
     }
@@ -187,8 +195,8 @@ export default function TrackingPage() {
                      <Card className="w-full max-w-md shadow-xl">
                         <CardHeader>
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                                {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Matching You With an Agent</>}
-                                {visit.status === 'accepted' && <span className="text-green-600">✅ Visit Confirmed</span>}
+                                {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Waiting for Agent</>}
+                                {visit.status === 'accepted' && <span className="text-green-600">Visit Confirmed!</span>}
                                 {visit.status === 'completed' && <span className="text-blue-600">🎉 Visit Complete</span>}
                             </CardTitle>
                              <CardDescription>
@@ -200,6 +208,7 @@ export default function TrackingPage() {
                         <CardContent>
                             {visit.status === 'pending' && (
                                 <div className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-muted-foreground">AVAILABLE AGENTS</h3>
                                     {onlineAgents.length > 0 ? (
                                         onlineAgents.map(agent => (
                                             <div key={agent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
@@ -209,7 +218,7 @@ export default function TrackingPage() {
                                                     </Avatar>
                                                     <div>
                                                         <p className="font-semibold">{agent.data.fullName}</p>
-                                                        <p className="text-xs text-muted-foreground">Online</p>
+                                                        <p className="text-xs text-green-600">Online</p>
                                                     </div>
                                                 </div>
                                                 <Button 
@@ -217,7 +226,7 @@ export default function TrackingPage() {
                                                     onClick={() => handleSelectAgent(agent)}
                                                     disabled={assigningAgent === agent.clientId}
                                                 >
-                                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Choose"}
+                                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Select Agent"}
                                                 </Button>
                                             </div>
                                         ))
@@ -230,26 +239,35 @@ export default function TrackingPage() {
                             )}
                             {visit.status === 'accepted' && agent && (
                                 <div className="space-y-4">
-                                    <div className="space-y-3 rounded-lg border bg-card text-card-foreground p-4">
-                                        <div className="flex items-center gap-3">
-                                            <Home className="h-5 w-5 text-muted-foreground"/>
+                                    <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
+                                        <div className="flex items-start gap-3">
+                                            <Home className="h-5 w-5 text-muted-foreground mt-1"/>
                                             <div>
                                                 <p className="text-sm text-muted-foreground">Hostel</p>
                                                 <p className="font-semibold">{hostel.name}</p>
                                             </div>
                                         </div>
-                                         <div className="flex items-center gap-3">
-                                            <UserCheck className="h-5 w-5 text-muted-foreground"/>
+                                         <div className="flex items-start gap-3">
+                                            <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
                                             <div>
                                                 <p className="text-sm text-muted-foreground">Your Agent</p>
                                                 <p className="font-semibold">{agent.name}</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <Calendar className="h-5 w-5 text-muted-foreground"/>
-                                            <div>
-                                                <p className="text-sm text-muted-foreground">Date</p>
-                                                <p className="font-semibold">{new Date(visit.createdAt).toLocaleString()}</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="flex items-start gap-3">
+                                                <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">Date</p>
+                                                    <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
+                                                </div>
+                                            </div>
+                                             <div className="flex items-start gap-3">
+                                                <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">Time</p>
+                                                    <p className="font-semibold">{visit.visitTime}</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -260,7 +278,7 @@ export default function TrackingPage() {
                                         <a href={`tel:${agentPhoneNumber}`} className="flex-1">
                                             <Button className="w-full" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
                                         </a>
-                                        <a href={`https://wa.me/${agentPhoneNumber}`} className="flex-1">
+                                        <a href={`https://wa.me/${agentPhoneNumber}`} target="_blank" rel="noopener noreferrer" className="flex-1">
                                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                                         </a>
                                     </div>
@@ -283,4 +301,3 @@ export default function TrackingPage() {
         </div>
     );
 }
-

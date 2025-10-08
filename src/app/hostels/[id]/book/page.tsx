@@ -10,12 +10,17 @@ import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { CreditCard, Calendar, Loader2, Phone, Briefcase } from 'lucide-react';
+import { CreditCard, Calendar as CalendarIcon, Loader2, Phone, Briefcase, Clock } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { initializeMomoPayment } from '@/app/actions/paystack';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+
 
 export default function BookingPage() {
     const [hostel, setHostel] = useState<Hostel | null>(null);
@@ -26,6 +31,9 @@ export default function BookingPage() {
     const [phone, setPhone] = useState('');
     const [provider, setProvider] = useState('');
     const [email, setEmail] = useState('student@test.com'); // Default email
+    const [visitDate, setVisitDate] = useState<Date>();
+    const [visitTime, setVisitTime] = useState('');
+
 
     const params = useParams();
     const router = useRouter();
@@ -45,8 +53,8 @@ export default function BookingPage() {
     }, [id]);
 
     const handlePayment = async () => {
-        if (!hostel || !phone || !provider || !email) {
-            toast({ title: "Missing Information", description: "Please fill in your email, phone, and select a provider.", variant: "destructive" });
+        if (!hostel || !phone || !provider || !email || !visitDate || !visitTime) {
+            toast({ title: "Missing Information", description: "Please fill all fields, including visit date and time.", variant: "destructive" });
             return;
         }
 
@@ -64,10 +72,13 @@ export default function BookingPage() {
             });
 
             if (result.status && result.authorization_url) {
-                // Open the payment link in a new tab to avoid iframe issues
-                window.open(result.authorization_url, '_blank');
+                // To pass more data to the confirmation page, we can add it to the callback URL
+                const callbackUrl = new URL(result.callback_url);
+                callbackUrl.searchParams.set('visitDate', visitDate.toISOString());
+                callbackUrl.searchParams.set('visitTime', visitTime);
+
+                window.open(callbackUrl.toString(), '_blank');
                 toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
-                // The user will be redirected to the confirmation page by Paystack in the new tab.
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
@@ -128,6 +139,37 @@ export default function BookingPage() {
                         </div>
 
                         <div className="space-y-4">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="visit-date">Visit Date</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                        <Button
+                                            variant={"outline"}
+                                            className={cn(
+                                            "w-full justify-start text-left font-normal",
+                                            !visitDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {visitDate ? format(visitDate, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar
+                                                mode="single"
+                                                selected={visitDate}
+                                                onSelect={setVisitDate}
+                                                initialFocus
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="visit-time">Proposed Time</Label>
+                                    <Input id="visit-time" type="time" value={visitTime} onChange={e => setVisitTime(e.target.value)} />
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email Address</Label>
                                 <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" />
