@@ -48,14 +48,8 @@ export function Header() {
                 role: userData.role
             };
             setAppUser(currentUser);
-            
-            // Ably Presence for Agents
-            if (userData.role === 'agent') {
-              const agentChannel = ably.channels.get('agents:live');
-              await agentChannel.presence.enter({ id: user.uid });
-            }
-
         } else {
+            // If user exists in Auth but not in Firestore, log them out.
             await signOut(auth);
             setAppUser(null);
         }
@@ -65,23 +59,36 @@ export function Header() {
       setLoading(false);
     });
 
-    return () => {
-      // Ensure agent leaves presence on component unmount or user change
-      if (appUser && appUser.role === 'agent') {
-        const agentChannel = ably.channels.get('agents:live');
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // This effect handles Ably presence for the current user.
+    if (appUser?.role === 'agent') {
+      const agentChannel = ably.channels.get('agents:live');
+      const enterPresence = async () => {
+        try {
+          await agentChannel.presence.enter({ id: appUser.uid });
+        } catch (e) {
+          console.error('Error entering Ably presence:', e);
+        }
+      };
+      enterPresence();
+
+      // The cleanup function for this effect will leave presence.
+      // This runs when the component unmounts or when appUser changes.
+      return () => {
         agentChannel.presence.leave({ id: appUser.uid });
-      }
-      unsubscribe();
+      };
     }
   }, [appUser]);
+
 
   const handleLogout = async () => {
     setAuthAction(true);
     try {
-      if (appUser && appUser.role === 'agent') {
-        const agentChannel = ably.channels.get('agents:live');
-        await agentChannel.presence.leave({ id: appUser.uid });
-      }
+      // The useEffect cleanup will handle leaving presence automatically
+      // when the appUser state is set to null by onAuthStateChanged.
       await signOut(auth);
       toast({ title: "Logged out successfully" });
       router.push('/');
