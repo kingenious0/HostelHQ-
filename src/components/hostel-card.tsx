@@ -33,11 +33,12 @@ export function HostelCard({ hostel }: HostelCardProps) {
     return () => unsubscribe();
   }, []);
 
-  const isStudent = currentUser && currentUser.email?.includes('student');
+  // A simple check to see if the logged-in user is a student.
+  const isStudent = currentUser && !currentUser.email?.endsWith('@agent.hostelhq.com') && !currentUser.email?.endsWith('@admin.hostelhq.com');
   const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
   return (
-    <Card className="w-full overflow-hidden transition-all hover:shadow-lg duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col group">
+    <Card className="w-full overflow-hidden transition-all hover:shadow-xl duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col group border-0 rounded-xl">
         <Link href={`/hostels/${hostel.id}`} className="block flex flex-col flex-grow">
             <CardHeader className="p-0">
             <div className="relative h-48 w-full">
@@ -47,24 +48,24 @@ export function HostelCard({ hostel }: HostelCardProps) {
                 fill
                 style={{ objectFit: 'cover' }}
                 data-ai-hint="hostel exterior"
-                className="transition-transform duration-300 group-hover:scale-105"
+                className="transition-transform duration-500 group-hover:scale-110 rounded-t-xl"
                 />
                 {isStudent && hostel.availability && (
-                    <Badge className={cn("absolute top-2 right-2 flex items-center gap-1.5", currentAvailability.className)}>
+                    <Badge className={cn("absolute top-3 right-3 flex items-center gap-1.5 shadow-md", currentAvailability.className)}>
                         {currentAvailability.icon}
                         {currentAvailability.text}
                     </Badge>
                 )}
             </div>
             </CardHeader>
-            <CardContent className="p-4 flex-grow">
+            <CardContent className="p-4 flex-grow bg-card rounded-b-xl">
             <CardTitle className="text-lg font-bold font-headline truncate">{hostel.name}</CardTitle>
             <div className="flex items-center text-muted-foreground text-sm mt-1">
-                <MapPin className="h-4 w-4 mr-1" />
-                <span>{hostel.location}</span>
+                <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                <span className="truncate">{hostel.location}</span>
             </div>
-            <div className="flex items-center mt-2">
-                <div className="flex items-center text-yellow-500">
+            <div className="flex items-center mt-3">
+                <div className="flex items-center text-yellow-400">
                 {[...Array(5)].map((_, i) => (
                     <Star key={i} className={`h-5 w-5 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                 ))}
@@ -73,10 +74,10 @@ export function HostelCard({ hostel }: HostelCardProps) {
             </div>
             </CardContent>
         </Link>
-        <CardFooter className="p-4 pt-0 flex justify-between items-center mt-auto">
+        <CardFooter className="p-4 pt-0 flex justify-between items-center mt-auto bg-card rounded-b-xl">
             <div>
-            <span className="text-xl font-bold">GH₵{hostel.price.toLocaleString()}</span>
-            <span className="text-sm text-muted-foreground">/year</span>
+            <span className="text-xl font-bold text-primary">GH₵{hostel.price.toLocaleString()}</span>
+            <span className="text-sm text-muted-foreground">/yr</span>
             </div>
             <Link href={`/hostels/${hostel.id}`}>
               <Button>View Details</Button>

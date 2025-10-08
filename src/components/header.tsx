@@ -80,11 +80,11 @@ export function Header() {
   const isAdmin = appUser?.role === 'admin';
 
   return (
-    <header className="bg-card shadow-sm sticky top-0 z-40">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+    <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
+      <div className="container mx-auto flex h-20 items-center justify-between px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <Hotel className="h-6 w-6 text-primary" />
-          <span className="text-xl font-bold text-foreground">HostelHQ</span>
+          <Hotel className="h-8 w-8 text-primary" />
+          <span className="text-2xl font-bold text-foreground font-headline">HostelHQ</span>
         </Link>
         <div className="flex items-center gap-4">
            <nav className="hidden items-center gap-6 md:flex">
@@ -109,16 +109,16 @@ export function Header() {
           </nav>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" disabled={loading}>
+              <Button variant="ghost" size="icon" disabled={loading}>
                 {loading || authAction ? <Loader2 className="h-5 w-5 animate-spin" /> : <User className="h-5 w-5" />}
                 <span className="sr-only">User Menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
               {appUser ? (
                 <>
                   <DropdownMenuLabel>
-                    {appUser.fullName}
+                    <div className="font-semibold">{appUser.fullName}</div>
                     <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -162,5 +162,3 @@ export function Header() {
     </header>
   );
 }
-
-    
