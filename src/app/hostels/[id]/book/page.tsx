@@ -69,15 +69,13 @@ export default function BookingPage() {
                 provider: provider as 'mtn' | 'vod' | 'tgo',
                 label: `Visit fee for ${hostel.name}`,
                 hostelId: id, // Pass the hostelId
+                visitDate: visitDate.toISOString(),
+                visitTime: visitTime,
             });
 
             if (result.status && result.authorization_url) {
-                // To pass more data to the confirmation page, we can add it to the callback URL
-                const callbackUrl = new URL(result.callback_url);
-                callbackUrl.searchParams.set('visitDate', visitDate.toISOString());
-                callbackUrl.searchParams.set('visitTime', visitTime);
-
-                window.open(callbackUrl.toString(), '_blank');
+                // The server now constructs the full callback URL. We just need to open the auth URL.
+                window.open(result.authorization_url, '_blank');
                 toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");

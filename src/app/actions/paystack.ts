@@ -10,14 +10,17 @@ type MomoPaymentPayload = {
     phone: string;
     provider: 'mtn' | 'vod' | 'tgo';
     label?: string;
-    hostelId: string; // Added hostelId
+    hostelId: string;
+    visitDate: string; // Added visitDate
+    visitTime: string; // Added visitTime
 }
 
 export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
 
     if (!secretKey) {
-        throw new Error("Paystack secret key is not configured.");
+        console.error("Paystack secret key is not configured.");
+        return { status: false, message: "Payment processor is not configured. Please contact support." };
     }
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
@@ -26,7 +29,11 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
-    const callback_url = `${protocol}://${host}/hostels/book/confirmation?hostelId=${payload.hostelId}`;
+    // Construct the full callback URL with all necessary query parameters
+    const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
+    callback_url.searchParams.set('hostelId', payload.hostelId);
+    callback_url.searchParams.set('visitDate', payload.visitDate);
+    callback_url.searchParams.set('visitTime', payload.visitTime);
 
 
     try {
@@ -40,7 +47,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                 email: payload.email,
                 amount: payload.amount,
                 currency: 'GHS',
-                callback_url, // URL to redirect to after payment
+                callback_url: callback_url.toString(), // URL to redirect to after payment
                 metadata: {
                     label: payload.label || 'HostelHQ Payment',
                 },
