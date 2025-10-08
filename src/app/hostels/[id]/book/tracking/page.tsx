@@ -7,7 +7,7 @@ import { Agent, Hostel, getAgent, AppUser } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock, MapPin } from 'lucide-react';
+import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock, MapPin, CheckCheck, XCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
@@ -97,8 +97,11 @@ export default function TrackingPage() {
         const visitDocRef = doc(db, 'visits', visitId as string);
 
         const setupAgentGpsSubscription = (agentId: string) => {
+            if (agentGpsChannelRef.current && agentGpsChannelRef.current.name.includes(agentId)) {
+                return; // Already subscribed to this agent
+            }
             if (agentGpsChannelRef.current) {
-                agentGpsChannelRef.current.unsubscribe();
+                agentGpsChannelRef.current.unsubscribe(); // Unsubscribe from old agent
             }
             
             getAgent(agentId).then(agentDetails => {
@@ -132,22 +135,15 @@ export default function TrackingPage() {
             setVisit(visitData);
             setLoading(false);
 
-            if (visitData.agentId && visitData.agentId !== (agent?.id || '')) {
-                getAgent(visitData.agentId).then(agentDetails => {
-                    if (agentDetails) {
-                        setAgent(agentDetails);
-                        if (visitData.status === 'accepted') {
-                           setupAgentGpsSubscription(visitData.agentId!);
-                        }
-                    }
-                });
+            if (visitData.agentId) {
+                setupAgentGpsSubscription(visitData.agentId);
             } else if (!visitData.agentId) {
                 // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
                 const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
                      const filteredAgents = agents
                         .map(a => ({ clientId: a.clientId, data: a.data as any }))
-                        .filter(a => a.data.email !== 'admin@hostelhq.com'); // Exclude admin
+                        .filter(a => a.data && a.data.email !== 'admin@hostelhq.com'); // Exclude admin
                      setOnlineAgents(filteredAgents);
                 };
 
@@ -173,7 +169,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId, agent?.id]);
+    }, [visitId, hostelId]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
@@ -182,11 +178,9 @@ export default function TrackingPage() {
 
         try {
             const visitDocRef = doc(db, 'visits', visitId as string);
-            // Assign the agent, but keep status as 'pending'
             await updateDoc(visitDocRef, {
                 agentId: selectedAgent.data.id
             });
-            // The onSnapshot listener will then show the "waiting for agent" screen.
         } catch (error) {
             console.error("Failed to assign agent:", error);
             toast({ title: 'Assignment Failed', description: 'Could not assign agent. Please try again.', variant: 'destructive'});
@@ -199,7 +193,7 @@ export default function TrackingPage() {
         if(visitId) {
             await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
             toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
-            router.push(`/hostels/${hostelId}/book/rating`);
+            router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
         }
     }
     
@@ -223,23 +217,23 @@ export default function TrackingPage() {
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-muted-foreground">AVAILABLE AGENTS</h3>
                     {onlineAgents.length > 0 ? (
-                        onlineAgents.map(agent => (
-                            <div key={agent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
+                        onlineAgents.map(onlineAgent => (
+                            <div key={onlineAgent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
                                 <div className="flex items-center gap-3">
                                     <Avatar>
-                                        <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
+                                        <AvatarFallback>{onlineAgent.data.fullName.charAt(0)}</AvatarFallback>
                                     </Avatar>
                                     <div>
-                                        <p className="font-semibold">{agent.data.fullName}</p>
+                                        <p className="font-semibold">{onlineAgent.data.fullName}</p>
                                         <p className="text-xs text-green-600">Online</p>
                                     </div>
                                 </div>
                                 <Button 
                                     size="sm" 
-                                    onClick={() => handleSelectAgent(agent)}
-                                    disabled={assigningAgent === agent.clientId}
+                                    onClick={() => handleSelectAgent(onlineAgent)}
+                                    disabled={assigningAgent === onlineAgent.clientId}
                                 >
-                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Select Agent"}
+                                    {assigningAgent === onlineAgent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Select Agent"}
                                 </Button>
                             </div>
                         ))
@@ -256,7 +250,7 @@ export default function TrackingPage() {
             return (
                 <div className="text-center py-8">
                      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
-                    <p className="font-semibold">Waiting for {agent?.name || 'Agent'} to accept...</p>
+                    <p className="font-semibold">Waiting for {agent.fullName || 'Agent'} to accept...</p>
                     <p className="text-sm text-muted-foreground mt-1">You will be notified once they confirm your visit request.</p>
                 </div>
             );
@@ -277,7 +271,7 @@ export default function TrackingPage() {
                             <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
                             <div>
                                 <p className="text-sm text-muted-foreground">Your Agent</p>
-                                <p className="font-semibold">{agent.name}</p>
+                                <p className="font-semibold">{agent.fullName}</p>
                             </div>
                         </div>
                          <div className="flex items-start gap-3">
@@ -323,8 +317,20 @@ export default function TrackingPage() {
         if (visit.status === 'completed') { // Step 4: Visit is done
              return (
                 <div className="text-center py-8">
+                    <CheckCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
                     <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
-                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating`)}>Rate Your Visit</Button>
+                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating?visitId=${visit.id}`)}>Rate Your Visit</Button>
+                </div>
+            );
+        }
+        
+        if (visit.status === 'cancelled') {
+             return (
+                <div className="text-center py-8">
+                    <XCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
+                    <p className="font-semibold">Visit Cancelled</p>
+                    <p className="text-muted-foreground mb-4">This visit request was cancelled.</p>
+                    <Button variant="outline" onClick={() => router.push('/')}>Find Another Hostel</Button>
                 </div>
             );
         }
@@ -343,9 +349,10 @@ export default function TrackingPage() {
     
     const getCardDescription = () => {
         if (!visit.agentId) return "Please select an available agent to begin your tour.";
-        if (visit.status === 'pending' && agent) return `Waiting for ${agent.name} to accept your request.`;
-        if (visit.status === 'accepted' && agent) return `Your agent, ${agent.name}, is on the way.`;
+        if (visit.status === 'pending' && agent) return `Waiting for ${agent.fullName} to accept your request.`;
+        if (visit.status === 'accepted' && agent) return `Your agent, ${agent.fullName}, is on the way.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
+        if (visit.status === 'cancelled') return `The request was cancelled by the agent or timed out.`;
         return "";
     }
 
@@ -376,8 +383,5 @@ export default function TrackingPage() {
         </div>
     );
 }
-    
 
     
-
-

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Check, X, Phone } from 'lucide-react';
+import { Loader2, AlertTriangle, Check, X, Phone, CheckCheck } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -96,13 +96,19 @@ export default function AgentDashboard() {
         return () => unsubscribeVisits();
     }, [currentUser]);
     
-    const handleUpdateRequest = async (visitId: string, newStatus: 'accepted' | 'cancelled') => {
+    const handleUpdateRequest = async (visitId: string, newStatus: 'accepted' | 'cancelled' | 'completed') => {
         setProcessingId(visitId);
         try {
             const visitRef = doc(db, 'visits', visitId);
             await updateDoc(visitRef, { status: newStatus });
+            
+            let title = '';
+            if (newStatus === 'accepted') title = 'Request Accepted';
+            else if (newStatus === 'cancelled') title = 'Request Declined';
+            else if (newStatus === 'completed') title = 'Visit Marked as Complete';
+            
             toast({
-                title: `Request ${newStatus === 'accepted' ? 'Accepted' : 'Declined'}`,
+                title: title,
                 description: "The student has been notified."
             });
         } catch (error) {
@@ -212,7 +218,16 @@ export default function AgentDashboard() {
                                                             </>
                                                         )}
                                                         {visit.status === 'accepted' && (
-                                                            <span className="text-xs text-green-600 font-semibold">Accepted</span>
+                                                            <Button 
+                                                                variant="default" 
+                                                                size="sm"
+                                                                className="bg-green-600 hover:bg-green-700"
+                                                                onClick={() => handleUpdateRequest(visit.id, 'completed')}
+                                                                disabled={processingId === visit.id}
+                                                            >
+                                                                {processingId === visit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
+                                                                Mark as Complete
+                                                            </Button>
                                                         )}
                                                     </TableCell>
                                                 </TableRow>
@@ -234,4 +249,6 @@ export default function AgentDashboard() {
         </div>
     );
 }
+    
+
     
