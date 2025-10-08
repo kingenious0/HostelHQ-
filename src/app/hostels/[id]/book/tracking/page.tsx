@@ -1,4 +1,3 @@
-
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
@@ -8,7 +7,7 @@ import { Agent, Hostel, getAgent, AppUser } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock } from 'lucide-react';
+import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock, MapPin } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
@@ -39,6 +38,24 @@ type OnlineAgent = {
     }
 }
 
+async function getAddressFromCoordinates(lat: number, lng: number): Promise<string> {
+    const accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
+    if (!accessToken) return "Location details unavailable";
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${accessToken}&types=address&limit=1`;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.features && data.features.length > 0) {
+            return data.features[0].place_name;
+        }
+        return "Near your location";
+    } catch (error) {
+        console.error("Error fetching address:", error);
+        return "Could not fetch address";
+    }
+}
+
+
 export default function TrackingPage() {
     const params = useParams();
     const searchParams = useSearchParams();
@@ -53,6 +70,7 @@ export default function TrackingPage() {
     const [loading, setLoading] = useState(true);
     const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
     const [agentLiveLocation, setAgentLiveLocation] = useState<{ lat: number, lng: number} | undefined>(undefined);
+    const [agentLiveAddress, setAgentLiveAddress] = useState<string | null>(null);
     const agentGpsChannelRef = useRef<Types.RealtimeChannelPromise | null>(null);
     const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
 
@@ -88,6 +106,7 @@ export default function TrackingPage() {
                     setAgent(agentDetails);
                     if(agentDetails.location) {
                         setAgentLiveLocation(agentDetails.location);
+                         getAddressFromCoordinates(agentDetails.location.lat, agentDetails.location.lng).then(setAgentLiveAddress);
                     }
                 }
             });
@@ -97,6 +116,7 @@ export default function TrackingPage() {
 
             const subscribeCallback = (message: Types.Message) => {
                 setAgentLiveLocation(message.data);
+                getAddressFromCoordinates(message.data.lat, message.data.lng).then(setAgentLiveAddress);
             };
             channel.subscribe('location', subscribeCallback);
             unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
@@ -112,7 +132,7 @@ export default function TrackingPage() {
             setVisit(visitData);
             setLoading(false);
 
-            if (visitData.agentId) {
+            if (visitData.agentId && visitData.agentId !== (agent?.id || '')) {
                 getAgent(visitData.agentId).then(agentDetails => {
                     if (agentDetails) {
                         setAgent(agentDetails);
@@ -121,7 +141,7 @@ export default function TrackingPage() {
                         }
                     }
                 });
-            } else {
+            } else if (!visitData.agentId) {
                 // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
                 const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
@@ -153,7 +173,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId]);
+    }, [visitId, hostelId, agent?.id]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
@@ -260,6 +280,13 @@ export default function TrackingPage() {
                                 <p className="font-semibold">{agent.name}</p>
                             </div>
                         </div>
+                         <div className="flex items-start gap-3">
+                            <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
+                            <div>
+                                <p className="text-sm text-muted-foreground">Agent's Location</p>
+                                <p className="font-semibold">{agentLiveAddress || "Tracking..."}</p>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex items-start gap-3">
                                 <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
@@ -288,7 +315,7 @@ export default function TrackingPage() {
                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                         </a>
                     </div>
-                     <Button className="w-full" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
+                     <Button className="w-full bg-primary text-primary-foreground" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
                 </div>
             );
         }
@@ -352,3 +379,4 @@ export default function TrackingPage() {
     
 
     
+
