@@ -40,13 +40,10 @@ export function Header() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Set client ID for Ably auth
-        if (ably.auth) {
-          if (!ably.auth.options) {
-            (ably.auth.options as any) = {};
-          }
-          ably.auth.options.clientId = user.uid;
+        if (!ably.auth.options) {
+          (ably.auth.options as any) = {};
         }
+        ably.auth.options.clientId = user.uid;
 
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
@@ -257,3 +254,4 @@ export function Header() {
     </header>
   );
 }
+    

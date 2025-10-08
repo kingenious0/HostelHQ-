@@ -226,7 +226,7 @@ export default function TrackingPage() {
             );
         }
 
-        if (visit.status === 'pending' && visit.agentId) { // Step 2: Agent assigned, waiting for their acceptance
+        if (visit.status === 'pending' && agent) { // Step 2: Agent assigned, waiting for their acceptance
             return (
                 <div className="text-center py-8">
                      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
@@ -301,7 +301,7 @@ export default function TrackingPage() {
 
     const getCardTitle = () => {
         if (!visit.agentId) return "Select an Agent";
-        if (visit.status === 'pending') return "Request Sent";
+        if (visit.status === 'pending' && agent) return "Request Sent";
         if (visit.status === 'accepted') return <span className="text-green-600">Visit Confirmed!</span>;
         if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
@@ -310,8 +310,8 @@ export default function TrackingPage() {
     
     const getCardDescription = () => {
         if (!visit.agentId) return "Please select an available agent to begin your tour.";
-        if (visit.status === 'pending') return `Waiting for ${agent?.name || 'agent'} to accept your request.`;
-        if (visit.status === 'accepted') return agent && `Your agent, ${agent.name}, is on the way.`;
+        if (visit.status === 'pending' && agent) return `Waiting for ${agent.name} to accept your request.`;
+        if (visit.status === 'accepted' && agent) return `Your agent, ${agent.name}, is on the way.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
         return "";
     }
@@ -343,3 +343,4 @@ export default function TrackingPage() {
         </div>
     );
 }
+    
