@@ -7,9 +7,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, runTransaction } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import { Hostel } from '@/lib/data';
 
 function ConfirmationContent() {
     const router = useRouter();
@@ -20,6 +21,7 @@ function ConfirmationContent() {
     const reference = searchParams.get('reference');
     const visitDate = searchParams.get('visitDate');
     const visitTime = searchParams.get('visitTime');
+    const visitType = searchParams.get('visitType');
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -41,7 +43,7 @@ function ConfirmationContent() {
             return;
         }
 
-        if (!hostelId || !reference || !visitDate || !visitTime) {
+        if (!hostelId || !reference || !visitType) {
              toast({ title: "Invalid Confirmation Link", description: "Missing booking details.", variant: "destructive" });
              router.push('/');
             return;
@@ -49,22 +51,43 @@ function ConfirmationContent() {
 
         const createVisitRecord = async () => {
             try {
-                // This is where we create the visit record in Firestore
-                const visitRef = await addDoc(collection(db, 'visits'), {
-                    studentId: currentUser.uid,
-                    hostelId: hostelId,
-                    agentId: null, // Agent will be assigned later
-                    status: 'pending', // Initial status after payment
-                    paymentReference: reference,
-                    createdAt: new Date().toISOString(),
-                    visitDate: visitDate,
-                    visitTime: visitTime,
-                });
-                
-                toast({ title: "Payment Confirmed!", description: "We're finding an agent for you." });
-                
-                // Redirect to the tracking page, passing the new visit ID
-                router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
+                if (visitType === 'agent') {
+                    // This is the original flow for agent-assisted visits
+                     if (!visitDate || !visitTime) {
+                        toast({ title: "Invalid Confirmation Link", description: "Missing visit time for agent visit.", variant: "destructive" });
+                        return;
+                    }
+                    const visitRef = await addDoc(collection(db, 'visits'), {
+                        studentId: currentUser.uid,
+                        hostelId: hostelId,
+                        agentId: null, 
+                        status: 'pending',
+                        paymentReference: reference,
+                        createdAt: new Date().toISOString(),
+                        visitDate: visitDate,
+                        visitTime: visitTime,
+                        visitType: 'agent',
+                        studentCompleted: false,
+                    });
+                    
+                    toast({ title: "Payment Confirmed!", description: "We're finding an agent for you." });
+                    router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
+
+                } else if (visitType === 'self') {
+                    // This is the new flow for self-visits
+                    const hostelRef = doc(db, 'hostels', hostelId);
+                    const hostelSnap = await getDoc(hostelRef);
+                    if(!hostelSnap.exists()) throw new Error("Hostel not found");
+                    const hostelData = hostelSnap.data() as Hostel;
+
+                    toast({ title: "Payment Confirmed!", description: `Here are the directions to ${hostelData.name}.` });
+                    // For self-visit, we just need to redirect them to a page showing the location.
+                    // The tracking page is a good candidate as it already has the map centered on the hostel.
+                    router.push(`/hostels/${hostelId}/book/tracking?self_visit=true`);
+
+                } else {
+                    throw new Error("Invalid visit type specified");
+                }
 
             } catch (error) {
                 console.error("Error creating visit record:", error);
@@ -75,14 +98,14 @@ function ConfirmationContent() {
 
         createVisitRecord();
 
-    }, [router, hostelId, reference, currentUser, loadingAuth, toast, visitDate, visitTime]);
+    }, [router, hostelId, reference, currentUser, loadingAuth, toast, visitDate, visitTime, visitType]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">
             <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
-            <h1 className="text-2xl font-bold font-headline mb-2">Payment Confirmed. Saving Your Visit...</h1>
+            <h1 className="text-2xl font-bold font-headline mb-2">Payment Confirmed. Processing Your Request...</h1>
             <p className="text-muted-foreground max-w-sm">
-                Your payment was successful. Please wait while we create your visit record and find an agent.
+                Your payment was successful. Please wait while we finalize your booking details.
             </p>
         </div>
     );
@@ -106,3 +129,5 @@ export default function BookingConfirmationPage() {
         </div>
     );
 }
+
+    

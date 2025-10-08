@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Header } from '@/components/header';
-import { Agent, Hostel, getAgent, AppUser } from '@/lib/data';
+import { Agent, Hostel, getAgent, AppUser, getHostel } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,7 @@ export default function TrackingPage() {
     const { toast } = useToast();
     const { id: hostelId } = params;
     const visitId = searchParams.get('visitId');
+    const isSelfVisit = searchParams.get('self_visit') === 'true';
 
     const [visit, setVisit] = useState<Visit | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
@@ -77,33 +78,41 @@ export default function TrackingPage() {
     const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!visitId || !hostelId) {
+        if (!hostelId) {
             notFound();
             return;
         }
 
         const unsubscribes: (() => void)[] = [];
 
-        const fetchHostel = async () => {
-            const hostelDocRef = doc(db, 'hostels', hostelId as string);
-            const hostelSnap = await getDoc(hostelDocRef);
-            if (hostelSnap.exists()) {
-                const hostelData = {id: hostelSnap.id, ...hostelSnap.data()} as Hostel;
+        const fetchHostelData = async () => {
+            const hostelData = await getHostel(hostelId as string);
+            if (hostelData) {
                 setHostel(hostelData);
             } else {
                 notFound();
             }
         };
-        fetchHostel();
+        fetchHostelData();
+
+        if (isSelfVisit) {
+            setLoading(false);
+            return;
+        }
+        
+        if (!visitId) {
+             notFound();
+             return;
+        }
 
         const visitDocRef = doc(db, 'visits', visitId as string);
 
         const setupAgentGpsSubscription = (agentId: string) => {
             if (agentGpsChannelRef.current && agentGpsChannelRef.current.name.includes(agentId)) {
-                return; // Already subscribed to this agent
+                return; 
             }
             if (agentGpsChannelRef.current) {
-                agentGpsChannelRef.current.unsubscribe(); // Unsubscribe from old agent
+                agentGpsChannelRef.current.unsubscribe();
             }
             
             getAgent(agentId).then(agentDetails => {
@@ -171,7 +180,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId]);
+    }, [visitId, hostelId, isSelfVisit]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
@@ -199,7 +208,7 @@ export default function TrackingPage() {
         }
     }
     
-    if (loading || !visit || !hostel) {
+    if (loading || !hostel || (!isSelfVisit && !visit)) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
@@ -212,9 +221,38 @@ export default function TrackingPage() {
     }
     
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
+    
+    const renderSelfVisitContent = () => {
+        return (
+            <div className="space-y-4">
+                <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
+                    <div className="flex items-start gap-3">
+                        <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Hostel</p>
+                            <p className="font-semibold">{hostel.name}</p>
+                        </div>
+                    </div>
+                     <div className="flex items-start gap-3">
+                        <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Location</p>
+                            <p className="font-semibold">{hostel.location}</p>
+                        </div>
+                    </div>
+                </div>
+                 <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
+                    Open in Google Maps
+                </Button>
+            </div>
+        )
+    }
 
-    const renderContent = () => {
-        if (!visit.agentId) { // Step 1: No agent assigned, student needs to pick one
+
+    const renderAgentVisitContent = () => {
+        if (!visit) return null;
+
+        if (!visit.agentId) {
             return (
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-muted-foreground">AVAILABLE AGENTS</h3>
@@ -248,7 +286,7 @@ export default function TrackingPage() {
             );
         }
 
-        if (visit.status === 'pending' && agent) { // Step 2: Agent assigned, waiting for their acceptance
+        if (visit.status === 'pending' && agent) {
             return (
                 <div className="text-center py-8">
                      <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
@@ -258,7 +296,7 @@ export default function TrackingPage() {
             );
         }
 
-        if (visit.status === 'accepted' && agent) { // Step 3: Agent accepted, show tracking and details
+        if (visit.status === 'accepted' && agent) {
             return (
                  <div className="space-y-4">
                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
@@ -318,7 +356,7 @@ export default function TrackingPage() {
             );
         }
 
-        if (visit.status === 'completed') { // Step 4: Visit is done
+        if (visit.status === 'completed') {
              return (
                 <div className="text-center py-8">
                     <CheckCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
@@ -343,8 +381,10 @@ export default function TrackingPage() {
     }
 
     const getCardTitle = () => {
+        if (isSelfVisit) return "Hostel Directions";
+        if (!visit) return "Loading Visit...";
         if (!visit.agentId) return "Select an Agent";
-        if (visit.status === 'pending' && agent) return `Your visit with ${agent.fullName} is confirmed!`;
+        if (visit.status === 'pending' && agent) return `Your visit with ${agent.fullName} is pending.`;
         if (visit.status === 'accepted') return <span className="text-green-600">Your visit with {agent?.fullName} is confirmed!</span>;
         if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
@@ -352,11 +392,13 @@ export default function TrackingPage() {
     }
     
     const getCardDescription = () => {
+        if (isSelfVisit) return "You've opted to visit the hostel by yourself. Use the map for navigation.";
+        if (!visit) return "";
         if (!visit.agentId) return "Please select an available agent to begin your tour.";
-        if (visit.status === 'pending' && agent) return `Your assigned agent, ${agent.fullName}, will meet you at the scheduled time.`;
-        if (visit.status === 'accepted' && agent) return `Your tour with agent ${agent.fullName} is confirmed.`;
+        if (visit.status === 'pending' && agent) return `Waiting for ${agent.fullName} to accept your request.`;
+        if (visit.status === 'accepted' && agent) return `Your tour with agent ${agent.fullName} is confirmed. Track their location here.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
-        if (visit.status === 'cancelled') return `The request was cancelled by the agent or timed out.`;
+        if (visit.status === 'cancelled') return `The request was cancelled or timed out.`;
         return "";
     }
 
@@ -376,7 +418,7 @@ export default function TrackingPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {renderContent()}
+                            {isSelfVisit ? renderSelfVisitContent() : renderAgentVisitContent()}
                         </CardContent>
                     </Card>
                 </div>
@@ -388,3 +430,4 @@ export default function TrackingPage() {
     );
 }
 
+    

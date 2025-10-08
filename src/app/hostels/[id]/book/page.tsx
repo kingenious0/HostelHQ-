@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { CreditCard, Calendar as CalendarIcon, Loader2, Phone, Briefcase, Clock } from 'lucide-react';
+import { CreditCard, Calendar as CalendarIcon, Loader2, Phone, Briefcase, Clock, User, Navigation } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +20,25 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+
+type VisitType = 'agent' | 'self';
+
+const visitOptions = {
+    agent: {
+        price: 10,
+        title: "Visit with an Agent",
+        description: "An agent will guide you to the hostel and show you the room.",
+        icon: <User className="h-5 w-5" />
+    },
+    self: {
+        price: 35,
+        title: "Visit by Yourself",
+        description: "Get detailed directions and visit the hostel at your convenience.",
+        icon: <Navigation className="h-5 w-5" />
+    }
+}
 
 
 export default function BookingPage() {
@@ -28,6 +47,7 @@ export default function BookingPage() {
     const [isPaying, setIsPaying] = useState(false);
     
     // Form state
+    const [visitType, setVisitType] = useState<VisitType>('agent');
     const [phone, setPhone] = useState('');
     const [provider, setProvider] = useState('');
     const [email, setEmail] = useState('student@test.com'); // Default email
@@ -36,7 +56,7 @@ export default function BookingPage() {
 
 
     const params = useParams();
-    const router = useRouter();
+    router = useRouter();
     const { toast } = useToast();
     const id = params.id as string;
 
@@ -53,8 +73,9 @@ export default function BookingPage() {
     }, [id]);
 
     const handlePayment = async () => {
-        if (!hostel || !phone || !provider || !email || !visitDate || !visitTime) {
-            toast({ title: "Missing Information", description: "Please fill all fields, including visit date and time.", variant: "destructive" });
+        const isAgentVisit = visitType === 'agent';
+        if (!hostel || !phone || !provider || !email || (isAgentVisit && (!visitDate || !visitTime))) {
+            toast({ title: "Missing Information", description: "Please fill all required fields for your chosen visit type.", variant: "destructive" });
             return;
         }
 
@@ -64,17 +85,17 @@ export default function BookingPage() {
         try {
             const result = await initializeMomoPayment({
                 email,
-                amount: 10 * 100, // 10 GHS in pesewas
+                amount: visitOptions[visitType].price * 100, // Price in pesewas
                 phone,
                 provider: provider as 'mtn' | 'vod' | 'tgo',
                 label: `Visit fee for ${hostel.name}`,
-                hostelId: id, // Pass the hostelId
-                visitDate: visitDate.toISOString(),
-                visitTime: visitTime,
+                hostelId: id,
+                visitDate: isAgentVisit ? visitDate.toISOString() : new Date().toISOString(), // Use current date for self-visit
+                visitTime: isAgentVisit ? visitTime : '',
+                visitType: visitType,
             });
 
             if (result.status && result.authorization_url) {
-                // The server now constructs the full callback URL. We just need to open the auth URL.
                 window.open(result.authorization_url, '_blank');
                 toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
             } else {
@@ -109,65 +130,64 @@ export default function BookingPage() {
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 flex items-center justify-center py-12 px-4">
-                <Card className="w-full max-w-lg shadow-xl">
+                <Card className="w-full max-w-2xl shadow-xl">
                     <CardHeader>
                         <CardTitle className="text-2xl font-headline">Book a Visit to {hostel.name}</CardTitle>
-                        <CardDescription>Secure your spot to visit this hostel. A small fee is required.</CardDescription>
+                        <CardDescription>Secure your spot to visit this hostel. Choose your preferred method.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="relative h-24 w-24 rounded-lg overflow-hidden">
-                                <Image src={hostel.images[0]} alt={hostel.name} fill style={{ objectFit: 'cover' }} data-ai-hint="hostel exterior" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold">{hostel.name}</h3>
-                                <p className="text-sm text-muted-foreground">{hostel.location}</p>
-                            </div>
-                        </div>
-                        <div className="space-y-4 mb-6">
-                            <div className="flex justify-between items-center">
-                                <span>Visit Fee</span>
-                                <span className="font-semibold">GH₵ 10.00</span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between items-center text-lg font-bold">
-                                <span>Total</span>
-                                <span>GH₵ 10.00</span>
-                            </div>
-                        </div>
+                         <RadioGroup defaultValue="agent" onValueChange={(value: VisitType) => setVisitType(value)} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                           {Object.entries(visitOptions).map(([key, option]) => (
+                                <Label key={key} htmlFor={key} className={cn("flex flex-col items-start rounded-lg border p-4 cursor-pointer transition-all hover:bg-accent/10", visitType === key && "ring-2 ring-primary bg-primary/5")}>
+                                     <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3">
+                                            <RadioGroupItem value={key} id={key} />
+                                            <span className="font-semibold text-base">{option.title}</span>
+                                        </div>
+                                        <div className="font-bold text-lg">
+                                            GH₵{option.price.toFixed(2)}
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-2 pl-8">{option.description}</p>
+                                </Label>
+                           ))}
+                        </RadioGroup>
 
                         <div className="space-y-4">
-                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="visit-date">Visit Date</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                        <Button
-                                            variant={"outline"}
-                                            className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !visitDate && "text-muted-foreground"
-                                            )}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {visitDate ? format(visitDate, "PPP") : <span>Pick a date</span>}
-                                        </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            <Calendar
-                                                mode="single"
-                                                selected={visitDate}
-                                                onSelect={setVisitDate}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
+                            {visitType === 'agent' && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="visit-date">Visit Date</Label>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                            <Button
+                                                variant={"outline"}
+                                                className={cn(
+                                                "w-full justify-start text-left font-normal bg-background",
+                                                !visitDate && "text-muted-foreground"
+                                                )}
+                                            >
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {visitDate ? format(visitDate, "PPP") : <span>Pick a date</span>}
+                                            </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={visitDate}
+                                                    onSelect={setVisitDate}
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="visit-time">Proposed Time</Label>
+                                        <Input id="visit-time" type="time" value={visitTime} onChange={e => setVisitTime(e.target.value)} className="bg-background"/>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="visit-time">Proposed Time</Label>
-                                    <Input id="visit-time" type="time" value={visitTime} onChange={e => setVisitTime(e.target.value)} />
-                                </div>
-                            </div>
+                            )}
+
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email Address</Label>
                                 <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@email.com" />
@@ -198,7 +218,7 @@ export default function BookingPage() {
                     <CardFooter>
                         <Button className="w-full h-12 text-lg bg-accent hover:bg-accent/90 text-accent-foreground" onClick={handlePayment} disabled={isPaying}>
                             {isPaying ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
-                            Proceed to Pay
+                             Pay GH₵{visitOptions[visitType].price.toFixed(2)}
                         </Button>
                     </CardFooter>
                 </Card>
@@ -206,3 +226,5 @@ export default function BookingPage() {
         </div>
     );
 }
+
+    

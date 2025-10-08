@@ -13,6 +13,7 @@ type MomoPaymentPayload = {
     hostelId: string;
     visitDate: string; 
     visitTime: string; 
+    visitType: 'agent' | 'self';
 }
 
 type HostelPaymentPayload = {
@@ -40,6 +41,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     callback_url.searchParams.set('hostelId', payload.hostelId);
     callback_url.searchParams.set('visitDate', payload.visitDate);
     callback_url.searchParams.set('visitTime', payload.visitTime);
+    callback_url.searchParams.set('visitType', payload.visitType);
 
 
     try {
@@ -56,6 +58,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                 callback_url: callback_url.toString(), 
                 metadata: {
                     label: payload.label || 'HostelHQ Payment',
+                    visitType: payload.visitType,
                 },
                 channels: ['mobile_money'],
                 mobile_money: {
@@ -150,3 +153,5 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
         return { status: false, message: "Could not connect to payment service." };
     }
 }
+
+    
