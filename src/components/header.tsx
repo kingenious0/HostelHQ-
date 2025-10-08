@@ -39,6 +39,10 @@ export function Header() {
       if (user) {
         // Set client ID for Ably auth
         if (ably.auth) {
+          // Ensure auth.options exists before setting clientId
+          if (!ably.auth.options) {
+            (ably.auth.options as any) = {};
+          }
           ably.auth.options.clientId = user.uid;
         }
 
