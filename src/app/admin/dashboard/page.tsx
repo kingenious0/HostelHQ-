@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from '@/components/ui/badge';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
+import { ably } from '@/lib/ably';
+import { Types } from 'ably';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
 
 type Hostel = {
   id: string;
@@ -43,6 +47,16 @@ type User = {
   role: 'student' | 'agent';
 }
 
+type OnlineAgent = {
+  clientId: string;
+  data: {
+      id: string;
+      fullName: string;
+      email: string;
+  }
+}
+
+
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
   'Available': 'Limited',
   'Limited': 'Full',
@@ -60,7 +74,7 @@ export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [stats, setStats] = useState({ revenue: 0, occupancyRate: '0%', totalListings: 0 });
+  const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedHostel, setSelectedHostel] = useState<PendingHostel | null>(null);
@@ -102,34 +116,26 @@ export default function AdminDashboard() {
       setUsers(usersData);
     });
 
-    // Fetch stats
-    const fetchStats = async () => {
-        const approvedSnapshot = await getDocs(collection(db, 'hostels'));
-        const pendingSnapshot = await getDocs(collection(db, 'pendingHostels'));
-        
-        const totalApproved = approvedSnapshot.size;
-        const totalPending = pendingSnapshot.size;
-        const totalListings = totalApproved + totalPending;
-
-        const totalRevenue = approvedSnapshot.docs.reduce((sum, doc) => sum + (doc.data().price || 0), 0);
-        const occupancy = totalListings > 0 ? (totalApproved / totalListings) * 100 : 0;
-
-        setStats({
-            revenue: totalRevenue,
-            occupancyRate: `${occupancy.toFixed(0)}%`,
-            totalListings: totalApproved,
-        });
+    // Ably presence for online agents
+    const presenceChannel = ably.channels.get('agents:live');
+    const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
+      setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
     };
-
-    fetchStats();
-    const unsubStats = onSnapshot(collection(db, 'hostels'), fetchStats);
+    const setupPresenceListener = async () => {
+        await presenceChannel.presence.subscribe(['enter', 'present', 'leave'], () => {
+            presenceChannel.presence.get().then(updateOnlineAgents);
+        });
+        const initialAgents = await presenceChannel.presence.get();
+        updateOnlineAgents(initialAgents);
+    };
+    setupPresenceListener();
 
 
     return () => {
       unsubPending();
       unsubApproved();
       unsubUsers();
-      unsubStats();
+      presenceChannel.presence.unsubscribe();
     };
   }, []);
 
@@ -248,7 +254,7 @@ export default function AdminDashboard() {
         <div className="container mx-auto">
           <h1 className="text-3xl font-bold font-headline mb-6">Admin Dashboard</h1>
 
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Students</CardTitle>
@@ -267,6 +273,16 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{agents.length}</div>
                  <p className="text-xs text-muted-foreground">Registered agents</p>
+              </CardContent>
+            </Card>
+             <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Online Agents</CardTitle>
+                <Wifi className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{onlineAgents.length}</div>
+                 <p className="text-xs text-muted-foreground">Currently active</p>
               </CardContent>
             </Card>
             <Card>
@@ -396,61 +412,100 @@ export default function AdminDashboard() {
                 </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-                <CardTitle>User Management</CardTitle>
-                <CardDescription>View all registered users and manage their roles.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Full Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Role</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {users.length > 0 ? (
-                            users.map(user => (
-                                <TableRow key={user.id}>
-                                    <TableCell className="font-medium">{user.fullName}</TableCell>
-                                    <TableCell>{user.email}</TableCell>
-                                    <TableCell>
-                                        <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
-                                            {user.role}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => toggleUserRole(user)}
-                                            disabled={processingId === user.id}
-                                            title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
-                                        >
-                                            {processingId === user.id ? (
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
-                                            )}
-                                        </Button>
-                                    </TableCell>
+          
+           <div className="grid gap-8 lg:grid-cols-2 mb-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>User Management</CardTitle>
+                        <CardDescription>View all registered users and manage their roles.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Full Name</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
-                            ))
-                        ) : (
-                             <TableRow>
-                                <TableCell colSpan={4} className="text-center h-24">
-                                    No users found.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </CardContent>
-          </Card>
+                            </TableHeader>
+                            <TableBody>
+                                {users.length > 0 ? (
+                                    users.map(user => (
+                                        <TableRow key={user.id}>
+                                            <TableCell className="font-medium">{user.fullName}</TableCell>
+                                            <TableCell>{user.email}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
+                                                    {user.role}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => toggleUserRole(user)}
+                                                    disabled={processingId === user.id}
+                                                    title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
+                                                >
+                                                    {processingId === user.id ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
+                                                    )}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center h-24">
+                                            No users found.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Online Agents</CardTitle>
+                        <CardDescription>A real-time list of agents currently active on the platform.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Full Name</TableHead>
+                                    <TableHead>Email</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {onlineAgents.length > 0 ? (
+                                    onlineAgents.map(agent => (
+                                        <TableRow key={agent.clientId}>
+                                            <TableCell className="font-medium flex items-center gap-2">
+                                                 <Avatar className="h-8 w-8">
+                                                    <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
+                                                 </Avatar>
+                                                {agent.data.fullName}
+                                            </TableCell>
+                                            <TableCell>{agent.data.email}</TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={2} className="text-center h-24">
+                                            No agents are currently online.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+           </div>
         </div>
       </main>
 
