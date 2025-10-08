@@ -16,7 +16,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
 
 
 const amenityIcons = {
@@ -35,13 +35,24 @@ const availabilityInfo: Record<Hostel['availability'], { text: string, icon: Rea
     'Full': { text: 'Hostel Full', icon: <Lock />, className: 'bg-red-100 text-red-800 border-red-200'},
 };
 
-function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: User | null }) {
+type AppUser = {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: 'student' | 'agent' | 'admin';
+}
+
+function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: AppUser | null }) {
     const router = useRouter();
     const { toast } = useToast();
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
     const handleApply = async () => {
-        if (!currentUser) return;
+        if (!currentUser) {
+             toast({title: "Please Log In", description: "You need to be logged in to apply for a hostel.", variant: "destructive"});
+             router.push('/login');
+             return;
+        };
 
         // Check if the user has a completed visit for this hostel
         const visitsRef = collection(db, 'visits');
@@ -128,12 +139,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
 function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
     const { toast } = useToast();
+    const router = useRouter();
     const handleApply = () => {
         toast({
             title: "Please Log In",
             description: "You need to be logged in as a student to apply for a hostel. Please use the menu in the top right.",
             variant: "destructive",
         })
+        router.push('/login');
     };
 
     return (
@@ -184,7 +197,8 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 export default function HostelDetailPage() {
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const routeParams = useParams();
   const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
 
@@ -202,14 +216,31 @@ export default function HostelDetailPage() {
       };
       fetchHostelData();
 
-      const unsubscribe = onAuthStateChanged(auth, user => {
-          setCurrentUser(user);
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                setAppUser({
+                    uid: user.uid,
+                    email: user.email!,
+                    fullName: userData.fullName,
+                    role: userData.role
+                });
+            } else {
+                setAppUser(null);
+            }
+          } else {
+              setAppUser(null);
+          }
+          setAuthChecked(true);
       });
       return () => unsubscribe();
   }, [id]);
 
 
-  if (loading) {
+  if (loading || !authChecked) {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -224,15 +255,16 @@ export default function HostelDetailPage() {
     notFound();
   }
 
-  const isStudent = currentUser && currentUser.email?.includes('student');
+  const isStudent = appUser?.role === 'student';
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 md:px-6 py-12">
-        {isStudent ? <FullHostelDetails hostel={hostel} currentUser={currentUser} /> : <LimitedHostelDetails hostel={hostel} />}
+        {isStudent ? <FullHostelDetails hostel={hostel} currentUser={appUser} /> : <LimitedHostelDetails hostel={hostel} />}
       </main>
     </div>
   );
 }
 
+    
