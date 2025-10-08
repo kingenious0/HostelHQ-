@@ -18,6 +18,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { ably } from '@/lib/ably';
 
 type AppUser = {
   uid: string;
@@ -36,35 +37,51 @@ export function Header() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is signed in, get their role from Firestore.
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            setAppUser({
+            const currentUser = {
                 uid: user.uid,
                 email: user.email!,
                 fullName: userData.fullName,
                 role: userData.role
-            });
+            };
+            setAppUser(currentUser);
+            
+            // Ably Presence for Agents
+            if (userData.role === 'agent') {
+              const agentChannel = ably.channels.get('agents:live');
+              await agentChannel.presence.enter({ id: user.uid });
+            }
+
         } else {
-            // This case can happen if a user is in Auth but not in Firestore.
-            // For now, we sign them out to maintain consistency.
             await signOut(auth);
             setAppUser(null);
         }
       } else {
-        // User is signed out.
         setAppUser(null);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, []);
+
+    return () => {
+      // Ensure agent leaves presence on component unmount or user change
+      if (appUser && appUser.role === 'agent') {
+        const agentChannel = ably.channels.get('agents:live');
+        agentChannel.presence.leave({ id: appUser.uid });
+      }
+      unsubscribe();
+    }
+  }, [appUser]);
 
   const handleLogout = async () => {
     setAuthAction(true);
     try {
+      if (appUser && appUser.role === 'agent') {
+        const agentChannel = ably.channels.get('agents:live');
+        await agentChannel.presence.leave({ id: appUser.uid });
+      }
       await signOut(auth);
       toast({ title: "Logged out successfully" });
       router.push('/');

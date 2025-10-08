@@ -120,16 +120,15 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
 
 const seedInitialUsers = async () => {
     try {
-        const adminRef = doc(db, 'users', 'admin-user-id'); // Use a fixed ID for admin
+        // This is a placeholder for your actual admin UID from Firebase Auth
+        const adminUid = 'CgE1aY3sVwXp2bY4i7S9fRzWn8E3'; // REPLACE WITH YOUR ADMIN's UID
+        const adminRef = doc(db, 'users', adminUid); 
         const adminSnap = await getDoc(adminRef);
         if (!adminSnap.exists()) {
             console.log("Seeding admin user data...");
-            // IMPORTANT: You must create this user in Firebase Authentication manually
-            // with email 'admin@test.com' and a password.
-            // The UID from Firebase Auth must replace 'admin-user-id' here.
             await setDoc(adminRef, {
                 fullName: 'Admin User',
-                email: 'admin@test.com',
+                email: 'admin@test.com', // The email used in Firebase Auth
                 role: 'admin'
             });
         }
@@ -137,7 +136,8 @@ const seedInitialUsers = async () => {
         console.warn("Could not seed admin user data:", e);
     }
 };
-//seedInitialUsers();
+// Uncomment and run once locally after creating the admin user in Firebase Auth
+// seedInitialUsers();
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
@@ -193,5 +193,3 @@ export async function getHostels(): Promise<Hostel[]> {
     console.log("Falling back to static hostel data.");
     return staticHostels;
 }
-
-    
