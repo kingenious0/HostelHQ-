@@ -1,8 +1,7 @@
-
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Agent, Hostel, getAgent } from '@/lib/data';
@@ -40,73 +39,108 @@ export default function TrackingPage() {
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [loading, setLoading] = useState(true);
     const [agentLiveLocation, setAgentLiveLocation] = useState<{ lat: number, lng: number} | undefined>(undefined);
+    const agentGpsChannelRef = useRef<Types.RealtimeChannelPromise | null>(null);
 
     useEffect(() => {
         if (!visitId || !hostelId) {
             notFound();
             return;
-        };
+        }
 
         const unsubscribes: (() => void)[] = [];
 
-        // Fetch hostel data once
         const fetchHostel = async () => {
-             const hostelDocRef = doc(db, 'hostels', hostelId as string);
-             const hostelSnap = await getDoc(hostelDocRef);
-             if(hostelSnap.exists()) {
-                 const hostelData = {id: hostelSnap.id, ...hostelSnap.data()} as Hostel
-                 setHostel(hostelData);
-             } else {
-                 notFound();
-             }
-        }
-        fetchHostel();
-
-        // Listen to visit document for agent assignment
-        const visitDocRef = doc(db, 'visits', visitId as string);
-        const unsubVisit = onSnapshot(visitDocRef, async (docSnap) => {
-            if (docSnap.exists()) {
-                const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
-                setVisit(visitData);
-
-                // If an agent is already assigned, fetch their details and subscribe to GPS
-                if (visitData.agentId && (!agent || agent.id !== visitData.agentId)) {
-                    const agentDetails = await getAgent(visitData.agentId);
-                    setAgent(agentDetails);
-                    if(agentDetails?.location) {
-                        setAgentLiveLocation(agentDetails.location);
-                    }
-                    const channel = ably.channels.get(`agent:${visitData.agentId}:gps`);
-                    const subscribeCallback = (message: Types.Message) => {
-                        setAgentLiveLocation(message.data);
-                    };
-                    channel.subscribe('location', subscribeCallback);
-                    unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
-                
-                // If no agent is assigned, find one from Ably presence
-                } else if (!visitData.agentId) {
-                    const presenceChannel = ably.channels.get('agents:live');
-                    const onlineAgents = await presenceChannel.presence.get();
-                    
-                    if (onlineAgents.length > 0) {
-                        const assignedAgentMember = onlineAgents[0]; // Choose the first agent for simplicity
-                        
-                        await updateDoc(visitDocRef, {
-                            agentId: assignedAgentMember.clientId,
-                            status: 'accepted'
-                        });
-                        // The onSnapshot listener will then pick up this change and set the agent state
-                    }
-                }
+            const hostelDocRef = doc(db, 'hostels', hostelId as string);
+            const hostelSnap = await getDoc(hostelDocRef);
+            if (hostelSnap.exists()) {
+                const hostelData = {id: hostelSnap.id, ...hostelSnap.data()} as Hostel;
+                setHostel(hostelData);
             } else {
                 notFound();
             }
+        };
+        fetchHostel();
+
+        const visitDocRef = doc(db, 'visits', visitId as string);
+
+        const assignAgent = async (agentMember: Types.PresenceMessage) => {
+            try {
+                await updateDoc(visitDocRef, {
+                    agentId: agentMember.clientId,
+                    status: 'accepted'
+                });
+            } catch (error) {
+                console.error("Failed to assign agent:", error);
+            }
+        };
+
+        const setupAgentSubscription = async (agentId: string) => {
+            if (agentGpsChannelRef.current) {
+                agentGpsChannelRef.current.unsubscribe();
+            }
+            
+            const agentDetails = await getAgent(agentId);
+            setAgent(agentDetails);
+            if(agentDetails?.location) {
+                setAgentLiveLocation(agentDetails.location);
+            }
+            
+            const channel = ably.channels.get(`agent:${agentId}:gps`);
+            agentGpsChannelRef.current = channel;
+
+            const subscribeCallback = (message: Types.Message) => {
+                setAgentLiveLocation(message.data);
+            };
+            channel.subscribe('location', subscribeCallback);
+            unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
+        };
+        
+        const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
+            if (!docSnap.exists()) {
+                notFound();
+                return;
+            }
+
+            const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
+            setVisit(visitData);
             setLoading(false);
+
+            if (visitData.agentId) {
+                if (!agent || agent.id !== visitData.agentId) {
+                    setupAgentSubscription(visitData.agentId);
+                }
+            } else {
+                // If no agent is assigned, listen for one
+                const presenceChannel = ably.channels.get('agents:live');
+                const presenceCallback = (agentMember: Types.PresenceMessage) => {
+                    if (agentMember.action === 'enter' || agentMember.action === 'present') {
+                        // Found an agent, assign them and unsubscribe from presence updates
+                        assignAgent(agentMember);
+                        presenceChannel.unsubscribe(presenceCallback);
+                    }
+                };
+
+                // Subscribe to presence updates
+                presenceChannel.subscribe(presenceCallback);
+                unsubscribes.push(() => presenceChannel.unsubscribe(presenceCallback));
+
+                // Also check if any agents are already present
+                presenceChannel.presence.get().then(onlineAgents => {
+                    if (onlineAgents.length > 0) {
+                        assignAgent(onlineAgents[0]);
+                        presenceChannel.unsubscribe(presenceCallback);
+                    }
+                });
+            }
         });
+
         unsubscribes.push(unsubVisit);
 
         return () => {
             unsubscribes.forEach(unsub => unsub());
+            if (agentGpsChannelRef.current) {
+                agentGpsChannelRef.current.detach();
+            }
         };
     }, [visitId, hostelId, agent]);
     
@@ -126,8 +160,7 @@ export default function TrackingPage() {
         if(visitId) {
             await updateDoc(doc(db, 'visits', visitId as string), { status: 'completed' });
             if(agent) {
-                // Remove agent from presence set
-                 ably.channels.get('agents:live').presence.leave({ id: agent.id });
+                // Agent presence is handled on login/logout in the header now
             }
             router.push(`/hostels/${hostelId}/book/rating`);
         }
