@@ -25,7 +25,7 @@ type AppUser = {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'agent' | 'admin';
+  role: 'student' | 'agent' | 'admin' | 'pending_agent';
 }
 
 export function Header() {
@@ -45,10 +45,23 @@ export function Header() {
         }
         ably.auth.options.clientId = user.uid;
 
-        const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        // Check 'users' collection first
+        let userDocRef = doc(db, "users", user.uid);
+        let userDocSnap = await getDoc(userDocRef);
+        let userData;
+
         if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
+            userData = userDocSnap.data();
+        } else {
+            // If not in 'users', check 'pendingUsers'
+            userDocRef = doc(db, "pendingUsers", user.uid);
+            userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                userData = userDocSnap.data();
+            }
+        }
+        
+        if (userData) {
             const currentUser = {
                 uid: user.uid,
                 email: user.email!,
@@ -57,9 +70,11 @@ export function Header() {
             };
             setAppUser(currentUser);
         } else {
+            // User exists in Auth but not in any DB collection, likely an anomaly
             await signOut(auth);
             setAppUser(null);
         }
+
       } else {
         if (ably.auth && ably.auth.options) {
           ably.auth.options.clientId = undefined;
@@ -152,6 +167,7 @@ export function Header() {
   const isAgent = appUser?.role === 'agent';
   const isAdmin = appUser?.role === 'admin';
   const isStudent = appUser?.role === 'student';
+  const isPending = appUser?.role === 'pending_agent';
 
   return (
     <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
@@ -204,6 +220,7 @@ export function Header() {
                   <DropdownMenuLabel>
                     <div className="font-semibold">{appUser.fullName}</div>
                     <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
+                     {isPending && <Badge variant="secondary" className="mt-1">Pending Approval</Badge>}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {isStudent && (

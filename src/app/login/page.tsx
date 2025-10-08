@@ -11,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, KeyRound, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { signInWithEmailAndPassword, User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -24,9 +25,30 @@ export default function LoginPage() {
     const handleLogin = async () => {
         setIsSubmitting(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // Check the user's role from Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                if (userData.role === 'pending_agent') {
+                    await auth.signOut(); // Log the user out
+                    toast({
+                        title: 'Account Pending Approval',
+                        description: 'Your agent account is still awaiting admin approval.',
+                        variant: 'destructive',
+                    });
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+            
             toast({ title: 'Login Successful!' });
             router.push('/');
+
         } catch (error: any) {
             console.error("Login error:", error);
             let errorMessage = "An unknown error occurred.";
@@ -60,7 +82,7 @@ export default function LoginPage() {
                                 <Input 
                                     id="email" 
                                     type="email" 
-                                    placeholder="you@email.com" 
+                                    placeholder="e.g. name@student.hostelhq.com" 
                                     className="pl-10" 
                                     value={email} 
                                     onChange={(e) => setEmail(e.target.value)} 
