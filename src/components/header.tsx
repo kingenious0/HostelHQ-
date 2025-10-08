@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
+import { Badge } from '@/components/ui/badge';
 
 type AppUser = {
   uid: string;

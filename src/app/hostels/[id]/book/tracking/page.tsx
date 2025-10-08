@@ -113,19 +113,22 @@ export default function TrackingPage() {
             setLoading(false);
 
             if (visitData.agentId) {
-                // Agent is assigned, check status
-                if (visitData.status === 'accepted') {
-                    // Agent accepted, start tracking them
-                    setupAgentGpsSubscription(visitData.agentId);
-                } else if (visitData.status === 'pending') {
-                    // Agent assigned, but not yet accepted.
-                    getAgent(visitData.agentId).then(setAgent);
-                }
+                getAgent(visitData.agentId).then(agentDetails => {
+                    if (agentDetails) {
+                        setAgent(agentDetails);
+                        if (visitData.status === 'accepted') {
+                           setupAgentGpsSubscription(visitData.agentId!);
+                        }
+                    }
+                });
             } else {
                 // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
                 const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
-                     setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
+                     const filteredAgents = agents
+                        .map(a => ({ clientId: a.clientId, data: a.data as any }))
+                        .filter(a => a.data.email !== 'admin@hostelhq.com'); // Exclude admin
+                     setOnlineAgents(filteredAgents);
                 };
 
                 const setupPresenceListener = async () => {
