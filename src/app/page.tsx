@@ -17,16 +17,7 @@ export default async function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
       <main className="flex-1">
-        <section className="relative h-[450px] bg-gray-200">
-            <Image 
-                src="https://picsum.photos/seed/hero-hostel/1200/500" 
-                alt="Comfortable student accommodations"
-                fill
-                style={{objectFit: 'cover'}}
-                className="brightness-[.6]"
-                data-ai-hint="student accommodation building"
-                priority
-            />
+        <section className="relative h-[450px] bg-gradient-to-br from-primary via-primary/70 to-accent/60">
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-4">
                 <h1 className="text-4xl md:text-5xl font-bold font-headline">Find Your Perfect Student Home</h1>
                 <p className="mt-2 text-lg md:text-xl max-w-2xl">
@@ -39,7 +30,7 @@ export default async function Home() {
                                 <div className="relative w-full">
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input placeholder="Search hostel name..." className="pl-12 h-14 text-base rounded-lg"/>
-                                _</div>
+                                </div>
                                 <div className="relative w-full">
                                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input placeholder="Enter location" className="pl-12 h-14 text-base rounded-lg" />
