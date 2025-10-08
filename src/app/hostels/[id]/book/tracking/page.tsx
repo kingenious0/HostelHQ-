@@ -111,10 +111,10 @@ export default function TrackingPage() {
 
             if (visitData.agentId) {
                 // Agent is assigned, check status
-                if (visitData.status === 'accepted' && (!agent || agent.id !== visitData.agentId)) {
+                if (visitData.status === 'accepted') {
                     // Agent accepted, start tracking them
                     setupAgentGpsSubscription(visitData.agentId);
-                } else if (!agent && visitData.status === 'pending') {
+                } else if (visitData.status === 'pending') {
                     // Agent assigned, but not yet accepted.
                     getAgent(visitData.agentId).then(setAgent);
                 }
@@ -147,7 +147,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId, agent]);
+    }, [visitId, hostelId]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
