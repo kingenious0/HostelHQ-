@@ -110,12 +110,16 @@ export default function TrackingPage() {
             setLoading(false);
 
             if (visitData.agentId) {
-                // Agent is assigned, start tracking them
-                if (!agent || agent.id !== visitData.agentId) {
+                // Agent is assigned, check status
+                if (visitData.status === 'accepted' && (!agent || agent.id !== visitData.agentId)) {
+                    // Agent accepted, start tracking them
                     setupAgentGpsSubscription(visitData.agentId);
+                } else if (!agent && visitData.status === 'pending') {
+                    // Agent assigned, but not yet accepted.
+                    getAgent(visitData.agentId).then(setAgent);
                 }
             } else {
-                // No agent assigned, listen for online agents
+                // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
                 const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
                      setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
@@ -148,15 +152,15 @@ export default function TrackingPage() {
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
         setAssigningAgent(selectedAgent.clientId);
-        toast({ title: 'Assigning Agent...', description: `You have been successfully assigned to ${selectedAgent.data.fullName}. Their details have been sent to you.` });
+        toast({ title: 'Assigning Agent...', description: `Your request has been sent to ${selectedAgent.data.fullName}. Please wait for them to accept.` });
 
         try {
             const visitDocRef = doc(db, 'visits', visitId as string);
+            // Assign the agent, but keep status as 'pending'
             await updateDoc(visitDocRef, {
-                agentId: selectedAgent.data.id,
-                status: 'accepted'
+                agentId: selectedAgent.data.id
             });
-            // The onSnapshot listener will then take over to display the tracking UI.
+            // The onSnapshot listener will then show the "waiting for agent" screen.
         } catch (error) {
             console.error("Failed to assign agent:", error);
             toast({ title: 'Assignment Failed', description: 'Could not assign agent. Please try again.', variant: 'destructive'});
@@ -187,6 +191,132 @@ export default function TrackingPage() {
     
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
 
+    const renderContent = () => {
+        if (!visit.agentId) { // Step 1: No agent assigned, student needs to pick one
+            return (
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground">AVAILABLE AGENTS</h3>
+                    {onlineAgents.length > 0 ? (
+                        onlineAgents.map(agent => (
+                            <div key={agent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
+                                <div className="flex items-center gap-3">
+                                    <Avatar>
+                                        <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <p className="font-semibold">{agent.data.fullName}</p>
+                                        <p className="text-xs text-green-600">Online</p>
+                                    </div>
+                                </div>
+                                <Button 
+                                    size="sm" 
+                                    onClick={() => handleSelectAgent(agent)}
+                                    disabled={assigningAgent === agent.clientId}
+                                >
+                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Select Agent"}
+                                </Button>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-8">
+                            <p className="text-muted-foreground">No agents are available right now. Please check back shortly.</p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        if (visit.status === 'pending' && visit.agentId) { // Step 2: Agent assigned, waiting for their acceptance
+            return (
+                <div className="text-center py-8">
+                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                    <p className="font-semibold">Waiting for {agent?.name || 'Agent'} to accept...</p>
+                    <p className="text-sm text-muted-foreground mt-1">You will be notified once they confirm your visit request.</p>
+                </div>
+            );
+        }
+
+        if (visit.status === 'accepted' && agent) { // Step 3: Agent accepted, show tracking and details
+            return (
+                 <div className="space-y-4">
+                    <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
+                        <div className="flex items-start gap-3">
+                            <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                            <div>
+                                <p className="text-sm text-muted-foreground">Hostel</p>
+                                <p className="font-semibold">{hostel.name}</p>
+                            </div>
+                        </div>
+                         <div className="flex items-start gap-3">
+                            <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
+                            <div>
+                                <p className="text-sm text-muted-foreground">Your Agent</p>
+                                <p className="font-semibold">{agent.name}</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-start gap-3">
+                                <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Date</p>
+                                    <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
+                                </div>
+                            </div>
+                             <div className="flex items-start gap-3">
+                                <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Time</p>
+                                    <p className="font-semibold">{visit.visitTime}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex w-full gap-2">
+                        <a href={`tel:${agentPhoneNumber}`} className="flex-1">
+                            <Button className="w-full" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
+                        </a>
+                        <a href={`https://wa.me/${agentPhoneNumber}`} target="_blank" rel="noopener noreferrer" className="flex-1">
+                            <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
+                        </a>
+                    </div>
+                     <Button className="w-full" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
+                </div>
+            );
+        }
+
+        if (visit.status === 'completed') { // Step 4: Visit is done
+             return (
+                <div className="text-center py-8">
+                    <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
+                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating`)}>Rate Your Visit</Button>
+                </div>
+            );
+        }
+
+        return <div className="text-center py-8"><p>Loading...</p></div>;
+    }
+
+    const getCardTitle = () => {
+        if (!visit.agentId) return "Select an Agent";
+        if (visit.status === 'pending') return "Request Sent";
+        if (visit.status === 'accepted') return <span className="text-green-600">Visit Confirmed!</span>;
+        if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
+        if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
+        return "Visit Details";
+    }
+    
+    const getCardDescription = () => {
+        if (!visit.agentId) return "Please select an available agent to begin your tour.";
+        if (visit.status === 'pending') return `Waiting for ${agent?.name || 'agent'} to accept your request.`;
+        if (visit.status === 'accepted') return agent && `Your agent, ${agent.name}, is on the way.`;
+        if (visit.status === 'completed') return "Thank you for using HostelHQ!";
+        return "";
+    }
+
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -195,102 +325,14 @@ export default function TrackingPage() {
                      <Card className="w-full max-w-md shadow-xl">
                         <CardHeader>
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                                {visit.status === 'pending' && <><Loader2 className="h-6 w-6 animate-spin" /> Waiting for Agent</>}
-                                {visit.status === 'accepted' && <span className="text-green-600">Visit Confirmed!</span>}
-                                {visit.status === 'completed' && <span className="text-blue-600">🎉 Visit Complete</span>}
+                                {getCardTitle()}
                             </CardTitle>
                              <CardDescription>
-                                {visit.status === 'pending' && "Please select an available agent to begin your tour."}
-                                {visit.status === 'accepted' && agent && `Your agent, ${agent.name}, is on the way.`}
-                                {visit.status === 'completed' && "Thank you for using HostelHQ!"}
+                                {getCardDescription()}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {visit.status === 'pending' && (
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-semibold text-muted-foreground">AVAILABLE AGENTS</h3>
-                                    {onlineAgents.length > 0 ? (
-                                        onlineAgents.map(agent => (
-                                            <div key={agent.clientId} className="flex items-center justify-between p-3 border rounded-lg">
-                                                <div className="flex items-center gap-3">
-                                                    <Avatar>
-                                                        <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
-                                                    </Avatar>
-                                                    <div>
-                                                        <p className="font-semibold">{agent.data.fullName}</p>
-                                                        <p className="text-xs text-green-600">Online</p>
-                                                    </div>
-                                                </div>
-                                                <Button 
-                                                    size="sm" 
-                                                    onClick={() => handleSelectAgent(agent)}
-                                                    disabled={assigningAgent === agent.clientId}
-                                                >
-                                                    {assigningAgent === agent.clientId ? <Loader2 className="h-4 w-4 animate-spin"/> : "Select Agent"}
-                                                </Button>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center py-8">
-                                            <p className="text-muted-foreground">No agents are available right now. Please check back shortly.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            {visit.status === 'accepted' && agent && (
-                                <div className="space-y-4">
-                                    <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
-                                        <div className="flex items-start gap-3">
-                                            <Home className="h-5 w-5 text-muted-foreground mt-1"/>
-                                            <div>
-                                                <p className="text-sm text-muted-foreground">Hostel</p>
-                                                <p className="font-semibold">{hostel.name}</p>
-                                            </div>
-                                        </div>
-                                         <div className="flex items-start gap-3">
-                                            <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
-                                            <div>
-                                                <p className="text-sm text-muted-foreground">Your Agent</p>
-                                                <p className="font-semibold">{agent.name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="flex items-start gap-3">
-                                                <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
-                                                <div>
-                                                    <p className="text-sm text-muted-foreground">Date</p>
-                                                    <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
-                                                </div>
-                                            </div>
-                                             <div className="flex items-start gap-3">
-                                                <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
-                                                <div>
-                                                    <p className="text-sm text-muted-foreground">Time</p>
-                                                    <p className="font-semibold">{visit.visitTime}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <Separator />
-                                    
-                                    <div className="flex w-full gap-2">
-                                        <a href={`tel:${agentPhoneNumber}`} className="flex-1">
-                                            <Button className="w-full" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
-                                        </a>
-                                        <a href={`https://wa.me/${agentPhoneNumber}`} target="_blank" rel="noopener noreferrer" className="flex-1">
-                                            <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
-                                        </a>
-                                    </div>
-                                     <Button className="w-full" onClick={handleVisitComplete}>Mark Visit as Complete</Button>
-                                </div>
-                            )}
-                             {visit.status === 'completed' && (
-                                <div className="text-center py-8">
-                                    <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
-                                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating`)}>Rate Your Visit</Button>
-                                </div>
-                            )}
+                            {renderContent()}
                         </CardContent>
                     </Card>
                 </div>

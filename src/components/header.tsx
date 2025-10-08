@@ -38,7 +38,7 @@ export function Header() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Set client ID for Ably auth
-        if (ably.auth.options) {
+        if (ably.auth) {
           ably.auth.options.clientId = user.uid;
         }
 
@@ -131,6 +131,11 @@ export function Header() {
               Hostels
             </Link>
             {isAgent && (
+               <Link href="/agent/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                Dashboard
+              </Link>
+            )}
+            {isAgent && (
               <Link href="/agent/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                 List a Hostel
               </Link>
@@ -173,6 +178,9 @@ export function Header() {
                   )}
                   {isAgent && (
                     <>
+                       <DropdownMenuItem asChild>
+                        <Link href="/agent/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/agent/listings"><ListPlus className="mr-2 h-4 w-4"/>My Listings</Link>
                       </DropdownMenuItem>

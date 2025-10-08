@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Eye } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, Clock, Check, X } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -96,13 +96,13 @@ export default function MyVisitsPage() {
 
     }, [currentUser, toast]);
     
-    const getStatusVariant = (status: Visit['status']) => {
+    const getStatusInfo = (status: Visit['status']): { variant: "default" | "secondary" | "outline" | "destructive", icon: React.ReactNode, text: string } => {
         switch (status) {
-            case 'completed': return 'default';
-            case 'accepted': return 'secondary';
-            case 'pending': return 'outline';
-            case 'cancelled': return 'destructive';
-            default: return 'outline';
+            case 'completed': return { variant: 'default', icon: <Check className="h-3 w-3" />, text: 'Completed' };
+            case 'accepted': return { variant: 'secondary', icon: <Check className="h-3 w-3" />, text: 'Accepted' };
+            case 'pending': return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending' };
+            case 'cancelled': return { variant: 'destructive', icon: <X className="h-3 w-3" />, text: 'Cancelled' };
+            default: return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending' };
         }
     };
 
@@ -163,16 +163,19 @@ export default function MyVisitsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {myVisits.length > 0 ? (
-                                            myVisits.map(visit => (
+                                            myVisits.map(visit => {
+                                                const statusInfo = getStatusInfo(visit.status);
+                                                return (
                                                 <TableRow key={visit.id}>
                                                     <TableCell className="font-medium">{visit.hostelName}</TableCell>
-                                                    <TableCell>{visit.agentName || 'Pending...'}</TableCell>
+                                                    <TableCell>{visit.agentName || 'Awaiting agent...'}</TableCell>
                                                      <TableCell>
                                                         {format(new Date(visit.visitDate), "PPP")} at {visit.visitTime}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge variant={getStatusVariant(visit.status)} className="capitalize">
-                                                            {visit.status}
+                                                        <Badge variant={statusInfo.variant} className="capitalize flex items-center gap-1.5">
+                                                            {statusInfo.icon}
+                                                            {statusInfo.text}
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right">
@@ -184,7 +187,8 @@ export default function MyVisitsPage() {
                                                         </Link>
                                                     </TableCell>
                                                 </TableRow>
-                                            ))
+                                                )
+                                            })
                                         ) : (
                                             <TableRow>
                                                 <TableCell colSpan={5} className="text-center h-24">
