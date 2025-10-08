@@ -279,7 +279,7 @@ export default function TrackingPage() {
                             <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
                             <div>
                                 <p className="text-sm text-muted-foreground">Agent's Location</p>
-                                <p className="font-semibold">{agentLiveAddress || "Tracking..."}</p>
+                                <p className="font-semibold">{agentLiveAddress || "Tracking agent..."}</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -310,7 +310,7 @@ export default function TrackingPage() {
                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                         </a>
                     </div>
-                     <Button className="w-full bg-primary text-primary-foreground" onClick={handleVisitComplete} disabled={visit.studentCompleted}>
+                     <Button variant="destructive" className="w-full" onClick={handleVisitComplete} disabled={visit.studentCompleted}>
                         {visit.studentCompleted ? "Waiting for Agent to Confirm" : "Mark Visit as Complete"}
                      </Button>
                 </div>
@@ -386,3 +386,4 @@ export default function TrackingPage() {
         </div>
     );
 }
+
