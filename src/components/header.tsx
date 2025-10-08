@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus } from 'lucide-react';
+import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -60,7 +60,7 @@ export function Header() {
         }
       } else {
         // Clear client ID on logout
-        if (ably.auth.options) {
+        if (ably.auth && ably.auth.options) {
           ably.auth.options.clientId = undefined;
         }
         setAppUser(null);
@@ -116,6 +116,7 @@ export function Header() {
   
   const isAgent = appUser?.role === 'agent';
   const isAdmin = appUser?.role === 'admin';
+  const isStudent = appUser?.role === 'student';
 
   return (
     <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
@@ -144,6 +145,11 @@ export function Header() {
                 Admin Dashboard
               </Link>
             )}
+            {isStudent && (
+                 <Link href="/my-visits" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                    My Visits
+                </Link>
+            )}
           </nav>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -160,6 +166,11 @@ export function Header() {
                     <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {isStudent && (
+                     <DropdownMenuItem asChild>
+                        <Link href="/my-visits"><Briefcase className="mr-2 h-4 w-4"/>My Visits</Link>
+                    </DropdownMenuItem>
+                  )}
                   {isAgent && (
                     <>
                       <DropdownMenuItem asChild>
