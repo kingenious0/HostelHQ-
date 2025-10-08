@@ -78,16 +78,19 @@ export default function TrackingPage() {
 
         const visitDocRef = doc(db, 'visits', visitId as string);
 
-        const setupAgentGpsSubscription = async (agentId: string) => {
+        const setupAgentGpsSubscription = (agentId: string) => {
             if (agentGpsChannelRef.current) {
                 agentGpsChannelRef.current.unsubscribe();
             }
             
-            const agentDetails = await getAgent(agentId);
-            setAgent(agentDetails);
-            if(agentDetails?.location) {
-                setAgentLiveLocation(agentDetails.location);
-            }
+            getAgent(agentId).then(agentDetails => {
+                if (agentDetails) {
+                    setAgent(agentDetails);
+                    if(agentDetails.location) {
+                        setAgentLiveLocation(agentDetails.location);
+                    }
+                }
+            });
             
             const channel = ably.channels.get(`agent:${agentId}:gps`);
             agentGpsChannelRef.current = channel;
@@ -343,4 +346,6 @@ export default function TrackingPage() {
         </div>
     );
 }
+    
+
     
