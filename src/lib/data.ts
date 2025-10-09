@@ -195,11 +195,14 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const reviewsQuery = query(
                 collection(db, 'reviews'), 
                 where('hostelId', '==', hostelId),
-                where('status', '==', 'approved'),
-                orderBy('createdAt', 'desc')
+                where('status', '==', 'approved')
             );
             const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviewsData = reviewsSnapshot.docs.map(doc => convertTimestamps({ id: doc.id, ...doc.data() })) as Review[];
+            let reviewsData = reviewsSnapshot.docs.map(doc => convertTimestamps({ id: doc.id, ...doc.data() })) as Review[];
+
+            // Sort reviews by date on the client-side
+            reviewsData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
 
             // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
