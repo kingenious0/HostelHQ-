@@ -26,7 +26,11 @@ export type Hostel = {
   lat?: number;
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
-  roomTypes?: RoomType[];
+  roomTypes: RoomType[]; // Changed from optional to required
+  priceRange: { // New field for calculated min/max price
+    min: number;
+    max: number;
+  };
   [key: string]: any; 
 };
 
@@ -75,7 +79,8 @@ export const staticHostels: Hostel[] = [
     roomTypes: [
         { id: 'rt1', name: '4 in a room', price: 3700, availability: 'Available' },
         { id: 'rt2', name: '2 in a room', price: 4500, availability: 'Limited' },
-    ]
+    ],
+    priceRange: { min: 3700, max: 4500 },
   },
 ];
 
@@ -175,11 +180,18 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
+            
+            // Calculate price range
+            const prices = roomTypes.map(rt => rt.price);
+            const priceRange = {
+                min: prices.length > 0 ? Math.min(...prices) : 0,
+                max: prices.length > 0 ? Math.max(...prices) : 0,
+            };
 
             const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
             
-            return convertTimestamps({ id: hostelDoc.id, ...data, roomTypes, lat, lng }) as Hostel;
+            return convertTimestamps({ id: hostelDoc.id, ...data, roomTypes, priceRange, lat, lng }) as Hostel;
         }
     } catch(e) {
         console.error("Error fetching hostel from firestore: ", e);
@@ -210,10 +222,14 @@ export async function getHostels(): Promise<Hostel[]> {
                 availability = 'Limited';
             }
 
-            // Get the lowest price
-            const price = roomTypes.length > 0 ? Math.min(...roomTypes.map(rt => rt.price)) : 0;
+            // Calculate price range
+            const prices = roomTypes.map(rt => rt.price);
+            const priceRange = {
+                min: prices.length > 0 ? Math.min(...prices) : 0,
+                max: prices.length > 0 ? Math.max(...prices) : 0,
+            };
 
-            return convertTimestamps({ id: doc.id, ...data, roomTypes, availability, price }) as Hostel;
+            return convertTimestamps({ id: doc.id, ...data, roomTypes, availability, priceRange }) as Hostel;
         }));
         
         if (firestoreHostels.length > 0) {

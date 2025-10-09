@@ -33,9 +33,22 @@ export function HostelCard({ hostel }: HostelCardProps) {
     return () => unsubscribe();
   }, []);
 
-  // A simple check to see if the logged-in user is a student.
   const isStudent = currentUser && !currentUser.email?.endsWith('@agent.hostelhq.com') && !currentUser.email?.endsWith('@admin.hostelhq.com');
   const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
+
+  const renderPrice = () => {
+    if (!hostel.priceRange || hostel.priceRange.min === 0) {
+        return <span className="text-xl font-bold text-primary">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+    }
+    if (hostel.priceRange.min === hostel.priceRange.max) {
+      return <span className="text-xl font-bold text-primary">GH₵{hostel.priceRange.min.toLocaleString()}</span>;
+    }
+    return (
+      <span className="text-xl font-bold text-primary">
+        GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
+      </span>
+    );
+  };
 
   return (
     <Card className="w-full overflow-hidden transition-all hover:shadow-xl duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col group border-0 rounded-xl">
@@ -76,8 +89,8 @@ export function HostelCard({ hostel }: HostelCardProps) {
         </Link>
         <CardFooter className="p-4 pt-0 flex justify-between items-center mt-auto bg-card rounded-b-xl">
             <div>
-            <span className="text-xl font-bold text-primary">GH₵{hostel.price.toLocaleString()}</span>
-            <span className="text-sm text-muted-foreground">/yr</span>
+              {renderPrice()}
+              <span className="text-sm text-muted-foreground">/yr</span>
             </div>
             <Link href={`/hostels/${hostel.id}`}>
               <Button>View Details</Button>

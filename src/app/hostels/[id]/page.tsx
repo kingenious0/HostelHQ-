@@ -3,10 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
-import { getHostel, Hostel } from '@/lib/data';
+import { getHostel, Hostel, RoomType } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -18,15 +18,17 @@ import type { User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
 
 
-const amenityIcons = {
-  wifi: <Wifi className="h-5 w-5" />,
-  parking: <ParkingSquare className="h-5 w-5" />,
-  kitchen: <Utensils className="h-5 w-5" />,
-  laundry: <Droplets className="h-5 w-5" />,
-  ac: <Snowflake className="h-5 w-5" />,
-  gym: <Dumbbell className="h-5 w-5" />,
+const amenityIcons: { [key: string]: React.ReactNode } = {
+  'wifi': <Wifi className="h-5 w-5" />,
+  'parking': <ParkingSquare className="h-5 w-5" />,
+  'kitchen': <Utensils className="h-5 w-5" />,
+  'laundry': <Droplets className="h-5 w-5" />,
+  'ac': <Snowflake className="h-5 w-5" />,
+  'gym': <Dumbbell className="h-5 w-5" />,
   'study area': <BookOpen className="h-5 w-5" />,
 };
 
@@ -55,7 +57,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
              return;
         };
 
-        // Check if the user has a completed visit for this hostel
+        // This is a simplified logic. In a real app, you'd probably pass the chosen room type to the booking page.
+        // For now, we'll just check if *any* visit has been completed.
         const visitsRef = collection(db, 'visits');
         const q = query(visitsRef, 
             where('studentId', '==', currentUser.uid),
@@ -77,6 +80,15 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
              router.push(`/hostels/${hostel.id}/book`);
         }
     };
+    
+    const getRoomAvailabilityVariant = (availability: RoomType['availability']) => {
+        switch(availability) {
+            case 'Available': return 'default';
+            case 'Limited': return 'secondary';
+            case 'Full': return 'destructive';
+            default: return 'outline';
+        }
+    }
 
     return (
         <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
@@ -94,8 +106,24 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <CarouselPrevious className="left-4" />
                     <CarouselNext className="right-4" />
                 </Carousel>
+                
+                 <div className="mt-8">
+                    <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
+                    <p className="mt-6 text-lg text-foreground/80">{hostel.description}</p>
+                </div>
+                
+                 <div className="mt-8">
+                    <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
+                    <div className="flex flex-wrap gap-4">
+                        {hostel.amenities.map((amenity: string) => (
+                        <Badge key={amenity} variant="outline" className="text-base p-2 capitalize flex items-center gap-2">
+                            {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />} {amenity}
+                        </Badge>
+                        ))}
+                    </div>
+                </div>
             </div>
-            <div className="flex flex-col justify-center">
+            <div className="flex flex-col">
                 <Badge 
                     variant="outline"
                     className={cn("text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}
@@ -115,24 +143,47 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
                     <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews} reviews)</span>
                 </div>
-                <p className="mt-6 text-lg text-foreground/80">{hostel.description}</p>
-                <div className="mt-8">
-                    <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
-                    <div className="flex flex-wrap gap-4">
-                        {hostel.amenities.map((amenity: string) => (
-                        <Badge key={amenity} variant="outline" className="text-base p-2 capitalize flex items-center gap-2">
-                            {amenityIcons[amenity.toLowerCase().replace(' ', '-') as keyof typeof amenityIcons] || <div className="h-5 w-5" />} {amenity}
-                        </Badge>
-                        ))}
-                    </div>
-                </div>
-                <div className="mt-8 flex items-baseline gap-4">
-                    <span className="text-4xl font-bold text-primary">GH₵{hostel.price.toLocaleString()}</span>
-                    <span className="text-lg text-muted-foreground">/year</span>
-                </div>
-                <Button size="lg" className="w-full mt-6 bg-accent hover:bg-accent/90 text-accent-foreground text-lg" onClick={handleApply}>
-                    Apply to Secure Hostel
-                </Button>
+                
+                <Card className="mt-8">
+                    <CardHeader>
+                        <CardTitle>Room Types & Pricing</CardTitle>
+                        <CardDescription>Select a room and book a visit to proceed.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <Table>
+                            <TableBody>
+                                {hostel.roomTypes?.map((room) => (
+                                <TableRow key={room.id}>
+                                    <TableCell>
+                                        <p className="font-medium">{room.name}</p>
+                                        <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+                                            {room.beds && <span className="flex items-center gap-1"><Bed className="h-3 w-3"/> {room.beds} Beds</span>}
+                                            {room.bathrooms && <span className="flex items-center gap-1"><Bath className="h-3 w-3"/> {room.bathrooms}</span>}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={getRoomAvailabilityVariant(room.availability)}>{room.availability}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <p className="font-semibold">GH₵{room.price.toLocaleString()}</p>
+                                        <p className="text-xs text-muted-foreground">/year</p>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button 
+                                            size="sm"
+                                            disabled={room.availability === 'Full'}
+                                            onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
+                                        >
+                                            Book Visit
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
             </div>
         </div>
     );
@@ -148,6 +199,20 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
             variant: "destructive",
         })
         router.push('/login');
+    };
+    
+    const renderPrice = () => {
+        if (!hostel.priceRange || hostel.priceRange.min === 0) {
+            return <span className="text-4xl font-bold text-primary">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+        }
+        if (hostel.priceRange.min === hostel.priceRange.max) {
+        return <span className="text-4xl font-bold text-primary">GH₵{hostel.priceRange.min.toLocaleString()}</span>;
+        }
+        return (
+        <span className="text-4xl font-bold text-primary">
+            GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
+        </span>
+        );
     };
 
     return (
@@ -167,8 +232,17 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
             </div>
             <div className="flex flex-col justify-center">
                  <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
+                 <div className="flex items-center text-muted-foreground mt-2">
+                    <MapPin className="h-5 w-5 mr-2" />
+                    <span>{hostel.location}</span>
+                </div>
                 <p className="mt-6 text-lg text-foreground/80">{hostel.description}</p>
                 
+                <div className="mt-8 flex items-baseline gap-4">
+                    {renderPrice()}
+                    <span className="text-lg text-muted-foreground">/year</span>
+                </div>
+
                 <Card className="mt-8 bg-muted/30">
                     <CardHeader>
                         <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground"/> More Details Available</CardTitle>
@@ -179,15 +253,15 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                     <CardContent>
                         <ul className="text-muted-foreground list-disc pl-5 space-y-1">
                             <li>Full Photo Gallery</li>
-                            <li>Available Amenities</li>
-                            <li>Pricing and Room Options</li>
+                            <li>Available Amenities & Room Types</li>
                             <li>Live Availability Status</li>
+                            <li>Book a Guided or Self-Guided Visit</li>
                         </ul>
                     </CardContent>
                 </Card>
 
                 <Button size="lg" className="w-full mt-6 bg-accent hover:bg-accent/90 text-accent-foreground text-lg" onClick={handleApply}>
-                    Apply to Secure Hostel
+                    Log In to Book
                 </Button>
             </div>
         </div>
