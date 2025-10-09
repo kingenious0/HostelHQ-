@@ -1,13 +1,16 @@
 
+
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc } from "firebase/firestore";
 import { ably } from './ably';
 
 export type RoomType = {
-  id?: string; // Optional, might be doc ID if it's a subcollection
+  id?: string;
   name: string;
   price: number;
   availability: 'Available' | 'Limited' | 'Full';
+  beds?: string;
+  bathrooms?: string;
 };
 
 export type Hostel = {
@@ -22,9 +25,9 @@ export type Hostel = {
   agentId?: string;
   lat?: number;
   lng?: number;
-  availability: 'Available' | 'Limited' | 'Full'; // This will become an aggregate status
-  roomTypes?: RoomType[]; // Array of room types
-  [key: string]: any; // Allow other properties
+  availability: 'Available' | 'Limited' | 'Full';
+  roomTypes?: RoomType[];
+  [key: string]: any; 
 };
 
 export type AppUser = {
@@ -53,7 +56,6 @@ export type Visit = {
     status: 'pending' | 'accepted' | 'declined' | 'completed';
 }
 
-// This is now just a fallback if firestore fails, not the primary source of truth.
 export const staticHostels: Hostel[] = [
   {
     id: '1',
@@ -71,8 +73,8 @@ export const staticHostels: Hostel[] = [
     lng: -1.66,
     availability: 'Available',
     roomTypes: [
-        { name: '4 in a room', price: 3700, availability: 'Available' },
-        { name: '2 in a room', price: 4500, availability: 'Limited' },
+        { id: 'rt1', name: '4 in a room', price: 3700, availability: 'Available' },
+        { id: 'rt2', name: '2 in a room', price: 4500, availability: 'Limited' },
     ]
   },
 ];
@@ -188,6 +190,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
     return staticHostel || null;
 }
 
+
 export async function getHostels(): Promise<Hostel[]> {
      try {
         const hostelsCollectionRef = collection(db, 'hostels');
@@ -199,7 +202,18 @@ export async function getHostels(): Promise<Hostel[]> {
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
             
-            return convertTimestamps({ id: doc.id, ...data, roomTypes }) as Hostel;
+             // Determine aggregate availability
+            let availability: Hostel['availability'] = 'Full';
+            if (roomTypes.some(rt => rt.availability === 'Available')) {
+                availability = 'Available';
+            } else if (roomTypes.some(rt => rt.availability === 'Limited')) {
+                availability = 'Limited';
+            }
+
+            // Get the lowest price
+            const price = roomTypes.length > 0 ? Math.min(...roomTypes.map(rt => rt.price)) : 0;
+
+            return convertTimestamps({ id: doc.id, ...data, roomTypes, availability, price }) as Hostel;
         }));
         
         if (firestoreHostels.length > 0) {

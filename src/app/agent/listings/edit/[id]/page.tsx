@@ -10,14 +10,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2 } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2, PlusCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, writeBatch, addDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { RoomType } from '@/lib/data';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
 
@@ -25,9 +28,7 @@ type HostelData = {
     name: string;
     location: string;
     nearbyLandmarks: string;
-    price: number;
     amenities: string[];
-    roomFeatures: { beds: string; bathrooms: string };
     images: string[];
     description: string;
     agentId: string;
@@ -35,6 +36,7 @@ type HostelData = {
 
 export default function EditListingPage() {
     const [formData, setFormData] = useState<Partial<HostelData>>({});
+    const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -63,12 +65,10 @@ export default function EditListingPage() {
             setLoading(true);
             const hostelIdStr = hostelId as string;
             
-            // 1. Try fetching from 'hostels' (approved) collection first
             let docRef = doc(db, 'hostels', hostelIdStr);
             let docSnap = await getDoc(docRef);
             let isApproved = true;
 
-            // 2. If not found, fall back to 'pendingHostels'
             if (!docSnap.exists()) {
                 docRef = doc(db, 'pendingHostels', hostelIdStr);
                 docSnap = await getDoc(docRef);
@@ -86,6 +86,13 @@ export default function EditListingPage() {
                 }
                 setFormData(hostelData);
                 setPhotoPreviews(hostelData.images || []);
+
+                // Fetch room types
+                const roomTypesRef = collection(docRef, 'roomTypes');
+                const roomTypesSnap = await getDocs(roomTypesRef);
+                const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({...d.data(), id: d.id})) as RoomType[];
+                setRoomTypes(fetchedRoomTypes);
+
             } else {
                 toast({ title: "Not Found", description: "This listing does not exist.", variant: "destructive" });
                 router.push('/agent/listings');
@@ -101,12 +108,25 @@ export default function EditListingPage() {
         setFormData(prev => ({ ...prev, [id]: value }));
     };
 
-    const handleRoomFeatureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { id, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            roomFeatures: { ...prev.roomFeatures, [id]: value } as { beds: string; bathrooms: string }
-        }));
+    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number) => {
+        const newRoomTypes = [...roomTypes];
+        (newRoomTypes[index] as any)[field] = value;
+        setRoomTypes(newRoomTypes);
+    };
+
+    const addRoomType = () => {
+        // Add a temporary, client-side-only ID for keying purposes
+        const newId = `new-${Date.now()}`;
+        setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available' }]);
+    };
+
+    const removeRoomType = (index: number) => {
+        if (roomTypes.length <= 1) {
+            toast({ title: "Cannot Remove", description: "You must have at least one room type.", variant: "destructive" });
+            return;
+        }
+        const newRoomTypes = roomTypes.filter((_, i) => i !== index);
+        setRoomTypes(newRoomTypes);
     };
 
     const handleAmenityChange = (amenity: string, checked: boolean) => {
@@ -134,8 +154,6 @@ export default function EditListingPage() {
             }));
             setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
         } else {
-            // This needs to be more complex to match file with preview
-            // For now, let's just clear new photos if one is removed
             setPhotos([]);
             setPhotoPreviews(formData.images || []);
             toast({ title: "New Photos Cleared", description: "To remove a single new photo, please re-select your desired images."});
@@ -150,6 +168,11 @@ export default function EditListingPage() {
         toast({ title: 'Updating listing...' });
 
         try {
+            const collectionName = isApprovedListing ? 'hostels' : 'pendingHostels';
+            const hostelRef = doc(db, collectionName, hostelId as string);
+            
+            const batch = writeBatch(db);
+
             let updatedImageUrls = formData.images || [];
 
             if (photos.length > 0) {
@@ -157,16 +180,38 @@ export default function EditListingPage() {
                 updatedImageUrls = [...updatedImageUrls, ...newImageUrls];
             }
 
-            // Determine which collection to update
-            const collectionName = isApprovedListing ? 'hostels' : 'pendingHostels';
-            const docRef = doc(db, collectionName, hostelId as string);
-            
-            await updateDoc(docRef, {
+            // Update main hostel document
+            batch.update(hostelRef, {
                 ...formData,
-                price: Number(formData.price) || 0,
                 images: updatedImageUrls,
                 updatedAt: serverTimestamp()
             });
+
+            // Sync room types
+            const existingRoomTypeIds = (await getDocs(collection(hostelRef, 'roomTypes'))).docs.map(d => d.id);
+            const currentRoomTypeIds = roomTypes.map(rt => rt.id).filter(id => id && !id.startsWith('new-'));
+
+            // Delete rooms that were removed
+            for (const id of existingRoomTypeIds) {
+                if (!currentRoomTypeIds.includes(id)) {
+                    batch.delete(doc(hostelRef, 'roomTypes', id));
+                }
+            }
+            
+            // Update or add new rooms
+            for (const room of roomTypes) {
+                const { id, ...roomData } = room;
+                if (id && !id.startsWith('new-')) {
+                    // Update existing room
+                    batch.update(doc(hostelRef, 'roomTypes', id), roomData);
+                } else {
+                    // Add new room
+                    const newRoomRef = doc(collection(hostelRef, 'roomTypes'));
+                    batch.set(newRoomRef, roomData);
+                }
+            }
+
+            await batch.commit();
 
             const successMessage = isApprovedListing 
                 ? 'Your live listing has been updated.'
@@ -224,15 +269,9 @@ export default function EditListingPage() {
                         {/* Basic Info */}
                         <div className="space-y-4">
                             <h3 className="font-semibold text-lg border-b pb-2">Basic Information</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Hostel Name</Label>
-                                    <Input id="name" value={formData.name || ''} onChange={handleInputChange} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="price">Price per Year (GH₵)</Label>
-                                    <Input id="price" type="number" value={formData.price || ''} onChange={e => setFormData(p => ({...p, price: Number(e.target.value)}))} />
-                                </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="name">Hostel Name</Label>
+                                <Input id="name" value={formData.name || ''} onChange={handleInputChange} />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="location">GPS Location</Label>
@@ -244,21 +283,66 @@ export default function EditListingPage() {
                             </div>
                         </div>
 
-                        {/* Room Features & Amenities */}
+                        {/* Room Types */}
                         <div className="space-y-4">
-                             <h3 className="font-semibold text-lg border-b pb-2">Features & Amenities</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="beds">Number of Beds</Label>
-                                    <Input id="beds" type="number" value={formData.roomFeatures?.beds || ''} onChange={handleRoomFeatureChange} />
+                            <h3 className="font-semibold text-lg border-b pb-2">Room Types & Pricing</h3>
+                            {roomTypes.map((room, index) => (
+                                <div key={room.id} className="flex flex-col md:flex-row gap-3 p-4 border rounded-lg relative">
+                                    <div className="flex-1 space-y-2">
+                                        <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
+                                        <Input 
+                                            id={`room-name-${index}`} 
+                                            placeholder="e.g., 4 in a room, Annex"
+                                            value={room.name}
+                                            onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
+                                        />
+                                    </div>
+                                     <div className="w-full md:w-40 space-y-2">
+                                        <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
+                                        <Input
+                                            id={`room-price-${index}`}
+                                            type="number"
+                                            placeholder="3500"
+                                            value={room.price}
+                                            onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
+                                        />
+                                    </div>
+                                     <div className="w-full md:w-48 space-y-2">
+                                        <Label htmlFor={`room-availability-${index}`}>Availability</Label>
+                                         <Select 
+                                            value={room.availability} 
+                                            onValueChange={(value) => handleRoomTypeChange(index, 'availability', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Available">Available</SelectItem>
+                                                <SelectItem value="Limited">Limited</SelectItem>
+                                                <SelectItem value="Full">Full</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="absolute top-2 right-2 h-7 w-7 text-muted-foreground"
+                                        onClick={() => removeRoomType(index)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="bathrooms">Bathroom Details</Label>
-                                    <Input id="bathrooms" value={formData.roomFeatures?.bathrooms || ''} onChange={handleRoomFeatureChange} />
-                                </div>
-                            </div>
+                            ))}
+                            <Button variant="outline" onClick={addRoomType} className="w-full">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Another Room Type
+                            </Button>
+                        </div>
+                        
+                        {/* Amenities */}
+                        <div className="space-y-4">
+                             <h3 className="font-semibold text-lg border-b pb-2">Amenities</h3>
                              <div>
-                                <Label className="text-base font-semibold">Amenities</Label>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
                                     {amenitiesList.map(amenity => (
                                         <div key={amenity} className="flex items-center space-x-2">
@@ -294,7 +378,7 @@ export default function EditListingPage() {
                              <h3 className="font-semibold text-lg border-b pb-2">Description</h3>
                             <Textarea id="description" value={formData.description || ''} onChange={handleInputChange} rows={6} />
                             {!isApprovedListing && (
-                                <p className="text-xs text-muted-foreground mt-1">The AI will re-enhance this on submission.</p>
+                                <p className="text-xs text-muted-foreground mt-1">The AI will re-enhance this on submission if it meets criteria.</p>
                             )}
                         </div>
                     </CardContent>
