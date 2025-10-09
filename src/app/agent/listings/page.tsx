@@ -59,8 +59,8 @@ export default function AgentListingsPage() {
             ]);
 
             const listingsData: Listing[] = [];
-            pendingSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data() } as Listing));
-            approvedSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data() } as Listing));
+            pendingSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data(), status: 'pending' } as Listing));
+            approvedSnapshot.forEach(doc => listingsData.push({ id: doc.id, ...doc.data(), status: 'approved' } as Listing));
             
             setMyListings(listingsData);
             setLoading(false);
@@ -177,7 +177,7 @@ export default function AgentListingsPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/agent/listings/edit/${listing.id}`)} disabled={listing.status === 'approved'}>
+                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/agent/listings/edit/${listing.id}`)}>
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
                                                     </TableCell>

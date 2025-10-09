@@ -41,6 +41,7 @@ export default function EditListingPage() {
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+    const [isApprovedListing, setIsApprovedListing] = useState(false);
 
     const router = useRouter();
     const params = useParams();
@@ -60,8 +61,21 @@ export default function EditListingPage() {
 
         const fetchHostelData = async () => {
             setLoading(true);
-            const docRef = doc(db, 'pendingHostels', hostelId as string);
-            const docSnap = await getDoc(docRef);
+            const hostelIdStr = hostelId as string;
+            
+            // 1. Try fetching from 'hostels' (approved) collection first
+            let docRef = doc(db, 'hostels', hostelIdStr);
+            let docSnap = await getDoc(docRef);
+            let isApproved = true;
+
+            // 2. If not found, fall back to 'pendingHostels'
+            if (!docSnap.exists()) {
+                docRef = doc(db, 'pendingHostels', hostelIdStr);
+                docSnap = await getDoc(docRef);
+                isApproved = false;
+            }
+            
+            setIsApprovedListing(isApproved);
 
             if (docSnap.exists()) {
                 const hostelData = docSnap.data() as HostelData;
@@ -143,7 +157,10 @@ export default function EditListingPage() {
                 updatedImageUrls = [...updatedImageUrls, ...newImageUrls];
             }
 
-            const docRef = doc(db, 'pendingHostels', hostelId as string);
+            // Determine which collection to update
+            const collectionName = isApprovedListing ? 'hostels' : 'pendingHostels';
+            const docRef = doc(db, collectionName, hostelId as string);
+            
             await updateDoc(docRef, {
                 ...formData,
                 price: Number(formData.price) || 0,
@@ -151,7 +168,11 @@ export default function EditListingPage() {
                 updatedAt: serverTimestamp()
             });
 
-            toast({ title: 'Listing Updated!', description: 'Your changes have been submitted for review.' });
+            const successMessage = isApprovedListing 
+                ? 'Your live listing has been updated.'
+                : 'Your changes have been submitted for review.';
+
+            toast({ title: 'Listing Updated!', description: successMessage });
             router.push('/agent/listings');
 
         } catch (error) {
@@ -197,7 +218,7 @@ export default function EditListingPage() {
                 <Card className="w-full max-w-3xl shadow-lg">
                     <CardHeader>
                         <CardTitle className="text-2xl font-headline">Edit Hostel Listing</CardTitle>
-                        <CardDescription>Update the details for "{formData.name}" and re-submit for approval.</CardDescription>
+                        <CardDescription>Update the details for "{formData.name}".</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Basic Info */}
@@ -272,13 +293,15 @@ export default function EditListingPage() {
                         <div>
                              <h3 className="font-semibold text-lg border-b pb-2">Description</h3>
                             <Textarea id="description" value={formData.description || ''} onChange={handleInputChange} rows={6} />
-                            <p className="text-xs text-muted-foreground mt-1">The AI will re-enhance this on submission.</p>
+                            {!isApprovedListing && (
+                                <p className="text-xs text-muted-foreground mt-1">The AI will re-enhance this on submission.</p>
+                            )}
                         </div>
                     </CardContent>
                     <CardFooter>
                         <Button onClick={handleSubmit} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Save and Re-submit
+                            Save Changes
                         </Button>
                     </CardFooter>
                 </Card>
@@ -286,4 +309,3 @@ export default function EditListingPage() {
         </div>
     );
 }
-    
