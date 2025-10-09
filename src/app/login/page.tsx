@@ -28,22 +28,19 @@ export default function LoginPage() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Check the user's role from Firestore
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
+            // Check if user is a pending agent first
+            const pendingUserDocRef = doc(db, 'pendingUsers', user.uid);
+            const pendingUserDocSnap = await getDoc(pendingUserDocRef);
 
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                if (userData.role === 'pending_agent') {
-                    await auth.signOut(); // Log the user out
-                    toast({
-                        title: 'Account Pending Approval',
-                        description: 'Your agent account is still awaiting admin approval.',
-                        variant: 'destructive',
-                    });
-                    setIsSubmitting(false);
-                    return;
-                }
+            if (pendingUserDocSnap.exists()) {
+                await auth.signOut(); // Log the user out immediately
+                toast({
+                    title: 'Account Pending Approval',
+                    description: 'Your agent account is still awaiting admin approval.',
+                    variant: 'destructive',
+                });
+                setIsSubmitting(false);
+                return;
             }
             
             toast({ title: 'Login Successful!' });
@@ -121,5 +118,3 @@ export default function LoginPage() {
         </div>
     );
 }
-
-    
