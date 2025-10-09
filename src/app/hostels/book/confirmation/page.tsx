@@ -1,4 +1,3 @@
-
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -74,12 +73,13 @@ function ConfirmationContent() {
             }
 
             try {
+                let visitRef;
                 if (visitType === 'agent') {
                     if (!visitDate || !visitTime) {
                         toast({ title: "Invalid Confirmation Link", description: "Missing visit time for agent visit.", variant: "destructive" });
                         return;
                     }
-                    const visitRef = await addDoc(collection(db, 'visits'), {
+                    visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         agentId: null, 
@@ -97,17 +97,17 @@ function ConfirmationContent() {
 
                 } else if (visitType === 'self') {
                      // Log the self-visit in the database
-                    const visitRef = await addDoc(collection(db, 'visits'), {
+                    visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         agentId: null,
-                        status: 'completed', // Mark as completed since no agent is involved
+                        status: 'accepted', // Self-visits are auto-accepted
                         paymentReference: reference,
                         createdAt: new Date().toISOString(),
                         visitDate: new Date().toISOString(), // Self-visits are immediate
                         visitTime: new Date().toLocaleTimeString(),
                         visitType: 'self',
-                        studentCompleted: true,
+                        studentCompleted: false, // Student has not completed it yet
                     });
 
                     const hostelRef = doc(db, 'hostels', hostelId);
@@ -116,7 +116,7 @@ function ConfirmationContent() {
                     const hostelData = hostelSnap.data() as Hostel;
 
                     toast({ title: "Payment Confirmed!", description: `Here are the directions to ${hostelData.name}.` });
-                    router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}&self_visit=true`);
+                    router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
 
                 } else {
                     throw new Error("Invalid visit type specified");

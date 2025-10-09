@@ -65,7 +65,6 @@ export default function TrackingPage() {
     const { toast } = useToast();
     const { id: hostelId } = params;
     const visitId = searchParams.get('visitId');
-    const isSelfVisit = searchParams.get('self_visit') === 'true';
 
     const [visit, setVisit] = useState<Visit | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
@@ -77,7 +76,9 @@ export default function TrackingPage() {
     const [agentLiveAddress, setAgentLiveAddress] = useState<string | null>(null);
     const agentGpsChannelRef = useRef<Types.RealtimeChannelPromise | null>(null);
     const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
-     const [isCompleting, setIsCompleting] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
+
+    const isSelfVisit = visit?.visitType === 'self';
 
      useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -103,14 +104,9 @@ export default function TrackingPage() {
             }
         };
         fetchHostelData();
-
-        if (isSelfVisit) {
-            setLoading(false);
-            return;
-        }
         
         if (!visitId) {
-             notFound();
+             setLoading(false);
              return;
         }
 
@@ -157,7 +153,7 @@ export default function TrackingPage() {
 
             if (visitData.agentId) {
                 setupAgentGpsSubscription(visitData.agentId);
-            } else if (!visitData.agentId) {
+            } else if (!visitData.agentId && visitData.visitType === 'agent') {
                 // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
                 const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
@@ -189,7 +185,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId, isSelfVisit]);
+    }, [visitId, hostelId]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
@@ -213,7 +209,7 @@ export default function TrackingPage() {
         if(!visitId) return;
         setIsCompleting(true);
         try {
-            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true });
+            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true, status: 'completed' });
             toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
             router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
         } catch (error) {
@@ -225,7 +221,7 @@ export default function TrackingPage() {
     }
 
     
-    if (loading || !hostel || (!isSelfVisit && !visit)) {
+    if (loading || !hostel || !visit) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
@@ -248,6 +244,16 @@ export default function TrackingPage() {
                 </div>
             )
         }
+        if (visit?.studentCompleted) {
+             return (
+                <div className="text-center py-8">
+                    <CheckCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
+                    <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
+                    <Button onClick={() => router.push(`/hostels/${hostelId}/book/rating?visitId=${visit.id}`)}>Rate Your Visit</Button>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-4">
                 <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
@@ -269,8 +275,9 @@ export default function TrackingPage() {
                  <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
                     Open in Google Maps
                 </Button>
-                <Button className="w-full" variant="outline" onClick={() => router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`)}>
-                    Rate Your Visit
+                <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
+                    {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    Mark Visit as Complete
                 </Button>
             </div>
         )
@@ -325,6 +332,15 @@ export default function TrackingPage() {
         }
 
         if (visit.status === 'accepted' && agent) {
+            if (visit.studentCompleted) {
+                 return (
+                    <div className="text-center py-8">
+                        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                        <p className="font-semibold">Waiting for agent to confirm completion...</p>
+                        <p className="text-sm text-muted-foreground mt-1">Your visit will be marked as complete once both parties confirm.</p>
+                    </div>
+                );
+            }
             return (
                  <div className="space-y-4">
                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
@@ -377,9 +393,9 @@ export default function TrackingPage() {
                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                         </a>
                     </div>
-                     <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={visit.studentCompleted || isCompleting}>
+                     <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
                          {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                        {visit.studentCompleted ? "Waiting for Agent to Confirm" : "Mark Visit as Complete"}
+                        Mark Visit as Complete
                      </Button>
                 </div>
             );
@@ -410,7 +426,7 @@ export default function TrackingPage() {
     }
 
     const getCardTitle = () => {
-        if (isSelfVisit) return "Hostel Directions";
+        if (isSelfVisit) return "Self-Guided Visit";
         if (!visit) return "Loading Visit...";
         if (!visit.agentId) return "Select an Agent";
         if (visit.status === 'pending' && agent) return "Visit Request Pending";

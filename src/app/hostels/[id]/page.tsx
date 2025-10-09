@@ -59,7 +59,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         const q = query(visitsRef, 
             where('studentId', '==', currentUser.uid),
             where('hostelId', '==', hostel.id),
-            where('status', '==', 'completed'),
+            where('studentCompleted', '==', true),
             limit(1)
         );
         
@@ -72,7 +72,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
              toast({title: "Visit confirmed!", description: "Redirecting you to secure your room."});
              router.push(`/hostels/${hostel.id}/secure`);
         } else {
-             toast({title: "Visit Required", description: "You need to book a visit before securing a room.", variant: "destructive"});
+             toast({title: "Visit Required", description: "You need to book and complete a visit before securing a room.", variant: "destructive"});
              router.push(`/hostels/${hostel.id}/book`);
         }
     };
@@ -266,5 +266,3 @@ export default function HostelDetailPage() {
     </div>
   );
 }
-
-    
