@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -106,7 +107,17 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
         if (existingVisit) {
             if (existingVisit.status === 'completed') {
-                 return <Button variant="outline" size="sm" disabled>Visit Completed</Button>;
+                return (
+                    <Button 
+                        size="sm"
+                        disabled={room.availability === 'Full'}
+                        onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
+                        className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                    >
+                        <ShieldCheck className="mr-2 h-4 w-4"/>
+                        Secure Room
+                    </Button>
+                );
             }
             return (
                 <Button 
@@ -250,17 +261,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     <TableCell className="font-semibold">
                                         GH₵{room.price.toLocaleString()}
                                     </TableCell>
-                                    <TableCell className="text-right space-x-2">
+                                    <TableCell className="text-right">
                                         {getVisitButton(room)}
-                                         <Button 
-                                            size="sm"
-                                            disabled={room.availability === 'Full'}
-                                            onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
-                                            className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                                        >
-                                            <ShieldCheck className="mr-2 h-4 w-4"/>
-                                            Secure
-                                        </Button>
                                     </TableCell>
                                 </TableRow>
                                 ))}
@@ -439,5 +441,3 @@ export default function HostelDetailPage() {
     </div>
   );
 }
-
-    
