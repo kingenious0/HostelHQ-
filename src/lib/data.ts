@@ -1,6 +1,6 @@
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
 import { ably } from './ably';
 
 export type Hostel = {
@@ -18,6 +18,7 @@ export type Hostel = {
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
   roomFeatures?: { beds: string; bathrooms: string };
+  [key: string]: any; // Allow other properties
 };
 
 export type AppUser = {
@@ -132,6 +133,24 @@ export async function getAgent(agentId: string): Promise<Agent | null> {
     }
 }
 
+// Function to convert Firestore Timestamps to strings
+const convertTimestamps = (data: any) => {
+  const newData: { [key: string]: any } = {};
+  for (const key in data) {
+    if (data.hasOwnProperty(key)) {
+      const value = data[key];
+      if (value instanceof Timestamp) {
+        newData[key] = value.toDate().toISOString();
+      } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        newData[key] = convertTimestamps(value);
+      } else {
+        newData[key] = value;
+      }
+    }
+  }
+  return newData;
+};
+
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
     try {
@@ -141,7 +160,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const data = hostelDoc.data();
             const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
-            return { id: hostelDoc.id, ...data, lat, lng } as Hostel;
+            return convertTimestamps({ id: hostelDoc.id, ...data, lat, lng }) as Hostel;
         }
     } catch(e) {
         console.error("Error fetching hostel from firestore: ", e);
@@ -156,7 +175,11 @@ export async function getHostels(): Promise<Hostel[]> {
      try {
         const hostelsCollectionRef = collection(db, 'hostels');
         const querySnapshot = await getDocs(hostelsCollectionRef);
-        const firestoreHostels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
+        const firestoreHostels = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            // Convert any Firestore Timestamps to serializable strings
+            return convertTimestamps({ id: doc.id, ...data }) as Hostel;
+        });
         
         if (firestoreHostels.length > 0) {
             return firestoreHostels;
