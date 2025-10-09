@@ -1,4 +1,3 @@
-
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
@@ -10,14 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock, MapPin, CheckCheck, XCircle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, onSnapshot, updateDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 import { MapboxMap } from '@/components/map';
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 type Visit = {
     id: string;
@@ -70,12 +70,21 @@ export default function TrackingPage() {
     const [visit, setVisit] = useState<Visit | null>(null);
     const [agent, setAgent] = useState<Agent | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
+    const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
     const [agentLiveLocation, setAgentLiveLocation] = useState<{ lat: number, lng: number} | undefined>(undefined);
     const [agentLiveAddress, setAgentLiveAddress] = useState<string | null>(null);
     const agentGpsChannelRef = useRef<Types.RealtimeChannelPromise | null>(null);
     const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
+     const [isCompleting, setIsCompleting] = useState(false);
+
+     useEffect(() => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribeAuth();
+    }, []);
 
     useEffect(() => {
         if (!hostelId) {
@@ -200,11 +209,44 @@ export default function TrackingPage() {
     }
 
 
-    const handleVisitComplete = async () => {
-        if(visitId) {
+    const handleStudentComplete = async () => {
+        if(!visitId) return;
+        setIsCompleting(true);
+        try {
             await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true });
             toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
             router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
+        } catch (error) {
+            console.error("Failed to mark visit complete:", error);
+            toast({ title: "Update Failed", description: "Could not mark visit as complete.", variant: 'destructive'});
+        } finally {
+            setIsCompleting(false);
+        }
+    }
+
+    const handleSelfVisitComplete = async () => {
+        if (!currentUser || !hostel) return;
+        setIsCompleting(true);
+        try {
+             const visitRef = await addDoc(collection(db, 'visits'), {
+                studentId: currentUser.uid,
+                hostelId: hostel.id,
+                agentId: null, 
+                status: 'completed',
+                studentCompleted: true,
+                paymentReference: searchParams.get('reference') || 'N/A', // Assuming reference is in URL
+                createdAt: new Date().toISOString(),
+                visitDate: new Date().toISOString(),
+                visitTime: new Date().toLocaleTimeString(),
+                visitType: 'self',
+            });
+            toast({ title: "Visit Logged!", description: "Thank you for your feedback. Please rate your visit."});
+            router.push(`/hostels/${hostelId}/book/rating?visitId=${visitRef.id}`);
+        } catch (error) {
+            console.error("Failed to log self-visit:", error);
+            toast({ title: "Action Failed", description: "Could not log your visit completion.", variant: "destructive"});
+        } finally {
+            setIsCompleting(false);
         }
     }
     
@@ -223,6 +265,14 @@ export default function TrackingPage() {
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
     
     const renderSelfVisitContent = () => {
+        if (!hostel?.lat || !hostel?.lng) {
+            return (
+                <div className="text-center py-8">
+                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                    <p className="font-semibold">Loading hostel location...</p>
+                </div>
+            )
+        }
         return (
             <div className="space-y-4">
                 <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
@@ -244,6 +294,10 @@ export default function TrackingPage() {
                  <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
                     Open in Google Maps
                 </Button>
+                 <Button variant="destructive" className="w-full" onClick={handleSelfVisitComplete} disabled={isCompleting}>
+                    {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4"/>}
+                    Mark Visit as Complete
+                 </Button>
             </div>
         )
     }
@@ -349,7 +403,8 @@ export default function TrackingPage() {
                             <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
                         </a>
                     </div>
-                     <Button variant="destructive" className="w-full" onClick={handleVisitComplete} disabled={visit.studentCompleted}>
+                     <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={visit.studentCompleted || isCompleting}>
+                         {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                         {visit.studentCompleted ? "Waiting for Agent to Confirm" : "Mark Visit as Complete"}
                      </Button>
                 </div>
@@ -371,7 +426,7 @@ export default function TrackingPage() {
                 <div className="text-center py-8">
                     <XCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
                     <p className="font-semibold">Visit Cancelled</p>
-                    <p className="text-muted-foreground mb-4">This visit request was cancelled.</p>
+                    <p className="text-muted-foreground mb-4">This request was cancelled or timed out.</p>
                     <Button variant="outline" onClick={() => router.push('/')}>Find Another Hostel</Button>
                 </div>
             );
@@ -384,8 +439,8 @@ export default function TrackingPage() {
         if (isSelfVisit) return "Hostel Directions";
         if (!visit) return "Loading Visit...";
         if (!visit.agentId) return "Select an Agent";
-        if (visit.status === 'pending' && agent) return `Your visit with ${agent.fullName} is pending.`;
-        if (visit.status === 'accepted') return <span className="text-green-600">Your visit with {agent?.fullName} is confirmed!</span>;
+        if (visit.status === 'pending' && agent) return "Visit Request Pending";
+        if (visit.status === 'accepted') return <span className="text-green-600">Visit Confirmed!</span>;
         if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
         return "Visit Details";
@@ -398,7 +453,7 @@ export default function TrackingPage() {
         if (visit.status === 'pending' && agent) return `Waiting for ${agent.fullName} to accept your request.`;
         if (visit.status === 'accepted' && agent) return `Your tour with agent ${agent.fullName} is confirmed. Track their location here.`;
         if (visit.status === 'completed') return "Thank you for using HostelHQ!";
-        if (visit.status === 'cancelled') return `The request was cancelled or timed out.`;
+        if (visit.status === 'cancelled') return `This visit request was cancelled.`;
         return "";
     }
 
@@ -429,5 +484,3 @@ export default function TrackingPage() {
         </div>
     );
 }
-
-    

@@ -21,6 +21,7 @@ type HostelPaymentPayload = {
     amount: number; // in pesewas
     hostelName: string;
     studentName: string;
+    hostelId: string;
 }
 
 export async function initializeMomoPayment(payload: MomoPaymentPayload) {
@@ -103,8 +104,10 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
-    // For securing a hostel, the confirmation can be a simple success page.
-    const callback_url = `${protocol}://${host}/`;
+    // The callback URL now needs to pass the hostelId for record keeping
+    const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
+    callback_url.searchParams.set('hostelId', payload.hostelId);
+
 
     try {
         const response = await fetch(paystackUrl, {
@@ -117,7 +120,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                 email: payload.email,
                 amount: payload.amount,
                 currency: 'GHS',
-                callback_url: callback_url,
+                callback_url: callback_url.toString(),
                 metadata: {
                     custom_fields: [
                         {
@@ -153,5 +156,3 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
         return { status: false, message: "Could not connect to payment service." };
     }
 }
-
-    

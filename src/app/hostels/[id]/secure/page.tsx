@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -77,7 +76,7 @@ export default function SecureHostelPage() {
     });
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
-        if (!hostel) return;
+        if (!hostel || typeof hostelId !== 'string') return;
         
         setIsSubmitting(true);
         toast({ title: "Initializing Payment..." });
@@ -88,6 +87,7 @@ export default function SecureHostelPage() {
                 amount: hostel.price * 100, // Amount in pesewas
                 hostelName: hostel.name,
                 studentName: values.studentName,
+                hostelId: hostelId,
             });
 
             if (result.status && result.authorization_url) {

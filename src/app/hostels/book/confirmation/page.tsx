@@ -1,4 +1,3 @@
-
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -22,6 +21,7 @@ function ConfirmationContent() {
     const visitDate = searchParams.get('visitDate');
     const visitTime = searchParams.get('visitTime');
     const visitType = searchParams.get('visitType');
+    const trxref = searchParams.get('trxref'); // For hostel securing
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -43,17 +43,38 @@ function ConfirmationContent() {
             return;
         }
 
-        if (!hostelId || !reference || !visitType) {
-             toast({ title: "Invalid Confirmation Link", description: "Missing booking details.", variant: "destructive" });
-             router.push('/');
-            return;
-        }
+        const handleConfirmation = async () => {
+            // This handles confirming payment for securing a hostel room
+            if (trxref && hostelId) {
+                try {
+                    await addDoc(collection(db, 'bookings'), {
+                        studentId: currentUser.uid,
+                        hostelId: hostelId,
+                        paymentReference: trxref,
+                        bookingDate: new Date().toISOString(),
+                    });
+                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked. Check 'My Visits' for details." });
+                    // Redirect to a success page or dashboard
+                    router.push('/my-visits');
+                } catch (error) {
+                    console.error("Error creating booking record:", error);
+                    toast({ title: "Something went wrong", description: "Could not save your booking details. Please contact support.", variant: 'destructive'});
+                    router.push(`/hostels/${hostelId}`);
+                }
+                return;
+            }
 
-        const createVisitRecord = async () => {
+
+            // This handles confirming payment for a visit
+            if (!hostelId || !reference || !visitType) {
+                 toast({ title: "Invalid Confirmation Link", description: "Missing booking details.", variant: "destructive" });
+                 router.push('/');
+                return;
+            }
+
             try {
                 if (visitType === 'agent') {
-                    // This is the original flow for agent-assisted visits
-                     if (!visitDate || !visitTime) {
+                    if (!visitDate || !visitTime) {
                         toast({ title: "Invalid Confirmation Link", description: "Missing visit time for agent visit.", variant: "destructive" });
                         return;
                     }
@@ -74,16 +95,13 @@ function ConfirmationContent() {
                     router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
 
                 } else if (visitType === 'self') {
-                    // This is the new flow for self-visits
                     const hostelRef = doc(db, 'hostels', hostelId);
                     const hostelSnap = await getDoc(hostelRef);
                     if(!hostelSnap.exists()) throw new Error("Hostel not found");
                     const hostelData = hostelSnap.data() as Hostel;
 
                     toast({ title: "Payment Confirmed!", description: `Here are the directions to ${hostelData.name}.` });
-                    // For self-visit, we just need to redirect them to a page showing the location.
-                    // The tracking page is a good candidate as it already has the map centered on the hostel.
-                    router.push(`/hostels/${hostelId}/book/tracking?self_visit=true`);
+                    router.push(`/hostels/${hostelId}/book/tracking?self_visit=true&reference=${reference}`);
 
                 } else {
                     throw new Error("Invalid visit type specified");
@@ -96,9 +114,9 @@ function ConfirmationContent() {
             }
         };
 
-        createVisitRecord();
+        handleConfirmation();
 
-    }, [router, hostelId, reference, currentUser, loadingAuth, toast, visitDate, visitTime, visitType]);
+    }, [router, hostelId, reference, trxref, currentUser, loadingAuth, toast, visitDate, visitTime, visitType]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">
@@ -129,5 +147,3 @@ export default function BookingConfirmationPage() {
         </div>
     );
 }
-
-    
