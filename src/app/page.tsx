@@ -11,7 +11,8 @@ import Image from 'next/image';
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const hostels = await getHostels();
+  const allHostels = await getHostels({ featured: false });
+  const featuredHostels = await getHostels({ featured: true });
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -53,10 +54,21 @@ export default async function Home() {
             </div>
         </section>
 
-        <section className="container mx-auto px-4 md:px-6 py-16">
-          <h2 className="text-3xl font-bold mb-8 text-center font-headline">Featured Hostels</h2>
+        {featuredHostels.length > 0 && (
+          <section className="container mx-auto px-4 md:px-6 py-16">
+            <h2 className="text-3xl font-bold mb-8 text-center font-headline">Featured Hostels</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {featuredHostels.map((hostel) => (
+                <HostelCard key={hostel.id} hostel={hostel} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="container mx-auto px-4 md:px-6 py-16 bg-gray-50/50 rounded-xl">
+          <h2 className="text-3xl font-bold mb-8 text-center font-headline">All Hostels</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {hostels.map((hostel) => (
+            {allHostels.map((hostel) => (
               <HostelCard key={hostel.id} hostel={hostel} />
             ))}
           </div>

@@ -31,6 +31,7 @@ export type Hostel = {
     min: number;
     max: number;
   };
+  isFeatured?: boolean;
   [key: string]: any; 
 };
 
@@ -55,7 +56,6 @@ export type Visit = {
     id: string;
     studentId: string;
     agentId: string;
-    hostelId: string;
     visitDate: Date;
     status: 'pending' | 'accepted' | 'declined' | 'completed';
 }
@@ -203,10 +203,15 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 }
 
 
-export async function getHostels(): Promise<Hostel[]> {
+export async function getHostels(options: { featured?: boolean } = {}): Promise<Hostel[]> {
      try {
-        const hostelsCollectionRef = collection(db, 'hostels');
-        const querySnapshot = await getDocs(hostelsCollectionRef);
+        let hostelsQuery = query(collection(db, 'hostels'));
+
+        if (options.featured) {
+            hostelsQuery = query(hostelsQuery, where("isFeatured", "==", true));
+        }
+
+        const querySnapshot = await getDocs(hostelsQuery);
 
         const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (doc) => {
             const data = doc.data();
@@ -232,7 +237,8 @@ export async function getHostels(): Promise<Hostel[]> {
             return convertTimestamps({ id: doc.id, ...data, roomTypes, availability, priceRange }) as Hostel;
         }));
         
-        if (firestoreHostels.length > 0) {
+        // Don't fall back to static data if we are specifically querying for featured hostels
+        if (firestoreHostels.length > 0 || options.featured) {
             return firestoreHostels;
         }
     } catch (e: any) {

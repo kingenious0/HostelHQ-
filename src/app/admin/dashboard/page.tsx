@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,7 @@ import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { RoomType } from '@/lib/data';
+import { cn } from '@/lib/utils';
 
 type Hostel = {
   id: string;
@@ -33,6 +34,7 @@ type Hostel = {
   location: string;
   price: number;
   availability: 'Available' | 'Limited' | 'Full';
+  isFeatured?: boolean;
   [key: string]: any;
 };
 
@@ -293,6 +295,22 @@ export default function AdminDashboard() {
       }
   }
 
+  const handleToggleFeatured = async (hostel: Hostel) => {
+    setProcessingId(hostel.id);
+    const newFeaturedState = !hostel.isFeatured;
+    try {
+        const hostelRef = doc(db, 'hostels', hostel.id);
+        await updateDoc(hostelRef, { isFeatured: newFeaturedState });
+        toast({ title: "Featured Status Updated", description: `${hostel.name} is ${newFeaturedState ? 'now featured' : 'no longer featured'}.`});
+    } catch (error) {
+        console.error("Error updating featured status:", error);
+        toast({ title: "Update Failed", description: "Could not update featured status.", variant: "destructive"});
+    } finally {
+        setProcessingId(null);
+    }
+}
+
+
   const toggleUserRole = async (user: User) => {
     const newRole = user.role === 'student' ? 'agent' : 'student';
     if(!confirm(`Are you sure you want to change ${user.fullName}'s role to ${newRole}?`)) return;
@@ -520,6 +538,18 @@ export default function AdminDashboard() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right space-x-2">
+                                             <Button 
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8"
+                                                onClick={() => handleToggleFeatured(hostel)}
+                                                disabled={processingId === hostel.id}
+                                                title={hostel.isFeatured ? "Remove from featured" : "Mark as featured"}
+                                            >
+                                                {processingId === hostel.id ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                                  <Star className={cn("h-4 w-4", hostel.isFeatured ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground")} />
+                                                )}
+                                            </Button>
                                             <Button 
                                                 variant="outline"
                                                 size="icon"
@@ -528,8 +558,7 @@ export default function AdminDashboard() {
                                                 disabled={processingId === hostel.id}
                                                 title="Cycle availability status"
                                             >
-                                                {processingId === hostel.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                                                {processingId !== hostel.id && <Repeat className="h-4 w-4" />}
+                                                {processingId === hostel.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Repeat className="h-4 w-4" />}
                                             </Button>
                                             <Button
                                                 variant="destructive"
@@ -748,8 +777,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-    
-
-    
-
-    
