@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +24,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-
+import { RoomType } from '@/lib/data';
 
 type Hostel = {
   id: string;
@@ -38,6 +38,7 @@ type Hostel = {
 
 type PendingHostel = Omit<Hostel, 'availability'> & {
   dateSubmitted: string;
+  roomTypes: RoomType[];
 };
 
 type User = {
@@ -98,7 +99,7 @@ export default function AdminDashboard() {
           description: data.description || 'No description provided.',
           images: data.images || [],
           amenities: data.amenities || [],
-          roomFeatures: data.roomFeatures || { beds: 'N/A', bathrooms: 'N/A' },
+          roomTypes: [], // Will be fetched on review
         } as PendingHostel
       });
       setPendingHostels(hostelsData);
@@ -151,34 +152,51 @@ export default function AdminDashboard() {
     setProcessingId(hostelId);
     toast({ title: "Approving Hostel..." });
     try {
-      const pendingDocRef = doc(db, 'pendingHostels', hostelId);
-      const pendingDocSnap = await getDoc(pendingDocRef);
+        const pendingDocRef = doc(db, 'pendingHostels', hostelId);
+        const batch = writeBatch(db);
 
-      if (pendingDocSnap.exists()) {
-        const hostelData = pendingDocSnap.data();
+        // Fetch the main hostel document
+        const pendingDocSnap = await getDoc(pendingDocRef);
+        if (!pendingDocSnap.exists()) {
+            throw new Error("Hostel not found in pending list.");
+        }
         
-        await setDoc(doc(db, 'hostels', hostelId), {
-          ...hostelData,
-          status: 'approved',
-          approvedAt: new Date().toISOString(),
-          availability: 'Available', 
+        const { id, roomTypes, ...hostelData } = selectedHostel as PendingHostel;
+        
+        // Define the new approved hostel document
+        const approvedDocRef = doc(db, 'hostels', hostelId);
+        batch.set(approvedDocRef, {
+            ...hostelData,
+            status: 'approved',
+            approvedAt: new Date().toISOString(),
         });
         
-        await deleteDoc(pendingDocRef);
+        // Copy all room types from subcollection
+        if (roomTypes && roomTypes.length > 0) {
+            for (const room of roomTypes) {
+                const newRoomRef = doc(collection(approvedDocRef, 'roomTypes'));
+                batch.set(newRoomRef, room);
+            }
+        }
+
+        // Delete the original pending document
+        batch.delete(pendingDocRef);
+        
+        // Commit the batch
+        await batch.commit();
 
         toast({ title: "Hostel Approved", description: `${hostelData.name} is now live.` });
         setIsDialogOpen(false);
         setSelectedHostel(null);
-      } else {
-        throw new Error("Hostel not found in pending list.");
-      }
+
     } catch (error) {
-      console.error("Error approving hostel: ", error);
-      toast({ title: "Approval Failed", description: "An error occurred.", variant: "destructive" });
+        console.error("Error approving hostel: ", error);
+        toast({ title: "Approval Failed", description: "An error occurred.", variant: "destructive" });
     } finally {
-      setProcessingId(null);
+        setProcessingId(null);
     }
   };
+
 
   const handleReject = async (hostelId: string) => {
     setProcessingId(hostelId);
@@ -294,9 +312,29 @@ export default function AdminDashboard() {
   }
 
 
-  const openReviewDialog = (hostel: PendingHostel) => {
-    setSelectedHostel(hostel);
-    setIsDialogOpen(true);
+  const openReviewDialog = async (hostel: PendingHostel) => {
+    // Fetch full details including room types before opening dialog
+    const pendingDocRef = doc(db, 'pendingHostels', hostel.id);
+    const roomTypesRef = collection(pendingDocRef, 'roomTypes');
+    
+    const [hostelSnap, roomTypesSnap] = await Promise.all([
+        getDoc(pendingDocRef),
+        getDocs(roomTypesRef)
+    ]);
+
+    if(hostelSnap.exists()) {
+        const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({...d.data(), id: d.id})) as RoomType[];
+        const fullHostelData = {
+            ...hostelSnap.data(),
+            id: hostelSnap.id,
+            roomTypes: fetchedRoomTypes
+        } as PendingHostel;
+
+        setSelectedHostel(fullHostelData);
+        setIsDialogOpen(true);
+    } else {
+        toast({ title: "Error", description: "Could not fetch hostel details.", variant: 'destructive'});
+    }
   }
 
   const students = users.filter(u => u.role === 'student');
@@ -643,28 +681,36 @@ export default function AdminDashboard() {
                   </Carousel>
                 </div>
                 
+                 <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">Room Types</h3>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Room Name</TableHead>
+                                <TableHead>Price/Year</TableHead>
+                                <TableHead>Beds</TableHead>
+                                <TableHead>Bathroom</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {selectedHostel.roomTypes.map((room) => (
+                                <TableRow key={room.id}>
+                                    <TableCell className="font-medium">{room.name}</TableCell>
+                                    <TableCell>GH₵{room.price.toLocaleString()}</TableCell>
+                                    <TableCell>{room.beds || 'N/A'}</TableCell>
+                                    <TableCell>{room.bathrooms || 'N/A'}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <h3 className="font-semibold text-lg mb-2">Details</h3>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Price/Year:</span>
-                                <span className="font-medium">GH₵{selectedHostel.price.toLocaleString()}</span>
-                            </div>
-                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Beds:</span>
-                                <span className="font-medium">{selectedHostel.roomFeatures.beds}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Bathroom:</span>
-                                <span className="font-medium">{selectedHostel.roomFeatures.bathrooms}</span>
-                            </div>
-                        </div>
-                    </div>
                      <div>
                         <h3 className="font-semibold text-lg mb-2">Amenities</h3>
                         <div className="flex flex-wrap gap-2">
-                            {selectedHostel.amenities.map(amenity => (
+                            {(selectedHostel.amenities as string[]).map(amenity => (
                                 <Badge key={amenity} variant="secondary">{amenity}</Badge>
                             ))}
                         </div>
@@ -702,6 +748,8 @@ export default function AdminDashboard() {
     </div>
   );
 }
+    
+
     
 
     
