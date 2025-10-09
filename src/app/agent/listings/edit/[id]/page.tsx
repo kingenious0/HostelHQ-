@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2, PlusCircle } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2, PlusCircle, ShieldCheck, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, writeBatch, addDoc } from 'firebase/firestore';
@@ -18,24 +18,19 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { RoomType } from '@/lib/data';
+import { RoomType, Hostel } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
+const billsIncludedList = ['Water', 'Refuse'];
+const billsExcludedList = ['Gas', 'Electricity'];
+const securitySafetyList = ['Security Alarm', 'Maintenance Team (24-hour on call)', 'Entire Building Fenced', 'Controlled Access Gate (24-hour)', 'Tanoso Police Station (close)'];
 
-type HostelData = {
-    name: string;
-    location: string;
-    nearbyLandmarks: string;
-    amenities: string[];
-    images: string[];
-    description: string;
-    agentId: string;
-};
+
+type HostelData = Partial<Hostel>;
 
 export default function EditListingPage() {
-    const [formData, setFormData] = useState<Partial<HostelData>>({});
+    const [formData, setFormData] = useState<HostelData>({});
     const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +82,6 @@ export default function EditListingPage() {
                 setFormData(hostelData);
                 setPhotoPreviews(hostelData.images || []);
 
-                // Fetch room types
                 const roomTypesRef = collection(docRef, 'roomTypes');
                 const roomTypesSnap = await getDocs(roomTypesRef);
                 const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({...d.data(), id: d.id})) as RoomType[];
@@ -115,7 +109,6 @@ export default function EditListingPage() {
     };
 
     const addRoomType = () => {
-        // Add a temporary, client-side-only ID for keying purposes
         const newId = `new-${Date.now()}`;
         setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available' }]);
     };
@@ -129,11 +122,11 @@ export default function EditListingPage() {
         setRoomTypes(newRoomTypes);
     };
 
-    const handleAmenityChange = (amenity: string, checked: boolean) => {
-        const currentAmenities = formData.amenities || [];
+    const handleCheckboxChange = (field: keyof HostelData, item: string, checked: boolean) => {
+        const currentItems = (formData[field] as string[] | undefined) || [];
         setFormData(prev => ({
             ...prev,
-            amenities: checked ? [...currentAmenities, amenity] : currentAmenities.filter(a => a !== amenity)
+            [field]: checked ? [...currentItems, item] : currentItems.filter(i => i !== item)
         }));
     };
     
@@ -180,32 +173,28 @@ export default function EditListingPage() {
                 updatedImageUrls = [...updatedImageUrls, ...newImageUrls];
             }
 
-            // Update main hostel document
+            const { id, roomTypes: rt, priceRange, ...updateData } = formData;
+            
             batch.update(hostelRef, {
-                ...formData,
+                ...updateData,
                 images: updatedImageUrls,
                 updatedAt: serverTimestamp()
             });
 
-            // Sync room types
             const existingRoomTypeIds = (await getDocs(collection(hostelRef, 'roomTypes'))).docs.map(d => d.id);
             const currentRoomTypeIds = roomTypes.map(rt => rt.id).filter(id => id && !id.startsWith('new-'));
 
-            // Delete rooms that were removed
             for (const id of existingRoomTypeIds) {
                 if (!currentRoomTypeIds.includes(id)) {
                     batch.delete(doc(hostelRef, 'roomTypes', id));
                 }
             }
             
-            // Update or add new rooms
             for (const room of roomTypes) {
-                const { id, ...roomData } = room;
-                if (id && !id.startsWith('new-')) {
-                    // Update existing room
-                    batch.update(doc(hostelRef, 'roomTypes', id), roomData);
+                const { id: roomId, ...roomData } = room;
+                if (roomId && !roomId.startsWith('new-')) {
+                    batch.update(doc(hostelRef, 'roomTypes', roomId), roomData);
                 } else {
-                    // Add new room
                     const newRoomRef = doc(collection(hostelRef, 'roomTypes'));
                     batch.set(newRoomRef, roomData);
                 }
@@ -281,6 +270,10 @@ export default function EditListingPage() {
                                 <Label htmlFor="nearbyLandmarks">Nearby Landmarks</Label>
                                 <Input id="nearbyLandmarks" value={formData.nearbyLandmarks || ''} onChange={handleInputChange} />
                             </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="distanceToUniversity">Distance to AAMUSTED University</Label>
+                                <Input id="distanceToUniversity" placeholder="e.g., 10mins" value={formData.distanceToUniversity || ''} onChange={handleInputChange} />
+                            </div>
                         </div>
 
                         {/* Room Types */}
@@ -339,15 +332,49 @@ export default function EditListingPage() {
                             </Button>
                         </div>
                         
-                        {/* Amenities */}
-                        <div className="space-y-4">
-                             <h3 className="font-semibold text-lg border-b pb-2">Amenities</h3>
-                             <div>
+                        {/* Amenities, Bills, Security */}
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="font-semibold text-lg border-b pb-2">Amenities</h3>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                                    {amenitiesList.map(amenity => (
-                                        <div key={amenity} className="flex items-center space-x-2">
-                                            <Checkbox id={amenity} checked={formData.amenities?.includes(amenity)} onCheckedChange={(checked) => handleAmenityChange(amenity, !!checked)} />
-                                            <label htmlFor={amenity} className="text-sm font-medium">{amenity}</label>
+                                    {amenitiesList.map(item => (
+                                        <div key={item} className="flex items-center space-x-2">
+                                            <Checkbox id={`amenity-${item}`} checked={formData.amenities?.includes(item)} onCheckedChange={(checked) => handleCheckboxChange('amenities', item, !!checked)} />
+                                            <label htmlFor={`amenity-${item}`} className="text-sm font-medium">{item}</label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                             <div>
+                                <h3 className="font-semibold text-lg border-b pb-2 flex items-center gap-2"><FileText className="h-4 w-4"/>Student Bills</h3>
+                                <div className="p-3 border rounded-md mt-2 space-y-4">
+                                    <p className="text-sm font-medium">Included:</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                        {billsIncludedList.map(item => (
+                                            <div key={item} className="flex items-center space-x-2">
+                                                <Checkbox id={`bills-inc-${item}`} checked={formData.billsIncluded?.includes(item)} onCheckedChange={(checked) => handleCheckboxChange('billsIncluded', item, !!checked)} />
+                                                <label htmlFor={`bills-inc-${item}`} className="text-sm">{item}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-sm font-medium">Excluded:</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                         {billsExcludedList.map(item => (
+                                            <div key={item} className="flex items-center space-x-2">
+                                                <Checkbox id={`bills-exc-${item}`} checked={formData.billsExcluded?.includes(item)} onCheckedChange={(checked) => handleCheckboxChange('billsExcluded', item, !!checked)} />
+                                                <label htmlFor={`bills-exc-${item}`} className="text-sm">{item}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-lg border-b pb-2 flex items-center gap-2"><ShieldCheck className="h-4 w-4"/>Security & Safety</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                                     {securitySafetyList.map(item => (
+                                        <div key={item} className="flex items-center space-x-2">
+                                            <Checkbox id={`sec-${item}`} checked={formData.securityAndSafety?.includes(item)} onCheckedChange={(checked) => handleCheckboxChange('securityAndSafety', item, !!checked)} />
+                                            <label htmlFor={`sec-${item}`} className="text-sm">{item}</label>
                                         </div>
                                     ))}
                                 </div>
@@ -393,3 +420,5 @@ export default function EditListingPage() {
         </div>
     );
 }
+
+    

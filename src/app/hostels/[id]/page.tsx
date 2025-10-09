@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -76,11 +76,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             const visitSnapshot = await getDocs(visitsQuery);
             if (!visitSnapshot.empty) {
                 const visitDoc = visitSnapshot.docs[0];
-                // Only consider non-cancelled visits as "existing" for blocking new bookings
                 if (visitDoc.data().status !== 'cancelled') {
                     setExistingVisit({ id: visitDoc.id, status: visitDoc.data().status } as Visit);
                 } else {
-                    setExistingVisit(null); // Allow re-booking if cancelled
+                    setExistingVisit(null);
                 }
             } else {
                 setExistingVisit(null);
@@ -160,54 +159,89 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <CarouselNext className="right-4" />
                 </Carousel>
                 
-                 <div className="mt-8">
-                    <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
-                    <p className="mt-2 text-foreground/80 leading-relaxed">{hostel.description}</p>
-                </div>
-                
-                 <div className="mt-8">
-                    <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {hostel.amenities.map((amenity: string) => (
-                        <div key={amenity} className="flex items-center gap-3">
-                           <div className="p-2 bg-secondary rounded-md">
-                             {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
-                           </div>
-                           <span className="text-sm font-medium capitalize">{amenity}</span>
-                        </div>
-                        ))}
+                 <div className="mt-8 space-y-6">
+                    <div>
+                        <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
+                        <p className="mt-2 text-foreground/80 leading-relaxed">{hostel.description}</p>
+                         {hostel.distanceToUniversity && <p className="mt-2 text-sm text-muted-foreground">Distance to AAMUSTED University: {hostel.distanceToUniversity}</p>}
                     </div>
-                </div>
-                
-                <div className="mt-8">
-                    <h3 className="text-xl font-semibold font-headline mb-4">Reviews ({hostel.reviews.length})</h3>
-                    {hostel.reviews.length > 0 ? (
-                        <div className="space-y-6">
-                            {hostel.reviews.map(review => (
-                                <div key={review.id} className="flex gap-4">
-                                     <Avatar>
-                                        <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-semibold">{review.studentName}</p>
-                                            <span className="text-xs text-muted-foreground">{format(new Date(review.createdAt), 'PP')}</span>
-                                        </div>
-                                        <div className="flex items-center mt-1">
-                                            {[...Array(5)].map((_, i) => (
-                                                <Star key={i} className={`h-4 w-4 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/30'}`} />
-                                            ))}
-                                        </div>
-                                        <p className="text-sm text-foreground/80 mt-2">{review.comment}</p>
-                                    </div>
-                                </div>
+
+                    <Separator />
+                    
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><FileText className="h-5 w-5 text-muted-foreground"/>Student Bills</h3>
+                        {hostel.billsIncluded && hostel.billsIncluded.length > 0 && (
+                            <div>
+                                <p className="font-medium">Hostel Bills included:</p>
+                                <p className="text-muted-foreground">{hostel.billsIncluded.join(', ')}.</p>
+                            </div>
+                        )}
+                         {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
+                            <div>
+                                <p className="font-medium">Hostel Bills Excludes:</p>
+                                <p className="text-muted-foreground">{hostel.billsExcluded.join(', ')}.</p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <Separator />
+
+                    <div className="space-y-4">
+                         <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-muted-foreground"/>Security & Safety</h3>
+                         {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
+                            <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                                {hostel.securityAndSafety.map(item => <li key={item}>{item}</li>)}
+                            </ul>
+                        )}
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                        <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {hostel.amenities.map((amenity: string) => (
+                            <div key={amenity} className="flex items-center gap-3">
+                               <div className="p-2 bg-secondary rounded-md">
+                                 {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
+                               </div>
+                               <span className="text-sm font-medium capitalize">{amenity}</span>
+                            </div>
                             ))}
                         </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">No reviews yet for this hostel.</p>
-                    )}
-                </div>
+                    </div>
 
+                    <Separator />
+                    
+                    <div>
+                        <h3 className="text-xl font-semibold font-headline mb-4">Reviews ({hostel.reviews.length})</h3>
+                        {hostel.reviews.length > 0 ? (
+                            <div className="space-y-6">
+                                {hostel.reviews.map(review => (
+                                    <div key={review.id} className="flex gap-4">
+                                         <Avatar>
+                                            <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-semibold">{review.studentName}</p>
+                                                <span className="text-xs text-muted-foreground">{format(new Date(review.createdAt), 'PP')}</span>
+                                            </div>
+                                            <div className="flex items-center mt-1">
+                                                {[...Array(5)].map((_, i) => (
+                                                    <Star key={i} className={`h-4 w-4 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/30'}`} />
+                                                ))}
+                                            </div>
+                                            <p className="text-sm text-foreground/80 mt-2">{review.comment}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No reviews yet for this hostel.</p>
+                        )}
+                    </div>
+                </div>
             </div>
             <div className="flex flex-col">
                 <Badge 
@@ -441,3 +475,5 @@ export default function HostelDetailPage() {
     </div>
   );
 }
+
+    

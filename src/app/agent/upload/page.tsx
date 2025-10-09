@@ -11,11 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, PlusCircle, Trash2, BedDouble } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, PlusCircle, Trash2, BedDouble, ShieldCheck, FileText, Lightbulb } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, writeBatch, doc } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
@@ -24,6 +24,10 @@ import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
+const billsIncludedList = ['Water', 'Refuse'];
+const billsExcludedList = ['Gas', 'Electricity'];
+const securitySafetyList = ['Security Alarm', 'Maintenance Team (24-hour on call)', 'Entire Building Fenced', 'Controlled Access Gate (24-hour)', 'Tanoso Police Station (close)'];
+
 
 export default function AgentUploadPage() {
     const [step, setStep] = useState(1);
@@ -41,13 +45,17 @@ export default function AgentUploadPage() {
     const [roomTypes, setRoomTypes] = useState<Partial<RoomType>[]>([
         { name: '', price: 0, availability: 'Available' }
     ]);
+    const [distanceToUni, setDistanceToUni] = useState('');
+    const [billsIncluded, setBillsIncluded] = useState<string[]>([]);
+    const [billsExcluded, setBillsExcluded] = useState<string[]>([]);
+    const [securityAndSafety, setSecurityAndSafety] = useState<string[]>([]);
     
     // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
     const [loadingAuth, setLoadingAuth] = useState(true);
 
-    const totalSteps = 4;
+    const totalSteps = 5;
     const progress = (step / totalSteps) * 100;
 
     useEffect(() => {
@@ -77,9 +85,9 @@ export default function AgentUploadPage() {
         setRoomTypes(newRoomTypes);
     };
 
-    const handleAmenityChange = (amenity: string, checked: boolean) => {
-        setSelectedAmenities(prev => 
-            checked ? [...prev, amenity] : prev.filter(a => a !== amenity)
+    const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>, item: string, checked: boolean) => {
+        setter(prev => 
+            checked ? [...prev, item] : prev.filter(i => i !== item)
         );
     };
 
@@ -158,8 +166,7 @@ export default function AgentUploadPage() {
             
             // 3. Use a batch write to add hostel and room types
             const batch = writeBatch(db);
-            const newHostelRef = addDoc(collection(db, 'pendingHostels'), {}).then(ref => ref); // Get a ref for the new hostel
-            const hostelRef = await newHostelRef;
+            const hostelRef = doc(collection(db, 'pendingHostels'));
 
             batch.set(hostelRef, {
                 name: hostelName,
@@ -173,11 +180,13 @@ export default function AgentUploadPage() {
                 status: 'pending',
                 agentId: currentUser.uid,
                 dateSubmitted: new Date().toISOString(),
-                // Aggregate availability
                 availability: roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full',
+                distanceToUniversity: distanceToUni,
+                billsIncluded: billsIncluded,
+                billsExcluded: billsExcluded,
+                securityAndSafety: securityAndSafety,
             });
             
-            // Add each room type to the subcollection
             roomTypes.forEach(room => {
                 const roomTypeRef = doc(collection(hostelRef, 'roomTypes'));
                 batch.set(roomTypeRef, room);
@@ -252,7 +261,8 @@ export default function AgentUploadPage() {
                             <CardDescription>{
                                 step === 1 ? 'Hostel Information' :
                                 step === 2 ? 'Room Types & Pricing' :
-                                step === 3 ? 'Upload Photos & Location' : 'Description & Submission'
+                                step === 3 ? 'Facilities & Location' : 
+                                step === 4 ? 'Description & Photos' : 'Submission'
                             }</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -266,20 +276,13 @@ export default function AgentUploadPage() {
                                         <Label htmlFor="landmarks">Nearby Landmarks</Label>
                                         <Input id="landmarks" placeholder="e.g., Accra Mall, University of Ghana" value={nearbyLandmarks} onChange={(e) => setNearbyLandmarks(e.target.value)} />
                                     </div>
-                                    <div>
-                                        <Label className="text-base font-semibold">Amenities</Label>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                                            {amenitiesList.map(amenity => (
-                                                <div key={amenity} className="flex items-center space-x-2">
-                                                    <Checkbox id={amenity} checked={selectedAmenities.includes(amenity)} onCheckedChange={(checked) => handleAmenityChange(amenity, !!checked)} />
-                                                    <label htmlFor={amenity} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{amenity}</label>
-                                                </div>
-                                            ))}
-                                        </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="distance">Distance to AAMUSTED University</Label>
+                                        <Input id="distance" placeholder="e.g., 10mins" value={distanceToUni} onChange={(e) => setDistanceToUni(e.target.value)} />
                                     </div>
                                 </div>
                             )}
-                            {step === 2 && (
+                             {step === 2 && (
                                 <div className="space-y-4">
                                     <Label className="text-base font-semibold">Room Types & Pricing</Label>
                                     <p className="text-sm text-muted-foreground">Add all the different types of rooms available in this hostel.</p>
@@ -336,7 +339,56 @@ export default function AgentUploadPage() {
                                     </Button>
                                 </div>
                             )}
-                            {step === 3 && (
+                             {step === 3 && (
+                                <div className="space-y-6">
+                                     <div>
+                                        <Label className="text-base font-semibold">Amenities</Label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
+                                            {amenitiesList.map(item => (
+                                                <div key={item} className="flex items-center space-x-2">
+                                                    <Checkbox id={`amenity-${item}`} checked={selectedAmenities.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setSelectedAmenities, item, !!checked)} />
+                                                    <label htmlFor={`amenity-${item}`} className="text-sm font-medium">{item}</label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label className="text-base font-semibold flex items-center gap-2"><FileText className="h-4 w-4"/>Student Bills</Label>
+                                        <div className="p-3 border rounded-md mt-2 space-y-4">
+                                            <p className="text-sm font-medium">Included:</p>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                                {billsIncludedList.map(item => (
+                                                    <div key={item} className="flex items-center space-x-2">
+                                                        <Checkbox id={`bills-inc-${item}`} checked={billsIncluded.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setBillsIncluded, item, !!checked)} />
+                                                        <label htmlFor={`bills-inc-${item}`} className="text-sm">{item}</label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <p className="text-sm font-medium">Excluded:</p>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                                 {billsExcludedList.map(item => (
+                                                    <div key={item} className="flex items-center space-x-2">
+                                                        <Checkbox id={`bills-exc-${item}`} checked={billsExcluded.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setBillsExcluded, item, !!checked)} />
+                                                        <label htmlFor={`bills-exc-${item}`} className="text-sm">{item}</label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label className="text-base font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4"/>Security & Safety</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                                             {securitySafetyList.map(item => (
+                                                <div key={item} className="flex items-center space-x-2">
+                                                    <Checkbox id={`sec-${item}`} checked={securityAndSafety.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setSecurityAndSafety, item, !!checked)} />
+                                                    <label htmlFor={`sec-${item}`} className="text-sm">{item}</label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {step === 4 && (
                                 <div className="space-y-6">
                                      <div>
                                         <Label htmlFor="photos-input">Upload up to 5 Photos</Label>
@@ -368,15 +420,24 @@ export default function AgentUploadPage() {
                                             <Input id="gps" placeholder="e.g., 5.6037, -0.1870" className="pl-10" value={gpsLocation} onChange={e => setGpsLocation(e.target.value)} />
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                            {step === 4 && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="description">Hostel Description</Label>
-                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students. The AI will automatically enhance this on submission." rows={8} />
+                                     <div className="space-y-2">
+                                        <Label htmlFor="description">Main Hostel Description</Label>
+                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students." rows={6} />
                                         <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Sparkles className="h-3 w-3" /> An AI will enhance this description upon submission to make it more appealing.</p>
                                     </div>
+                                </div>
+                            )}
+                             {step === 5 && (
+                                <div className="space-y-4 text-center">
+                                    <h3 className="text-xl font-semibold">Final Check</h3>
+                                    <p className="text-muted-foreground">You are about to submit <span className="font-bold">{hostelName}</span> for approval. Please confirm all details are correct.</p>
+                                    <Alert>
+                                        <Lightbulb className="h-4 w-4" />
+                                        <AlertTitle>AI Enhancement</AlertTitle>
+                                        <AlertDescription>
+                                            The main description you provided will be automatically enhanced by our AI to make it more attractive to students.
+                                        </AlertDescription>
+                                    </Alert>
                                 </div>
                             )}
                         </CardContent>
@@ -397,3 +458,5 @@ export default function AgentUploadPage() {
         </div>
     );
 }
+
+    

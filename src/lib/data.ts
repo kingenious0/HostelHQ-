@@ -42,6 +42,10 @@ export type Hostel = {
     max: number;
   };
   isFeatured?: boolean;
+  distanceToUniversity?: string;
+  billsIncluded?: string[];
+  billsExcluded?: string[];
+  securityAndSafety?: string[];
   [key: string]: any; 
 };
 
@@ -300,3 +304,5 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
     console.log("Falling back to static hostel data.");
     return staticHostels;
 }
+
+    
