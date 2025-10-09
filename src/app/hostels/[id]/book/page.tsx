@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { getHostel, Hostel } from '@/lib/data';
 import { notFound } from 'next/navigation';
@@ -56,9 +56,11 @@ export default function BookingPage() {
 
 
     const params = useParams();
+    const searchParams = useSearchParams();
     const router = useRouter();
     const { toast } = useToast();
     const id = params.id as string;
+    const roomTypeId = searchParams.get('roomTypeId');
 
     useEffect(() => {
         const fetchHostelData = async () => {
@@ -115,7 +117,7 @@ export default function BookingPage() {
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
-                    <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
                 </main>
             </div>
         );
@@ -226,5 +228,3 @@ export default function BookingPage() {
         </div>
     );
 }
-
-    

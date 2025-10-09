@@ -18,7 +18,7 @@ import type { User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 
 
@@ -50,37 +50,6 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const { toast } = useToast();
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
-    const handleApply = async () => {
-        if (!currentUser) {
-             toast({title: "Please Log In", description: "You need to be logged in to apply for a hostel.", variant: "destructive"});
-             router.push('/login');
-             return;
-        };
-
-        // This is a simplified logic. In a real app, you'd probably pass the chosen room type to the booking page.
-        // For now, we'll just check if *any* visit has been completed.
-        const visitsRef = collection(db, 'visits');
-        const q = query(visitsRef, 
-            where('studentId', '==', currentUser.uid),
-            where('hostelId', '==', hostel.id),
-            where('studentCompleted', '==', true),
-            limit(1)
-        );
-        
-        toast({title: "Checking your visit history..."});
-
-        const querySnapshot = await getDocs(q);
-        const hasVisited = !querySnapshot.empty;
-
-        if (hasVisited) {
-             toast({title: "Visit confirmed!", description: "Redirecting you to secure your room."});
-             router.push(`/hostels/${hostel.id}/secure`);
-        } else {
-             toast({title: "Visit Required", description: "You need to book and complete a visit before securing a room.", variant: "destructive"});
-             router.push(`/hostels/${hostel.id}/book`);
-        }
-    };
-    
     const getRoomAvailabilityVariant = (availability: RoomType['availability']) => {
         switch(availability) {
             case 'Available': return 'default';
@@ -109,16 +78,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 
                  <div className="mt-8">
                     <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
-                    <p className="mt-6 text-lg text-foreground/80">{hostel.description}</p>
+                    <p className="mt-2 text-foreground/80 leading-relaxed">{hostel.description}</p>
                 </div>
                 
                  <div className="mt-8">
                     <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
-                    <div className="flex flex-wrap gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {hostel.amenities.map((amenity: string) => (
-                        <Badge key={amenity} variant="outline" className="text-base p-2 capitalize flex items-center gap-2">
-                            {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />} {amenity}
-                        </Badge>
+                        <div key={amenity} className="flex items-center gap-3">
+                           <div className="p-2 bg-secondary rounded-md">
+                             {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
+                           </div>
+                           <span className="text-sm font-medium capitalize">{amenity}</span>
+                        </div>
                         ))}
                     </div>
                 </div>
@@ -144,13 +116,21 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews} reviews)</span>
                 </div>
                 
-                <Card className="mt-8">
+                <Card className="mt-8 shadow-md">
                     <CardHeader>
                         <CardTitle>Room Types & Pricing</CardTitle>
                         <CardDescription>Select a room and book a visit to proceed.</CardDescription>
                     </CardHeader>
                     <CardContent>
                          <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Room Type</TableHead>
+                                    <TableHead>Availability</TableHead>
+                                    <TableHead>Price</TableHead>
+                                    <TableHead className="text-right">Action</TableHead>
+                                </TableRow>
+                            </TableHeader>
                             <TableBody>
                                 {hostel.roomTypes?.map((room) => (
                                 <TableRow key={room.id}>
@@ -164,9 +144,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     <TableCell>
                                         <Badge variant={getRoomAvailabilityVariant(room.availability)}>{room.availability}</Badge>
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                        <p className="font-semibold">GH₵{room.price.toLocaleString()}</p>
-                                        <p className="text-xs text-muted-foreground">/year</p>
+                                    <TableCell className="font-semibold">
+                                        GH₵{room.price.toLocaleString()}
+                                        <span className="text-xs text-muted-foreground font-normal">/year</span>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button 
@@ -333,7 +313,7 @@ export default function HostelDetailPage() {
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                <Loader2 className="h-16 w-16 animate-spin text-primary" />
             </main>
         </div>
     )

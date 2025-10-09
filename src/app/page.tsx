@@ -18,6 +18,14 @@ export default async function Home() {
       <Header />
       <main className="flex-1">
         <section className="relative h-[450px] bg-gradient-to-br from-primary via-primary/70 to-accent/60">
+            <div className="absolute inset-0 bg-black/50" />
+            <Image 
+                src="https://images.unsplash.com/photo-1582407947304-fd86f028f716?q=80&w=2796&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                alt="Modern student accommodations"
+                fill
+                className="object-cover"
+                data-ai-hint="student accommodation building"
+            />
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-4">
                 <h1 className="text-4xl md:text-5xl font-bold font-headline">Find Your Perfect Student Home</h1>
                 <p className="mt-2 text-lg md:text-xl max-w-2xl">
@@ -29,11 +37,11 @@ export default async function Home() {
                             <form className="flex flex-col md:flex-row items-center gap-4">
                                 <div className="relative w-full">
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input placeholder="Search hostel name..." className="pl-12 h-14 text-base rounded-lg"/>
+                                    <Input placeholder="Search hostel name..." className="pl-12 h-14 text-base rounded-lg text-foreground bg-white"/>
                                 </div>
                                 <div className="relative w-full">
                                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input placeholder="Enter location" className="pl-12 h-14 text-base rounded-lg" />
+                                    <Input placeholder="Enter location" className="pl-12 h-14 text-base rounded-lg text-foreground bg-white" />
                                 </div>
                                 <Button size="lg" className="w-full md:w-auto h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg text-lg">
                                     Search
