@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Eye, Clock, Check, X, BedDouble, CalendarCheck, User, Navigation } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, Clock, Check, X, BedDouble, CalendarCheck, User as UserIcon, Navigation } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
@@ -36,7 +36,7 @@ type EnrichedVisit = Visit & {
 export default function MyVisitsPage() {
     const [myVisits, setMyVisits] = useState<EnrichedVisit[]>([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const { toast } = useToast();
     const router = useRouter();
@@ -57,7 +57,6 @@ export default function MyVisitsPage() {
 
         setLoading(true);
 
-        // Listener for Visits
         const visitsQuery = query(collection(db, "visits"), where("studentId", "==", currentUser.uid));
         const unsubscribeVisits = onSnapshot(visitsQuery, async (querySnapshot) => {
             const visitsData: Visit[] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Visit));
@@ -66,15 +65,9 @@ export default function MyVisitsPage() {
                 let hostelName = 'Unknown Hostel';
                 let agentName: string | null = null;
                 try {
-                    // Try fetching from approved hostels first, then pending
-                    let hostelRef = doc(db, 'hostels', visit.hostelId);
-                    let hostelSnap = await getDoc(hostelRef);
-                    if (!hostelSnap.exists()) {
-                         hostelRef = doc(db, 'pendingHostels', visit.hostelId);
-                         hostelSnap = await getDoc(hostelRef);
-                    }
+                    const hostelRef = doc(db, 'hostels', visit.hostelId);
+                    const hostelSnap = await getDoc(hostelRef);
                     if (hostelSnap.exists()) hostelName = hostelSnap.data().name;
-
                 } catch (e) { console.error("Error fetching hostel", e); }
                 
                 if (visit.agentId) {
@@ -92,10 +85,7 @@ export default function MyVisitsPage() {
             setLoading(false);
         });
 
-        return () => {
-            unsubscribeVisits();
-        };
-
+        return () => unsubscribeVisits();
     }, [currentUser, toast]);
     
     const getStatusInfo = (visit: EnrichedVisit): { variant: "default" | "secondary" | "outline" | "destructive", icon: React.ReactNode, text: string } => {
@@ -142,7 +132,7 @@ export default function MyVisitsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-2xl font-headline">My Hostel Visits</CardTitle>
-                            <CardDescription>Track your upcoming and past hostel visit requests, both with agents and by yourself.</CardDescription>
+                            <CardDescription>Track your upcoming and past hostel visit requests.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {loading ? (
@@ -170,7 +160,7 @@ export default function MyVisitsPage() {
                                                     <TableCell className="font-medium">{visit.hostelName}</TableCell>
                                                     <TableCell>
                                                         <Badge variant={visit.visitType === 'agent' ? 'outline' : 'secondary'} className="capitalize flex items-center gap-1.5">
-                                                            {visit.visitType === 'agent' ? <User className="h-3 w-3" /> : <Navigation className="h-3 w-3" />}
+                                                            {visit.visitType === 'agent' ? <UserIcon className="h-3 w-3" /> : <Navigation className="h-3 w-3" />}
                                                             {visit.visitType === 'agent' ? `Agent: ${visit.agentName || 'Pending'}` : 'Self Visit'}
                                                         </Badge>
                                                     </TableCell>
