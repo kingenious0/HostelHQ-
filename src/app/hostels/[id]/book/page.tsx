@@ -96,8 +96,8 @@ export default function BookingPage() {
             });
 
             if (result.status && result.authorization_url) {
-                window.open(result.authorization_url, '_blank');
-                toast({ title: "Complete Payment", description: "Please complete the payment in the new tab."});
+                toast({ title: "Redirecting to Payment", description: "You will be redirected to a secure payment page."});
+                router.push(result.authorization_url);
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
@@ -227,3 +227,4 @@ export default function BookingPage() {
     );
 }
 
+    
