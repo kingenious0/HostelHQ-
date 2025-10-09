@@ -28,8 +28,8 @@ import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
-import { getHostel, Hostel } from "@/lib/data"
-import { notFound } from 'next/navigation';
+import { getHostel, Hostel, RoomType } from "@/lib/data"
+import { notFound, useSearchParams } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
 
 const formSchema = z.object({
@@ -47,9 +47,13 @@ export default function SecureHostelPage() {
     const { toast } = useToast();
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const { id: hostelId } = params;
+    const roomTypeId = searchParams.get('roomTypeId');
+
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
+    const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
 
      React.useEffect(() => {
         const fetchHostelData = async () => {
@@ -59,9 +63,14 @@ export default function SecureHostelPage() {
                 notFound();
             }
             setHostel(hostelData);
+
+            if (roomTypeId) {
+                const room = hostelData.roomTypes.find(rt => rt.id === roomTypeId);
+                setSelectedRoom(room || null);
+            }
         };
         fetchHostelData();
-    }, [hostelId]);
+    }, [hostelId, roomTypeId]);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -76,7 +85,7 @@ export default function SecureHostelPage() {
     });
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
-        if (!hostel || typeof hostelId !== 'string') return;
+        if (!hostel || !selectedRoom || typeof hostelId !== 'string') return;
         
         setIsSubmitting(true);
         toast({ title: "Initializing Payment..." });
@@ -84,7 +93,7 @@ export default function SecureHostelPage() {
         try {
             const result = await initializeHostelPayment({
                 email: values.email,
-                amount: hostel.price * 100, // Amount in pesewas
+                amount: selectedRoom.price * 100, // Amount in pesewas
                 hostelName: hostel.name,
                 studentName: values.studentName,
                 hostelId: hostelId,
@@ -92,7 +101,6 @@ export default function SecureHostelPage() {
 
             if (result.status && result.authorization_url) {
                 toast({ title: "Redirecting to Payment", description: "You will be redirected to a secure payment page."});
-                // Redirect user to the returned authorization URL
                 router.push(result.authorization_url);
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
@@ -110,9 +118,9 @@ export default function SecureHostelPage() {
         <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
             <Card className="w-full max-w-lg shadow-xl">
                 <CardHeader>
-                    <CardTitle className="text-2xl font-headline">Secure Your Hostel Room</CardTitle>
+                    <CardTitle className="text-2xl font-headline">Secure Your Room: {selectedRoom?.name}</CardTitle>
                     <CardDescription>
-                        Complete this form to proceed to the final payment for {hostel?.name}.
+                        Complete this form to pay for the <span className="font-semibold">{selectedRoom?.name}</span> room at <span className="font-semibold">{hostel?.name}</span>.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -226,9 +234,9 @@ export default function SecureHostelPage() {
                                 )}
                             />
                              <CardFooter className="px-0 pt-6">
-                                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                                <Button type="submit" className="w-full" disabled={isSubmitting || !selectedRoom}>
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Proceed to Pay GH₵{hostel?.price.toLocaleString() || 0}
+                                    Proceed to Pay GH₵{selectedRoom?.price.toLocaleString() || 'N/A'}
                                 </Button>
                             </CardFooter>
                         </form>

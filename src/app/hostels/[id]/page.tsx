@@ -6,7 +6,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -151,7 +151,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 <Card className="mt-8 shadow-md">
                     <CardHeader>
                         <CardTitle>Room Types & Pricing</CardTitle>
-                        <CardDescription>Select a room and book a visit to proceed.</CardDescription>
+                        <CardDescription>Select a room to book a visit or secure it for the year.</CardDescription>
                     </CardHeader>
                     <CardContent>
                          <Table>
@@ -159,8 +159,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 <TableRow>
                                     <TableHead>Room Type</TableHead>
                                     <TableHead>Availability</TableHead>
-                                    <TableHead>Price</TableHead>
-                                    <TableHead className="text-right">Action</TableHead>
+                                    <TableHead>Price/Year</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -178,15 +178,24 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     </TableCell>
                                     <TableCell className="font-semibold">
                                         GH₵{room.price.toLocaleString()}
-                                        <span className="text-xs text-muted-foreground font-normal">/year</span>
                                     </TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-right space-x-2">
                                         <Button 
+                                            variant="outline"
                                             size="sm"
                                             disabled={room.availability === 'Full'}
                                             onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
                                         >
                                             Book Visit
+                                        </Button>
+                                         <Button 
+                                            size="sm"
+                                            disabled={room.availability === 'Full'}
+                                            onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
+                                            className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                                        >
+                                            <ShieldCheck className="mr-2 h-4 w-4"/>
+                                            Secure
                                         </Button>
                                     </TableCell>
                                 </TableRow>
