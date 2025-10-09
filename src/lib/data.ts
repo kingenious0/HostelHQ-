@@ -252,13 +252,8 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
             
-             // Determine aggregate availability
-            let availability: Hostel['availability'] = 'Full';
-            if (roomTypes.some(rt => rt.availability === 'Available')) {
-                availability = 'Available';
-            } else if (roomTypes.some(rt => rt.availability === 'Limited')) {
-                availability = 'Limited';
-            }
+             // Determine aggregate availability from the top-level document first
+            let availability = data.availability as Hostel['availability'] || 'Full';
 
             // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
