@@ -3,10 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/header';
-import { getHostel, Hostel, RoomType } from '@/lib/data';
+import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -14,12 +14,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import type { User } from 'firebase/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { format } from 'date-fns';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -94,6 +96,36 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         ))}
                     </div>
                 </div>
+                
+                <div className="mt-8">
+                    <h3 className="text-xl font-semibold font-headline mb-4">Reviews ({hostel.reviews.length})</h3>
+                    {hostel.reviews.length > 0 ? (
+                        <div className="space-y-6">
+                            {hostel.reviews.map(review => (
+                                <div key={review.id} className="flex gap-4">
+                                     <Avatar>
+                                        <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold">{review.studentName}</p>
+                                            <span className="text-xs text-muted-foreground">{format(new Date(review.createdAt), 'PP')}</span>
+                                        </div>
+                                        <div className="flex items-center mt-1">
+                                            {[...Array(5)].map((_, i) => (
+                                                <Star key={i} className={`h-4 w-4 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/30'}`} />
+                                            ))}
+                                        </div>
+                                        <p className="text-sm text-foreground/80 mt-2">{review.comment}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">No reviews yet for this hostel.</p>
+                    )}
+                </div>
+
             </div>
             <div className="flex flex-col">
                 <Badge 
@@ -113,7 +145,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                         ))}
                     </div>
-                    <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews} reviews)</span>
+                    <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews.length} reviews)</span>
                 </div>
                 
                 <Card className="mt-8 shadow-md">

@@ -20,6 +20,7 @@ export type Review = {
     rating: number;
     comment: string;
     createdAt: string; // ISO string
+    status: 'pending' | 'approved';
 };
 
 export type Hostel = {
@@ -27,7 +28,7 @@ export type Hostel = {
   name: string;
   location: string;
   rating: number;
-  reviews: Review[]; // Changed from number to array of Review objects
+  reviews: Review[]; 
   amenities: string[];
   images: string[];
   description: string;
@@ -198,7 +199,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
                 orderBy('createdAt', 'desc')
             );
             const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviews = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Review[];
+            const reviewsData = reviewsSnapshot.docs.map(doc => convertTimestamps({ id: doc.id, ...doc.data() })) as Review[];
 
             // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
@@ -211,8 +212,8 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
             
             // Recalculate average rating
-            const totalRating = reviews.reduce((acc, review) => acc + review.rating, 0);
-            const averageRating = reviews.length > 0 ? totalRating / reviews.length : 0;
+            const totalRating = reviewsData.reduce((acc, review) => acc + review.rating, 0);
+            const averageRating = reviewsData.length > 0 ? totalRating / reviewsData.length : 0;
 
             return convertTimestamps({ 
                 id: hostelDoc.id, 
@@ -221,7 +222,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
                 priceRange, 
                 lat, 
                 lng, 
-                reviews, 
+                reviews: reviewsData, 
                 rating: averageRating
             }) as Hostel;
         }

@@ -7,9 +7,9 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -24,8 +24,9 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { RoomType } from '@/lib/data';
+import { RoomType, Review } from '@/lib/data';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 type Hostel = {
   id: string;
@@ -76,6 +77,7 @@ const availabilityVariant: Record<Hostel['availability'], "default" | "secondary
 export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [pendingAgents, setPendingAgents] = useState<User[]>([]);
   const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
@@ -125,6 +127,21 @@ export default function AdminDashboard() {
         const agentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setPendingAgents(agentsData);
     });
+    
+     // Real-time pending reviews
+    const reviewsQuery = query(collection(db, 'reviews'), where('status', '==', 'pending'));
+    const unsubReviews = onSnapshot(reviewsQuery, (snapshot) => {
+        const reviewsData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const date = (data.createdAt as Timestamp)?.toDate ? (data.createdAt as Timestamp).toDate().toLocaleDateString() : new Date(data.createdAt).toLocaleDateString();
+            return {
+                id: doc.id,
+                ...data,
+                createdAt: date
+            } as Review;
+        });
+        setPendingReviews(reviewsData);
+    });
 
     // Ably presence for online agents
     const presenceChannel = ably.channels.get('agents:live');
@@ -146,6 +163,7 @@ export default function AdminDashboard() {
       unsubApproved();
       unsubUsers();
       unsubPendingAgents();
+      unsubReviews();
       presenceChannel.presence.unsubscribe();
     };
   }, []);
@@ -263,6 +281,26 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject') => {
+        setProcessingId(reviewId);
+        const reviewRef = doc(db, 'reviews', reviewId);
+        
+        try {
+            if (action === 'approve') {
+                await updateDoc(reviewRef, { status: 'approved' });
+                toast({ title: "Review Approved", description: "The review is now public." });
+            } else { // reject
+                await deleteDoc(reviewRef);
+                toast({ title: "Review Rejected", description: "The review has been deleted." });
+            }
+        } catch (error) {
+            console.error(`Error ${action}ing review:`, error);
+            toast({ title: "Action Failed", description: `Could not ${action} the review.`, variant: 'destructive' });
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
   const handleDeleteApproved = async (hostelId: string) => {
     if (!window.confirm("Are you sure you want to permanently delete this hostel? This action cannot be undone.")) {
         return;
@@ -357,6 +395,7 @@ export default function AdminDashboard() {
 
   const students = users.filter(u => u.role === 'student');
   const agents = users.filter(u => u.role === 'agent');
+  const totalPending = pendingHostels.length + pendingAgents.length + pendingReviews.length;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -412,8 +451,8 @@ export default function AdminDashboard() {
                 <Loader2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{pendingHostels.length + pendingAgents.length}</div>
-                 <p className="text-xs text-muted-foreground">Hostels & Agents</p>
+                <div className="text-2xl font-bold">{totalPending}</div>
+                 <p className="text-xs text-muted-foreground">Hostels, Agents & Reviews</p>
               </CardContent>
             </Card>
           </div>
@@ -641,7 +680,8 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
             </div>
-             <div className="grid grid-cols-1 mb-8">
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                  <Card>
                     <CardHeader>
                         <CardTitle>Online Agents</CardTitle>
@@ -672,6 +712,62 @@ export default function AdminDashboard() {
                                     <TableRow>
                                         <TableCell colSpan={2} className="text-center h-24">
                                             No agents are currently online.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Pending Review Moderation</CardTitle>
+                        <CardDescription>Approve or reject new reviews from students.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                         <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Review</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {pendingReviews.length > 0 ? (
+                                    pendingReviews.map(review => (
+                                        <TableRow key={review.id}>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <Star key={i} className={cn("h-4 w-4", i < review.rating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground/30")} />
+                                                    ))}
+                                                </div>
+                                                <p className="font-medium mt-1 truncate max-w-xs">{review.comment}</p>
+                                                <p className="text-xs text-muted-foreground">{review.studentName} on {format(new Date(review.createdAt), 'PP')}</p>
+                                            </TableCell>
+                                            <TableCell className="text-right space-x-1">
+                                                <Button
+                                                    variant="ghost" size="icon"
+                                                    className="h-8 w-8"
+                                                    disabled={processingId === review.id}
+                                                    onClick={() => handleReviewAction(review.id, 'reject')}
+                                                ><XCircle className="h-4 w-4 text-destructive" /></Button>
+                                                <Button
+                                                    variant="ghost" size="icon"
+                                                    className="h-8 w-8"
+                                                    disabled={processingId === review.id}
+                                                    onClick={() => handleReviewAction(review.id, 'approve')}
+                                                >
+                                                    {processingId === review.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCircle className="h-4 w-4 text-green-600" />}
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={2} className="text-center h-24">
+                                            No pending reviews.
                                         </TableCell>
                                     </TableRow>
                                 )}
