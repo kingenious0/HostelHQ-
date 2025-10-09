@@ -185,7 +185,7 @@ export default function MyVisitsPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {myVisits.length &gt; 0 ? (
+                                        {myVisits.length > 0 ? (
                                             myVisits.map(visit => {
                                                 const statusInfo = getStatusInfo(visit.status);
                                                 return (
@@ -240,7 +240,7 @@ export default function MyVisitsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {myBookings.length &gt; 0 ? (
+                                    {myBookings.length > 0 ? (
                                         myBookings.map(booking => (
                                             <TableRow key={booking.id}>
                                                 <TableCell className="font-medium">{booking.hostelName}</TableCell>
@@ -269,5 +269,3 @@ export default function MyVisitsPage() {
         </div>
     );
 }
-
-    
