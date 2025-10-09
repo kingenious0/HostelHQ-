@@ -1,3 +1,4 @@
+
 "use client"
 import 'mapbox-gl/dist/mapbox-gl.css';
 import React, { useRef, useEffect, useState } from 'react';
@@ -21,141 +22,82 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || '';
 export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
+    const agentMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
     
     const [mapLoaded, setMapLoaded] = useState(false);
     const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('streets');
+    const [styleUrl, setStyleUrl] = useState(mapStyles.streets);
 
     const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
 
-    const addSourcesAndLayers = (map: mapboxgl.Map) => {
-        // Add hostel source and layer
-        if (hostelLocation) {
-             if(!map.getSource('hostel-pin-source')) {
-                map.addSource('hostel-pin-source', {
-                    type: 'geojson',
-                    data: {
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: [hostelLocation.lng || 0, hostelLocation.lat || 0]
-                        },
-                        properties: {}
-                    }
-                });
-            }
-             if(!map.getLayer('hostel-pin-layer')) {
-                map.addLayer({
-                    id: 'hostel-pin-layer',
-                    type: 'circle',
-                    source: 'hostel-pin-source',
-                    paint: {
-                        'circle-radius': 8,
-                        'circle-color': '#800000', // Use a literal color, not CSS variable
-                        'circle-stroke-color': 'white',
-                        'circle-stroke-width': 2,
-                    }
-                });
-             }
-        }
-        
-        // Add agent source and layer
-        if(!map.getSource('agent-location-source')) {
-            map.addSource('agent-location-source', {
-                type: 'geojson',
-                data: {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'Point',
-                        coordinates: [0, 0]
-                    },
-                    properties: {}
-                }
-            });
-        }
-        if(!map.getLayer('agent-location-layer')) {
-            map.addLayer({
-                id: 'agent-location-layer',
-                type: 'circle',
-                source: 'agent-location-source',
-                paint: {
-                    'circle-radius': 10,
-                    'circle-color': '#008080', // Teal color for agent
-                    'circle-stroke-color': 'white',
-                    'circle-stroke-width': 2,
-                }
-            });
-        }
-    };
-    
-    const switchStyle = (newStyle: 'streets' | 'satellite') => {
-        if (!mapRef.current) return;
-        setActiveStyle(newStyle);
-        mapRef.current.setStyle(mapStyles[newStyle]);
-    };
-
     useEffect(() => {
-        if (!mapboxToken || mapboxToken === 'YOUR_MAPBOX_API_KEY_HERE') return;
+        if (!mapboxToken || mapboxToken === 'YOUR_MAPBOX_API_KEY_HERE') {
+            console.error("Mapbox token is not set.");
+            return;
+        }
         if (mapRef.current || !mapContainerRef.current) return; 
 
         mapRef.current = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: mapStyles.streets,
+            style: styleUrl,
             center: [hostelLocation?.lng || -0.1870, hostelLocation?.lat || 5.6037],
             zoom: 14
         });
-
+        
         mapRef.current.on('load', () => {
-             const map = mapRef.current;
-             if (!map) return;
-             addSourcesAndLayers(map);
              setMapLoaded(true);
         });
-        
-         // When style changes, 'styledata' event is fired. Re-add sources and layers.
-        mapRef.current.on('styledata', () => {
-            if (mapRef.current?.isStyleLoaded()) {
-                addSourcesAndLayers(mapRef.current);
-            }
-        });
 
-        // Cleanup on unmount
         return () => {
             mapRef.current?.remove();
             mapRef.current = null;
         };
-    }, [hostelLocation, mapboxToken]);
+    }, [styleUrl, hostelLocation, mapboxToken]);
 
-    // Effect to handle hostel marker and agent location updates
     useEffect(() => {
         if (!mapLoaded || !mapRef.current) return;
 
-        // Update agent location
-        if (agentLocation?.lat && agentLocation.lng) {
-            const agentSource = mapRef.current.getSource('agent-location-source') as mapboxgl.GeoJSONSource;
-            if (agentSource) {
-                const coordinates: [number, number] = [agentLocation.lng, agentLocation.lat];
-                agentSource.setData({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: coordinates },
-                    properties: {}
-                });
-                 mapRef.current.panTo(coordinates);
+        // Create or update hostel marker
+        if (hostelLocation?.lat && hostelLocation?.lng) {
+            if (hostelMarkerRef.current) {
+                hostelMarkerRef.current.setLngLat([hostelLocation.lng, hostelLocation.lat]);
+            } else {
+                const el = document.createElement('div');
+                el.className = 'w-4 h-4 rounded-full bg-red-700 border-2 border-white shadow-lg';
+                hostelMarkerRef.current = new mapboxgl.Marker(el)
+                    .setLngLat([hostelLocation.lng, hostelLocation.lat])
+                    .addTo(mapRef.current);
             }
         }
-        
-        // Update hostel location (if it changes, though unlikely)
-        if (hostelLocation?.lat && hostelLocation.lng) {
-            const hostelSource = mapRef.current.getSource('hostel-pin-source') as mapboxgl.GeoJSONSource;
-            if (hostelSource) {
-                 hostelSource.setData({
-                    type: 'Feature',
-                    geometry: { type: 'Point', coordinates: [hostelLocation.lng, hostelLocation.lat] },
-                    properties: {}
-                });
+
+        // Create or update agent marker
+        if (agentLocation?.lat && agentLocation.lng) {
+            if (agentMarkerRef.current) {
+                agentMarkerRef.current.setLngLat([agentLocation.lng, agentLocation.lat]);
+            } else {
+                 const el = document.createElement('div');
+                el.className = 'w-5 h-5 rounded-full bg-primary border-2 border-white shadow-lg';
+                agentMarkerRef.current = new mapboxgl.Marker(el)
+                    .setLngLat([agentLocation.lng, agentLocation.lat])
+                    .addTo(mapRef.current);
+            }
+            mapRef.current.panTo([agentLocation.lng, agentLocation.lat], { duration: 1000 });
+        } else {
+            // If agent location becomes null, remove the marker
+            if (agentMarkerRef.current) {
+                agentMarkerRef.current.remove();
+                agentMarkerRef.current = null;
             }
         }
 
     }, [mapLoaded, agentLocation, hostelLocation]);
+
+    const switchStyle = (newStyle: 'streets' | 'satellite') => {
+        if (!mapRef.current) return;
+        setActiveStyle(newStyle);
+        setStyleUrl(mapStyles[newStyle]);
+    };
     
     if (!mapboxToken || mapboxToken === "YOUR_MAPBOX_API_KEY_HERE") {
         return (

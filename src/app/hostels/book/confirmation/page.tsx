@@ -78,6 +78,7 @@ function ConfirmationContent() {
                 if (visitType === 'agent') {
                     if (!visitDate || !visitTime) {
                         toast({ title: "Invalid Confirmation Link", description: "Missing visit time for agent visit.", variant: "destructive" });
+                        router.push(`/hostels/${hostelId}/book`);
                         return;
                     }
                     visitRef = await addDoc(collection(db, 'visits'), {

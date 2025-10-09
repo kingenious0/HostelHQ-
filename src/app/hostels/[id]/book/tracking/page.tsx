@@ -145,7 +145,8 @@ export default function TrackingPage() {
         
         const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
             if (!docSnap.exists()) {
-                notFound();
+                toast({ title: "Visit Not Found", description: "The visit you are looking for does not exist.", variant: "destructive" });
+                router.push('/');
                 return;
             }
 
@@ -187,7 +188,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId]);
+    }, [visitId, hostelId, router, toast]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
