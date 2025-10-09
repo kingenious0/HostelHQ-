@@ -6,7 +6,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -47,10 +47,48 @@ type AppUser = {
   role: 'student' | 'agent' | 'admin';
 }
 
+type Visit = {
+  id: string;
+  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+}
+
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: AppUser | null }) {
     const router = useRouter();
     const { toast } = useToast();
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
+    const [existingVisit, setExistingVisit] = useState<Visit | null | undefined>(undefined); // undefined: loading, null: not found
+
+    useEffect(() => {
+        if (!currentUser || !hostel.id) {
+            setExistingVisit(null);
+            return;
+        }
+
+        const checkExistingVisit = async () => {
+            const visitsQuery = query(
+                collection(db, 'visits'),
+                where('studentId', '==', currentUser.uid),
+                where('hostelId', '==', hostel.id),
+                limit(1)
+            );
+
+            const visitSnapshot = await getDocs(visitsQuery);
+            if (!visitSnapshot.empty) {
+                const visitDoc = visitSnapshot.docs[0];
+                // Only consider non-cancelled visits as "existing" for blocking new bookings
+                if (visitDoc.data().status !== 'cancelled') {
+                    setExistingVisit({ id: visitDoc.id, status: visitDoc.data().status } as Visit);
+                } else {
+                    setExistingVisit(null); // Allow re-booking if cancelled
+                }
+            } else {
+                setExistingVisit(null);
+            }
+        };
+
+        checkExistingVisit();
+    }, [currentUser, hostel.id]);
+
 
     const getRoomAvailabilityVariant = (availability: RoomType['availability']) => {
         switch(availability) {
@@ -59,6 +97,39 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             case 'Full': return 'destructive';
             default: return 'outline';
         }
+    }
+    
+    const getVisitButton = (room: RoomType) => {
+        if (existingVisit === undefined) {
+             return <Button variant="outline" size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking...</Button>;
+        }
+
+        if (existingVisit) {
+            if (existingVisit.status === 'completed') {
+                 return <Button variant="outline" size="sm" disabled>Visit Completed</Button>;
+            }
+            return (
+                <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                >
+                    <Ticket className="mr-2 h-4 w-4"/>
+                    Track Visit
+                </Button>
+            );
+        }
+
+        return (
+            <Button 
+                variant="outline"
+                size="sm"
+                disabled={room.availability === 'Full'}
+                onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
+            >
+                Book Visit
+            </Button>
+        );
     }
 
     return (
@@ -180,14 +251,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                         GH₵{room.price.toLocaleString()}
                                     </TableCell>
                                     <TableCell className="text-right space-x-2">
-                                        <Button 
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={room.availability === 'Full'}
-                                            onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
-                                        >
-                                            Book Visit
-                                        </Button>
+                                        {getVisitButton(room)}
                                          <Button 
                                             size="sm"
                                             disabled={room.availability === 'Full'}
@@ -375,3 +439,5 @@ export default function HostelDetailPage() {
     </div>
   );
 }
+
+    
