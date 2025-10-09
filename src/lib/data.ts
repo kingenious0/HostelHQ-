@@ -1,7 +1,7 @@
 
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy } from "firebase/firestore";
 import { ably } from './ably';
 
 export type RoomType = {
@@ -13,12 +13,21 @@ export type RoomType = {
   bathrooms?: string;
 };
 
+export type Review = {
+    id: string;
+    studentId: string;
+    studentName: string;
+    rating: number;
+    comment: string;
+    createdAt: string; // ISO string
+};
+
 export type Hostel = {
   id: string;
   name: string;
   location: string;
   rating: number;
-  reviews: number;
+  reviews: Review[]; // Changed from number to array of Review objects
   amenities: string[];
   images: string[];
   description: string;
@@ -26,8 +35,8 @@ export type Hostel = {
   lat?: number;
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
-  roomTypes: RoomType[]; // Changed from optional to required
-  priceRange: { // New field for calculated min/max price
+  roomTypes: RoomType[];
+  priceRange: { 
     min: number;
     max: number;
   };
@@ -66,7 +75,7 @@ export const staticHostels: Hostel[] = [
     name: 'Doku Hostel',
     location: 'AAMUSTED, Kumasi (~5 min walk)',
     rating: 4.5,
-    reviews: 12,
+    reviews: [],
     amenities: ['Balconies', 'TV Room', 'Comfortable'],
     images: [
       'https://picsum.photos/seed/hostel-building-1/800/600',
@@ -181,6 +190,16 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
             
+             // Fetch approved reviews for the hostel
+            const reviewsQuery = query(
+                collection(db, 'reviews'), 
+                where('hostelId', '==', hostelId),
+                where('status', '==', 'approved'),
+                orderBy('createdAt', 'desc')
+            );
+            const reviewsSnapshot = await getDocs(reviewsQuery);
+            const reviews = reviewsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Review[];
+
             // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
             const priceRange = {
@@ -191,7 +210,20 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
             
-            return convertTimestamps({ id: hostelDoc.id, ...data, roomTypes, priceRange, lat, lng }) as Hostel;
+            // Recalculate average rating
+            const totalRating = reviews.reduce((acc, review) => acc + review.rating, 0);
+            const averageRating = reviews.length > 0 ? totalRating / reviews.length : 0;
+
+            return convertTimestamps({ 
+                id: hostelDoc.id, 
+                ...data, 
+                roomTypes, 
+                priceRange, 
+                lat, 
+                lng, 
+                reviews, 
+                rating: averageRating
+            }) as Hostel;
         }
     } catch(e) {
         console.error("Error fetching hostel from firestore: ", e);
@@ -234,7 +266,24 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
                 max: prices.length > 0 ? Math.max(...prices) : 0,
             };
 
-            return convertTimestamps({ id: doc.id, ...data, roomTypes, availability, priceRange }) as Hostel;
+            // For the main list, we can just return the number of reviews and average rating
+            // rather than the full review objects.
+            const reviewsQuery = query(collection(db, 'reviews'), where('hostelId', '==', doc.id), where('status', '==', 'approved'));
+            const reviewsSnapshot = await getDocs(reviewsQuery);
+            const reviewsCount = reviewsSnapshot.size;
+            const totalRating = reviewsSnapshot.docs.reduce((acc, doc) => acc + doc.data().rating, 0);
+            const averageRating = reviewsCount > 0 ? totalRating / reviewsCount : 0;
+
+
+            return convertTimestamps({ 
+                id: doc.id, 
+                ...data, 
+                roomTypes, 
+                availability, 
+                priceRange,
+                reviews: reviewsCount, // Return count for list view
+                rating: averageRating,
+            }) as Hostel;
         }));
         
         // Don't fall back to static data if we are specifically querying for featured hostels

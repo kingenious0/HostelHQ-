@@ -10,17 +10,29 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
-import { doc, updateDoc, increment } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, updateDoc, increment, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 export default function RatingPage() {
     const router = useRouter();
     const params = useParams();
+    const searchParams = useSearchParams();
     const { id: hostelId } = params;
+    const visitId = searchParams.get('visitId');
+
     const [rating, setRating] = useState(0);
     const [comment, setComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const { toast } = useToast();
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
 
     const handleSubmit = async () => {
         if (rating === 0) {
@@ -28,26 +40,36 @@ export default function RatingPage() {
             return;
         }
 
+        if (!currentUser) {
+            toast({ title: "You must be logged in to submit a review.", variant: "destructive" });
+            return;
+        }
+        
+        if (!hostelId || typeof hostelId !== 'string') {
+            toast({ title: "Invalid hostel specified.", variant: "destructive" });
+            return;
+        }
+
         setIsSubmitting(true);
         toast({ title: "Submitting your review..." });
         
         try {
-            // In a real app, you'd save the rating and comment to your database
-            const hostelRef = doc(db, 'hostels', hostelId as string);
-            
-            // This is a simplified update. A real app might average ratings.
-            await updateDoc(hostelRef, {
-                reviews: increment(1),
-                // This is a naive way to update rating. A better way would involve cloud functions to calculate average.
-                // rating: newAverageRating 
+            // Save the review to a 'reviews' subcollection for moderation
+            const reviewsRef = collection(db, 'reviews');
+            await addDoc(reviewsRef, {
+                hostelId: hostelId,
+                studentId: currentUser.uid,
+                studentName: currentUser.displayName || 'Anonymous Student', // Fallback
+                rating: rating,
+                comment: comment,
+                createdAt: serverTimestamp(),
+                status: 'pending', // for moderation
+                visitId: visitId || null,
             });
-
-             // You could also store the specific review in a subcollection, e.g.,
-             // addDoc(collection(db, `hostels/${hostelId}/reviews`), { rating, comment, user: ... });
 
             toast({
                 title: "Review Submitted!",
-                description: "Thank you for your feedback.",
+                description: "Thank you for your feedback. Your review is pending approval.",
             });
 
             router.push(`/hostels/${hostelId}`);
@@ -94,7 +116,7 @@ export default function RatingPage() {
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <Button className="w-full" onClick={handleSubmit} disabled={isSubmitting || rating === 0}>
+                        <Button className="w-full" onClick={handleSubmit} disabled={isSubmitting || rating === 0 || !currentUser}>
                             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Submit Review
                         </Button>
