@@ -37,14 +37,15 @@ export function HostelCard({ hostel }: HostelCardProps) {
   const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
 
   const renderPrice = () => {
-    if (!hostel.priceRange || hostel.priceRange.min === 0) {
-        return <span className="text-xl font-bold text-primary">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+    const priceStyle = "text-xl font-bold text-primary";
+    if (hostel.priceRange.min === 0 && hostel.price) {
+       return <span className={priceStyle}>GH₵{hostel.price.toLocaleString()}</span>
     }
     if (hostel.priceRange.min === hostel.priceRange.max) {
-      return <span className="text-xl font-bold text-primary">GH₵{hostel.priceRange.min.toLocaleString()}</span>;
+      return <span className={priceStyle}>GH₵{hostel.priceRange.min.toLocaleString()}</span>;
     }
     return (
-      <span className="text-xl font-bold text-primary">
+      <span className="text-lg font-bold text-primary">
         GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
       </span>
     );

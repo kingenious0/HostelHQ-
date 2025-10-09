@@ -311,28 +311,29 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 }
 
 function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
-    const { toast } = useToast();
     const router = useRouter();
-    const handleApply = () => {
+    const { toast } = useToast();
+    
+    const handleLoginRedirect = () => {
         toast({
             title: "Please Log In",
-            description: "You need to be logged in as a student to apply for a hostel. Please use the menu in the top right.",
-            variant: "destructive",
-        })
+            description: "You need to be logged in as a student to secure a hostel.",
+            variant: "default",
+        });
         router.push('/login');
     };
     
     const renderPrice = () => {
         if (!hostel.priceRange || hostel.priceRange.min === 0) {
-            return <span className="text-4xl font-bold text-primary">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+            return <span className="text-4xl font-bold text-destructive">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
         }
         if (hostel.priceRange.min === hostel.priceRange.max) {
-        return <span className="text-4xl font-bold text-primary">GH₵{hostel.priceRange.min.toLocaleString()}</span>;
+            return <span className="text-4xl font-bold text-destructive">GH₵{hostel.priceRange.min.toLocaleString()}</span>;
         }
         return (
-        <span className="text-4xl font-bold text-primary">
-            GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
-        </span>
+            <span className="text-4xl font-bold text-destructive">
+                GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
+            </span>
         );
     };
 
@@ -341,7 +342,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
             <div>
                  <Carousel className="w-full rounded-lg overflow-hidden shadow-lg">
                     <CarouselContent>
-                        {hostel.images.slice(0, 2).map((img: string, index: number) => (
+                        {hostel.images.map((img: string, index: number) => (
                             <CarouselItem key={index}>
                                 <div className="relative h-96 w-full">
                                 <Image src={img} alt={`${hostel.name} image ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="hostel exterior" />
@@ -349,41 +350,60 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                             </CarouselItem>
                         ))}
                     </CarouselContent>
+                    <CarouselPrevious className="left-4"/>
+                    <CarouselNext className="right-4"/>
                 </Carousel>
+                <div className="mt-8">
+                    <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
+                    <p className="mt-2 text-foreground/80 leading-relaxed line-clamp-5">{hostel.description}</p>
+                </div>
             </div>
-            <div className="flex flex-col justify-center">
+            <div className="flex flex-col">
                  <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
                  <div className="flex items-center text-muted-foreground mt-2">
                     <MapPin className="h-5 w-5 mr-2" />
                     <span>{hostel.location}</span>
                 </div>
-                <p className="mt-6 text-lg text-foreground/80">{hostel.description}</p>
-                
-                <div className="mt-8 flex items-baseline gap-4">
-                    {renderPrice()}
-                    <span className="text-lg text-muted-foreground">/year</span>
+                 <div className="flex items-center mt-4">
+                    <div className="flex items-center text-yellow-500">
+                        {[...Array(5)].map((_, i) => (
+                        <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
+                        ))}
+                    </div>
+                    <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews.length} reviews)</span>
                 </div>
+
+                <div className="mt-8">
+                    <h3 className="text-lg font-semibold font-headline mb-3">Amenities</h3>
+                    <div className="flex flex-wrap gap-3">
+                        {hostel.amenities.slice(0, 4).map((amenity: string) => (
+                            <Badge key={amenity} variant="outline" className="text-sm p-2 flex items-center gap-2">
+                                {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
+                                <span className="font-medium capitalize">{amenity}</span>
+                            </Badge>
+                        ))}
+                    </div>
+                </div>
+                
+                <div className="mt-8 flex items-baseline gap-2">
+                    {renderPrice()}
+                    <span className="text-base text-muted-foreground">/year</span>
+                </div>
+
+                <Button size="lg" className="w-full mt-6 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 text-lg h-14" onClick={handleLoginRedirect}>
+                    Apply to Secure Hostel
+                </Button>
 
                 <Card className="mt-8 bg-muted/30">
                     <CardHeader>
-                        <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground"/> More Details Available</CardTitle>
-                        <CardDescription>
-                            Log in as a student to see all amenities, pricing, room details, and more photos.
-                        </CardDescription>
+                        <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground"/> Log in for full details</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ul className="text-muted-foreground list-disc pl-5 space-y-1">
-                            <li>Full Photo Gallery</li>
-                            <li>Available Amenities & Room Types</li>
-                            <li>Live Availability Status</li>
-                            <li>Book a Guided or Self-Guided Visit</li>
-                        </ul>
+                        <p className="text-muted-foreground text-sm">
+                            Create a free student account to see all photos, room types, and book a visit.
+                        </p>
                     </CardContent>
                 </Card>
-
-                <Button size="lg" className="w-full mt-6 bg-accent hover:bg-accent/90 text-accent-foreground text-lg" onClick={handleApply}>
-                    Log In to Book
-                </Button>
             </div>
         </div>
     );
