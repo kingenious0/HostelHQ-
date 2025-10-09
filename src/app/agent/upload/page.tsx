@@ -11,15 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign } from 'lucide-react';
+import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, PlusCircle, Trash2, BedDouble } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { RoomType } from '@/lib/data';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
 
@@ -31,14 +33,14 @@ export default function AgentUploadPage() {
     // Form State
     const [hostelName, setHostelName] = useState('');
     const [nearbyLandmarks, setNearbyLandmarks] = useState('');
-    const [price, setPrice] = useState('');
-    const [beds, setBeds] = useState('');
-    const [bathrooms, setBathrooms] = useState('');
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
     const [gpsLocation, setGpsLocation] = useState('');
     const [description, setDescription] = useState('');
+    const [roomTypes, setRoomTypes] = useState<Partial<RoomType>[]>([
+        { name: '', price: 0, availability: 'Available' }
+    ]);
     
     // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +58,24 @@ export default function AgentUploadPage() {
         return () => unsubscribe();
     }, []);
 
+    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number) => {
+        const newRoomTypes = [...roomTypes];
+        (newRoomTypes[index] as any)[field] = value;
+        setRoomTypes(newRoomTypes);
+    };
+
+    const addRoomType = () => {
+        setRoomTypes([...roomTypes, { name: '', price: 0, availability: 'Available' }]);
+    };
+
+    const removeRoomType = (index: number) => {
+        if (roomTypes.length <= 1) {
+            toast({ title: "Cannot Remove", description: "You must have at least one room type.", variant: "destructive" });
+            return;
+        }
+        const newRoomTypes = roomTypes.filter((_, i) => i !== index);
+        setRoomTypes(newRoomTypes);
+    };
 
     const handleAmenityChange = (amenity: string, checked: boolean) => {
         setSelectedAmenities(prev => 
@@ -84,6 +104,11 @@ export default function AgentUploadPage() {
             toast({ title: 'No Photos', description: 'Please upload at least one photo.', variant: 'destructive' });
             return;
         }
+        
+        if (roomTypes.some(rt => !rt.name || !rt.price || rt.price <= 0)) {
+            toast({ title: 'Invalid Room Types', description: 'Please ensure all room types have a name and a valid price.', variant: 'destructive' });
+            return;
+        }
 
         setIsSubmitting(true);
         toast({ title: 'Submitting hostel...', description: 'Uploading images and enhancing description.' });
@@ -95,6 +120,7 @@ export default function AgentUploadPage() {
             
             // 2. Enhance description with AI
             let finalDescription = description;
+            const roomFeaturesString = roomTypes.map(rt => `${rt.name} at GHS ${rt.price}`).join('; ');
             if (photos.length > 0 && description) {
                 try {
                     const photoDataUris = await Promise.all(photos.map(file => {
@@ -111,7 +137,7 @@ export default function AgentUploadPage() {
                         gpsLocation,
                         nearbyLandmarks,
                         amenities: selectedAmenities.join(', '),
-                        roomFeatures: `${beds} beds, ${bathrooms} bathrooms`,
+                        roomFeatures: roomFeaturesString,
                         currentDescription: description,
                     };
                     const result = await enhanceHostelDescription(input);
@@ -130,22 +156,34 @@ export default function AgentUploadPage() {
                 }
             }
             
-            // 3. Add hostel data to Firestore 'pendingHostels' collection
-            await addDoc(collection(db, 'pendingHostels'), {
+            // 3. Use a batch write to add hostel and room types
+            const batch = writeBatch(db);
+            const newHostelRef = addDoc(collection(db, 'pendingHostels'), {}).then(ref => ref); // Get a ref for the new hostel
+            const hostelRef = await newHostelRef;
+
+            batch.set(hostelRef, {
                 name: hostelName,
                 location: gpsLocation,
                 nearbyLandmarks,
-                price: Number(price) || 0,
                 rating: 0,
                 reviews: 0,
                 amenities: selectedAmenities,
-                roomFeatures: { beds, bathrooms },
                 images: imageUrls,
                 description: finalDescription,
                 status: 'pending',
                 agentId: currentUser.uid,
                 dateSubmitted: new Date().toISOString(),
+                // Aggregate availability
+                availability: roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full',
             });
+            
+            // Add each room type to the subcollection
+            roomTypes.forEach(room => {
+                const roomTypeRef = doc(collection(hostelRef, 'roomTypes'));
+                batch.set(roomTypeRef, room);
+            });
+
+            await batch.commit();
 
             toast({ title: 'Submission Successful!', description: 'The hostel has been sent for admin approval.' });
             router.push('/agent/listings'); 
@@ -212,8 +250,8 @@ export default function AgentUploadPage() {
                         <CardHeader>
                             <CardTitle className="text-2xl font-headline">List a New Hostel</CardTitle>
                             <CardDescription>{
-                                step === 1 ? 'Hostel Information & Price' :
-                                step === 2 ? 'Room Features & Amenities' :
+                                step === 1 ? 'Hostel Information' :
+                                step === 2 ? 'Room Types & Pricing' :
                                 step === 3 ? 'Upload Photos & Location' : 'Description & Submission'
                             }</CardDescription>
                         </CardHeader>
@@ -228,30 +266,6 @@ export default function AgentUploadPage() {
                                         <Label htmlFor="landmarks">Nearby Landmarks</Label>
                                         <Input id="landmarks" placeholder="e.g., Accra Mall, University of Ghana" value={nearbyLandmarks} onChange={(e) => setNearbyLandmarks(e.target.value)} />
                                     </div>
-                                     <div className="space-y-2">
-                                        <Label htmlFor="price">Price per Year (GH₵)</Label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input id="price" type="number" placeholder="e.g., 3500" className="pl-10" value={price} onChange={(e) => setPrice(e.target.value)} />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            {step === 2 && (
-                                <div className="space-y-6">
-                                    <div>
-                                        <Label className="text-base font-semibold">Room Features</Label>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="beds">Number of Beds</Label>
-                                                <Input id="beds" type="number" placeholder="e.g., 2" value={beds} onChange={(e) => setBeds(e.target.value)} />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="bathrooms">Bathroom Details</Label>
-                                                <Input id="bathrooms" placeholder="e.g., Private" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} />
-                                            </div>
-                                        </div>
-                                    </div>
                                     <div>
                                         <Label className="text-base font-semibold">Amenities</Label>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
@@ -263,6 +277,63 @@ export default function AgentUploadPage() {
                                             ))}
                                         </div>
                                     </div>
+                                </div>
+                            )}
+                            {step === 2 && (
+                                <div className="space-y-4">
+                                    <Label className="text-base font-semibold">Room Types & Pricing</Label>
+                                    <p className="text-sm text-muted-foreground">Add all the different types of rooms available in this hostel.</p>
+                                    {roomTypes.map((room, index) => (
+                                        <div key={index} className="flex flex-col md:flex-row gap-3 p-4 border rounded-lg relative">
+                                            <div className="flex-1 space-y-2">
+                                                <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
+                                                <Input 
+                                                    id={`room-name-${index}`} 
+                                                    placeholder="e.g., 4 in a room, Annex"
+                                                    value={room.name}
+                                                    onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
+                                                />
+                                            </div>
+                                             <div className="w-full md:w-40 space-y-2">
+                                                <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
+                                                <Input
+                                                    id={`room-price-${index}`}
+                                                    type="number"
+                                                    placeholder="3500"
+                                                    value={room.price}
+                                                    onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
+                                                />
+                                            </div>
+                                             <div className="w-full md:w-48 space-y-2">
+                                                <Label htmlFor={`room-availability-${index}`}>Availability</Label>
+                                                 <Select 
+                                                    value={room.availability} 
+                                                    onValueChange={(value) => handleRoomTypeChange(index, 'availability', value)}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select status" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Available">Available</SelectItem>
+                                                        <SelectItem value="Limited">Limited</SelectItem>
+                                                        <SelectItem value="Full">Full</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="absolute top-2 right-2 h-7 w-7 text-muted-foreground"
+                                                onClick={() => removeRoomType(index)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    <Button variant="outline" onClick={addRoomType} className="w-full">
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        Add Another Room Type
+                                    </Button>
                                 </div>
                             )}
                             {step === 3 && (
@@ -326,4 +397,3 @@ export default function AgentUploadPage() {
         </div>
     );
 }
-    

@@ -3,11 +3,17 @@ import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
 import { ably } from './ably';
 
+export type RoomType = {
+  id?: string; // Optional, might be doc ID if it's a subcollection
+  name: string;
+  price: number;
+  availability: 'Available' | 'Limited' | 'Full';
+};
+
 export type Hostel = {
   id: string;
   name: string;
   location: string;
-  price: number;
   rating: number;
   reviews: number;
   amenities: string[];
@@ -16,8 +22,8 @@ export type Hostel = {
   agentId?: string;
   lat?: number;
   lng?: number;
-  availability: 'Available' | 'Limited' | 'Full';
-  roomFeatures?: { beds: string; bathrooms: string };
+  availability: 'Available' | 'Limited' | 'Full'; // This will become an aggregate status
+  roomTypes?: RoomType[]; // Array of room types
   [key: string]: any; // Allow other properties
 };
 
@@ -53,7 +59,6 @@ export const staticHostels: Hostel[] = [
     id: '1',
     name: 'Doku Hostel',
     location: 'AAMUSTED, Kumasi (~5 min walk)',
-    price: 3700,
     rating: 4.5,
     reviews: 12,
     amenities: ['Balconies', 'TV Room', 'Comfortable'],
@@ -65,6 +70,10 @@ export const staticHostels: Hostel[] = [
     lat: 6.69,
     lng: -1.66,
     availability: 'Available',
+    roomTypes: [
+        { name: '4 in a room', price: 3700, availability: 'Available' },
+        { name: '2 in a room', price: 4500, availability: 'Limited' },
+    ]
   },
 ];
 
@@ -156,11 +165,19 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
     try {
         const hostelDocRef = doc(db, 'hostels', hostelId);
         const hostelDoc = await getDoc(hostelDocRef);
+
         if (hostelDoc.exists()) {
             const data = hostelDoc.data();
+            
+            // Fetch room types from subcollection
+            const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
+            const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
+            const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
+
             const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
             const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
-            return convertTimestamps({ id: hostelDoc.id, ...data, lat, lng }) as Hostel;
+            
+            return convertTimestamps({ id: hostelDoc.id, ...data, roomTypes, lat, lng }) as Hostel;
         }
     } catch(e) {
         console.error("Error fetching hostel from firestore: ", e);
@@ -175,11 +192,15 @@ export async function getHostels(): Promise<Hostel[]> {
      try {
         const hostelsCollectionRef = collection(db, 'hostels');
         const querySnapshot = await getDocs(hostelsCollectionRef);
-        const firestoreHostels = querySnapshot.docs.map(doc => {
+
+        const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (doc) => {
             const data = doc.data();
-            // Convert any Firestore Timestamps to serializable strings
-            return convertTimestamps({ id: doc.id, ...data }) as Hostel;
-        });
+            const roomTypesCollectionRef = collection(db, 'hostels', doc.id, 'roomTypes');
+            const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
+            const roomTypes = roomTypesSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
+            
+            return convertTimestamps({ id: doc.id, ...data, roomTypes }) as Hostel;
+        }));
         
         if (firestoreHostels.length > 0) {
             return firestoreHostels;
