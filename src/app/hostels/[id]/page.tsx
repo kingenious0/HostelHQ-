@@ -13,7 +13,8 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
@@ -229,7 +230,20 @@ export default function HostelDetailPage() {
                     role: userData.role
                 });
             } else {
-                setAppUser(null);
+                // If user not in 'users', check 'pendingUsers'
+                const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
+                const pendingUserDocSnap = await getDoc(pendingUserDocRef);
+                if (pendingUserDocSnap.exists()) {
+                    const userData = pendingUserDocSnap.data();
+                     setAppUser({
+                        uid: user.uid,
+                        email: user.email!,
+                        fullName: userData.fullName,
+                        role: userData.role
+                    });
+                } else {
+                    setAppUser(null);
+                }
             }
           } else {
               setAppUser(null);

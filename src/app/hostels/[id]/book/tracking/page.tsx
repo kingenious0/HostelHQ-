@@ -1,3 +1,4 @@
+
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
@@ -29,6 +30,7 @@ type Visit = {
     createdAt: string;
     visitDate: string;
     visitTime: string;
+    visitType?: 'agent' | 'self';
 };
 
 type OnlineAgent = {
@@ -209,7 +211,7 @@ export default function TrackingPage() {
         if(!visitId) return;
         setIsCompleting(true);
         try {
-            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true, status: 'completed' });
+            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true });
             toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
             router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
         } catch (error) {
@@ -276,7 +278,7 @@ export default function TrackingPage() {
                     Open in Google Maps
                 </Button>
                 <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                    {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" /> }
                     Mark Visit as Complete
                 </Button>
             </div>
@@ -394,7 +396,7 @@ export default function TrackingPage() {
                         </a>
                     </div>
                      <Button variant="destructive" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                         {isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                         {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
                         Mark Visit as Complete
                      </Button>
                 </div>

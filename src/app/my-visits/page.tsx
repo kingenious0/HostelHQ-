@@ -65,9 +65,15 @@ export default function MyVisitsPage() {
                 let hostelName = 'Unknown Hostel';
                 let agentName: string | null = null;
                 try {
-                    const hostelRef = doc(db, 'hostels', visit.hostelId);
-                    const hostelSnap = await getDoc(hostelRef);
+                    // Try fetching from 'hostels' first, then 'pendingHostels'
+                    let hostelRef = doc(db, 'hostels', visit.hostelId);
+                    let hostelSnap = await getDoc(hostelRef);
+                    if (!hostelSnap.exists()) {
+                        hostelRef = doc(db, 'pendingHostels', visit.hostelId);
+                        hostelSnap = await getDoc(hostelRef);
+                    }
                     if (hostelSnap.exists()) hostelName = hostelSnap.data().name;
+
                 } catch (e) { console.error("Error fetching hostel", e); }
                 
                 if (visit.agentId) {
@@ -89,10 +95,10 @@ export default function MyVisitsPage() {
     }, [currentUser, toast]);
     
     const getStatusInfo = (visit: EnrichedVisit): { variant: "default" | "secondary" | "outline" | "destructive", icon: React.ReactNode, text: string } => {
-        if(visit.studentCompleted) return { variant: 'default', icon: <Check className="h-3 w-3" />, text: 'Completed' };
-        if(visit.status === 'cancelled') return { variant: 'destructive', icon: <X className="h-3 w-3" />, text: 'Cancelled' };
-        if(visit.status === 'accepted') return { variant: 'secondary', icon: <Check className="h-3 w-3" />, text: 'Accepted' };
-        if(visit.status === 'pending') return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending' };
+        if (visit.status === 'completed' || visit.studentCompleted) return { variant: 'default', icon: <Check className="h-3 w-3" />, text: 'Completed' };
+        if (visit.status === 'cancelled') return { variant: 'destructive', icon: <X className="h-3 w-3" />, text: 'Cancelled' };
+        if (visit.status === 'accepted') return { variant: 'secondary', icon: <Check className="h-3 w-3" />, text: 'Accepted' };
+        if (visit.status === 'pending') return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending' };
         return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Unknown' };
     };
 
@@ -174,12 +180,10 @@ export default function MyVisitsPage() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Link href={`/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`}>
-                                                            <Button variant="outline" size="sm">
-                                                                <Eye className="mr-2 h-4 w-4" />
-                                                                View Details
-                                                            </Button>
-                                                        </Link>
+                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`)}>
+                                                            <Eye className="mr-2 h-4 w-4" />
+                                                            View Details
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                                 )

@@ -1,3 +1,4 @@
+
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -39,7 +40,7 @@ function ConfirmationContent() {
 
         if (!currentUser) {
             toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: "destructive" });
-            router.push('/');
+            router.push('/login');
             return;
         }
 
@@ -53,9 +54,9 @@ function ConfirmationContent() {
                         paymentReference: trxref,
                         bookingDate: new Date().toISOString(),
                     });
-                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked. Check 'My Bookings' for details." });
+                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked." });
                     // Redirect to a success page or dashboard
-                    router.push('/my-visits');
+                    router.push('/');
                 } catch (error) {
                     console.error("Error creating booking record:", error);
                     toast({ title: "Something went wrong", description: "Could not save your booking details. Please contact support.", variant: 'destructive'});
@@ -82,7 +83,7 @@ function ConfirmationContent() {
                     visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
-                        agentId: null, 
+                        agentId: null, // Agent will be assigned on the tracking page
                         status: 'pending',
                         paymentReference: reference,
                         createdAt: new Date().toISOString(),
@@ -101,7 +102,7 @@ function ConfirmationContent() {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         agentId: null,
-                        status: 'accepted', // Self-visits are auto-accepted
+                        status: 'accepted', // Self-visits are auto-accepted as there is no agent
                         paymentReference: reference,
                         createdAt: new Date().toISOString(),
                         visitDate: new Date().toISOString(), // Self-visits are immediate
@@ -110,12 +111,7 @@ function ConfirmationContent() {
                         studentCompleted: false, // Student has not completed it yet
                     });
 
-                    const hostelRef = doc(db, 'hostels', hostelId);
-                    const hostelSnap = await getDoc(hostelRef);
-                    if(!hostelSnap.exists()) throw new Error("Hostel not found");
-                    const hostelData = hostelSnap.data() as Hostel;
-
-                    toast({ title: "Payment Confirmed!", description: `Here are the directions to ${hostelData.name}.` });
+                    toast({ title: "Payment Confirmed!", description: "Proceed to the hostel using the directions provided." });
                     router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
 
                 } else {
