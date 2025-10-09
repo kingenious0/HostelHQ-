@@ -123,7 +123,6 @@ export function Header() {
             });
           },
           (error) => {
-            console.error("Geolocation error:", error);
             if(error.code === 1) { // PERMISSION_DENIED
               toast({ title: 'Location Access Denied', description: 'Please enable location services to be visible to students.', variant: 'destructive'});
             }
