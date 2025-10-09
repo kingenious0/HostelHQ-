@@ -1,3 +1,4 @@
+
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -53,7 +54,7 @@ function ConfirmationContent() {
                         paymentReference: trxref,
                         bookingDate: new Date().toISOString(),
                     });
-                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked. Check 'My Visits' for details." });
+                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked. Check 'My Bookings' for details." });
                     // Redirect to a success page or dashboard
                     router.push('/my-visits');
                 } catch (error) {
@@ -95,13 +96,27 @@ function ConfirmationContent() {
                     router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
 
                 } else if (visitType === 'self') {
+                     // Log the self-visit in the database
+                    const visitRef = await addDoc(collection(db, 'visits'), {
+                        studentId: currentUser.uid,
+                        hostelId: hostelId,
+                        agentId: null,
+                        status: 'completed', // Mark as completed since no agent is involved
+                        paymentReference: reference,
+                        createdAt: new Date().toISOString(),
+                        visitDate: new Date().toISOString(), // Self-visits are immediate
+                        visitTime: new Date().toLocaleTimeString(),
+                        visitType: 'self',
+                        studentCompleted: true,
+                    });
+
                     const hostelRef = doc(db, 'hostels', hostelId);
                     const hostelSnap = await getDoc(hostelRef);
                     if(!hostelSnap.exists()) throw new Error("Hostel not found");
                     const hostelData = hostelSnap.data() as Hostel;
 
                     toast({ title: "Payment Confirmed!", description: `Here are the directions to ${hostelData.name}.` });
-                    router.push(`/hostels/${hostelId}/book/tracking?self_visit=true&reference=${reference}`);
+                    router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}&self_visit=true`);
 
                 } else {
                     throw new Error("Invalid visit type specified");

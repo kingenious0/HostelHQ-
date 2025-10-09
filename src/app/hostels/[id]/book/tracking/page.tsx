@@ -224,31 +224,6 @@ export default function TrackingPage() {
         }
     }
 
-    const handleSelfVisitComplete = async () => {
-        if (!currentUser || !hostel) return;
-        setIsCompleting(true);
-        try {
-             const visitRef = await addDoc(collection(db, 'visits'), {
-                studentId: currentUser.uid,
-                hostelId: hostel.id,
-                agentId: null, 
-                status: 'completed',
-                studentCompleted: true,
-                paymentReference: searchParams.get('reference') || 'N/A', // Assuming reference is in URL
-                createdAt: new Date().toISOString(),
-                visitDate: new Date().toISOString(),
-                visitTime: new Date().toLocaleTimeString(),
-                visitType: 'self',
-            });
-            toast({ title: "Visit Logged!", description: "Thank you for your feedback. Please rate your visit."});
-            router.push(`/hostels/${hostelId}/book/rating?visitId=${visitRef.id}`);
-        } catch (error) {
-            console.error("Failed to log self-visit:", error);
-            toast({ title: "Action Failed", description: "Could not log your visit completion.", variant: "destructive"});
-        } finally {
-            setIsCompleting(false);
-        }
-    }
     
     if (loading || !hostel || (!isSelfVisit && !visit)) {
         return (
@@ -294,10 +269,9 @@ export default function TrackingPage() {
                  <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
                     Open in Google Maps
                 </Button>
-                 <Button variant="destructive" className="w-full" onClick={handleSelfVisitComplete} disabled={isCompleting}>
-                    {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4"/>}
-                    Mark Visit as Complete
-                 </Button>
+                <Button className="w-full" variant="outline" onClick={() => router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`)}>
+                    Rate Your Visit
+                </Button>
             </div>
         )
     }
