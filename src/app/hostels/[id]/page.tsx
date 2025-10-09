@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -288,6 +287,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             {room.beds && <span className="flex items-center gap-1"><Bed className="h-3 w-3"/> {room.beds} Beds</span>}
                                             {room.bathrooms && <span className="flex items-center gap-1"><Bath className="h-3 w-3"/> {room.bathrooms}</span>}
                                         </div>
+
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={getRoomAvailabilityVariant(room.availability)}>{room.availability}</Badge>
@@ -495,3 +495,5 @@ export default function HostelDetailPage() {
     </div>
   );
 }
+
+    
