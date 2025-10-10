@@ -74,8 +74,10 @@ function useAgentPresence(): { agents: Agent[], loading: boolean } {
 
 
 // --- 2. Main Scheduling Component ---
-function SchedulingContent({ visitId }: { visitId: string }) {
+function SchedulingContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const visitId = searchParams.get('visitId');
     const { toast } = useToast();
 
     const { agents, loading } = useAgentPresence();
@@ -84,10 +86,17 @@ function SchedulingContent({ visitId }: { visitId: string }) {
     const [visitDate, setVisitDate] = useState<Date>();
     const [visitTime, setVisitTime] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    useEffect(() => {
+        if (!visitId) {
+            toast({ title: "Error", description: "Visit ID is missing from URL.", variant: "destructive" });
+            router.push('/');
+        }
+    }, [visitId, router, toast]);
 
 
     const handleScheduleSubmit = async () => {
-        if (!selectedAgent || !visitDate || !visitTime) {
+        if (!selectedAgent || !visitDate || !visitTime || !visitId) {
             toast({ title: "Missing Information", description: "Please select an agent, date, and time.", variant: "destructive" });
             return;
         }
@@ -114,6 +123,10 @@ function SchedulingContent({ visitId }: { visitId: string }) {
              setIsSubmitting(false);
         }
     };
+    
+    if (!visitId) {
+        return <LoaderState message="Invalid visit ID..." />;
+    }
 
     return (
         <Card className="w-full max-w-4xl shadow-xl">
@@ -200,27 +213,12 @@ function SchedulingContent({ visitId }: { visitId: string }) {
 
 // --- 3. Page Wrapper Component ---
 export default function AgentSchedulingPage() {
-    const searchParams = useSearchParams();
-    const visitId = searchParams.get('visitId');
-
-    // This component must be wrapped in Suspense because useSearchParams can only be used in a Client Component.
-    const PageContent = () => {
-        if (!visitId) {
-            return (
-                <div className="text-center p-8">
-                    <p className="text-red-600">Error: Visit ID is missing. Cannot schedule a visit.</p>
-                </div>
-            );
-        }
-        return <SchedulingContent visitId={visitId} />;
-    }
-    
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
                 <Suspense fallback={<LoaderState message="Loading Agent Data..." />}>
-                    <PageContent />
+                    <SchedulingContent />
                 </Suspense>
             </main>
         </div>
