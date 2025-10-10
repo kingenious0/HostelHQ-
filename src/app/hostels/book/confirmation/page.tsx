@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,7 +25,7 @@ function ConfirmationContent() {
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-    const [hasProcessed, setHasProcessed] = useState(false); // State to prevent double-processing
+    const [hasProcessed, setHasProcessed] = useState(false);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -49,10 +49,18 @@ function ConfirmationContent() {
         }
 
         const handleConfirmation = async () => {
-            setHasProcessed(true); // Mark as processed immediately
+            // 1. Reject obviously bad links immediately, as suggested.
+            if (!hostelId || (!trxref && !reference)) {
+                toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
+                router.push('/');
+                return;
+            }
+            
+            // 2. Now we know we have something to do, so we mark it as processed.
+            setHasProcessed(true);
 
             // This handles confirming payment for securing a hostel room
-            if (trxref && hostelId) {
+            if (trxref) {
                 toast({ title: "Confirming Room Booking...", description: "Please wait while we finalize your details." });
                 try {
                     await addDoc(collection(db, 'bookings'), {
@@ -63,7 +71,7 @@ function ConfirmationContent() {
                         status: 'confirmed'
                     });
                      toast({ title: "Room Secured!", description: "Congratulations! Your room is booked and your agent will be in touch." });
-                    router.push(`/hostels/${hostelId}`); // Redirect to hostel page after securing
+                    router.push(`/hostels/${hostelId}`);
                 } catch (error) {
                     console.error("Error creating booking record:", error);
                     toast({ title: "Something went wrong", description: "Could not save your booking details. Please contact support.", variant: 'destructive'});
@@ -73,7 +81,7 @@ function ConfirmationContent() {
             }
 
             // This handles confirming payment for a visit
-            if (reference && hostelId && visitType) {
+            if (reference) {
                  toast({ title: "Payment Confirmed!", description: "Finalizing your visit details..." });
                  try {
                      const visitRef = await addDoc(collection(db, 'visits'), {
@@ -82,13 +90,14 @@ function ConfirmationContent() {
                         agentId: null,
                         status: visitType === 'self' ? 'accepted' : 'pending',
                         paymentReference: reference,
-                        createdAt: new Date().toISOString(),
+                        createdAt: serverTimestamp(),
                         visitDate: visitDate || new Date().toISOString(),
                         visitTime: visitTime || new Date().toLocaleTimeString(),
                         visitType: visitType,
                         studentCompleted: false,
                     });
                     
+                    toast({ title: "Visit Scheduled!", description: "Redirecting you to the tracking page..."});
                     // Redirect to the tracking page with the new visit ID
                     router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
 
@@ -99,15 +108,6 @@ function ConfirmationContent() {
                 }
                 return;
             }
-
-            // If no valid parameters are found, wait briefly before concluding it's an error
-            setTimeout(() => {
-                if (!hasProcessed) {
-                    toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
-                    router.push('/');
-                }
-            }, 1000);
-
         };
 
         handleConfirmation();
