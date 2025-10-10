@@ -9,19 +9,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Eye, Clock, Check, X, BedDouble, CalendarCheck, User as UserIcon, Navigation } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, Clock, Check, X, Navigation, User as UserIcon } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 
 type Visit = {
     id: string;
     hostelId: string;
     agentId: string | null;
-    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled' | 'scheduling';
     visitDate: string;
     visitTime: string;
     visitType: 'agent' | 'self';
@@ -65,7 +65,6 @@ export default function MyVisitsPage() {
                 let hostelName = 'Unknown Hostel';
                 let agentName: string | null = null;
                 try {
-                    // Try fetching from 'hostels' first, then 'pendingHostels'
                     let hostelRef = doc(db, 'hostels', visit.hostelId);
                     let hostelSnap = await getDoc(hostelRef);
                     if (!hostelSnap.exists()) {
@@ -86,7 +85,14 @@ export default function MyVisitsPage() {
                 return { ...visit, hostelName, agentName };
             }));
             
-            const sorted = enrichedVisits.sort((a,b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime());
+            const sorted = enrichedVisits.sort((a,b) => {
+                const dateA = new Date(a.visitDate);
+                const dateB = new Date(b.visitDate);
+                if (isValid(dateA) && isValid(dateB)) {
+                    return dateB.getTime() - dateA.getTime();
+                }
+                return 0;
+            });
             setMyVisits(sorted);
             setLoading(false);
         });
@@ -98,9 +104,25 @@ export default function MyVisitsPage() {
         if (visit.status === 'completed' || visit.studentCompleted) return { variant: 'default', icon: <Check className="h-3 w-3" />, text: 'Completed' };
         if (visit.status === 'cancelled') return { variant: 'destructive', icon: <X className="h-3 w-3" />, text: 'Cancelled' };
         if (visit.status === 'accepted') return { variant: 'secondary', icon: <Check className="h-3 w-3" />, text: 'Accepted' };
-        if (visit.status === 'pending') return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending' };
+        if (visit.status === 'pending') return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Pending Agent' };
+        if (visit.status === 'scheduling') return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Needs Scheduling' };
         return { variant: 'outline', icon: <Clock className="h-3 w-3" />, text: 'Unknown' };
     };
+
+    const getActionForVisit = (visit: EnrichedVisit) => {
+        const url = visit.status === 'scheduling' 
+            ? `/hostels/book/schedule?visitId=${visit.id}`
+            : `/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`;
+        
+        const buttonText = visit.status === 'scheduling' ? 'Schedule Visit' : 'View Details';
+
+        return (
+             <Button variant="outline" size="sm" onClick={() => router.push(url)}>
+                <Eye className="mr-2 h-4 w-4" />
+                {buttonText}
+            </Button>
+        )
+    }
 
     if (loadingAuth) {
         return (
@@ -161,6 +183,7 @@ export default function MyVisitsPage() {
                                         {myVisits.length > 0 ? (
                                             myVisits.map(visit => {
                                                 const statusInfo = getStatusInfo(visit);
+                                                const visitDate = new Date(visit.visitDate);
                                                 return (
                                                 <TableRow key={visit.id}>
                                                     <TableCell className="font-medium">{visit.hostelName}</TableCell>
@@ -171,7 +194,7 @@ export default function MyVisitsPage() {
                                                         </Badge>
                                                     </TableCell>
                                                      <TableCell>
-                                                        {format(new Date(visit.visitDate), "PPP")} at {visit.visitTime}
+                                                        {isValid(visitDate) ? `${format(visitDate, "PPP")} at ${visit.visitTime}` : 'Not Scheduled'}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge variant={statusInfo.variant} className="capitalize flex items-center gap-1.5">
@@ -180,10 +203,7 @@ export default function MyVisitsPage() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button variant="outline" size="sm" onClick={() => router.push(`/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`)}>
-                                                            <Eye className="mr-2 h-4 w-4" />
-                                                            View Details
-                                                        </Button>
+                                                        {getActionForVisit(visit)}
                                                     </TableCell>
                                                 </TableRow>
                                                 )

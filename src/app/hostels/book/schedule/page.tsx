@@ -4,9 +4,9 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
-import { Loader2, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -34,16 +34,11 @@ type OnlineAgentData = {
 }
 
 // --- 1. Custom Hook to Get Agent Online Status (Real-Time) ---
-function useAgentPresence(agentIds: string[]): { agents: Agent[], loading: boolean } {
+function useAgentPresence(): { agents: Agent[], loading: boolean } {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (agentIds.length === 0) {
-            setLoading(false);
-            return;
-        }
-
         const presenceChannel = ably.channels.get('agents:live');
 
         const updatePresence = async () => {
@@ -53,24 +48,26 @@ function useAgentPresence(agentIds: string[]): { agents: Agent[], loading: boole
             const presentMembers = await presenceChannel.presence.get();
             const presentAgentIds = new Set(presentMembers.map(m => (m.data as OnlineAgentData).id));
 
-            const agentsWithStatus = allAgents.map(agent => ({
+            const agentsWithStatus = allAgents
+                .filter(agent => agent.email !== 'admin@hostelhq.com') // Exclude admin
+                .map(agent => ({
                 ...agent,
                 status: presentAgentIds.has(agent.id) ? 'Online' : 'Offline'
             } as Agent));
             
-            setAgents(agentsWithStatus.sort((a, b) => a.status === 'Online' ? -1 : 1));
+            setAgents(agentsWithStatus.sort((a, b) => (a.status === 'Online' ? -1 : 1)));
             setLoading(false);
         };
         
         updatePresence(); // Initial fetch
         
-        presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence);
+        const subscription = presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence);
 
         return () => {
-            presenceChannel.presence.unsubscribe();
+           subscription.then(sub => sub.unsubscribe());
         };
 
-    }, [agentIds]);
+    }, []);
 
     return { agents, loading };
 }
@@ -81,24 +78,13 @@ function SchedulingContent({ visitId }: { visitId: string }) {
     const router = useRouter();
     const { toast } = useToast();
 
-    const [allAgentIds, setAllAgentIds] = useState<string[]>([]);
-    const { agents, loading } = useAgentPresence(allAgentIds);
+    const { agents, loading } = useAgentPresence();
 
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
     const [visitDate, setVisitDate] = useState<Date>();
     const [visitTime, setVisitTime] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-
-    useEffect(() => {
-        const fetchAgentIds = async () => {
-            const agentsCollectionRef = collection(db, 'users');
-            const q = query(agentsCollectionRef, where('role', '==', 'agent'));
-            const agentSnapshot = await getDocs(q);
-            setAllAgentIds(agentSnapshot.docs.map(doc => doc.id));
-        };
-        fetchAgentIds();
-    }, []);
 
     const handleScheduleSubmit = async () => {
         if (!selectedAgent || !visitDate || !visitTime) {
@@ -117,8 +103,10 @@ function SchedulingContent({ visitId }: { visitId: string }) {
                 status: 'pending' // Move to pending for agent to accept
             });
             
+            const visitSnap = await getDoc(visitRef);
+            const hostelId = visitSnap.data()?.hostelId;
+
             toast({title: "Request Sent!", description: `Your visit request has been sent to ${selectedAgent.fullName}.`});
-            const hostelId = (await getDocs(query(collection(db, 'visits'), where('__name__', '==', visitId)))).docs[0].data().hostelId;
             router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitId}`);
 
         } catch (error) {
@@ -215,15 +203,16 @@ export default function AgentSchedulingPage() {
     const searchParams = useSearchParams();
     const visitId = searchParams.get('visitId');
 
-    if (!visitId) {
-        return (
-            <div className="flex flex-col min-h-screen">
-                 <Header />
-                 <main className="flex-1 flex items-center justify-center">
-                    <p className="p-8 text-center text-red-600">Error: Visit ID is missing. Cannot schedule a visit.</p>
-                 </main>
-            </div>
-        );
+    // This component must be wrapped in Suspense because useSearchParams can only be used in a Client Component.
+    const PageContent = () => {
+        if (!visitId) {
+            return (
+                <div className="text-center p-8">
+                    <p className="text-red-600">Error: Visit ID is missing. Cannot schedule a visit.</p>
+                </div>
+            );
+        }
+        return <SchedulingContent visitId={visitId} />;
     }
     
     return (
@@ -231,7 +220,7 @@ export default function AgentSchedulingPage() {
             <Header />
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
                 <Suspense fallback={<LoaderState message="Loading Agent Data..." />}>
-                    <SchedulingContent visitId={visitId} />
+                    <PageContent />
                 </Suspense>
             </main>
         </div>
