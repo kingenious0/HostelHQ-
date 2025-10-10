@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -140,6 +141,43 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             </Button>
         );
     }
+    
+    const renderPrice = () => {
+        const priceStyle = "text-4xl font-bold";
+        if (!hostel.priceRange || hostel.priceRange.min === 0) {
+            return <span className={priceStyle}>GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+        }
+        if (hostel.priceRange.min === hostel.priceRange.max) {
+            return <span className={priceStyle}>GH₵{hostel.priceRange.min.toLocaleString()}</span>;
+        }
+        return (
+            <span className="text-3xl font-bold">
+                GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
+            </span>
+        );
+    };
+    
+    const getPrimaryCTA = () => {
+        if (existingVisit === undefined) {
+             return <Button size="lg" className="w-full mt-6 h-14" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking Status...</Button>;
+        }
+
+        if (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') {
+            return (
+                 <Button size="lg" className="w-full mt-6 h-14 bg-primary text-primary-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}>
+                    <Ticket className="mr-2 h-5 w-5"/>
+                    Track Your Visit
+                </Button>
+            );
+        }
+        
+        // Default case: No active visit, or visit was completed/cancelled.
+        return (
+             <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book`)}>
+                Book a Visit
+            </Button>
+        );
+    }
 
     return (
         <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
@@ -263,6 +301,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews.length} reviews)</span>
                 </div>
                 
+                 <div className="mt-8 flex items-baseline gap-2">
+                    {renderPrice()}
+                    <span className="text-base text-muted-foreground">/year</span>
+                </div>
+
+                {getPrimaryCTA()}
+
                 <Card className="mt-8 shadow-md">
                     <CardHeader>
                         <CardTitle>Room Types & Pricing</CardTitle>
@@ -496,4 +541,3 @@ export default function HostelDetailPage() {
   );
 }
 
-    
