@@ -104,7 +104,6 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
-    // The callback URL now needs to pass the hostelId for record keeping
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
 

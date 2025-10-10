@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -80,7 +81,7 @@ export default function SecureHostelPage() {
             ghanaCardNumber: "",
             departmentName: "",
             phoneNumber: "",
-            email: "",
+email: "",
         },
     });
 
