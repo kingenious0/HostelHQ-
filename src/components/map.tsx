@@ -5,9 +5,10 @@ import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { Hostel } from '@/lib/data';
 import { Map, Layers } from 'lucide-react';
+import { ably } from '@/lib/ably';
 
 interface MapboxMapProps {
-    agentLocation?: { lat: number; lng: number };
+    agentId?: string | null;
     hostelLocation: Hostel | null;
 }
 
@@ -16,13 +17,11 @@ const mapStyles = {
     satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
 };
 
-// Set the access token for Mapbox
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || '';
 
-export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
+export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
-    const agentMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
     
     const [mapLoaded, setMapLoaded] = useState(false);
@@ -38,19 +37,47 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
         }
         if (mapRef.current || !mapContainerRef.current) return; 
 
-        mapRef.current = new mapboxgl.Map({
+        const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: styleUrl,
             center: [hostelLocation?.lng || -0.1870, hostelLocation?.lat || 5.6037],
             zoom: 14
         });
+
+        mapRef.current = map;
         
-        mapRef.current.on('load', () => {
+        map.on('load', () => {
              setMapLoaded(true);
+
+             // Add empty source for agent location
+             if (!map.getSource('agent')) {
+                map.addSource('agent', {
+                    type: 'geojson',
+                    data: {
+                        type: 'Point',
+                        coordinates: [0, 0] // Start with an empty point
+                    }
+                });
+             }
+            
+             // Add a layer for the agent's location (a circle)
+             if (!map.getLayer('agent')) {
+                map.addLayer({
+                    id: 'agent',
+                    type: 'circle',
+                    source: 'agent',
+                    paint: {
+                        'circle-radius': 10,
+                        'circle-color': '#008080', // Deep Teal
+                        'circle-stroke-width': 2,
+                        'circle-stroke-color': '#ffffff'
+                    }
+                });
+             }
         });
 
         return () => {
-            mapRef.current?.remove();
+            map.remove();
             mapRef.current = null;
         };
     }, [styleUrl, hostelLocation, mapboxToken]);
@@ -67,31 +94,42 @@ export function MapboxMap({ agentLocation, hostelLocation }: MapboxMapProps) {
                 el.className = 'w-4 h-4 rounded-full bg-red-700 border-2 border-white shadow-lg';
                 hostelMarkerRef.current = new mapboxgl.Marker(el)
                     .setLngLat([hostelLocation.lng, hostelLocation.lat])
-                    .addTo(mapRef.current);
+                    .addTo(mapRef.current!);
             }
         }
+        
+    }, [mapLoaded, hostelLocation]);
 
-        // Create or update agent marker
-        if (agentLocation?.lat && agentLocation.lng) {
-            if (agentMarkerRef.current) {
-                agentMarkerRef.current.setLngLat([agentLocation.lng, agentLocation.lat]);
-            } else {
-                 const el = document.createElement('div');
-                el.className = 'w-5 h-5 rounded-full bg-primary border-2 border-white shadow-lg';
-                agentMarkerRef.current = new mapboxgl.Marker(el)
-                    .setLngLat([agentLocation.lng, agentLocation.lat])
-                    .addTo(mapRef.current);
-            }
-            mapRef.current.panTo([agentLocation.lng, agentLocation.lat], { duration: 1000 });
-        } else {
-            // If agent location becomes null, remove the marker
-            if (agentMarkerRef.current) {
-                agentMarkerRef.current.remove();
-                agentMarkerRef.current = null;
-            }
+    useEffect(() => {
+        if (!mapLoaded || !mapRef.current || !agentId) {
+            return;
         }
 
-    }, [mapLoaded, agentLocation, hostelLocation]);
+        const channel = ably.channels.get(`agent:${agentId}:gps`);
+        
+        const onLocationUpdate = (message: any) => {
+            const { lat, lng } = message.data;
+            const map = mapRef.current;
+            if (map) {
+                const agentSource = map.getSource('agent') as mapboxgl.GeoJSONSource;
+                if (agentSource) {
+                     agentSource.setData({
+                        type: 'Point',
+                        coordinates: [lng, lat]
+                    });
+                    map.panTo([lng, lat]);
+                }
+            }
+        };
+
+        channel.subscribe('location', onLocationUpdate);
+        
+        return () => {
+            channel.unsubscribe('location', onLocationUpdate);
+        };
+
+    }, [mapLoaded, agentId]);
+
 
     const switchStyle = (newStyle: 'streets' | 'satellite') => {
         if (!mapRef.current) return;

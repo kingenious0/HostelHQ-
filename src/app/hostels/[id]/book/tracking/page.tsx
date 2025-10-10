@@ -114,33 +114,12 @@ export default function TrackingPage() {
 
         const visitDocRef = doc(db, 'visits', visitId as string);
 
-        const setupAgentGpsSubscription = (agentId: string) => {
-            if (agentGpsChannelRef.current && agentGpsChannelRef.current.name.includes(agentId)) {
-                return; 
-            }
-            if (agentGpsChannelRef.current) {
-                agentGpsChannelRef.current.unsubscribe();
-            }
-            
+        const setupAgentDetails = (agentId: string) => {
             getAgent(agentId).then(agentDetails => {
                 if (agentDetails) {
                     setAgent(agentDetails);
-                    if(agentDetails.location) {
-                        setAgentLiveLocation(agentDetails.location);
-                         getAddressFromCoordinates(agentDetails.location.lat, agentDetails.location.lng).then(setAgentLiveAddress);
-                    }
                 }
             });
-            
-            const channel = ably.channels.get(`agent:${agentId}:gps`);
-            agentGpsChannelRef.current = channel;
-
-            const subscribeCallback = (message: Types.Message) => {
-                setAgentLiveLocation(message.data);
-                getAddressFromCoordinates(message.data.lat, message.data.lng).then(setAgentLiveAddress);
-            };
-            channel.subscribe('location', subscribeCallback);
-            unsubscribes.push(() => channel.unsubscribe(subscribeCallback));
         };
         
         const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
@@ -154,8 +133,8 @@ export default function TrackingPage() {
             setVisit(visitData);
             setLoading(false);
 
-            if (visitData.agentId) {
-                setupAgentGpsSubscription(visitData.agentId);
+            if (visitData.agentId && (!agent || agent.id !== visitData.agentId)) {
+                setupAgentDetails(visitData.agentId);
             } else if (!visitData.agentId && visitData.visitType === 'agent') {
                 // No agent assigned yet, listen for online agents
                 const presenceChannel = ably.channels.get('agents:live');
@@ -188,7 +167,7 @@ export default function TrackingPage() {
                 agentGpsChannelRef.current.detach();
             }
         };
-    }, [visitId, hostelId, router, toast]);
+    }, [visitId, hostelId, router, toast, agent]);
     
     const handleSelectAgent = async (selectedAgent: OnlineAgent) => {
         if (!visitId) return;
@@ -361,13 +340,6 @@ export default function TrackingPage() {
                                 <p className="font-semibold">{agent.fullName}</p>
                             </div>
                         </div>
-                         <div className="flex items-start gap-3">
-                            <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Agent's Location</p>
-                                <p className="font-semibold">{agentLiveAddress || "Tracking agent..."}</p>
-                            </div>
-                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex items-start gap-3">
                                 <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
@@ -434,7 +406,7 @@ export default function TrackingPage() {
         if (!visit.agentId) return "Select an Agent";
         if (visit.status === 'pending' && agent) return "Visit Request Pending";
         if (visit.status === 'accepted') return <span className="text-green-600">Visit Confirmed!</span>;
-        if (visit.status === 'completed') return <span className="text-blue-600">🎉 Visit Complete</span>;
+        if (visit.status === 'completed') return <span className="text-blue-600">Visit Complete</span>;
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
         return "Visit Details";
     }
@@ -471,7 +443,7 @@ export default function TrackingPage() {
                     </Card>
                 </div>
                 <div className="relative bg-muted h-96 md:h-full">
-                   <MapboxMap agentLocation={agentLiveLocation} hostelLocation={hostel} />
+                   <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
                 </div>
             </main>
         </div>
