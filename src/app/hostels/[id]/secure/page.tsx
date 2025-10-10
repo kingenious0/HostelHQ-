@@ -81,7 +81,7 @@ export default function SecureHostelPage() {
             ghanaCardNumber: "",
             departmentName: "",
             phoneNumber: "",
-email: "",
+            email: "",
         },
     });
 
@@ -101,8 +101,8 @@ email: "",
             });
 
             if (result.status && result.authorization_url) {
-                toast({ title: "Redirecting to Payment", description: "You will be redirected to a secure payment page."});
-                router.push(result.authorization_url);
+                toast({ title: "Redirecting to Payment", description: "Your payment page will open in a new tab."});
+                window.open(result.authorization_url, '_blank');
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
