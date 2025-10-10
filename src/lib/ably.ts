@@ -11,11 +11,12 @@ let ablyInstance: Realtime | null = null;
 // Function to get a singleton instance of Ably
 function getAblyClient() {
     if (!ablyInstance) {
-        ablyInstance = new Realtime({ authUrl });
-    }
-    return ablyInstance;
-}
+            ablyInstance = new Realtime({ authUrl });
+                }
+                    return ablyInstance;
+                    }
 
-// We initialize Ably without a clientId here.
-// The clientId will be set dynamically in the Header component after user authentication.
-export const ably = getAblyClient();
+                    // We initialize Ably without a clientId here.
+                    // The clientId will be set dynamically in the Header component after user authentication.
+                    export const ably = getAblyClient();
+                    

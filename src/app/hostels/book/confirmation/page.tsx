@@ -42,59 +42,81 @@ function ConfirmationContent() {
         const handleConfirmation = async () => {
             setHasProcessed(true); // Mark as processed immediately
 
-            // This handles confirming payment for securing a hostel room
+            // Check for room security payment confirmation (trxref)
             if (trxref && hostelId) {
-                toast({ title: "Confirming Room Booking...", description: "Please wait while we finalize your details." });
                 try {
+                    // 1. Create the primary booking record (Room Secured)
                     await addDoc(collection(db, 'bookings'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         paymentReference: trxref,
                         bookingDate: new Date().toISOString(),
-                        status: 'confirmed'
+                        status: 'paid' // New status: Paid, awaiting visit
                     });
-                     toast({ title: "Room Secured!", description: "Congratulations! Your room is booked and your agent will be in touch." });
-                    router.push(`/hostels/${hostelId}`); // Redirect to hostel page after securing
+
+                    // 2. Create the initial visit record (Visit Scheduled)
+                    const initialVisitDate = new Date().toISOString(); 
+                    const initialVisitTime = new Date().toLocaleTimeString();
+
+                    const visitRef = await addDoc(collection(db, 'visits'), {
+                        studentId: currentUser.uid,
+                        hostelId: hostelId,
+                        agentId: null, // Will be set later
+                        status: 'scheduling', // New status: Student needs to schedule
+                        paymentReference: trxref,
+                        createdAt: new Date().toISOString(),
+                        visitDate: initialVisitDate,
+                        visitTime: initialVisitTime,
+                        visitType: 'agent', // Assuming room security requires an agent-assisted visit
+                        studentCompleted: false,
+                    });
+
+                    // 3. Redirect to the new Scheduling page with the Visit ID
+                    router.push(`/hostels/book/schedule?visitId=${visitRef.id}`);
+
                 } catch (error) {
-                    console.error("Error creating booking record:", error);
-                    toast({ title: "Something went wrong", description: "Could not save your booking details. Please contact support.", variant: 'destructive'});
+                    console.error("Error creating booking/visit record:", error);
+                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive'});
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
             }
 
-            // This handles confirming payment for a visit
+            // Check for visit-only payment confirmation (reference)
             if (reference && hostelId && visitType) {
-                 toast({ title: "Payment Confirmed!", description: "Finalizing your visit details..." });
-                 try {
+                try {
+                     // 1. Create the visit record
                      const visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         agentId: null,
-                        status: visitType === 'self' ? 'accepted' : 'pending',
+                        status: 'scheduling', 
                         paymentReference: reference,
                         createdAt: new Date().toISOString(),
                         visitDate: visitDate || new Date().toISOString(),
                         visitTime: visitTime || new Date().toLocaleTimeString(),
-                        visitType: visitType,
+                        visitType: visitType as 'agent' | 'self',
                         studentCompleted: false,
                     });
                     
-                    // Redirect to the tracking page with the new visit ID
-                    router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
+                    // 2. Redirect to the new Scheduling page with the Visit ID or tracking page for self-visits
+                    if (visitType === 'self') {
+                        router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
+                    } else {
+                        router.push(`/hostels/book/schedule?visitId=${visitRef.id}`);
+                    }
 
                 } catch (error) {
                     console.error("Error creating visit record:", error);
-                    toast({ title: "Something went wrong", description: "Could not save your visit details. Please contact support.", variant: 'destructive'});
+                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive'});
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
             }
 
-            // If no valid parameters are found
+            // Fallback if no valid parameters are found
             toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
             router.push('/');
-
         };
 
         handleConfirmation();
