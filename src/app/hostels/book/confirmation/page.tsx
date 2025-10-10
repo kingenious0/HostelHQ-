@@ -1,3 +1,4 @@
+
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -35,7 +36,15 @@ function ConfirmationContent() {
     }, []);
 
     useEffect(() => {
-        if (loadingAuth || hasProcessed || !currentUser) {
+        if (loadingAuth || hasProcessed) {
+            return;
+        }
+        
+        if (!currentUser) {
+            if(!loadingAuth) {
+                 toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive'});
+                 router.push('/login');
+            }
             return;
         }
 
@@ -91,9 +100,13 @@ function ConfirmationContent() {
                 return;
             }
 
-            // If no valid parameters are found
-            toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
-            router.push('/');
+            // If no valid parameters are found, wait briefly before concluding it's an error
+            setTimeout(() => {
+                if (!hasProcessed) {
+                    toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
+                    router.push('/');
+                }
+            }, 1000);
 
         };
 
