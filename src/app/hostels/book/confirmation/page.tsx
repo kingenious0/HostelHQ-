@@ -1,3 +1,4 @@
+
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -6,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -24,7 +25,7 @@ function ConfirmationContent() {
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-    const [hasProcessed, setHasProcessed] = useState(false); // State to prevent double-processing
+    const [hasProcessed, setHasProcessed] = useState(false);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -35,12 +36,28 @@ function ConfirmationContent() {
     }, []);
 
     useEffect(() => {
-        if (loadingAuth || hasProcessed || !currentUser) {
+        if (loadingAuth || hasProcessed) {
+            return;
+        }
+        
+        if (!currentUser) {
+            if(!loadingAuth) {
+                 toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive'});
+                 router.push('/login');
+            }
             return;
         }
 
         const handleConfirmation = async () => {
-            setHasProcessed(true); // Mark as processed immediately
+            // 1. Reject obviously bad links immediately, as suggested.
+            if (!hostelId || (!trxref && !reference)) {
+                toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
+                router.push('/');
+                return;
+            }
+            
+            // 2. Now we know we have something to do, so we mark it as processed.
+            setHasProcessed(true);
 
             // Check for room security payment confirmation (trxref)
             if (trxref && hostelId) {
@@ -92,7 +109,7 @@ function ConfirmationContent() {
                         agentId: null,
                         status: visitTypeParam === 'self' ? 'accepted' : 'scheduling',
                         paymentReference: reference,
-                        createdAt: new Date().toISOString(),
+                        createdAt: serverTimestamp(),
                         visitDate: visitDate || new Date().toISOString(),
                         visitTime: visitTime || new Date().toLocaleTimeString(),
                         visitType: visitTypeParam as 'agent' | 'self',
