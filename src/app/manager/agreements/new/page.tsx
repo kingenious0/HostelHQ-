@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { tenancyAgreementText } from '@/lib/legal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getHostels, Hostel } from '@/lib/data';
 
 
 export default function NewAgreementPage() {
@@ -20,14 +21,20 @@ export default function NewAgreementPage() {
     const [hostelId, setHostelId] = useState('');
     const [agreementBody, setAgreementBody] = useState(tenancyAgreementText);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [hostels, setHostels] = useState<Hostel[]>([]);
+    const [isLoadingHostels, setIsLoadingHostels] = useState(true);
     const { toast } = useToast();
     const router = useRouter();
-    
-    // In the future, this would be fetched for the specific manager
-    const managedHostels = [
-        { id: '1', name: 'Doku Hostel' },
-        { id: 'h2', name: 'Pioneer Hall' }
-    ];
+
+    useEffect(() => {
+        const fetchHostels = async () => {
+            setIsLoadingHostels(true);
+            const fetchedHostels = await getHostels();
+            setHostels(fetchedHostels);
+            setIsLoadingHostels(false);
+        };
+        fetchHostels();
+    }, []);
 
     const handleSubmit = async () => {
         if (!templateName || !hostelId || !agreementBody) {
@@ -71,16 +78,22 @@ export default function NewAgreementPage() {
                             </div>
                              <div className="space-y-2">
                                 <Label htmlFor="hostel-select">Select Hostel</Label>
-                                 <Select value={hostelId} onValueChange={setHostelId}>
+                                 <Select value={hostelId} onValueChange={setHostelId} disabled={isLoadingHostels}>
                                     <SelectTrigger id="hostel-select">
-                                        <SelectValue placeholder="Assign to a hostel" />
+                                        <SelectValue placeholder={isLoadingHostels ? "Loading hostels..." : "Assign to a hostel"} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {managedHostels.map(hostel => (
-                                            <SelectItem key={hostel.id} value={hostel.id}>
-                                                {hostel.name}
-                                            </SelectItem>
-                                        ))}
+                                        {isLoadingHostels ? (
+                                            <div className="flex items-center justify-center p-4">
+                                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                            </div>
+                                        ) : (
+                                            hostels.map(hostel => (
+                                                <SelectItem key={hostel.id} value={hostel.id}>
+                                                    {hostel.name}
+                                                </SelectItem>
+                                            ))
+                                        )}
                                     </SelectContent>
                                 </Select>
                             </div>
