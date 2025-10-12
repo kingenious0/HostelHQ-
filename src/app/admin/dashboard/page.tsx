@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +60,20 @@ type OnlineAgent = {
   }
 }
 
+type AgreementTemplate = {
+    id: string;
+    name: string;
+    hostelName: string;
+    managerName: string;
+    status: 'Pending' | 'Approved' | 'Rejected';
+    content: string;
+}
+
+const mockTemplates: AgreementTemplate[] = [
+    { id: '1', name: 'Standard 2024 Agreement', hostelName: 'Doku Hostel', managerName: 'Manager Alice', status: 'Pending', content: 'This is the full text of the tenancy agreement...' },
+    { id: '2', name: 'Annex Rules Update', hostelName: 'Pioneer Hall', managerName: 'Manager Bob', status: 'Pending', content: 'This template includes updated rules for the annex building...' },
+];
+
 
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
   'Available': 'Limited',
@@ -78,13 +92,16 @@ export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
+  const [pendingAgreements, setPendingAgreements] = useState<AgreementTemplate[]>(mockTemplates);
   const [users, setUsers] = useState<User[]>([]);
   const [pendingAgents, setPendingAgents] = useState<User[]>([]);
   const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedHostel, setSelectedHostel] = useState<PendingHostel | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState<AgreementTemplate | null>(null);
+  const [isHostelDialogOpen, setIsHostelDialogOpen] = useState(false);
+  const [isAgreementDialogOpen, setIsAgreementDialogOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -206,7 +223,7 @@ export default function AdminDashboard() {
         await batch.commit();
 
         toast({ title: "Hostel Approved", description: `${hostelData.name} is now live.` });
-        setIsDialogOpen(false);
+        setIsHostelDialogOpen(false);
         setSelectedHostel(null);
 
     } catch (error) {
@@ -224,7 +241,7 @@ export default function AdminDashboard() {
     try {
       await deleteDoc(doc(db, 'pendingHostels', hostelId));
       toast({ title: "Hostel Rejected", description: "The submission has been removed." });
-      setIsDialogOpen(false);
+      setIsHostelDialogOpen(false);
       setSelectedHostel(null);
     } catch (error) {
       console.error("Error rejecting hostel: ", error);
@@ -368,7 +385,7 @@ export default function AdminDashboard() {
   }
 
 
-  const openReviewDialog = async (hostel: PendingHostel) => {
+  const openHostelReviewDialog = async (hostel: PendingHostel) => {
     // Fetch full details including room types before opening dialog
     const pendingDocRef = doc(db, 'pendingHostels', hostel.id);
     const roomTypesRef = collection(pendingDocRef, 'roomTypes');
@@ -387,15 +404,33 @@ export default function AdminDashboard() {
         } as PendingHostel;
 
         setSelectedHostel(fullHostelData);
-        setIsDialogOpen(true);
+        setIsHostelDialogOpen(true);
     } else {
         toast({ title: "Error", description: "Could not fetch hostel details.", variant: 'destructive'});
     }
   }
 
+  const openAgreementReviewDialog = (agreement: AgreementTemplate) => {
+      setSelectedAgreement(agreement);
+      setIsAgreementDialogOpen(true);
+  }
+  
+  const handleAgreementAction = (agreementId: string, action: 'approve' | 'reject') => {
+      // Mock logic for now
+      setProcessingId(agreementId);
+      toast({ title: `${action === 'approve' ? 'Approving' : 'Rejecting'} Agreement...` });
+      setTimeout(() => {
+          setPendingAgreements(prev => prev.filter(a => a.id !== agreementId));
+          toast({ title: `Agreement ${action === 'approve' ? 'Approved' : 'Rejected'}`});
+          setProcessingId(null);
+          setIsAgreementDialogOpen(false);
+          setSelectedAgreement(null);
+      }, 1500);
+  }
+
   const students = users.filter(u => u.role === 'student');
   const agents = users.filter(u => u.role === 'agent');
-  const totalPending = pendingHostels.length + pendingAgents.length + pendingReviews.length;
+  const totalPending = pendingHostels.length + pendingAgents.length + pendingReviews.length + pendingAgreements.length;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -452,7 +487,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalPending}</div>
-                 <p className="text-xs text-muted-foreground">Hostels, Agents & Reviews</p>
+                 <p className="text-xs text-muted-foreground">Hostels, Agents & more</p>
               </CardContent>
             </Card>
           </div>
@@ -485,7 +520,7 @@ export default function AdminDashboard() {
                                     <TableCell className="font-medium">{hostel.name}</TableCell>
                                     <TableCell className="text-sm text-muted-foreground">{hostel.dateSubmitted}</TableCell>
                                     <TableCell className="text-right">
-                                    <Button variant="outline" size="sm" onClick={() => openReviewDialog(hostel)}>Review</Button>
+                                    <Button variant="outline" size="sm" onClick={() => openHostelReviewDialog(hostel)}>Review</Button>
                                     </TableCell>
                                 </TableRow>
                                 ))
@@ -776,11 +811,66 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
            </div>
+            
+            <Card className="mb-8">
+                <CardHeader>
+                    <CardTitle>Pending Agreement Approvals</CardTitle>
+                    <CardDescription>Review and approve tenancy agreement templates from hostel managers.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Template Name</TableHead>
+                                <TableHead>Hostel</TableHead>
+                                <TableHead>Manager</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {pendingAgreements.length > 0 ? (
+                                pendingAgreements.map((template) => (
+                                    <TableRow key={template.id}>
+                                        <TableCell className="font-medium">{template.name}</TableCell>
+                                        <TableCell>{template.hostelName}</TableCell>
+                                        <TableCell>{template.managerName}</TableCell>
+                                        <TableCell className="text-right space-x-2">
+                                            <Button variant="outline" size="sm" onClick={() => openAgreementReviewDialog(template)}>View</Button>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                disabled={processingId === template.id}
+                                                onClick={() => handleAgreementAction(template.id, 'reject')}
+                                            >
+                                                <XCircle className="mr-2 h-4 w-4" /> Reject
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                className="bg-green-600 hover:bg-green-700"
+                                                disabled={processingId === template.id}
+                                                onClick={() => handleAgreementAction(template.id, 'approve')}
+                                            >
+                                                <CheckCircle className="mr-2 h-4 w-4" /> Approve
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center h-24">
+                                        No pending agreement templates.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
       </main>
 
       {selectedHostel && (
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isHostelDialogOpen} onOpenChange={setIsHostelDialogOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl">Review: {selectedHostel.name}</DialogTitle>
@@ -870,6 +960,41 @@ export default function AdminDashboard() {
         </Dialog>
       )}
 
+      {selectedAgreement && (
+        <Dialog open={isAgreementDialogOpen} onOpenChange={setIsAgreementDialogOpen}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>{selectedAgreement.name}</DialogTitle>
+                    <DialogDescription>
+                        Submitted by {selectedAgreement.managerName} for {selectedAgreement.hostelName}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 max-h-[60vh] overflow-y-auto pr-4 text-sm bg-muted/50 p-4 rounded-md">
+                    <pre className="whitespace-pre-wrap font-mono">{selectedAgreement.content}</pre>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsAgreementDialogOpen(false)}>Close</Button>
+                     <Button
+                        variant="destructive"
+                        disabled={processingId === selectedAgreement.id}
+                        onClick={() => handleAgreementAction(selectedAgreement.id, 'reject')}
+                    >
+                        <XCircle className="mr-2 h-4 w-4" /> Reject
+                    </Button>
+                    <Button
+                        className="bg-green-600 hover:bg-green-700"
+                        disabled={processingId === selectedAgreement.id}
+                        onClick={() => handleAgreementAction(selectedAgreement.id, 'approve')}
+                    >
+                        <CheckCircle className="mr-2 h-4 w-4" /> Approve
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+      )}
+
     </div>
   );
 }
+
+    
