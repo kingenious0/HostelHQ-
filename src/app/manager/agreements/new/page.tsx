@@ -96,7 +96,7 @@ export default function NewAgreementPage() {
                                 className="font-mono text-xs"
                              />
                              <p className="text-xs text-muted-foreground">
-                                Use placeholders like `{{studentName}}`, `{{rentAmount}}`, etc. The system will fill these in automatically.
+                                Use placeholders like `{'{{studentName}}'}`, `{'{{rentAmount}}'}`, etc. The system will fill these in automatically.
                              </p>
                         </div>
 
