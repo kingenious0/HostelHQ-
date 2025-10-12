@@ -24,11 +24,12 @@ export default function SignupPage() {
     const { toast } = useToast();
     const router = useRouter();
 
-    const getRoleFromEmail = (email: string): 'student' | 'agent' | 'admin' | 'pending_agent' | 'invalid' => {
+    const getRoleFromEmail = (email: string): 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager' | 'invalid' => {
         const lowerCaseEmail = email.toLowerCase();
         if (lowerCaseEmail === 'admin@hostelhq.com') return 'admin';
         if (lowerCaseEmail.endsWith('@student.hostelhq.com')) return 'student';
         if (lowerCaseEmail.endsWith('@agent.hostelhq.com')) return 'pending_agent';
+        if (lowerCaseEmail.endsWith('@manager.hostelhq.com')) return 'hostel_manager';
         return 'invalid';
     }
 
@@ -43,7 +44,7 @@ export default function SignupPage() {
         if (role === 'invalid') {
             toast({
                 title: "Invalid Email Format",
-                description: "Please use a valid email ending in @student.hostelhq.com or @agent.hostelhq.com.",
+                description: "Use a valid email ending: @student.hostelhq.com, @agent.hostelhq.com, or @manager.hostelhq.com.",
                 variant: "destructive"
             });
             return;
@@ -71,13 +72,17 @@ export default function SignupPage() {
                 await auth.signOut(); // Sign the user out until they are approved
                 router.push('/login');
             } else {
-                // For students and admin, create directly in 'users' collection
+                // For students, managers, and admin, create directly in 'users' collection
                 await setDoc(doc(db, "users", user.uid), userData);
                 toast({ title: 'Account Created Successfully!' });
                 if (role === 'admin') {
                     toast({ title: 'Admin Account Detected!', description: 'You have been assigned admin privileges.' });
                 }
-                router.push('/');
+                if (role === 'hostel_manager') {
+                     router.push('/manager/dashboard');
+                } else {
+                    router.push('/');
+                }
             }
 
         } catch (error: any) {
@@ -115,7 +120,12 @@ export default function SignupPage() {
                             <Info className="h-4 w-4" />
                             <AlertTitle>Email Requirement</AlertTitle>
                             <AlertDescription>
-                                Use a <code className="font-mono">@student.hostelhq.com</code> email to sign up as a student, or a <code className="font-mono">@agent.hostelhq.com</code> email to apply as an agent.
+                                Use a specific email format for your role:
+                                <ul className="list-disc list-inside text-xs mt-2">
+                                    <li><b>Student:</b> <code className="font-mono text-xs">...@student.hostelhq.com</code></li>
+                                    <li><b>Agent:</b> <code className="font-mono text-xs">...@agent.hostelhq.com</code></li>
+                                     <li><b>Manager:</b> <code className="font-mono text-xs">...@manager.hostelhq.com</code></li>
+                                </ul>
                             </AlertDescription>
                         </Alert>
                          <div className="space-y-2">

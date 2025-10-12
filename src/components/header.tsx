@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus, Briefcase } from 'lucide-react';
+import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus, Briefcase, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -26,7 +26,7 @@ type AppUser = {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'agent' | 'admin' | 'pending_agent';
+  role: 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager';
 }
 
 export function Header() {
@@ -168,6 +168,7 @@ export function Header() {
   const isAdmin = appUser?.role === 'admin';
   const isStudent = appUser?.role === 'student';
   const isPending = appUser?.role === 'pending_agent';
+  const isManager = appUser?.role === 'hostel_manager';
 
   return (
     <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
@@ -199,6 +200,11 @@ export function Header() {
             {isAdmin && (
               <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                 Admin Dashboard
+              </Link>
+            )}
+            {isManager && (
+              <Link href="/manager/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                Manager Dashboard
               </Link>
             )}
             {isStudent && (
@@ -244,6 +250,11 @@ export function Header() {
                    {isAdmin && (
                     <DropdownMenuItem asChild>
                         <Link href="/admin/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
+                    </DropdownMenuItem>
+                  )}
+                   {isManager && (
+                    <DropdownMenuItem asChild>
+                        <Link href="/manager/dashboard"><Building className="mr-2 h-4 w-4"/>Manager Dashboard</Link>
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
