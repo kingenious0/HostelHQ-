@@ -14,6 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import { tenancyAgreementText } from '@/lib/legal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getHostels, Hostel } from '@/lib/data';
+import { db, auth } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 
 export default function NewAgreementPage() {
@@ -23,8 +26,17 @@ export default function NewAgreementPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [hostels, setHostels] = useState<Hostel[]>([]);
     const [isLoadingHostels, setIsLoadingHostels] = useState(true);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
     const { toast } = useToast();
     const router = useRouter();
+
+     useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         const fetchHostels = async () => {
@@ -37,6 +49,10 @@ export default function NewAgreementPage() {
     }, []);
 
     const handleSubmit = async () => {
+        if (!currentUser) {
+            toast({ title: 'Authentication Error', description: 'You must be logged in to submit a template.', variant: 'destructive'});
+            return;
+        }
         if (!templateName || !hostelId || !agreementBody) {
             toast({ title: 'Missing Fields', description: 'Please fill out all fields.', variant: 'destructive'});
             return;
@@ -45,13 +61,28 @@ export default function NewAgreementPage() {
         setIsSubmitting(true);
         toast({ title: 'Submitting template for review...' });
 
-        // Firestore logic will be added in a future step
-        // For now, we simulate the process.
-        setTimeout(() => {
-            setIsSubmitting(false);
+        try {
+            const selectedHostel = hostels.find(h => h.id === hostelId);
+            
+            await addDoc(collection(db, 'agreementTemplates'), {
+                templateName: templateName,
+                hostelId: hostelId,
+                hostelName: selectedHostel?.name || 'Unknown Hostel',
+                content: agreementBody,
+                managerId: currentUser.uid,
+                managerName: currentUser.displayName || 'Unknown Manager',
+                status: 'Pending',
+                createdAt: serverTimestamp(),
+            });
+
             toast({ title: 'Template Submitted!', description: 'Your template has been sent to the admin for approval.'});
             router.push('/manager/dashboard');
-        }, 2000);
+
+        } catch (error) {
+            console.error("Error submitting template: ", error);
+            toast({ title: 'Submission Failed', description: 'An error occurred while saving the template.', variant: 'destructive'});
+            setIsSubmitting(false);
+        }
     }
 
     return (
@@ -115,7 +146,7 @@ export default function NewAgreementPage() {
 
                     </CardContent>
                     <CardFooter>
-                        <Button onClick={handleSubmit} disabled={isSubmitting}>
+                        <Button onClick={handleSubmit} disabled={isSubmitting || !currentUser}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Submit for Approval
                         </Button>

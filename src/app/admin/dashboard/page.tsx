@@ -62,18 +62,12 @@ type OnlineAgent = {
 
 type AgreementTemplate = {
     id: string;
-    name: string;
+    templateName: string;
     hostelName: string;
     managerName: string;
     status: 'Pending' | 'Approved' | 'Rejected';
     content: string;
 }
-
-const mockTemplates: AgreementTemplate[] = [
-    { id: '1', name: 'Standard 2024 Agreement', hostelName: 'Doku Hostel', managerName: 'Manager Alice', status: 'Pending', content: 'This is the full text of the tenancy agreement...' },
-    { id: '2', name: 'Annex Rules Update', hostelName: 'Pioneer Hall', managerName: 'Manager Bob', status: 'Pending', content: 'This template includes updated rules for the annex building...' },
-];
-
 
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
   'Available': 'Limited',
@@ -92,7 +86,7 @@ export default function AdminDashboard() {
   const [pendingHostels, setPendingHostels] = useState<PendingHostel[]>([]);
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
-  const [pendingAgreements, setPendingAgreements] = useState<AgreementTemplate[]>(mockTemplates);
+  const [pendingAgreements, setPendingAgreements] = useState<AgreementTemplate[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [pendingAgents, setPendingAgents] = useState<User[]>([]);
   const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
@@ -160,6 +154,14 @@ export default function AdminDashboard() {
         setPendingReviews(reviewsData);
     });
 
+    // Real-time pending agreements
+    const agreementsQuery = query(collection(db, 'agreementTemplates'), where('status', '==', 'Pending'));
+    const unsubAgreements = onSnapshot(agreementsQuery, (snapshot) => {
+        const agreementsData = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as AgreementTemplate));
+        setPendingAgreements(agreementsData);
+    });
+
+
     // Ably presence for online agents
     const presenceChannel = ably.channels.get('agents:live');
     const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
@@ -181,6 +183,7 @@ export default function AdminDashboard() {
       unsubUsers();
       unsubPendingAgents();
       unsubReviews();
+      unsubAgreements();
       presenceChannel.presence.unsubscribe();
     };
   }, []);
@@ -415,17 +418,21 @@ export default function AdminDashboard() {
       setIsAgreementDialogOpen(true);
   }
   
-  const handleAgreementAction = (agreementId: string, action: 'approve' | 'reject') => {
-      // Mock logic for now
+  const handleAgreementAction = async (agreementId: string, action: 'Approve' | 'Reject') => {
       setProcessingId(agreementId);
-      toast({ title: `${action === 'approve' ? 'Approving' : 'Rejecting'} Agreement...` });
-      setTimeout(() => {
-          setPendingAgreements(prev => prev.filter(a => a.id !== agreementId));
-          toast({ title: `Agreement ${action === 'approve' ? 'Approved' : 'Rejected'}`});
-          setProcessingId(null);
+      const newStatus = action;
+      try {
+          const agreementRef = doc(db, 'agreementTemplates', agreementId);
+          await updateDoc(agreementRef, { status: newStatus });
+          toast({ title: `Agreement ${newStatus}d`, description: `The template has been ${newStatus.toLowerCase()}d.` });
           setIsAgreementDialogOpen(false);
           setSelectedAgreement(null);
-      }, 1500);
+      } catch (error) {
+          console.error(`Error ${newStatus.toLowerCase()}ing agreement:`, error);
+          toast({ title: "Action Failed", description: `Could not ${action.toLowerCase()} the agreement.`, variant: "destructive"});
+      } finally {
+          setProcessingId(null);
+      }
   }
 
   const students = users.filter(u => u.role === 'student');
@@ -831,7 +838,7 @@ export default function AdminDashboard() {
                             {pendingAgreements.length > 0 ? (
                                 pendingAgreements.map((template) => (
                                     <TableRow key={template.id}>
-                                        <TableCell className="font-medium">{template.name}</TableCell>
+                                        <TableCell className="font-medium">{template.templateName}</TableCell>
                                         <TableCell>{template.hostelName}</TableCell>
                                         <TableCell>{template.managerName}</TableCell>
                                         <TableCell className="text-right space-x-2">
@@ -840,7 +847,7 @@ export default function AdminDashboard() {
                                                 variant="destructive"
                                                 size="sm"
                                                 disabled={processingId === template.id}
-                                                onClick={() => handleAgreementAction(template.id, 'reject')}
+                                                onClick={() => handleAgreementAction(template.id, 'Reject')}
                                             >
                                                 <XCircle className="mr-2 h-4 w-4" /> Reject
                                             </Button>
@@ -848,7 +855,7 @@ export default function AdminDashboard() {
                                                 size="sm"
                                                 className="bg-green-600 hover:bg-green-700"
                                                 disabled={processingId === template.id}
-                                                onClick={() => handleAgreementAction(template.id, 'approve')}
+                                                onClick={() => handleAgreementAction(template.id, 'Approve')}
                                             >
                                                 <CheckCircle className="mr-2 h-4 w-4" /> Approve
                                             </Button>
@@ -964,7 +971,7 @@ export default function AdminDashboard() {
         <Dialog open={isAgreementDialogOpen} onOpenChange={setIsAgreementDialogOpen}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>{selectedAgreement.name}</DialogTitle>
+                    <DialogTitle>{selectedAgreement.templateName}</DialogTitle>
                     <DialogDescription>
                         Submitted by {selectedAgreement.managerName} for {selectedAgreement.hostelName}.
                     </DialogDescription>
@@ -977,14 +984,14 @@ export default function AdminDashboard() {
                      <Button
                         variant="destructive"
                         disabled={processingId === selectedAgreement.id}
-                        onClick={() => handleAgreementAction(selectedAgreement.id, 'reject')}
+                        onClick={() => handleAgreementAction(selectedAgreement.id, 'Reject')}
                     >
                         <XCircle className="mr-2 h-4 w-4" /> Reject
                     </Button>
                     <Button
                         className="bg-green-600 hover:bg-green-700"
                         disabled={processingId === selectedAgreement.id}
-                        onClick={() => handleAgreementAction(selectedAgreement.id, 'approve')}
+                        onClick={() => handleAgreementAction(selectedAgreement.id, 'Approve')}
                     >
                         <CheckCircle className="mr-2 h-4 w-4" /> Approve
                     </Button>
