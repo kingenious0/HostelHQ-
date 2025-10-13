@@ -172,6 +172,16 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
         
         // Default case: No active visit, or visit was completed/cancelled.
+        // If visit is completed, student can now secure the hostel
+        if (existingVisit?.status === 'completed') {
+            return (
+                <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/secure`)}>
+                    <ShieldCheck className="mr-2 h-5 w-5"/>
+                    Secure This Hostel
+                </Button>
+            );
+        }
+        
         return (
              <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book`)}>
                 Book a Visit
@@ -541,3 +551,4 @@ export default function HostelDetailPage() {
   );
 }
 
+    

@@ -68,6 +68,9 @@ export default function SecureHostelPage() {
             if (roomTypeId) {
                 const room = hostelData.roomTypes.find(rt => rt.id === roomTypeId);
                 setSelectedRoom(room || null);
+            } else if (hostelData.roomTypes.length > 0) {
+                // If no room type is specified, default to the first one for the form's price display
+                setSelectedRoom(hostelData.roomTypes[0]);
             }
         };
         fetchHostelData();
@@ -248,3 +251,5 @@ export default function SecureHostelPage() {
     </div>
   )
 }
+
+    
