@@ -15,9 +15,16 @@ import { tenancyAgreementText } from '@/lib/legal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getHostels, Hostel } from '@/lib/data';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
+
+type AppUser = {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: 'student' | 'agent' | 'admin' | 'hostel_manager';
+}
 
 export default function NewAgreementPage() {
     const [templateName, setTemplateName] = useState('');
@@ -26,14 +33,30 @@ export default function NewAgreementPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [hostels, setHostels] = useState<Hostel[]>([]);
     const [isLoadingHostels, setIsLoadingHostels] = useState(true);
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
 
     const { toast } = useToast();
     const router = useRouter();
 
      useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setCurrentUser(user);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+             if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    setCurrentUser({
+                        uid: user.uid,
+                        email: user.email!,
+                        fullName: userData.fullName,
+                        role: userData.role
+                    });
+                } else {
+                    setCurrentUser(null);
+                }
+            } else {
+                setCurrentUser(null);
+            }
         });
         return () => unsubscribe();
     }, []);
@@ -70,7 +93,7 @@ export default function NewAgreementPage() {
                 hostelName: selectedHostel?.name || 'Unknown Hostel',
                 content: agreementBody,
                 managerId: currentUser.uid,
-                managerName: currentUser.displayName || 'Unknown Manager',
+                managerName: currentUser.fullName,
                 status: 'Pending',
                 createdAt: serverTimestamp(),
             });
@@ -140,7 +163,7 @@ export default function NewAgreementPage() {
                                 className="font-mono text-xs"
                              />
                              <p className="text-xs text-muted-foreground">
-                                Use placeholders like `{'{{studentName}}'}`, `{'{{rentAmount}}'}`, etc. The system will fill these in automatically.
+                                Use placeholders like {'`{{studentName}}`'}, {'`{{rentAmount}}`'}, etc. The system will fill these in automatically.
                              </p>
                         </div>
 
@@ -156,3 +179,5 @@ export default function NewAgreementPage() {
         </div>
     );
 }
+
+    

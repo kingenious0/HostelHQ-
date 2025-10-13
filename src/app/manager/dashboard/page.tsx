@@ -12,26 +12,51 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
-// Mock data for now
-const mockTemplates = [
-    { id: '1', name: 'Standard 2024 Agreement', status: 'Approved' },
-    { id: '2', name: 'New Annex Rules', status: 'Pending' },
-    { id: '3', name: 'Old Main Hostel Rules', status: 'Rejected' },
-];
+
+type AgreementTemplate = {
+    id: string;
+    templateName: string;
+    status: 'Approved' | 'Pending' | 'Rejected';
+};
 
 export default function ManagerDashboard() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
+    const [myTemplates, setMyTemplates] = useState<AgreementTemplate[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(true);
     const router = useRouter();
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
             setLoadingAuth(false);
+            if (!user) {
+                setLoadingTemplates(false);
+            }
         });
         return () => unsubscribeAuth();
     }, []);
+
+    useEffect(() => {
+        if (!currentUser) return;
+
+        setLoadingTemplates(true);
+        const templatesQuery = query(
+            collection(db, "agreementTemplates"), 
+            where("managerId", "==", currentUser.uid)
+        );
+
+        const unsubscribeTemplates = onSnapshot(templatesQuery, (snapshot) => {
+            const templatesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AgreementTemplate));
+            setMyTemplates(templatesData);
+            setLoadingTemplates(false);
+        });
+
+        return () => unsubscribeTemplates();
+    }, [currentUser]);
+
 
     if (loadingAuth) {
         return (
@@ -98,7 +123,12 @@ export default function ManagerDashboard() {
                             </Button>
                         </CardHeader>
                         <CardContent>
-                            <Table>
+                           {loadingTemplates ? (
+                                <div className="flex items-center justify-center p-8">
+                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                </div>
+                           ) : (
+                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Template Name</TableHead>
@@ -107,19 +137,28 @@ export default function ManagerDashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {mockTemplates.map((template) => (
-                                        <TableRow key={template.id}>
-                                            <TableCell className="font-medium">{template.name}</TableCell>
-                                            <TableCell>
-                                                <Badge variant={getStatusVariant(template.status)}>{template.status}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button variant="outline" size="sm">View</Button>
+                                    {myTemplates.length > 0 ? (
+                                        myTemplates.map((template) => (
+                                            <TableRow key={template.id}>
+                                                <TableCell className="font-medium">{template.templateName}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={getStatusVariant(template.status)}>{template.status}</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="outline" size="sm">View</Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={3} className="text-center h-24">
+                                                You have not created any templates yet.
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )}
                                 </TableBody>
                             </Table>
+                           )}
                         </CardContent>
                     </Card>
                 </div>
@@ -127,3 +166,5 @@ export default function ManagerDashboard() {
         </div>
     );
 }
+
+    
