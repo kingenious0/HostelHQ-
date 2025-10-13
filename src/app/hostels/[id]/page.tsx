@@ -66,19 +66,20 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         const checkExistingVisit = async () => {
-            // Correctly query for visits that are NOT cancelled.
             const visitsQuery = query(
                 collection(db, 'visits'),
                 where('studentId', '==', currentUser.uid),
-                where('hostelId', '==', hostel.id),
-                where('status', '!=', 'cancelled')
+                where('hostelId', '==', hostel.id)
             );
 
             const visitSnapshot = await getDocs(visitsQuery);
             if (!visitSnapshot.empty) {
-                // Since there should only be one active/completed visit, we take the first.
-                const visitDoc = visitSnapshot.docs[0];
-                setExistingVisit({ id: visitDoc.id, status: visitDoc.data().status } as Visit);
+                // Find the first visit that is NOT cancelled.
+                const activeOrCompletedVisit = visitSnapshot.docs
+                    .map(doc => ({ id: doc.id, status: doc.data().status } as Visit))
+                    .find(visit => visit.status !== 'cancelled');
+                
+                setExistingVisit(activeOrCompletedVisit || null);
             } else {
                 setExistingVisit(null);
             }
