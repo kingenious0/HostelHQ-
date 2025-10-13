@@ -66,21 +66,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         const checkExistingVisit = async () => {
+            // Correctly query for visits that are NOT cancelled.
             const visitsQuery = query(
                 collection(db, 'visits'),
                 where('studentId', '==', currentUser.uid),
                 where('hostelId', '==', hostel.id),
-                limit(1)
+                where('status', '!=', 'cancelled')
             );
 
             const visitSnapshot = await getDocs(visitsQuery);
             if (!visitSnapshot.empty) {
+                // Since there should only be one active/completed visit, we take the first.
                 const visitDoc = visitSnapshot.docs[0];
-                if (visitDoc.data().status !== 'cancelled') {
-                    setExistingVisit({ id: visitDoc.id, status: visitDoc.data().status } as Visit);
-                } else {
-                    setExistingVisit(null);
-                }
+                setExistingVisit({ id: visitDoc.id, status: visitDoc.data().status } as Visit);
             } else {
                 setExistingVisit(null);
             }
@@ -171,8 +169,6 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             );
         }
         
-        // Default case: No active visit, or visit was completed/cancelled.
-        // If visit is completed, student can now secure the hostel
         if (existingVisit?.status === 'completed') {
             return (
                 <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/secure`)}>
@@ -550,5 +546,3 @@ export default function HostelDetailPage() {
     </div>
   );
 }
-
-    
