@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Eye, Clock, Check, X, Navigation, User as UserIcon, FileText } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -99,11 +99,21 @@ export default function MyBookingsAndVisitsPage() {
             const bookingsData = await Promise.all(snapshot.docs.map(async (d) => {
                 const data = d.data();
                 const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                
+                let date;
+                if (data.bookingDate instanceof Timestamp) {
+                    date = data.bookingDate.toDate();
+                } else if (typeof data.bookingDate === 'string') {
+                    date = new Date(data.bookingDate);
+                } else {
+                    date = new Date(); // fallback
+                }
+
                 return {
                     id: d.id,
                     hostelId: data.hostelId,
                     hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
-                    bookingDate: (data.bookingDate?.toDate() ?? new Date()).toLocaleDateString(),
+                    bookingDate: date.toLocaleDateString(),
                     paymentReference: data.paymentReference
                 } as Booking;
             }));
