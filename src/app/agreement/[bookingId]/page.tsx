@@ -13,6 +13,7 @@ import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/
 import { Hostel, RoomType } from '@/lib/data';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { tenancyAgreementText } from '@/lib/legal';
 
 type Booking = {
     id: string;
@@ -75,9 +76,26 @@ export default function AgreementPage() {
                     limit(1)
                 );
                 const templateSnapshot = await getDocs(templateQuery);
-                if (templateSnapshot.empty) throw new Error("No approved agreement template found for this hostel.");
-                const templateData = { id: templateSnapshot.docs[0].id, ...templateSnapshot.docs[0].data() } as AgreementTemplate;
-                setTemplate(templateData);
+                
+                if (templateSnapshot.empty) {
+                    toast({
+                        title: "No Custom Template Found",
+                        description: "Using the default tenancy agreement for this hostel.",
+                        variant: "default"
+                    });
+                    // Fallback to the default legal text
+                    setTemplate({
+                        id: 'default',
+                        content: tenancyAgreementText,
+                        hostelName: hostelData.name,
+                        managerName: 'Hostel Management'
+                    });
+
+                } else {
+                    const templateData = { id: templateSnapshot.docs[0].id, ...templateSnapshot.docs[0].data() } as AgreementTemplate;
+                    setTemplate(templateData);
+                }
+
 
             } catch (error: any) {
                 console.error("Failed to fetch agreement data:", error);
