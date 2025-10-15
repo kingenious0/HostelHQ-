@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -30,7 +30,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
 import { getHostel, Hostel, RoomType } from "@/lib/data"
-import { notFound, useSearchParams } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
 
 const formSchema = z.object({
@@ -49,7 +49,7 @@ export default function SecureHostelPage() {
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
-    const { id: hostelId } = params;
+    const hostelId = params.id as string;
     const roomTypeId = searchParams.get('roomTypeId');
 
     const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -64,16 +64,16 @@ export default function SecureHostelPage() {
                 notFound();
             }
             setHostel(hostelData);
-
-            if (roomTypeId) {
-                const room = hostelData.roomTypes.find(rt => rt.id === roomTypeId);
+            
+            const targetRoomId = roomTypeId || hostelData.roomTypes[0]?.id;
+            if (targetRoomId) {
+                const room = hostelData.roomTypes.find(rt => rt.id === targetRoomId);
                 setSelectedRoom(room || null);
-            } else if (hostelData.roomTypes.length > 0) {
-                // If no room type is specified, default to the first one for the form's price display
-                setSelectedRoom(hostelData.roomTypes[0]);
             }
         };
-        fetchHostelData();
+        if(hostelId) {
+            fetchHostelData();
+        }
     }, [hostelId, roomTypeId]);
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -251,5 +251,3 @@ export default function SecureHostelPage() {
     </div>
   )
 }
-
-    
