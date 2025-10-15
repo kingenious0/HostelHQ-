@@ -55,9 +55,11 @@ export default function SecureHostelPage() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
     const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
+    const [loading, setLoading] = React.useState(true);
 
      React.useEffect(() => {
         const fetchHostelData = async () => {
+            setLoading(true);
             if(typeof hostelId !== 'string') return;
             const hostelData = await getHostel(hostelId);
             if (!hostelData) {
@@ -70,6 +72,7 @@ export default function SecureHostelPage() {
                 const room = hostelData.roomTypes.find(rt => rt.id === targetRoomId);
                 setSelectedRoom(room || null);
             }
+            setLoading(false);
         };
         if(hostelId) {
             fetchHostelData();
@@ -106,6 +109,8 @@ export default function SecureHostelPage() {
             if (result.status && result.authorization_url) {
                 toast({ title: "Redirecting to Payment", description: "Your payment page will open in a new tab."});
                 window.open(result.authorization_url, '_blank');
+                // Don't set isSubmitting to false, let the user complete payment.
+                // We can add a timeout or a manual cancel button if needed.
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }
@@ -114,6 +119,17 @@ export default function SecureHostelPage() {
              toast({ title: "Payment Error", description: error.message || "Could not connect to payment service.", variant: "destructive" });
              setIsSubmitting(false);
         }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                </main>
+            </div>
+        )
     }
 
   return (

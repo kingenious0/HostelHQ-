@@ -1,4 +1,3 @@
-
 // src/app/hostels/book/confirmation/page.tsx
 "use client";
 
@@ -49,60 +48,42 @@ function ConfirmationContent() {
         }
 
         const handleConfirmation = async () => {
-            // 1. Reject obviously bad links immediately, as suggested.
+            setHasProcessed(true);
+
             if (!hostelId || (!trxref && !reference)) {
                 toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
                 router.push('/');
                 return;
             }
-            
-            // 2. Now we know we have something to do, so we mark it as processed.
-            setHasProcessed(true);
 
-            // Check for room security payment confirmation (trxref)
+            // Room security payment (highest priority)
             if (trxref && hostelId) {
                 try {
-                    // 1. Create the primary booking record (Room Secured)
                     await addDoc(collection(db, 'bookings'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
                         paymentReference: trxref,
-                        bookingDate: new Date().toISOString(),
-                        status: 'paid' // New status: Paid, awaiting visit
+                        bookingDate: serverTimestamp(),
+                        status: 'paid'
                     });
 
-                    // 2. Create the initial visit record (Visit Scheduled)
-                    const initialVisitDate = new Date().toISOString(); 
-                    const initialVisitTime = new Date().toLocaleTimeString();
-
-                    const visitRef = await addDoc(collection(db, 'visits'), {
-                        studentId: currentUser.uid,
-                        hostelId: hostelId,
-                        agentId: null, // Will be set later
-                        status: 'scheduling', // New status: Student needs to schedule
-                        paymentReference: trxref,
-                        createdAt: new Date().toISOString(),
-                        visitDate: initialVisitDate,
-                        visitTime: initialVisitTime,
-                        visitType: 'agent', // Assuming room security requires an agent-assisted visit
-                        studentCompleted: false,
+                    toast({
+                        title: "Room Secured!",
+                        description: "Your payment was successful and your room is booked.",
                     });
-
-                    // 3. Redirect to the new Scheduling page with the Visit ID
-                    router.push(`/hostels/book/schedule?visitId=${visitRef.id}`);
+                     router.push(`/hostels/${hostelId}`);
 
                 } catch (error) {
-                    console.error("Error creating booking/visit record:", error);
+                    console.error("Error creating booking record:", error);
                     toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive'});
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
             }
 
-            // Check for visit-only payment confirmation (reference)
+            // Visit-only payment
             if (reference && hostelId && visitTypeParam) {
                 try {
-                     // 1. Create the visit record
                      const visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         hostelId: hostelId,
@@ -116,7 +97,6 @@ function ConfirmationContent() {
                         studentCompleted: false,
                     });
                     
-                    // 2. Redirect based on visit type
                     if (visitTypeParam === 'self') {
                         router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
                     } else {
@@ -131,8 +111,8 @@ function ConfirmationContent() {
                 return;
             }
 
-            // Fallback if no valid parameters are found
-            toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
+            // Fallback if no valid parameters are found after the initial check
+            toast({ title: "Invalid Confirmation Link", description: "The confirmation link is incomplete.", variant: "destructive" });
             router.push('/');
         };
 
@@ -145,7 +125,7 @@ function ConfirmationContent() {
             <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
             <h1 className="text-2xl font-bold font-headline mb-2">Finalizing Your Request...</h1>
             <p className="text-muted-foreground max-w-sm">
-                Your payment was successful. Please wait while we create your visit details. You will be redirected shortly.
+                Your payment was successful. Please wait while we create your booking details. You will be redirected shortly.
             </p>
         </div>
     );
