@@ -36,7 +36,7 @@ import { initializeHostelPayment } from "@/app/actions/paystack"
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
   indexNumber: z.string().min(5, { message: "Index number is required." }),
-  ghanaCardNumber: z.string().regex(/^[A-Z0-9]{10,15}$/, { message: "Invalid Ghana Card number." }),
+  ghanaCardNumber: z.string().regex(/^(GHA-)?\d{9}-\d$/, { message: "Invalid Ghana Card number. Format: GHA-XXXXXXXXX-X" }),
   departmentName: z.string().min(3, { message: "Department is required." }),
   level: z.enum(["100", "200", "300", "400"]),
   phoneNumber: z.string().regex(/^\+?[0-9]{10,13}$/, { message: "Invalid phone number." }),
