@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -55,12 +55,16 @@ function ConfirmationContent() {
                 router.push('/');
                 return;
             }
-
-            // Room security payment (highest priority)
+            
+            // This is a room security payment
             if (trxref && hostelId) {
                 try {
-                    await addDoc(collection(db, 'bookings'), {
+                     const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                     if(!userDoc.exists()) throw new Error("Student user record not found.");
+
+                    const bookingRef = await addDoc(collection(db, 'bookings'), {
                         studentId: currentUser.uid,
+                        studentDetails: userDoc.data(), // Store a snapshot of user details
                         hostelId: hostelId,
                         paymentReference: trxref,
                         bookingDate: serverTimestamp(),
@@ -69,9 +73,9 @@ function ConfirmationContent() {
 
                     toast({
                         title: "Room Secured!",
-                        description: "Your payment was successful and your room is booked.",
+                        description: "Your payment was successful. Generating your tenancy agreement...",
                     });
-                     router.push(`/hostels/${hostelId}`);
+                     router.push(`/agreement/${bookingRef.id}`);
 
                 } catch (error) {
                     console.error("Error creating booking record:", error);
@@ -81,7 +85,7 @@ function ConfirmationContent() {
                 return;
             }
 
-            // Visit-only payment
+            // This is a visit-only payment
             if (reference && hostelId && visitTypeParam) {
                 try {
                      const visitRef = await addDoc(collection(db, 'visits'), {
@@ -97,11 +101,11 @@ function ConfirmationContent() {
                         studentCompleted: false,
                     });
                     
-                    if (visitTypeParam === 'self') {
-                        router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`);
-                    } else {
-                        router.push(`/hostels/book/schedule?visitId=${visitRef.id}`);
-                    }
+                    const redirectUrl = visitTypeParam === 'self'
+                        ? `/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`
+                        : `/hostels/book/schedule?visitId=${visitRef.id}`;
+                    
+                    router.push(redirectUrl);
 
                 } catch (error) {
                     console.error("Error creating visit record:", error);

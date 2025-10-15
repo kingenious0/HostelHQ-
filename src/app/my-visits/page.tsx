@@ -9,13 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Eye, Clock, Check, X, Navigation, User as UserIcon } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, Clock, Check, X, Navigation, User as UserIcon, FileText } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format, isValid } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type Visit = {
     id: string;
@@ -33,8 +34,17 @@ type EnrichedVisit = Visit & {
     agentName: string | null;
 };
 
-export default function MyVisitsPage() {
+type Booking = {
+    id: string;
+    hostelId: string;
+    hostelName?: string;
+    bookingDate: string;
+    paymentReference: string;
+}
+
+export default function MyBookingsAndVisitsPage() {
     const [myVisits, setMyVisits] = useState<EnrichedVisit[]>([]);
+    const [myBookings, setMyBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -57,6 +67,7 @@ export default function MyVisitsPage() {
 
         setLoading(true);
 
+        // --- Fetch Visits ---
         const visitsQuery = query(collection(db, "visits"), where("studentId", "==", currentUser.uid));
         const unsubscribeVisits = onSnapshot(visitsQuery, async (querySnapshot) => {
             const visitsData: Visit[] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Visit));
@@ -65,39 +76,48 @@ export default function MyVisitsPage() {
                 let hostelName = 'Unknown Hostel';
                 let agentName: string | null = null;
                 try {
-                    let hostelRef = doc(db, 'hostels', visit.hostelId);
-                    let hostelSnap = await getDoc(hostelRef);
-                    if (!hostelSnap.exists()) {
-                        hostelRef = doc(db, 'pendingHostels', visit.hostelId);
-                        hostelSnap = await getDoc(hostelRef);
-                    }
+                    const hostelSnap = await getDoc(doc(db, 'hostels', visit.hostelId));
                     if (hostelSnap.exists()) hostelName = hostelSnap.data().name;
-
                 } catch (e) { console.error("Error fetching hostel", e); }
                 
                 if (visit.agentId) {
                     try {
-                        const agentRef = doc(db, 'users', visit.agentId);
-                        const agentSnap = await getDoc(agentRef);
+                        const agentSnap = await getDoc(doc(db, 'users', visit.agentId));
                         if (agentSnap.exists()) agentName = agentSnap.data().fullName;
                     } catch (e) { console.error("Error fetching agent", e); }
                 }
                 return { ...visit, hostelName, agentName };
             }));
             
-            const sorted = enrichedVisits.sort((a,b) => {
-                const dateA = new Date(a.visitDate);
-                const dateB = new Date(b.visitDate);
-                if (isValid(dateA) && isValid(dateB)) {
-                    return dateB.getTime() - dateA.getTime();
-                }
-                return 0;
-            });
-            setMyVisits(sorted);
-            setLoading(false);
+            const sortedVisits = enrichedVisits.sort((a,b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime());
+            setMyVisits(sortedVisits);
         });
 
-        return () => unsubscribeVisits();
+        // --- Fetch Bookings ---
+        const bookingsQuery = query(collection(db, "bookings"), where("studentId", "==", currentUser.uid));
+        const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
+            const bookingsData = await Promise.all(snapshot.docs.map(async (d) => {
+                const data = d.data();
+                const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                return {
+                    id: d.id,
+                    hostelId: data.hostelId,
+                    hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
+                    bookingDate: (data.bookingDate?.toDate() ?? new Date()).toLocaleDateString(),
+                    paymentReference: data.paymentReference
+                } as Booking;
+            }));
+            setMyBookings(bookingsData);
+        });
+
+
+        Promise.all([visitsQuery, bookingsQuery]).then(() => setLoading(false));
+
+
+        return () => {
+            unsubscribeVisits();
+            unsubscribeBookings();
+        };
     }, [currentUser, toast]);
     
     const getStatusInfo = (visit: EnrichedVisit): { variant: "default" | "secondary" | "outline" | "destructive", icon: React.ReactNode, text: string } => {
@@ -144,7 +164,7 @@ export default function MyVisitsPage() {
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
-                            You must be logged in as a Student to view your visits.
+                            You must be logged in as a Student to view your bookings and visits.
                         </AlertDescription>
                     </Alert>
                 </main>
@@ -159,65 +179,103 @@ export default function MyVisitsPage() {
                 <div className="container mx-auto space-y-8">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-2xl font-headline">My Hostel Visits</CardTitle>
-                            <CardDescription>Track your upcoming and past hostel visit requests.</CardDescription>
+                            <CardTitle className="text-2xl font-headline">My Bookings & Visits</CardTitle>
+                            <CardDescription>Track your confirmed room bookings and hostel visit requests.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {loading ? (
-                                <div className="flex items-center justify-center h-64">
-                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                    <p className="ml-4 text-muted-foreground">Loading your visits...</p>
-                                </div>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Hostel</TableHead>
-                                            <TableHead>Visit Type</TableHead>
-                                            <TableHead>Date &amp; Time</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {myVisits.length > 0 ? (
-                                            myVisits.map(visit => {
-                                                const statusInfo = getStatusInfo(visit);
-                                                const visitDate = new Date(visit.visitDate);
-                                                return (
-                                                <TableRow key={visit.id}>
-                                                    <TableCell className="font-medium">{visit.hostelName}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={visit.visitType === 'agent' ? 'outline' : 'secondary'} className="capitalize flex items-center gap-1.5">
-                                                            {visit.visitType === 'agent' ? <UserIcon className="h-3 w-3" /> : <Navigation className="h-3 w-3" />}
-                                                            {visit.visitType === 'agent' ? `Agent: ${visit.agentName || 'Pending'}` : 'Self Visit'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                     <TableCell>
-                                                        {isValid(visitDate) ? `${format(visitDate, "PPP")} at ${visit.visitTime}` : 'Not Scheduled'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={statusInfo.variant} className="capitalize flex items-center gap-1.5">
-                                                            {statusInfo.icon}
-                                                            {statusInfo.text}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {getActionForVisit(visit)}
-                                                    </TableCell>
+                             <Tabs defaultValue="bookings">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="bookings">Confirmed Bookings ({myBookings.length})</TabsTrigger>
+                                    <TabsTrigger value="visits">Visit Requests ({myVisits.length})</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="bookings">
+                                    {loading ? <Loader2 className="mt-8 mx-auto h-8 w-8 animate-spin text-muted-foreground"/> : (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Hostel</TableHead>
+                                                    <TableHead>Booking Date</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
                                                 </TableRow>
-                                                )
-                                            })
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center h-24">
-                                                    You haven't booked any visits yet.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            )}
+                                            </TableHeader>
+                                            <TableBody>
+                                                {myBookings.length > 0 ? (
+                                                    myBookings.map(booking => (
+                                                        <TableRow key={booking.id}>
+                                                            <TableCell className="font-medium">{booking.hostelName}</TableCell>
+                                                            <TableCell>{booking.bookingDate}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button variant="outline" size="sm" onClick={() => router.push(`/agreement/${booking.id}`)}>
+                                                                    <FileText className="mr-2 h-4 w-4" />
+                                                                    View Agreement
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="text-center h-24">
+                                                            You have no confirmed hostel bookings.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </TabsContent>
+                                <TabsContent value="visits">
+                                    {loading ? <Loader2 className="mt-8 mx-auto h-8 w-8 animate-spin text-muted-foreground"/> : (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Hostel</TableHead>
+                                                    <TableHead>Visit Type</TableHead>
+                                                    <TableHead>Date &amp; Time</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {myVisits.length > 0 ? (
+                                                    myVisits.map(visit => {
+                                                        const statusInfo = getStatusInfo(visit);
+                                                        const visitDate = new Date(visit.visitDate);
+                                                        return (
+                                                        <TableRow key={visit.id}>
+                                                            <TableCell className="font-medium">{visit.hostelName}</TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={visit.visitType === 'agent' ? 'outline' : 'secondary'} className="capitalize flex items-center gap-1.5">
+                                                                    {visit.visitType === 'agent' ? <UserIcon className="h-3 w-3" /> : <Navigation className="h-3 w-3" />}
+                                                                    {visit.visitType === 'agent' ? `Agent: ${visit.agentName || 'Pending'}` : 'Self Visit'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {isValid(visitDate) ? `${format(visitDate, "PPP")} at ${visit.visitTime}` : 'Not Scheduled'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={statusInfo.variant} className="capitalize flex items-center gap-1.5">
+                                                                    {statusInfo.icon}
+                                                                    {statusInfo.text}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {getActionForVisit(visit)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        )
+                                                    })
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center h-24">
+                                                            You haven't booked any visits yet.
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </TabsContent>
+                            </Tabs>
                         </CardContent>
                     </Card>
                 </div>

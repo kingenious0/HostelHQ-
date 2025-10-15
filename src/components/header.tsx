@@ -209,7 +209,7 @@ export function Header() {
             )}
             {isStudent && (
                  <Link href="/my-visits" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                    My Visits
+                    My Bookings
                 </Link>
             )}
           </nav>
@@ -231,7 +231,7 @@ export function Header() {
                   <DropdownMenuSeparator />
                   {isStudent && (
                      <DropdownMenuItem asChild>
-                        <Link href="/my-visits"><Briefcase className="mr-2 h-4 w-4"/>My Visits</Link>
+                        <Link href="/my-visits"><Briefcase className="mr-2 h-4 w-4"/>My Bookings</Link>
                     </DropdownMenuItem>
                   )}
                   {isAgent && (
