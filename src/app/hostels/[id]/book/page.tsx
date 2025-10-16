@@ -27,13 +27,13 @@ type VisitType = 'agent' | 'self';
 
 const visitOptions = {
     agent: {
-        price: 10,
+        price: 12,
         title: "Visit with an Agent",
         description: "An agent will guide you to the hostel and show you the room.",
         icon: <User className="h-5 w-5" />
     },
     self: {
-        price: 35,
+        price: 15,
         title: "Visit by Yourself",
         description: "Get detailed directions and visit the hostel at your convenience.",
         icon: <Navigation className="h-5 w-5" />

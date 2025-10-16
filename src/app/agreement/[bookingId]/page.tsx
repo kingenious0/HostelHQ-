@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Loader2, Download, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { Hostel, RoomType } from '@/lib/data';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -24,11 +26,9 @@ type Booking = {
     status: string;
 };
 
-type AgreementTemplate = {
+type Manager = {
     id: string;
-    content: string;
-    hostelName: string;
-    managerName: string;
+    fullName: string;
 }
 
 export default function AgreementPage() {
@@ -39,7 +39,7 @@ export default function AgreementPage() {
 
     const [booking, setBooking] = useState<Booking | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
-    const [template, setTemplate] = useState<AgreementTemplate | null>(null);
+    const [manager, setManager] = useState<Manager | null>(null);
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     
@@ -68,32 +68,31 @@ export default function AgreementPage() {
                 const hostelData = { id: hostelSnap.id, ...hostelSnap.data() } as Hostel;
                 setHostel(hostelData);
                 
-                // Fetch Approved Agreement Template for that hostel
-                const templateQuery = query(
-                    collection(db, 'agreementTemplates'),
-                    where('hostelId', '==', bookingData.hostelId),
-                    where('status', '==', 'Approved'),
-                    limit(1)
-                );
-                const templateSnapshot = await getDocs(templateQuery);
-                
-                if (templateSnapshot.empty) {
-                    toast({
-                        title: "No Custom Template Found",
-                        description: "Using the default tenancy agreement for this hostel.",
-                        variant: "default"
-                    });
-                    // Fallback to the default legal text
-                    setTemplate({
-                        id: 'default',
-                        content: tenancyAgreementText,
-                        hostelName: hostelData.name,
-                        managerName: 'Hostel Management'
-                    });
-
+                // Fetch the manager associated with the hostel's agentId
+                if (hostelData.agentId) {
+                    const managerQuery = query(
+                        collection(db, 'users'),
+                        where('role', '==', 'hostel_manager')
+                        // This logic assumes an agent is linked to a manager.
+                        // A more direct link from hostel -> manager would be better.
+                        // For now, let's find ANY manager for demo purposes.
+                    );
+                    const managerSnapshot = await getDocs(
+                        query(
+                            collection(db, 'users'), 
+                            where('role', '==', 'hostel_manager'), 
+                            limit(1)
+                        )
+                    );
+                    
+                    if (!managerSnapshot.empty) {
+                        const managerData = managerSnapshot.docs[0].data();
+                        setManager({ id: managerSnapshot.docs[0].id, fullName: managerData.fullName });
+                    } else {
+                        setManager({ id: 'default-manager', fullName: 'Hostel Management' });
+                    }
                 } else {
-                    const templateData = { id: templateSnapshot.docs[0].id, ...templateSnapshot.docs[0].data() } as AgreementTemplate;
-                    setTemplate(templateData);
+                     setManager({ id: 'default-manager', fullName: 'Hostel Management' });
                 }
 
 
@@ -158,8 +157,8 @@ export default function AgreementPage() {
     };
     
     const getFilledTemplate = () => {
-        if (!template || !booking || !hostel) return "";
-        let content = template.content;
+        if (!booking || !hostel || !manager) return "";
+        let content = tenancyAgreementText;
         
         const studentDetails = booking.studentDetails;
         const room = hostel.roomTypes.find(rt => rt.id === (booking as any).roomTypeId) || hostel.roomTypes[0];
@@ -176,7 +175,7 @@ export default function AgreementPage() {
             '{{rentAmount}}': room?.price.toLocaleString() || 'N/A',
             '{{startDate}}': new Date().toLocaleDateString(),
             '{{endDate}}': new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toLocaleDateString(),
-            '{{managerName}}': template.managerName,
+            '{{managerName}}': manager.fullName,
             // Add other placeholders as needed
         };
 
@@ -201,7 +200,7 @@ export default function AgreementPage() {
         );
     }
     
-    if (!booking || !hostel || !template) {
+    if (!booking || !hostel || !manager) {
          return (
              <div className="flex flex-col min-h-screen">
                 <Header />
@@ -247,7 +246,7 @@ export default function AgreementPage() {
                                     <div>
                                         <div className="border-t pt-2">
                                             <p className="font-semibold">Manager Signature</p>
-                                            <p className="text-xs">({template.managerName})</p>
+                                            <p className="text-xs">({manager.fullName})</p>
                                         </div>
                                     </div>
                                 </div>

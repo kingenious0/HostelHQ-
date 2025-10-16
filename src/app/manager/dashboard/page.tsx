@@ -13,66 +13,20 @@ import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
 
-
-type AgreementTemplate = {
-    id: string;
-    templateName: string;
-    status: 'Approved' | 'Pending' | 'Rejected';
-    hostelName: string;
-    content: string;
-};
 
 export default function ManagerDashboard() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
-    const [myTemplates, setMyTemplates] = useState<AgreementTemplate[]>([]);
-    const [loadingTemplates, setLoadingTemplates] = useState(true);
-    const [selectedTemplate, setSelectedTemplate] = useState<AgreementTemplate | null>(null);
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
             setLoadingAuth(false);
-            if (!user) {
-                setLoadingTemplates(false);
-            }
         });
         return () => unsubscribeAuth();
     }, []);
-
-    useEffect(() => {
-        if (!currentUser) return;
-
-        setLoadingTemplates(true);
-        const templatesQuery = query(
-            collection(db, "agreementTemplates"), 
-            where("managerId", "==", currentUser.uid)
-        );
-
-        const unsubscribeTemplates = onSnapshot(templatesQuery, (snapshot) => {
-            const templatesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AgreementTemplate));
-            setMyTemplates(templatesData);
-            setLoadingTemplates(false);
-        });
-
-        return () => unsubscribeTemplates();
-    }, [currentUser]);
-
-    const handleViewTemplate = (template: AgreementTemplate) => {
-        setSelectedTemplate(template);
-        setIsDialogOpen(true);
-    }
 
 
     if (loadingAuth) {
@@ -86,7 +40,6 @@ export default function ManagerDashboard() {
         );
     }
     
-    // A simple check. A more robust solution would check the user's role from your database.
     if (!currentUser || !currentUser.email?.endsWith('@manager.hostelhq.com')) {
         return (
             <div className="flex flex-col min-h-screen">
@@ -104,94 +57,22 @@ export default function ManagerDashboard() {
         )
     }
 
-    const getStatusVariant = (status: string) => {
-        switch (status) {
-            case 'Approved': return 'default';
-            case 'Pending': return 'secondary';
-            case 'Rejected': return 'destructive';
-            default: return 'outline';
-        }
-    }
-
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
                 <div className="container mx-auto grid gap-8 md:grid-cols-1">
-
                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle className="text-2xl font-headline">Tenancy Agreements</CardTitle>
-                                <CardDescription>Manage your agreement templates.</CardDescription>
-                            </div>
-                            <Button onClick={() => router.push('/manager/agreements/new')}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                New Template
-                            </Button>
+                        <CardHeader>
+                            <CardTitle className="text-2xl font-headline">Manager Dashboard</CardTitle>
+                            <CardDescription>Welcome, {currentUser.displayName || currentUser.email}.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                           {loadingTemplates ? (
-                                <div className="flex items-center justify-center p-8">
-                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                </div>
-                           ) : (
-                             <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Template Name</TableHead>
-                                        <TableHead>Hostel</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {myTemplates.length > 0 ? (
-                                        myTemplates.map((template) => (
-                                            <TableRow key={template.id}>
-                                                <TableCell className="font-medium">{template.templateName}</TableCell>
-                                                <TableCell>{template.hostelName}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={getStatusVariant(template.status)}>{template.status}</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button variant="outline" size="sm" onClick={() => handleViewTemplate(template)}>View</Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={4} className="text-center h-24">
-                                                You have not created any templates yet.
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                           )}
+                            <p className="text-muted-foreground">This dashboard is currently under development. More features for managing your hostels will be available soon.</p>
                         </CardContent>
                     </Card>
                 </div>
             </main>
-
-            {selectedTemplate && (
-                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                            <DialogTitle>{selectedTemplate.templateName}</DialogTitle>
-                            <DialogDescription>
-                                For {selectedTemplate.hostelName} | Status: {selectedTemplate.status}
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4 max-h-[60vh] overflow-y-auto pr-4 text-sm bg-muted/50 p-4 rounded-md">
-                            <pre className="whitespace-pre-wrap font-mono">{selectedTemplate.content}</pre>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Close</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            )}
         </div>
     );
 }
