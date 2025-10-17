@@ -2,17 +2,28 @@
 import { Header } from '@/components/header';
 import { HostelCard } from '@/components/hostel-card';
 import { getHostels } from '@/lib/data';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Search, MapPin } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { SearchForm } from '@/components/search-form';
 import Image from 'next/image';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Home() {
-  const allHostels = await getHostels({ featured: false });
+type HomeProps = {
+  searchParams?: {
+    search?: string;
+    location?: string;
+  };
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const searchQuery = searchParams?.search || '';
+  const locationQuery = searchParams?.location || '';
+
+  const allHostels = await getHostels({ search: searchQuery, location: locationQuery });
   const featuredHostels = await getHostels({ featured: true });
+
+  const hostelsToShow = searchQuery || locationQuery ? allHostels : allHostels.filter(h => !h.isFeatured);
+  const showFeatured = !searchQuery && !locationQuery;
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -33,28 +44,12 @@ export default async function Home() {
                     Discover the best student hostels in Ghana. Comfortable, affordable, and close to campus.
                 </p>
                 <div className="mt-8 w-full max-w-3xl">
-                    <Card className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-2xl">
-                        <CardContent className="p-2">
-                            <form className="flex flex-col md:flex-row items-center gap-4">
-                                <div className="relative w-full">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input placeholder="Search hostel name..." className="pl-12 h-14 text-base rounded-lg text-foreground bg-white"/>
-                                </div>
-                                <div className="relative w-full">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input placeholder="Enter location" className="pl-12 h-14 text-base rounded-lg text-foreground bg-white" />
-                                </div>
-                                <Button size="lg" className="w-full md:w-auto h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg text-lg">
-                                    Search
-                                </Button>
-                            </form>
-                        </CardContent>
-                    </Card>
+                   <SearchForm />
                 </div>
             </div>
         </section>
 
-        {featuredHostels.length > 0 && (
+        {showFeatured && featuredHostels.length > 0 && (
           <section className="container mx-auto px-4 md:px-6 py-16">
             <h2 className="text-3xl font-bold mb-8 text-center font-headline">Featured Hostels</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
@@ -66,12 +61,20 @@ export default async function Home() {
         )}
 
         <section className="container mx-auto px-4 md:px-6 py-16 bg-gray-50/50 rounded-xl">
-          <h2 className="text-3xl font-bold mb-8 text-center font-headline">All Hostels</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {allHostels.map((hostel) => (
-              <HostelCard key={hostel.id} hostel={hostel} />
-            ))}
-          </div>
+           <h2 className="text-3xl font-bold mb-8 text-center font-headline">
+            {searchQuery || locationQuery ? `Search Results (${hostelsToShow.length})` : 'All Hostels'}
+          </h2>
+          {hostelsToShow.length > 0 ? (
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {hostelsToShow.map((hostel) => (
+                <HostelCard key={hostel.id} hostel={hostel} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <p className="text-lg text-muted-foreground">No hostels found matching your criteria.</p>
+            </div>
+          )}
         </section>
       </main>
     </div>

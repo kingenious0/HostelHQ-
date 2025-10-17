@@ -1,7 +1,7 @@
 
 
 import { db } from './firebase';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy, or } from "firebase/firestore";
 import { ably } from './ably';
 
 export type RoomType = {
@@ -243,12 +243,32 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 }
 
 
-export async function getHostels(options: { featured?: boolean } = {}): Promise<Hostel[]> {
+export async function getHostels(options: { featured?: boolean, search?: string, location?: string } = {}): Promise<Hostel[]> {
      try {
         let hostelsQuery = query(collection(db, 'hostels'));
 
+        const conditions = [];
         if (options.featured) {
-            hostelsQuery = query(hostelsQuery, where("isFeatured", "==", true));
+            conditions.push(where("isFeatured", "==", true));
+        }
+
+        // Firestore does not support case-insensitive search natively.
+        // A common workaround is to store a lowercased version of the fields you want to search.
+        // For simplicity here, we will perform an exact match on the name, which means search is case-sensitive.
+        // A more robust solution would involve a third-party search service like Algolia or Typesense.
+        if (options.search) {
+             // This performs a "starts-with" search, which is better than nothing.
+            conditions.push(where("name", ">=", options.search));
+            conditions.push(where("name", "<=", options.search + '\uf8ff'));
+        }
+        
+        if (options.location) {
+             conditions.push(where("location", ">=", options.location));
+             conditions.push(where("location", "<=", options.location + '\uf8ff'));
+        }
+
+        if (conditions.length > 0) {
+            hostelsQuery = query(collection(db, 'hostels'), ...conditions);
         }
 
         const querySnapshot = await getDocs(hostelsQuery);
@@ -259,18 +279,14 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
             
-             // Determine aggregate availability from the top-level document first
             let availability = data.availability as Hostel['availability'] || 'Full';
 
-            // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
             const priceRange = {
                 min: prices.length > 0 ? Math.min(...prices) : 0,
                 max: prices.length > 0 ? Math.max(...prices) : 0,
             };
 
-            // For the main list, we can just return the number of reviews and average rating
-            // rather than the full review objects.
             const reviewsQuery = query(collection(db, 'reviews'), where('hostelId', '==', doc.id), where('status', '==', 'approved'));
             const reviewsSnapshot = await getDocs(reviewsQuery);
             const reviewsCount = reviewsSnapshot.size;
@@ -284,13 +300,12 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
                 roomTypes, 
                 availability, 
                 priceRange,
-                reviews: reviewsCount, // Return count for list view
+                reviews: reviewsCount,
                 rating: averageRating,
             }) as Hostel;
         }));
         
-        // Don't fall back to static data if we are specifically querying for featured hostels
-        if (firestoreHostels.length > 0 || options.featured) {
+        if (firestoreHostels.length > 0 || options.search || options.location) {
             return firestoreHostels;
         }
     } catch (e: any) {
@@ -301,8 +316,11 @@ export async function getHostels(options: { featured?: boolean } = {}): Promise<
         console.error("--------------------------------------\n");
     }
     
-    console.log("Falling back to static hostel data.");
-    return staticHostels;
-}
-
+    // Only fall back to static data if no search is active
+    if (!options.search && !options.location) {
+        console.log("Falling back to static hostel data.");
+        return staticHostels;
+    }
     
+    return [];
+}
