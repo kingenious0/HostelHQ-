@@ -11,9 +11,10 @@ import { Loader2, AlertTriangle, DollarSign, Home, BarChart } from 'lucide-react
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
-import { Hostel, RoomType, bookingsChartData } from '@/lib/data';
+import { collection, query, where, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
+import { Hostel, RoomType } from '@/lib/data';
 import { BookingsChart } from '@/components/bookings-chart';
+import { format } from 'date-fns';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
     roomTypes: Pick<RoomType, 'price'>[];
@@ -22,6 +23,7 @@ type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
 type Booking = {
     hostelId: string;
     roomTypeId?: string; // This might not exist on old bookings
+    bookingDate: Timestamp;
 };
 
 
@@ -31,6 +33,7 @@ export default function ManagerDashboard() {
     const [hostels, setHostels] = useState<ManagerHostel[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loadingData, setLoadingData] = useState(true);
+    const [chartData, setChartData] = useState<{ month: string; bookings: number }[]>([]);
     const router = useRouter();
 
     useEffect(() => {
@@ -66,6 +69,23 @@ export default function ManagerDashboard() {
                 const unsubscribeBookings = onSnapshot(bookingsQuery, (bookingSnapshot) => {
                     const fetchedBookings = bookingSnapshot.docs.map(bDoc => bDoc.data() as Booking);
                     setBookings(fetchedBookings);
+                    
+                    // Process data for the chart
+                    const monthlyBookings = new Array(12).fill(0);
+                    fetchedBookings.forEach(booking => {
+                        if (booking.bookingDate) {
+                            const month = booking.bookingDate.toDate().getMonth();
+                            monthlyBookings[month]++;
+                        }
+                    });
+
+                    const currentYearMonths = Array.from({length: 12}, (_, i) => format(new Date(0, i), 'MMM'));
+
+                    setChartData(currentYearMonths.map((month, index) => ({
+                        month,
+                        bookings: monthlyBookings[index]
+                    })));
+
                     setLoadingData(false);
                 });
                  return () => unsubscribeBookings();
@@ -204,11 +224,21 @@ export default function ManagerDashboard() {
 
                         <Card className="lg:col-span-3">
                             <CardHeader>
-                                <CardTitle>Monthly Bookings (Demo)</CardTitle>
-                                <CardDescription>A chart showing booking trends.</CardDescription>
+                                <CardTitle>Monthly Bookings</CardTitle>
+                                <CardDescription>A chart showing booking trends for the current year.</CardDescription>
                             </CardHeader>
                              <CardContent>
-                                <BookingsChart data={bookingsChartData} />
+                                {loadingData ? (
+                                     <div className="flex items-center justify-center h-[300px]">
+                                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                     </div>
+                                ) : totalBookings > 0 ? (
+                                    <BookingsChart data={chartData} />
+                                ) : (
+                                    <div className="flex items-center justify-center h-[300px] text-center text-muted-foreground">
+                                        No booking data available to display.
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 

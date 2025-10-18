@@ -99,16 +99,6 @@ export const staticHostels: Hostel[] = [
 ];
 
 
-export const bookingsChartData = [
-  { month: "Jan", bookings: 82 },
-  { month: "Feb", bookings: 95 },
-  { month: "Mar", bookings: 110 },
-  { month: "Apr", bookings: 98 },
-  { month: "May", bookings: 120 },
-  { month: "Jun", bookings: 135 },
-];
-
-
 let simulationInterval: NodeJS.Timeout | null = null;
 
 const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, destinationLng: number) => {
