@@ -183,17 +183,7 @@ export function Header() {
               Hostels
             </Link>
             {isAgent && (
-               <Link href="/agent/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                Dashboard
-              </Link>
-            )}
-            {isAgent && (
-              <Link href="/agent/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                List a Hostel
-              </Link>
-            )}
-             {isAgent && (
-               <Link href="/agent/listings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+              <Link href="/agent/listings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                 My Listings
               </Link>
             )}
@@ -241,9 +231,6 @@ export function Header() {
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/agent/listings"><ListPlus className="mr-2 h-4 w-4"/>My Listings</Link>
-                      </DropdownMenuItem>
-                       <DropdownMenuItem asChild>
-                        <Link href="/agent/upload"><ListPlus className="mr-2 h-4 w-4"/>Add New</Link>
                       </DropdownMenuItem>
                     </>
                   )}

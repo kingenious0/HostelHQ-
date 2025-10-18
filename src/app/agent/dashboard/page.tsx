@@ -131,6 +131,7 @@ export default function AgentDashboard() {
             } else {
                 // If accepting, just update the state locally to reflect the change
                 setSelectedVisit(prev => prev ? {...prev, status: 'accepted'} : null);
+                setMyVisits(prev => prev.map(v => v.id === visitId ? {...v, status: 'accepted'} : v));
             }
 
         } catch (error) {
@@ -157,7 +158,7 @@ export default function AgentDashboard() {
         );
     }
 
-    if (!currentUser || currentUser.email?.endsWith('@student.hostelhq.com')) {
+    if (!currentUser || !currentUser.email?.endsWith('@agent.hostelhq.com')) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
@@ -329,6 +330,11 @@ export default function AgentDashboard() {
                              {selectedVisit.status === 'completed' && (
                                 <div className="text-center w-full text-sm text-muted-foreground">
                                     This visit has been completed.
+                                </div>
+                            )}
+                             {selectedVisit.status === 'cancelled' && (
+                                <div className="text-center w-full text-sm text-muted-foreground">
+                                    This visit was declined.
                                 </div>
                             )}
                         </DialogFooter>
