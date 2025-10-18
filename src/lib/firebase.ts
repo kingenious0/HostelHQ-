@@ -27,19 +27,25 @@ export const db = getFirestore(app);
 // Enable persistence
 if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
     try {
-        enableIndexedDbPersistence(db).catch((err) => {
-            if (err.code == 'failed-precondition') {
-                // Multiple tabs open, persistence can only be enabled in one tab at a a time.
+        enableIndexedDbPersistence(db)
+        .catch((err) => {
+            if (err.code === 'failed-precondition') {
+                // Multiple tabs open, persistence can only be enabled in one tab at a time.
                 console.warn('Firestore persistence failed: multiple tabs open.');
-            } else if (err.code == 'unimplemented') {
+            } else if (err.code === 'unimplemented') {
                 // The current browser does not support all of the
                 // features required to enable persistence
                 console.warn('Firestore persistence not available in this browser.');
+            } else {
+                 console.error("An error occurred while enabling Firestore persistence:", err);
             }
         });
-    } catch (e) {
-        console.error("Firebase persistence error", e);
+    } catch (e: any) {
+        // This catch block is crucial for handling potential IndexedDB corruption errors.
+        if (e.message?.includes('potential corruption')) {
+            console.error("Firestore persistence could not be enabled due to potential IndexedDB corruption. This can sometimes be fixed by a hard refresh (Ctrl+Shift+R or Cmd+Shift+R). The app will continue to work online.");
+        } else {
+            console.error("An unexpected error occurred with Firebase persistence:", e);
+        }
     }
 }
-
-    
