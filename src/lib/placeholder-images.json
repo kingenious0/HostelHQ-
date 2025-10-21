@@ -1,0 +1,40 @@
+{
+  "placeholderImages": [
+    {
+      "id": "hostel-1",
+      "description": "Bright and airy student room",
+      "imageUrl": "https://images.unsplash.com/photo-1486304873000-235643847519?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwcm9vbXxlbnwwfHx8fDE3NTg5NDA3Nzl8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "student room"
+    },
+    {
+      "id": "hostel-2",
+      "description": "Cozy shared room for students",
+      "imageUrl": "https://images.unsplash.com/photo-1584132923901-cd27c0cdd88e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxob3N0ZWwlMjByb29tfGVufDB8fHx8MTc1ODk1OTQ4NHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "hostel room"
+    },
+    {
+      "id": "hostel-3",
+      "description": "Modern student living space",
+      "imageUrl": "https://images.unsplash.com/photo-1621070659899-40b6b6f6731d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8bW9kZXJuJTIwYXBhcnRtZW50fGVufDB8fHx8MTc1ODkxOTcyN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "modern apartment"
+    },
+    {
+      "id": "hostel-4",
+      "description": "A comfortable study environment",
+      "imageUrl": "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8c3R1ZHklMjBkZXNrfGVufDB8fHx8MTc1ODk0NTYyNXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "study desk"
+    },
+    {
+      "id": "hostel-5",
+      "description": "Common area for relaxation",
+      "imageUrl": "https://images.unsplash.com/photo-1700727448548-adbdbd12fb39?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxsb3VuZ2UlMjBhcmVhfGVufDB8fHx8MTc1ODg4NTk0OXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "lounge area"
+    },
+    {
+      "id": "hostel-6",
+      "description": "Well-equipped student kitchen",
+      "imageUrl": "https://images.unsplash.com/photo-1758523416144-d100288c5451?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxzaGFyZWQlMjBraXRjaGVufGVufDB8fHx8MTc1ODk4OTY4Nnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "shared kitchen"
+    }
+  ]
+}
