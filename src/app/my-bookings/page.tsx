@@ -159,10 +159,10 @@ export default function MyBookingsPage() {
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1">
-                                    <h3 className="font-semibold text-gray-900">
+                                    <h3 className="font-semibold text-gray-900 dark:text-white">
                                         {currentUser.displayName || 'User'}
                                     </h3>
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
                                         {currentUser.email}
                                     </p>
                                 </div>
@@ -220,7 +220,7 @@ export default function MyBookingsPage() {
                 {/* Main Content */}
                 <div className="flex-1 p-8">
                     <div className="max-w-4xl">
-                        <h1 className="text-3xl font-bold text-gray-900 mb-8">My Bookings</h1>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">My Bookings</h1>
 
                         {/* Status Tabs */}
                         <Tabs defaultValue="completed" className="mb-6">
@@ -241,7 +241,7 @@ export default function MyBookingsPage() {
 
                             <TabsContent value="pending">
                                 <div className="space-y-4">
-                                    <h2 className="text-xl font-semibold">Pending booking ({filteredBookings('pending').length})</h2>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pending booking ({filteredBookings('pending').length})</h2>
                                     {loading ? (
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                     ) : filteredBookings('pending').length > 0 ? (
@@ -250,7 +250,7 @@ export default function MyBookingsPage() {
                                         ))
                                     ) : (
                                         <Card>
-                                            <CardContent className="p-8 text-center text-gray-500">
+                                            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
                                                 No pending bookings
                                             </CardContent>
                                         </Card>
@@ -260,7 +260,7 @@ export default function MyBookingsPage() {
 
                             <TabsContent value="cancelled">
                                 <div className="space-y-4">
-                                    <h2 className="text-xl font-semibold">Canceled booking ({filteredBookings('cancelled').length})</h2>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Canceled booking ({filteredBookings('cancelled').length})</h2>
                                     {loading ? (
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                     ) : filteredBookings('cancelled').length > 0 ? (
@@ -269,7 +269,7 @@ export default function MyBookingsPage() {
                                         ))
                                     ) : (
                                         <Card>
-                                            <CardContent className="p-8 text-center text-gray-500">
+                                            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
                                                 No cancelled bookings
                                             </CardContent>
                                         </Card>
@@ -279,7 +279,7 @@ export default function MyBookingsPage() {
 
                             <TabsContent value="completed">
                                 <div className="space-y-4">
-                                    <h2 className="text-xl font-semibold">Confirmed booking ({filteredBookings('confirmed').length})</h2>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Confirmed booking ({filteredBookings('confirmed').length})</h2>
                                     {loading ? (
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                     ) : filteredBookings('confirmed').length > 0 ? (
@@ -288,7 +288,7 @@ export default function MyBookingsPage() {
                                         ))
                                     ) : (
                                         <Card>
-                                            <CardContent className="p-8 text-center text-gray-500">
+                                            <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
                                                 No confirmed bookings
                                             </CardContent>
                                         </Card>
@@ -313,10 +313,10 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
             <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-4">
-                        <Building2 className="h-5 w-5 text-gray-400 mt-1" />
+                        <Building2 className="h-5 w-5 text-gray-300 mt-1" />
                         <div>
-                            <h3 className="font-semibold text-lg">{booking.hostelName}</h3>
-                            <p className="text-sm text-gray-400">Booking ID: {booking.id.slice(-4)}</p>
+                            <h3 className="font-semibold text-lg text-white">{booking.hostelName}</h3>
+                            <p className="text-sm text-gray-300">Booking ID: {booking.id.slice(-4)}</p>
                         </div>
                     </div>
                     <div className="text-right">
@@ -337,16 +337,16 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                 
                 <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
                     <div>
-                        <p className="text-gray-400">Room Number</p>
-                        <p className="font-medium">{booking.roomNumber}</p>
+                        <p className="text-gray-300">Room Number</p>
+                        <p className="font-medium text-white">{booking.roomNumber}</p>
                     </div>
                     <div>
-                        <p className="text-gray-400">Room Type</p>
-                        <p className="font-medium">{booking.roomType}</p>
+                        <p className="text-gray-300">Room Type</p>
+                        <p className="font-medium text-white">{booking.roomType}</p>
                     </div>
                     <div>
-                        <p className="text-gray-400">Booked by</p>
-                        <p className="font-medium">{booking.bookedBy}</p>
+                        <p className="text-gray-300">Booked by</p>
+                        <p className="font-medium text-white">{booking.bookedBy}</p>
                     </div>
                 </div>
             </CardContent>
