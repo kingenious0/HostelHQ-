@@ -10,7 +10,7 @@ let ablyInstance: Realtime | null = null;
 
 // Function to get a singleton instance of Ably
 function getAblyClient() {
-    if (!ablyInstance) {
+    if (!ablyInstance && typeof window !== 'undefined') {
         ablyInstance = new Realtime({ authUrl });
     }
     return ablyInstance;
