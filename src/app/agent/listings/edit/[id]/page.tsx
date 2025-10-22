@@ -20,6 +20,7 @@ import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType, Hostel } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BackButton } from '@/components/ui/back-button';
 
 const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
 const billsIncludedList = ['Water', 'Refuse'];
@@ -251,7 +252,11 @@ export default function EditListingPage() {
             <main className="flex-1 flex flex-col items-center py-12 px-4 bg-gray-50/50">
                 <Card className="w-full max-w-3xl shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Edit Hostel Listing</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <BackButton fallbackHref="/agent/listings" />
+                            <CardTitle className="text-2xl font-headline">Edit Hostel Listing</CardTitle>
+                            <div className="w-10">{/* Placeholder to balance the layout */}</div>
+                        </div>
                         <CardDescription>Update the details for "{formData.name}".</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">

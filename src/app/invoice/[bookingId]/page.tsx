@@ -1,4 +1,3 @@
-// src/app/agreement/[bookingId]/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,16 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Download, Printer } from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import type { User as FirebaseUser } from 'firebase/auth';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { Hostel, RoomType } from '@/lib/data';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { tenancyAgreementText, termsAndConditionsText } from '@/lib/legal';
 import { BackButton } from '@/components/ui/back-button';
 
 type Booking = {
@@ -35,12 +31,17 @@ type Booking = {
     paymentDeadline?: { seconds: number; nanoseconds: number; };
 };
 
-type Manager = {
+type Payment = {
     id: string;
-    fullName: string;
-}
+    bookingId: string;
+    amount: number;
+    currency: string;
+    paymentDate: { seconds: number; nanoseconds: number; };
+    status: string;
+    type: string; // e.g., 'rent', 'damage_fee'
+};
 
-export default function AgreementPage() {
+export default function InvoicePage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
@@ -48,7 +49,7 @@ export default function AgreementPage() {
 
     const [booking, setBooking] = useState<Booking | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
-    const [manager, setManager] = useState<Manager | null>(null);
+    const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     
@@ -57,7 +58,7 @@ export default function AgreementPage() {
     useEffect(() => {
         if (!bookingId) {
             toast({ title: "Error", description: "No booking ID provided.", variant: "destructive" });
-            router.push('/my-bookings'); // Redirect to my bookings if no ID
+            router.push('/my-bookings');
             return;
         }
 
@@ -76,30 +77,19 @@ export default function AgreementPage() {
                 if (!hostelSnap.exists()) throw new Error("Hostel not found.");
                 const hostelData = { id: hostelSnap.id, ...hostelSnap.data() } as Hostel;
                 setHostel(hostelData);
-                
-                // Fetch the manager associated with the hostel's agentId
-                if (hostelData.agentId) {
-                    const managerQuery = query(
-                        collection(db, 'users'),
-                        where('uid', '==', hostelData.agentId), // Assuming agentId is the manager's uid for now
-                            limit(1)
-                    );
-                    const managerSnapshot = await getDocs(managerQuery);
-                    
-                    if (!managerSnapshot.empty) {
-                        const managerData = managerSnapshot.docs[0].data();
-                        setManager({ id: managerSnapshot.docs[0].id, fullName: managerData.fullName });
-                    } else {
-                        setManager({ id: 'default-manager', fullName: 'Hostel Management' });
-                    }
-                } else {
-                     setManager({ id: 'default-manager', fullName: 'Hostel Management' });
-                }
 
+                // Fetch Payments for this booking
+                const paymentsQuery = query(
+                    collection(db, 'payments'),
+                    where('bookingId', '==', bookingId as string)
+                );
+                const paymentsSnapshot = await getDocs(paymentsQuery);
+                const fetchedPayments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
+                setPayments(fetchedPayments);
 
             } catch (error: any) {
-                console.error("Failed to fetch agreement data:", error);
-                toast({ title: "Failed to load agreement", description: error.message, variant: "destructive" });
+                console.error("Failed to fetch invoice data:", error);
+                toast({ title: "Failed to load invoice", description: error.message, variant: "destructive" });
                 router.push('/my-bookings');
             } finally {
                 setLoading(false);
@@ -140,13 +130,13 @@ export default function AgreementPage() {
             heightLeft -= pdfHeight;
 
             while (heightLeft > 0) {
-                position = heightLeft - pdfHeight; // Corrected: subtract pdfHeight not finalHeight
+                position = heightLeft - pdfHeight;
                 pdf.addPage();
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
                 heightLeft -= pdfHeight;
             }
 
-            pdf.save(`tenancy-agreement-${hostel?.name?.replace(/\s/g, '-')}.pdf`);
+            pdf.save(`invoice-${bookingId}.pdf`);
             toast({ title: "Download started", description: "Your PDF is being downloaded."});
 
         } catch (error) {
@@ -156,44 +146,6 @@ export default function AgreementPage() {
             setIsDownloading(false);
         }
     };
-    
-    const getFilledTemplate = () => {
-        if (!booking || !hostel || !manager) return "";
-        let content = tenancyAgreementText;
-        
-        const studentDetails = booking.studentDetails; // Assumed to be available from booking
-        // Defensively handle cases where roomTypes might be missing or empty
-        const roomTypes = Array.isArray(hostel.roomTypes) ? hostel.roomTypes : [];
-        const room = roomTypes.find(rt => rt.id === booking.roomTypeId) || roomTypes[0] || null;
-
-        const today = new Date();
-        const academicYearStart = today.getFullYear();
-        const academicYearEnd = today.getFullYear() + 1;
-
-        const replacements = {
-            '{{currentDate}}': today.toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' }),
-            '{{hostelName}}': hostel.name.toUpperCase(),
-            '{{hostelLocation}}': hostel.location,
-            '{{landlordName}}': manager?.fullName || 'Hostel Management',
-            '{{tenantName}}': studentDetails?.fullName || 'N/A',
-            '{{tenantProgram}}': studentDetails?.program || 'N/A',
-            '{{tenantMobile}}': studentDetails?.phoneNumber || 'N/A',
-            '{{tenantEmail}}': studentDetails?.email || 'N/A',
-            '{{roomType}}': room?.name || 'N/A',
-            '{{roomPrice}}': room && typeof room.price === 'number' ? room.price.toLocaleString() : 'N/A',
-            '{{academicYear}}': `${academicYearStart}/${academicYearEnd}`,
-            '{{paymentDeadline}}': booking.paymentDeadline ? new Date(booking.paymentDeadline.seconds * 1000).toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
-            '{{roomSharingClause}}': hostel.roomSharingClause || 'Standard room sharing conditions apply.',
-            '{{accessRules}}': hostel.accessRules || 'Standard access rules apply.',
-            '{{termsAndConditions}}': termsAndConditionsText,
-        };
-
-        for (const [key, value] of Object.entries(replacements)) {
-            content = content.replace(new RegExp(key, 'g'), value);
-        }
-
-        return content;
-    };
 
     if (loading) {
         return (
@@ -202,23 +154,31 @@ export default function AgreementPage() {
                 <main className="flex-1 flex items-center justify-center">
                     <div className="flex items-center gap-4">
                         <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
-                        <p className="text-muted-foreground">Loading your agreement...</p>
+                        <p className="text-muted-foreground">Loading your invoice...</p>
                     </div>
                 </main>
             </div>
         );
     }
     
-    if (!booking || !hostel || !manager) {
+    if (!booking || !hostel) {
          return (
              <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
-                    <p className="text-destructive">Failed to load agreement details.</p>
+                    <p className="text-destructive">Failed to load invoice details.</p>
                 </main>
             </div>
         );
     }
+
+    // Calculate total amount paid
+    const totalAmountPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    // Find the room type associated with the booking
+    const roomTypes = Array.isArray(hostel.roomTypes) ? hostel.roomTypes : [];
+    const bookedRoom = roomTypes.find(rt => rt.id === booking.roomTypeId) || roomTypes[0] || null;
+    const roomPrice = bookedRoom && typeof bookedRoom.price === 'number' ? bookedRoom.price : 0;
+    const balanceDue = roomPrice - totalAmountPaid;
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -229,8 +189,8 @@ export default function AgreementPage() {
                         <CardHeader>
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <CardTitle className="text-2xl font-headline">Your Tenancy Agreement</CardTitle>
-                                    <CardDescription>This is your official agreement for your room at {hostel.name}.</CardDescription>
+                                    <CardTitle className="text-2xl font-headline">Invoice for Booking #{booking.id.substring(0, 8)}</CardTitle>
+                                    <CardDescription>Generated on {new Date().toLocaleDateString()}.</CardDescription>
                                 </div>
                                 <div className="flex gap-2">
                                     <BackButton fallbackHref="/my-bookings" />
@@ -252,33 +212,73 @@ export default function AgreementPage() {
                                     backgroundSize: 'contain',
                                   }}
                                 />
-                                <h1 className="text-xl font-bold text-center mb-6 relative z-10">TENANCY AGREEMENT</h1>
-                                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed relative z-10">
-                                    {getFilledTemplate()}
-                                </pre>
-                                 <div className="mt-16 grid grid-cols-2 gap-16 relative z-10">
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Student Signature</p>
-                                            <p className="text-xs mb-8">&nbsp;</p>
-                                            <p className="text-xs">({booking.studentDetails.fullName})</p>
-                                            <p className="text-xs">Date: {new Date().toLocaleDateString()}</p>
+                                <div className="relative z-10">
+                                    <h1 className="text-xl font-bold text-center mb-6">INVOICE</h1>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 mb-8">
+                                        <div>
+                                            <p className="font-semibold">Invoice To:</p>
+                                            <p>{booking.studentDetails.fullName}</p>
+                                            <p>{booking.studentDetails.email}</p>
+                                            <p>{booking.studentDetails.phoneNumber}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-semibold">HostelHQ</p>
+                                            <p>Your Accommodation Solution</p>
+                                            <p>Ghana</p>
                                         </div>
                                     </div>
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Manager Signature</p>
-                                            <p className="text-xs mb-8">&nbsp;</p>
-                                            <p className="text-xs">({manager.fullName})</p>
-                                            <p className="text-xs">Date: {new Date().toLocaleDateString()}</p>
-                                        </div>
+
+                                    <div className="mb-8">
+                                        <h2 className="text-lg font-semibold mb-2">Booking Details</h2>
+                                        <p><strong>Hostel:</strong> {hostel.name}</p>
+                                        <p><strong>Location:</strong> {hostel.location}</p>
+                                        <p><strong>Room Type:</strong> {bookedRoom?.name || 'N/A'}</p>
+                                        <p><strong>Booking Date:</strong> {new Date(booking.bookingDate).toLocaleDateString()}</p>
+                                    </div>
+
+                                    <div className="mb-8">
+                                        <h2 className="text-lg font-semibold mb-2">Payment Summary</h2>
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr>
+                                                    <th className="border-b-2 py-2">Description</th>
+                                                    <th className="border-b-2 py-2 text-right">Amount (GH₵)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td className="py-2">Room Rent for {bookedRoom?.name || 'N/A'}</td>
+                                                    <td className="py-2 text-right">{roomPrice.toFixed(2)}</td>
+                                                </tr>
+                                                {payments.map(payment => (
+                                                    <tr key={payment.id}>
+                                                        <td className="py-2">Payment ({payment.type}) - {new Date(payment.paymentDate.seconds * 1000).toLocaleDateString()}</td>
+                                                        <td className="py-2 text-right">-{(payment.amount).toFixed(2)}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="font-bold">
+                                                    <td className="py-2 border-t-2">Total Paid</td>
+                                                    <td className="py-2 border-t-2 text-right">{totalAmountPaid.toFixed(2)}</td>
+                                                </tr>
+                                                <tr className="font-bold">
+                                                    <td className="py-2">Balance Due</td>
+                                                    <td className="py-2 text-right">{balanceDue.toFixed(2)}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="text-center mt-12">
+                                        <p className="text-xs text-gray-600">Thank you for choosing HostelHQ!</p>
+                                        <p className="text-xs text-gray-600">For any queries, please contact us.</p>
                                     </div>
                                 </div>
                             </div>
                         </CardContent>
-                         <CardFooter>
+                        <CardFooter>
                             <p className="text-xs text-muted-foreground">
-                                Please keep a copy of this agreement for your records. You can access this page anytime from your "My Bookings" section.
+                                This is an electronically generated invoice and may not require a signature.
                             </p>
                         </CardFooter>
                     </Card>

@@ -18,7 +18,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, doc, getDoc, orderBy } from 'firebase/firestore';
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -41,11 +41,12 @@ const availabilityInfo: Record<Hostel['availability'], { text: string, icon: Rea
     'Full': { text: 'Hostel Full', icon: <Lock />, className: 'bg-red-100 text-red-800 border-red-200'},
 };
 
-type AppUser = {
+interface AppUser {
   uid: string;
   email: string;
   fullName: string;
   role: 'student' | 'agent' | 'admin';
+  profileImage?: string;
 }
 
 type Visit = {
@@ -184,23 +185,23 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 Book a Visit
             </Button>
         );
-    }
+    };
 
     return (
-        <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
-            <div>
+        <div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
+            <div className="order-2 lg:order-1">
                 <Carousel className="w-full rounded-lg overflow-hidden shadow-lg">
                     <CarouselContent>
                         {hostel.images.map((img: string, index: number) => (
                             <CarouselItem key={index}>
-                                <div className="relative h-96 w-full">
+                                <div className="relative h-64 sm:h-80 lg:h-96 w-full">
                                 <Image src={img} alt={`${hostel.name} image ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="hostel interior" />
                                 </div>
                             </CarouselItem>
                         ))}
                     </CarouselContent>
-                    <CarouselPrevious className="left-4" />
-                    <CarouselNext className="right-4" />
+                    <CarouselPrevious className="left-2 sm:left-4" />
+                    <CarouselNext className="right-2 sm:right-4" />
                 </Carousel>
                 
                  <div className="mt-8 space-y-6">
@@ -243,7 +244,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
                     <div>
                         <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {hostel.amenities.map((amenity: string) => (
                             <div key={amenity} className="flex items-center gap-3">
                                <div className="p-2 bg-secondary rounded-md">
@@ -258,13 +259,17 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <Separator />
                     
                     <div>
-                        <h3 className="text-xl font-semibold font-headline mb-4">Reviews ({hostel.reviews.length})</h3>
+                        <h3 className="text-xl font-semibold font-headline mb-4">Reviews ({hostel.numberOfReviews})</h3>
                         {hostel.reviews.length > 0 ? (
                             <div className="space-y-6">
                                 {hostel.reviews.map(review => (
                                     <div key={review.id} className="flex gap-4">
                                          <Avatar>
-                                            <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
+                                            {review.userProfileImage ? (
+                                              <AvatarImage src={review.userProfileImage} alt={review.studentName} />
+                                            ) : (
+                                              <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
+                                            )}
                                         </Avatar>
                                         <div>
                                             <div className="flex items-center gap-2">
@@ -287,66 +292,67 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
                 </div>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col order-1 lg:order-2">
                 <Badge 
                     variant="outline"
-                    className={cn("text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}
+                    className={cn("text-sm sm:text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}
                 >
                     {currentAvailability.icon} {currentAvailability.text}
                 </Badge>
-                <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-headline">{hostel.name}</h1>
                 <div className="flex items-center text-muted-foreground mt-2">
-                    <MapPin className="h-5 w-5 mr-2" />
-                    <span>{hostel.location}</span>
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                    <span className="text-sm sm:text-base">{hostel.location}</span>
                 </div>
                 <div className="flex items-center mt-4">
                     <div className="flex items-center text-yellow-500">
                         {[...Array(5)].map((_, i) => (
-                        <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
+                        <Star key={i} className={`h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                         ))}
                     </div>
-                    <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews.length} reviews)</span>
+                    <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({hostel.numberOfReviews} reviews)</span>
                 </div>
                 
-                 <div className="mt-8 flex items-baseline gap-2">
+                 <div className="mt-6 sm:mt-8 flex items-baseline gap-2">
                     {renderPrice()}
-                    <span className="text-base text-muted-foreground">/year</span>
+                    <span className="text-sm sm:text-base text-muted-foreground">/year</span>
                 </div>
 
                 {getPrimaryCTA()}
 
-                <Card className="mt-8 shadow-md">
+                <Card className="mt-6 sm:mt-8 shadow-md">
                     <CardHeader>
-                        <CardTitle>Room Types & Pricing</CardTitle>
-                        <CardDescription>Select a room to book a visit or secure it for the year.</CardDescription>
+                        <CardTitle className="text-lg sm:text-xl">Room Types & Pricing</CardTitle>
+                        <CardDescription className="text-sm">Select a room to book a visit or secure it for the year.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Room Type</TableHead>
-                                    <TableHead>Availability</TableHead>
-                                    <TableHead>Price/Year</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {hostel.roomTypes?.map((room) => (
-                                <TableRow key={room.id}>
-                                    <TableCell>
-                                        <p className="font-medium">{room.name}</p>
-                                        <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-                                            {room.beds && <span className="flex items-center gap-1"><Bed className="h-3 w-3"/> {room.beds} Beds</span>}
-                                            {room.bathrooms && <span className="flex items-center gap-1"><Bath className="h-3 w-3"/> {room.bathrooms}</span>}
-                                        </div>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="text-xs sm:text-sm">Room Type</TableHead>
+                                        <TableHead className="text-xs sm:text-sm">Availability</TableHead>
+                                        <TableHead className="text-xs sm:text-sm">Price/Year</TableHead>
+                                        <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {hostel.roomTypes?.map((room) => (
+                                    <TableRow key={room.id}>
+                                        <TableCell>
+                                            <p className="font-medium text-sm sm:text-base">{room.name}</p>
+                                            <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
+                                                {room.beds && <span className="flex items-center gap-1"><Bed className="h-3 w-3"/> {room.beds} Beds</span>}
+                                                {room.bathrooms && <span className="flex items-center gap-1"><Bath className="h-3 w-3"/> {room.bathrooms}</span>}
+                                            </div>
 
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={getRoomAvailabilityVariant(room.availability)}>{room.availability}</Badge>
-                                    </TableCell>
-                                    <TableCell className="font-semibold">
-                                        GH₵{room.price.toLocaleString()}
-                                    </TableCell>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={getRoomAvailabilityVariant(room.availability)} className="text-xs">{room.availability}</Badge>
+                                        </TableCell>
+                                        <TableCell className="font-semibold text-sm sm:text-base">
+                                            GH₵{room.price.toLocaleString()}
+                                        </TableCell>
                                     <TableCell className="text-right">
                                         {getVisitButton(room)}
                                     </TableCell>
@@ -354,6 +360,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 ))}
                             </TableBody>
                         </Table>
+                    </div>
                     </CardContent>
                 </Card>
 
@@ -422,7 +429,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                         <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                         ))}
                     </div>
-                    <span className="ml-3 text-lg text-muted-foreground">({hostel.reviews.length} reviews)</span>
+                    <span className="ml-3 text-lg text-muted-foreground">({hostel.numberOfReviews} reviews)</span>
                 </div>
 
                 <div className="mt-8">
@@ -494,7 +501,8 @@ export default function HostelDetailPage() {
                     uid: user.uid,
                     email: user.email!,
                     fullName: userData.fullName,
-                    role: userData.role
+                    role: userData.role,
+                    profileImage: userData.profileImage, // Fetch profile image
                 });
             } else {
                 // If user not in 'users', check 'pendingUsers'
@@ -506,7 +514,8 @@ export default function HostelDetailPage() {
                         uid: user.uid,
                         email: user.email!,
                         fullName: userData.fullName,
-                        role: userData.role
+                        role: userData.role,
+                        profileImage: userData.profileImage, // Fetch profile image
                     });
                 } else {
                     setAppUser(null);

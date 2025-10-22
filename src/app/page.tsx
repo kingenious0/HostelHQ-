@@ -4,6 +4,7 @@ import { HostelCard } from '@/components/hostel-card';
 import { getHostels } from '@/lib/data';
 import { SearchForm } from '@/components/search-form';
 import Image from 'next/image';
+import { Button } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,10 @@ type HomeProps = {
   searchParams?: {
     search?: string;
     location?: string;
+    institution?: string;
+    roomType?: string;
+    gender?: string;
+    page?: string;
   };
 };
 
@@ -18,12 +23,37 @@ export default async function Home({ searchParams }: HomeProps) {
   const resolvedSearchParams = await searchParams;
   const searchQuery = resolvedSearchParams?.search || '';
   const locationQuery = resolvedSearchParams?.location || '';
+  const institutionQuery = resolvedSearchParams?.institution || '';
+  const roomTypeQuery = resolvedSearchParams?.roomType || '';
+  const genderQuery = resolvedSearchParams?.gender || '';
+  const currentPage = Number(resolvedSearchParams?.page) || 1;
+  const itemsPerPage = 8; // Define how many hostels per page
 
-  const allHostels = await getHostels({ search: searchQuery, location: locationQuery });
+  const allHostels = await getHostels({
+    search: searchQuery,
+    location: locationQuery,
+    institution: institutionQuery,
+    roomType: roomTypeQuery,
+    gender: genderQuery,
+  });
   const featuredHostels = await getHostels({ featured: true });
 
-  const hostelsToShow = searchQuery || locationQuery ? allHostels : allHostels.filter(h => !h.isFeatured);
-  const showFeatured = !searchQuery && !locationQuery;
+  const filteredHostels = allHostels.filter(h => {
+    const matchesSearch = !searchQuery || (h.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesLocation = !locationQuery || (h.location ?? '').toLowerCase().includes(locationQuery.toLowerCase());
+    const matchesInstitution = !institutionQuery || (h.institution ?? '').toLowerCase().includes(institutionQuery.toLowerCase());
+    const matchesRoomType = !roomTypeQuery || (h.roomTypes ?? []).includes(roomTypeQuery);
+    const matchesGender = !genderQuery || (h.gender ?? '') === genderQuery;
+    return matchesSearch && matchesLocation && matchesInstitution && matchesRoomType && matchesGender;
+  });
+
+  const totalPages = Math.ceil(filteredHostels.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedHostels = filteredHostels.slice(startIndex, endIndex);
+
+  const hostelsToShow = searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery ? paginatedHostels : paginatedHostels;
+  const showFeatured = !searchQuery && !locationQuery && !institutionQuery && !roomTypeQuery && !genderQuery && currentPage === 1;
 
 
   return (
@@ -63,11 +93,11 @@ export default async function Home({ searchParams }: HomeProps) {
 
         <section className="container mx-auto px-4 md:px-6 py-16 bg-gray-50/50 rounded-xl">
            <h2 className="text-3xl font-bold mb-8 text-center font-headline">
-            {searchQuery || locationQuery ? `Search Results (${hostelsToShow.length})` : 'All Hostels'}
+            {(searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery) ? `Search Results (${filteredHostels.length})` : 'All Hostels'}
           </h2>
-          {hostelsToShow.length > 0 ? (
+          {paginatedHostels.length > 0 ? (
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {hostelsToShow.map((hostel) => (
+              {paginatedHostels.map((hostel) => (
                 <HostelCard key={hostel.id} hostel={hostel} />
               ))}
             </div>
@@ -76,8 +106,43 @@ export default async function Home({ searchParams }: HomeProps) {
               <p className="text-lg text-muted-foreground">No hostels found matching your criteria.</p>
             </div>
           )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-8 space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              {[...Array(totalPages)].map((_, index) => (
+                <Button
+                  key={index + 1}
+                  variant={currentPage === index + 1 ? "default" : "outline"}
+                  onClick={() => handlePageChange(index + 1)}
+                >
+                  {index + 1}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </section>
       </main>
     </div>
   );
+}
+
+function handlePageChange(page: number) {
+  const params = new URLSearchParams(window.location.search);
+  params.set('page', page.toString());
+  window.history.pushState(null, '', `/?${params.toString()}`);
 }

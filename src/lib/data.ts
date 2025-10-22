@@ -20,7 +20,6 @@ export type Review = {
     rating: number;
     comment: string;
     createdAt: string; // ISO string
-    status: 'pending' | 'approved';
 };
 
 export type Hostel = {
@@ -28,7 +27,7 @@ export type Hostel = {
   name: string;
   location: string;
   rating: number;
-  reviews: Review[]; 
+  numberOfReviews: number;
   amenities: string[];
   images: string[];
   description: string;
@@ -37,7 +36,7 @@ export type Hostel = {
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
   roomTypes: RoomType[];
-  priceRange: { 
+  priceRange: {
     min: number;
     max: number;
   };
@@ -46,7 +45,8 @@ export type Hostel = {
   billsIncluded?: string[];
   billsExcluded?: string[];
   securityAndSafety?: string[];
-  [key: string]: any; 
+  reviews: Review[]; // Add this back for full hostel details page
+  [key: string]: any;
 };
 
 export type AppUser = {
@@ -54,6 +54,7 @@ export type AppUser = {
   fullName: string;
   email: string;
   role: 'student' | 'agent' | 'admin';
+  profileImage?: string;
 };
 
 export type Agent = AppUser & {
@@ -80,7 +81,7 @@ export const staticHostels: Hostel[] = [
     name: 'Doku Hostel',
     location: 'AAMUSTED, Kumasi (~5 min walk)',
     rating: 4.5,
-    reviews: [],
+    numberOfReviews: 0,
     amenities: ['Balconies', 'TV Room', 'Comfortable'],
     images: [
       'https://picsum.photos/seed/hostel-building-1/800/600',
@@ -185,18 +186,22 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
             
-             // Fetch approved reviews for the hostel
+             // Fetch all reviews for the hostel (no status filter)
             const reviewsQuery = query(
                 collection(db, 'reviews'), 
                 where('hostelId', '==', hostelId),
-                where('status', '==', 'approved')
+                orderBy('createdAt', 'desc') // Order by most recent
             );
             const reviewsSnapshot = await getDocs(reviewsQuery);
-            let reviewsData = reviewsSnapshot.docs.map(doc => convertTimestamps({ id: doc.id, ...doc.data() })) as Review[];
-
-            // Sort reviews by date on the client-side
-            reviewsData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
+            const reviewsDataPromises = reviewsSnapshot.docs.map(async docSnapshot => {
+                const reviewData = convertTimestamps({ id: docSnapshot.id, ...docSnapshot.data() }) as Review;
+                // Fetch reviewer's profile image and name
+                const userDoc = await getDoc(doc(db, "users", reviewData.studentId));
+                const userProfileImage = userDoc.exists() ? (userDoc.data() as AppUser).profileImage : '';
+                const userName = userDoc.exists() ? (userDoc.data() as AppUser).fullName : reviewData.studentName; // Fallback to submitted name
+                return { ...reviewData, studentName: userName, userProfileImage };
+            });
+            let reviewsWithUserData = await Promise.all(reviewsDataPromises);
 
             // Calculate price range
             const prices = roomTypes.map(rt => rt.price);
@@ -205,22 +210,20 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
                 max: prices.length > 0 ? Math.max(...prices) : 0,
             };
 
-            const lat = typeof data.lat === 'number' ? data.lat : staticHostels[0].lat;
-            const lng = typeof data.lng === 'number' ? data.lng : staticHostels[0].lng;
-            
-            // Recalculate average rating
-            const totalRating = reviewsData.reduce((acc, review) => acc + review.rating, 0);
-            const averageRating = reviewsData.length > 0 ? totalRating / reviewsData.length : 0;
+            // Calculate average rating and number of reviews
+            const totalRating = reviewsWithUserData.reduce((acc, review) => acc + review.rating, 0);
+            const averageRating = reviewsWithUserData.length > 0 ? totalRating / reviewsWithUserData.length : 0;
 
             return convertTimestamps({ 
                 id: hostelDoc.id, 
                 ...data, 
                 roomTypes, 
                 priceRange, 
-                lat, 
-                lng, 
-                reviews: reviewsData, 
-                rating: averageRating
+                lat: typeof data.lat === 'number' ? data.lat : staticHostels[0].lat, 
+                lng: typeof data.lng === 'number' ? data.lng : staticHostels[0].lng, 
+                reviews: reviewsWithUserData, 
+                rating: averageRating,
+                numberOfReviews: reviewsWithUserData.length // Add this line
             }) as Hostel;
         }
     } catch(e) {
@@ -229,7 +232,11 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
     console.log("Falling back to static hostel data for hostelId: ", hostelId);
     const staticHostel = staticHostels.find(h => h.id === hostelId);
-    return staticHostel || null;
+    // Add numberOfReviews and empty reviews array for static data fallback
+    if (staticHostel) {
+        return { ...staticHostel, numberOfReviews: 0, reviews: [] };
+    }
+    return null;
 }
 
 

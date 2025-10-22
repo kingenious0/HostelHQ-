@@ -8,40 +8,117 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, updateProfile, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { loadSettings, saveSettings, clearLocalData, type ClientSettings } from '@/lib/clientSettings';
+import { BackButton } from '@/components/ui/back-button';
+
+interface AppUser {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: string;
+  profileImage?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
+  nationality?: string;
+  gender?: string;
+  privacySettings?: {
+    showPicture: boolean;
+    showProfile: boolean;
+    showProgrammeOfStudy: boolean;
+    showPhoneNumber: boolean;
+    showEmailAddress: boolean;
+  };
+}
 
 export default function SettingsPage() {
     const { toast } = useToast();
     const [user, setUser] = useState<FirebaseUser | null>(null);
+    const [appUser, setAppUser] = useState<AppUser | null>(null);
     const [fullName, setFullName] = useState('');
     const [initialName, setInitialName] = useState('');
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState<ClientSettings>(loadSettings());
+    const [privacySettings, setPrivacySettings] = useState({
+      showPicture: true,
+      showProfile: true,
+      showProgrammeOfStudy: true,
+      showPhoneNumber: true,
+      showEmailAddress: true,
+    });
 
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, async (u) => {
+        const unsubAuth = onAuthStateChanged(auth, async (u) => {
             setUser(u);
             if (!u) {
                 setLoading(false);
+                setAppUser(null);
                 return;
             }
-            try {
-                const userDoc = await getDoc(doc(db, 'users', u.uid));
-                const name = (userDoc.exists() ? userDoc.data().fullName : u.displayName) || '';
-                setFullName(name);
-                setInitialName(name);
-            } catch (e) {
-                // fall back silently
-            } finally {
+
+            const userDocRef = doc(db, "users", u.uid);
+            const unsubFirestore = onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const userData = docSnap.data() as AppUser;
+                    setAppUser({
+                        uid: u.uid,
+                        email: u.email!,
+                        fullName: userData.fullName || u.displayName || '',
+                        role: userData.role || 'student',
+                        profileImage: userData.profileImage || u.photoURL || '',
+                        phone: userData.phone || '',
+                        address: userData.address || '',
+                        bio: userData.bio || '',
+                        nationality: userData.nationality || '',
+                        gender: userData.gender || '',
+                        privacySettings: userData.privacySettings,
+                    });
+                    setFullName(userData.fullName || u.displayName || '');
+                    setInitialName(userData.fullName || u.displayName || '');
+                    setPrivacySettings(userData.privacySettings || {
+                      showPicture: true,
+                      showProfile: true,
+                      showProgrammeOfStudy: true,
+                      showPhoneNumber: true,
+                      showEmailAddress: true,
+                    });
+                } else {
+                    // If user exists in Auth but not in DB, create a basic profile
+                    const newUser: AppUser = {
+                        uid: u.uid,
+                        email: u.email!,
+                        fullName: u.displayName || '',
+                        role: 'student', // Default role
+                        profileImage: u.photoURL || '',
+                    };
+                    updateDoc(userDocRef, newUser, { merge: true }); // Create initial user doc
+                    setAppUser(newUser);
+                    setFullName(newUser.fullName);
+                    setInitialName(newUser.fullName);
+                    setPrivacySettings({
+                      showPicture: true,
+                      showProfile: true,
+                      showProgrammeOfStudy: true,
+                      showPhoneNumber: true,
+                      showEmailAddress: true,
+                    });
+                }
                 setLoading(false);
-            }
+            }, (error) => {
+                console.error("Error fetching user profile:", error);
+                toast({ title: "Error loading profile", variant: 'destructive' });
+                setLoading(false);
+            });
+
+            return () => unsubFirestore();
         });
-        return () => unsub();
+        return () => unsubAuth();
     }, []);
 
     const canSave = user && fullName.trim() && fullName.trim() !== initialName.trim() && !saving;
+    const canSavePrivacy = user && !loading && !saving; // Simplistic check for now
 
     const handleSave = async () => {
         if (!user) return;
@@ -66,6 +143,21 @@ export default function SettingsPage() {
         }
     };
 
+    const handleSavePrivacy = async () => {
+      if (!user) return;
+      setSaving(true);
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, { privacySettings: privacySettings });
+        toast({ title: 'Privacy settings updated' });
+      } catch (e) {
+        console.error("Error saving privacy settings:", e);
+        toast({ title: 'Failed to update privacy settings', variant: 'destructive' });
+      } finally {
+        setSaving(false);
+      }
+    };
+
     const updateSetting = <K extends keyof ClientSettings>(section: K, updater: (prev: ClientSettings[K]) => ClientSettings[K]) => {
         const next = { ...settings, [section]: updater(settings[section]) } as ClientSettings;
         setSettings(next);
@@ -78,11 +170,21 @@ export default function SettingsPage() {
         }
     };
 
+    const handlePrivacyToggle = (key: keyof AppUser['privacySettings'], checked: boolean) => {
+      setPrivacySettings(prev => ({
+        ...prev,
+        [key]: checked,
+      }));
+    };
+
     return (
         <div className="flex flex-col min-h-screen bg-gray-50/50">
             <Header />
-            <main className="flex-1 p-8 max-w-2xl">
-                <h1 className="text-2xl font-bold">Settings</h1>
+            <main className="flex-1 p-8 max-w-2xl mx-auto">
+                <div className="flex items-center gap-4 mb-6">
+                    <BackButton />
+                    <h1 className="text-2xl font-bold">Settings</h1>
+                </div>
                 <p className="text-muted-foreground mt-2">Update your preferences here.</p>
 
                 <div className="mt-8 space-y-8">
@@ -99,6 +201,74 @@ export default function SettingsPage() {
                             <Button onClick={handleSave} disabled={!canSave}>
                                 {saving ? 'Saving...' : 'Save'}
                             </Button>
+                        </div>
+                    </div>
+
+                    {/* Account Privacy Section */}
+                    <div>
+                        <h2 className="text-lg font-semibold">Account Privacy</h2>
+                        <p className="text-sm text-muted-foreground">Control what information other roommates can see.</p>
+                        <div className="mt-4 space-y-3">
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Picture</p>
+                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your profile picture.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showPicture}
+                                    onCheckedChange={(checked) => handlePrivacyToggle('showPicture', checked)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Profile</p>
+                                    <p className="text-sm text-muted-foreground">Allow other roommates to view your full profile.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showProfile}
+                                    onCheckedChange={(checked) => handlePrivacyToggle('showProfile', checked)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Programme of Study</p>
+                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your programme of study.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showProgrammeOfStudy}
+                                    onCheckedChange={(checked) => handlePrivacyToggle('showProgrammeOfStudy', checked)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Phone Number</p>
+                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your phone number.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showPhoneNumber}
+                                    onCheckedChange={(checked) => handlePrivacyToggle('showPhoneNumber', checked)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Email Address</p>
+                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your email address.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showEmailAddress}
+                                    onCheckedChange={(checked) => handlePrivacyToggle('showEmailAddress', checked)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                            <div className="flex justify-end">
+                                <Button onClick={handleSavePrivacy} disabled={!canSavePrivacy || saving}>
+                                  {saving ? 'Saving...' : 'Save Changes'}
+                                </Button>
+                            </div>
                         </div>
                     </div>
 

@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, updateDoc, increment, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { BackButton } from '@/components/ui/back-button';
 
 export default function RatingPage() {
     const router = useRouter();
@@ -63,13 +64,12 @@ export default function RatingPage() {
                 rating: rating,
                 comment: comment,
                 createdAt: serverTimestamp(),
-                status: 'pending', // for moderation
                 visitId: visitId || null,
             });
 
             toast({
                 title: "Review Submitted!",
-                description: "Thank you for your feedback. Your review is pending approval.",
+                description: "Thank you for your feedback. Your review is now live.",
             });
 
             router.push(`/hostels/${hostelId}`);
@@ -88,7 +88,11 @@ export default function RatingPage() {
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
                 <Card className="w-full max-w-lg shadow-xl">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Rate Your Visit Experience</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <BackButton fallbackHref={`/hostels/${hostelId}`} />
+                            <CardTitle className="text-2xl font-headline">Rate Your Visit Experience</CardTitle>
+                            <div className="w-10">{/* Placeholder to balance the layout */}</div>
+                        </div>
                         <CardDescription>How was the agent and the hostel tour? Your feedback helps other students.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
