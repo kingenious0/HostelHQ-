@@ -266,10 +266,10 @@ export function Header() {
 
   return (
     <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
-      <div className="container mx-auto flex h-20 items-center justify-between px-4 md:px-6">
+      <div className="container mx-auto flex h-16 sm:h-20 items-center justify-between px-3 sm:px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <Hotel className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold text-foreground font-headline">HostelHQ</span>
+          <Hotel className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+          <span className="text-xl sm:text-2xl font-bold text-foreground font-headline">HostelHQ</span>
         </Link>
         <div className="flex items-center gap-4">
            <nav className="hidden items-center gap-6 md:flex">

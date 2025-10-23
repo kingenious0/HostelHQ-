@@ -39,35 +39,35 @@ export function SearchForm() {
     };
 
     return (
-        <Card className="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-2xl">
-            <CardContent className="p-2">
-                <form onSubmit={handleSearch} className="flex flex-col gap-4">
-                    <div className="flex flex-col md:flex-row items-center gap-4">
+        <Card className="bg-white/90 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow-2xl mx-2 sm:mx-0">
+            <CardContent className="p-2 sm:p-3">
+                <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:gap-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
                         <div className="relative w-full">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Search hostel name..." 
-                                className="pl-12 h-14 text-base rounded-lg text-foreground bg-white"
+                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                         <div className="relative w-full">
-                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <MapPin className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Enter location" 
-                                className="pl-12 h-14 text-base rounded-lg text-foreground bg-white"
+                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white"
                                 value={locationQuery}
                                 onChange={(e) => setLocationQuery(e.target.value)}
                             />
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div className="relative">
-                            <University className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground z-10" />
+                            <University className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setInstitution} value={institution}>
-                                <SelectTrigger className="w-full pl-12 h-14 text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
                                     <SelectValue placeholder="Select Institution" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -80,9 +80,9 @@ export function SearchForm() {
                             </Select>
                         </div>
                         <div className="relative">
-                            <DoorOpen className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground z-10" />
+                            <DoorOpen className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setRoomType} value={roomType}>
-                                <SelectTrigger className="w-full pl-12 h-14 text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
                                     <SelectValue placeholder="Select Room Type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -96,9 +96,9 @@ export function SearchForm() {
                             </Select>
                         </div>
                         <div className="relative">
-                            <Users className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground z-10" />
+                            <Users className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setGender} value={gender}>
-                                <SelectTrigger className="w-full pl-12 h-14 text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
                                     <SelectValue placeholder="Select Gender" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -109,7 +109,7 @@ export function SearchForm() {
                         </div>
                     </div>
                     
-                    <Button type="submit" size="lg" className="w-full h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg text-lg">
+                    <Button type="submit" size="lg" className="w-full h-12 sm:h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg text-base sm:text-lg font-medium">
                         Search
                     </Button>
                 </form>

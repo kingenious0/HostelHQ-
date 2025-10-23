@@ -60,7 +60,7 @@ export default async function Home({ searchParams }: HomeProps) {
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
       <main className="flex-1">
-        <section className="relative h-[450px] bg-gradient-to-br from-primary via-primary/70 to-accent/60">
+        <section className="relative min-h-[100vh] sm:min-h-[80vh] md:h-[450px] bg-gradient-to-br from-primary via-primary/70 to-accent/60">
             <div className="absolute inset-0 bg-black/50" />
             <Image 
                 src="https://images.unsplash.com/photo-1582407947304-fd86f028f716?q=80&w=2796&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
@@ -69,21 +69,21 @@ export default async function Home({ searchParams }: HomeProps) {
                 className="object-cover"
                 data-ai-hint="student accommodation building"
             />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-4">
-                <h1 className="text-4xl md:text-5xl font-bold font-headline">Find Your Perfect Student Home</h1>
-                <p className="mt-2 text-lg md:text-xl max-w-2xl">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-4 sm:p-6">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold font-headline leading-tight">Find Your Perfect Student Home</h1>
+                <p className="mt-3 sm:mt-4 text-base sm:text-lg md:text-xl max-w-2xl">
                     Discover the best student hostels in Ghana. Comfortable, affordable, and close to campus.
                 </p>
-                <div className="mt-8 w-full max-w-3xl">
+                <div className="mt-6 sm:mt-8 w-full max-w-3xl px-2 sm:px-0">
                    <SearchForm />
                 </div>
             </div>
         </section>
 
         {showFeatured && featuredHostels.length > 0 && (
-          <section className="container mx-auto px-4 md:px-6 py-16">
-            <h2 className="text-3xl font-bold mb-8 text-center font-headline">Featured Hostels</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          <section className="container mx-auto px-3 sm:px-4 md:px-6 py-8 sm:py-12 md:py-16">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center font-headline">Featured Hostels</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
               {featuredHostels.map((hostel) => (
                 <HostelCard key={hostel.id} hostel={hostel} />
               ))}
@@ -91,29 +91,30 @@ export default async function Home({ searchParams }: HomeProps) {
           </section>
         )}
 
-        <section className="container mx-auto px-4 md:px-6 py-16 bg-gray-50/50 rounded-xl">
-           <h2 className="text-3xl font-bold mb-8 text-center font-headline">
+        <section className="container mx-auto px-3 sm:px-4 md:px-6 py-8 sm:py-12 md:py-16 bg-gray-50/50 rounded-xl mx-2 sm:mx-0">
+           <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-center font-headline">
             {(searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery) ? `Search Results (${filteredHostels.length})` : 'All Hostels'}
           </h2>
           {paginatedHostels.length > 0 ? (
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
               {paginatedHostels.map((hostel) => (
                 <HostelCard key={hostel.id} hostel={hostel} />
               ))}
             </div>
           ) : (
-            <div className="text-center py-16">
-              <p className="text-lg text-muted-foreground">No hostels found matching your criteria.</p>
+            <div className="text-center py-12 sm:py-16">
+              <p className="text-base sm:text-lg text-muted-foreground">No hostels found matching your criteria.</p>
             </div>
           )}
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex justify-center mt-8 space-x-2">
+            <div className="flex justify-center mt-6 sm:mt-8 space-x-2">
               <Button
                 variant="outline"
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
+                className="h-10 px-3 sm:px-4"
               >
                 Previous
               </Button>
@@ -122,6 +123,7 @@ export default async function Home({ searchParams }: HomeProps) {
                   key={index + 1}
                   variant={currentPage === index + 1 ? "default" : "outline"}
                   onClick={() => handlePageChange(index + 1)}
+                  className="h-10 px-3 sm:px-4"
                 >
                   {index + 1}
                 </Button>
@@ -130,6 +132,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 variant="outline"
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
+                className="h-10 px-3 sm:px-4"
               >
                 Next
               </Button>

@@ -105,4 +105,23 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Mobile viewport improvements */
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Ensure proper mobile scrolling */
+  body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Mobile-specific improvements for form elements */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px; /* Prevents zoom on iOS */
+    }
+  }
 }
