@@ -10,19 +10,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: Read这首诗<{
   children: React.ReactNode;
 }>) {
-  if (typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem('hostelhq:settings');
-      if (raw) {
-        const { profile } = JSON.parse(raw);
-        const theme = profile?.theme;
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      }
-    } catch {}
-  }
   return (
     <html lang="en" className="h-full">
       <head>

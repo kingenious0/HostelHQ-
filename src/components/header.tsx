@@ -333,7 +333,7 @@ export function Header() {
                   {isAgent && (
                     <>
                        <DropdownMenuItem asChild>
-                        <Link href="/agent/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
+                        <Link href="/agent/dashboard" className="flex items-center justify-between w-full"><div className="flex items-center"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</div></Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/agent/listings"><ListPlus className="mr-2 h-4 w-4"/>My Listings</Link>

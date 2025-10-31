@@ -177,6 +177,7 @@ export default function AgreementPage() {
             '{{landlordName}}': manager?.fullName || 'Hostel Management',
             '{{tenantName}}': studentDetails?.fullName || 'N/A',
             '{{tenantProgram}}': studentDetails?.program || 'N/A',
+            '{{tenantIndexNumber}}': studentDetails?.indexNumber || 'N/A',
             '{{tenantMobile}}': studentDetails?.phoneNumber || 'N/A',
             '{{tenantEmail}}': studentDetails?.email || 'N/A',
             '{{roomType}}': room?.name || 'N/A',
@@ -244,14 +245,17 @@ export default function AgreementPage() {
                         <CardContent>
                             <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800 relative overflow-hidden">
                                 <div
-                                  className="absolute inset-0 opacity-10 pointer-events-none"
+                                  className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
                                   style={{
-                                    backgroundImage: 'url(/HostelHQ.png)',
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundPosition: 'center',
-                                    backgroundSize: 'contain',
+                                    fontSize: '8rem',
+                                    fontWeight: 'bold',
+                                    color: '#000',
+                                    transform: 'rotate(-45deg)',
+                                    userSelect: 'none',
                                   }}
-                                />
+                                >
+                                  HostelHQ
+                                </div>
                                 <h1 className="text-xl font-bold text-center mb-6 relative z-10">TENANCY AGREEMENT</h1>
                                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed relative z-10">
                                     {getFilledTemplate()}

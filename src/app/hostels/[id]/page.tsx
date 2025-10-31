@@ -52,6 +52,7 @@ interface AppUser {
 type Visit = {
   id: string;
   status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  studentCompleted?: boolean;
 }
 
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: AppUser | null }) {
@@ -75,9 +76,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
             const visitSnapshot = await getDocs(visitsQuery);
             if (!visitSnapshot.empty) {
-                // Find the first visit that is NOT cancelled.
-                const activeOrCompletedVisit = visitSnapshot.docs
-                    .map(doc => ({ id: doc.id, status: doc.data().status } as Visit))
+                // Find a visit that is completed AND the student has marked as completed
+                const completedVisit = visitSnapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        status: doc.data().status,
+                        studentCompleted: doc.data().studentCompleted
+                    } as Visit))
+                    .find(visit => visit.status === 'completed' && visit.studentCompleted === true);
+                
+                // If no completed visit, find any non-cancelled visit
+                const activeOrCompletedVisit = completedVisit || visitSnapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        status: doc.data().status,
+                        studentCompleted: doc.data().studentCompleted
+                    } as Visit))
                     .find(visit => visit.status !== 'cancelled');
                 
                 setExistingVisit(activeOrCompletedVisit || null);
@@ -105,7 +119,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         if (existingVisit) {
-            if (existingVisit.status === 'completed') {
+            // Only show Secure Room if visit is completed AND student has marked it complete
+            if (existingVisit.status === 'completed' && existingVisit.studentCompleted === true) {
                 return (
                     <Button 
                         size="sm"
@@ -118,16 +133,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </Button>
                 );
             }
-            return (
-                <Button 
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
-                >
-                    <Ticket className="mr-2 h-4 w-4"/>
-                    Track Visit
-                </Button>
-            );
+            // If visit exists but not completed, show Track Visit
+            if (existingVisit.status !== 'cancelled') {
+                return (
+                    <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                    >
+                        <Ticket className="mr-2 h-4 w-4"/>
+                        Track Visit
+                    </Button>
+                );
+            }
         }
 
         return (
@@ -171,7 +189,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             );
         }
         
-        if (existingVisit?.status === 'completed') {
+        // Show Secure Hostel ONLY if visit is completed AND student has marked it complete
+        if (existingVisit?.status === 'completed' && existingVisit?.studentCompleted === true) {
             return (
                 <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/secure`)}>
                     <ShieldCheck className="mr-2 h-5 w-5"/>

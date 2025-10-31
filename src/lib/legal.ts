@@ -1,18 +1,151 @@
 
 export const tenancyAgreementText = `
-THIS TENANCY AGREEMENT is made this {{currentDate}} BETWEEN: {{hostelName}}, {{hostelLocation}}, Ghana per the Manager of the Hostel (hereinafter referred to as the "LANDLORD" which expression shall where the context so admits or requires include his executors, personal representatives, agents, and assigns) of the one part
+THIS TENANCY AGREEMENT is made this {{currentDate}} BETWEEN:
+
+
+{{hostelName}}, {{hostelLocation}}, Ghana per the Manager of the Hostel (hereinafter referred to as the "LANDLORD" which expression shall where the context so admits or requires include his executors, personal representatives, agents, and assigns) of the one part
 
 AND
-referred to as the "TENANT") of the other part.
+
+{{tenantName}} (Index Number: {{tenantIndexNumber}}, Email: {{tenantEmail}}, Mobile: {{tenantMobile}}) (hereinafter referred to as the "TENANT" which expression shall where the context so admits or requires include his executors, personal representatives and assigns) of the other part
 
 WHEREAS IT IS AGREED AS FOLLOWS:
 
-1. The Landlord agrees to let and the Tenant agrees to take ALL THAT one room in the Hostel, Kumasi for one academic year of the Kwame Nkrumah University of Science and Technology, Kumasi.
-2. The rent shall be GH₵{{roomPrice}} per academic year.
-3. The Tenant shall pay the rent hereby charged before the beginning of the academic year.
-4. In the event of the Landlord accepting a deposit for the rent, he shall be entitled to eject the Tenant once a balance of the rent becomes outstanding and that, in any case, the tenancy shall be forfeited when the outstanding rent remains unpaid by the end of November in the academic year.
-5. Where the room let is to be shared by other Tenants, the bathroom, toilet and other facilities in the room shall be used in common by the Tenants.
-6. All gates and access to the Hostel shall be locked by midnight from Mondays to Thursday with exception of Fridays to Mondays.
+
+1. PROPERTY DESCRIPTION
+
+   The Landlord agrees to let and the Tenant agrees to take ALL THAT {{roomType}} in {{hostelName}} located at {{hostelLocation}}, Ghana (hereinafter referred to as "the Property") for the academic year {{academicYear}}.
+
+2. TERM OF TENANCY
+
+   The tenancy shall commence on the first day of the academic year {{academicYear}} and shall continue until the end of said academic year, unless terminated earlier in accordance with the terms herein contained.
+
+3. RENT AND PAYMENT
+
+   3.1 The rent for the Property shall be GH₵{{roomPrice}} per academic year.
+
+   3.2 The Tenant shall pay the rent hereby charged in full before taking possession of the Property. 
+
+   3.3 In the event of the Landlord accepting a deposit for the rent, he shall be entitled to eject the Tenant once a balance of the rent becomes outstanding and that, in any case, the tenancy shall be forfeited when the outstanding rent remains unpaid by {{paymentDeadline}}.
+
+   3.4 All payments shall be made to the Landlord or his authorized agent at the address specified above or through the designated payment platform as agreed upon.
+
+4. SECURITY DEPOSIT
+
+   The Tenant agrees to pay a security deposit of GH₵500 (Five Hundred Ghana Cedis) which shall be refundable upon the expiry of this tenancy, subject to deduction for any damages, outstanding payments, or breaches of this agreement.
+
+5. USE OF PREMISES
+
+   5.1 The Property shall be used solely for residential purposes by the Tenant as a student.
+
+   5.2 The Tenant shall not use the Property or permit it to be used for any illegal purpose or activity.
+
+   5.3 Where the room let is to be shared by other Tenants, the bathroom, toilet and other facilities in the room shall be used in common by the Tenants in accordance with reasonable standards of hygiene and courtesy.
+
+6. TENANT'S OBLIGATIONS
+
+   The Tenant covenants and agrees with the Landlord as follows:
+
+   6.1 To pay the rent and other charges at the times and in the manner specified herein.
+
+   6.2 To keep the Property and its fixtures in good repair (fair wear and tear excepted) and to maintain it in a clean and habitable condition.
+
+   6.3 To allow the Landlord or his agent to enter the Property at reasonable times to inspect its condition or to carry out necessary repairs.
+
+   6.4 Not to make any alterations to the Property without the prior written consent of the Landlord.
+
+   6.5 Not to sublet or assign the Property or any part thereof without the Landlord's prior written consent.
+
+   6.6 To abide by all rules and regulations of the Hostel as may be communicated from time to time.
+
+   6.7 To conduct himself/herself in a manner that does not disturb the peace and quiet enjoyment of other tenants.
+
+7. LANDLORD'S OBLIGATIONS
+
+   The Landlord covenants with the Tenant as follows:
+
+   7.1 To ensure that the Property is fit for habitation and in good repair at the commencement of the tenancy.
+
+   7.2 To maintain the common areas and facilities of the Hostel in good repair.
+
+   7.3 To respect the Tenant's peaceful enjoyment of the Property.
+
+8. ACCESS CONTROL
+
+   8.1 All gates and access to the Hostel shall be locked by midnight from Mondays to Thursdays, with the exception of Fridays to Sundays.
+
+   8.2 {{accessRules}}
+
+9. UTILITIES AND SERVICES
+
+   9.1 Electricity and water charges are included in the rent (subject to reasonable usage limits).
+
+   9.2 The Tenant shall be responsible for excessive utility usage and may be charged separately for such excess.
+
+10. TERMINATION
+
+    10.1 Either party may terminate this tenancy by giving one (1) month's written notice to the other party.
+
+    10.2 The Landlord may terminate this tenancy immediately upon:
+       
+       (a) Non-payment of rent for more than thirty (30) days;
+       
+       (b) Breach of any of the terms and conditions contained herein;
+       
+       (c) Illegal or immoral use of the Property;
+       
+       (d) Any conduct that is prejudicial to the safety or comfort of other tenants.
+
+    10.3 The Tenant may vacate the Property at any time but shall remain liable for the rent for the full term unless the Landlord agrees otherwise in writing.
+
+11. EVICTION
+
+    Should the Tenant fail to pay rent or breach any term of this agreement, the Landlord shall be entitled to eject the Tenant and recover possession of the Property in accordance with the laws of Ghana.
+
+12. DAMAGES AND DILAPIDATIONS
+
+    Upon the expiration or termination of this tenancy, the Tenant shall return the Property in the same condition as received (fair wear and tear excepted). The Landlord shall be entitled to claim from the Tenant the cost of repairing any damage caused by the Tenant's negligence or misuse.
+
+13. KEYS
+
+    The Tenant shall be provided with keys to the Property and shall be responsible for their safekeeping. The Tenant shall surrender all keys upon termination of the tenancy.
+
+14. APPLICABLE LAW
+
+    This Agreement shall be governed by and construed in accordance with the laws of the Republic of Ghana.
+
+15. ENTIRE AGREEMENT
+
+    This document contains the entire agreement between the parties and supersedes all prior negotiations, representations, or agreements, whether oral or written.
+
+16. ADDITIONAL TERMS
+
+    16.1 {{roomSharingClause}}
+
+    16.2 Any matters not covered by this agreement shall be dealt with at the Landlord's discretion, subject to applicable law.
+
+
+IN WITNESS WHEREOF, the Parties have hereunto set their hands the day and year first above written.
+
+
+Signed by the within-named Landlord                     .............................................................
+
+Per the Manager of the Hostel in the presence of:                                                               LANDLORD
+
+NAME..............................................,..............................................
+ADDRESS..........................................,.............................................. (WITNESS)
+OCCUPATION......................................,
+
+
+
+
+Signed by the within-named Tenant                       .............................................................
+
+In the presence of:                                                                                              TENANT
+
+NAME..............................................,..............................................
+ADDRESS..........................................,.............................................. (WITNESS)
+OCCUPATION......................................,
 `;
 
 export const termsAndConditionsText = `

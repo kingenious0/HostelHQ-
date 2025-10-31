@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -204,14 +205,17 @@ export default function InvoicePage() {
                         <CardContent>
                             <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800 relative overflow-hidden">
                                 <div
-                                  className="absolute inset-0 opacity-10 pointer-events-none"
+                                  className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
                                   style={{
-                                    backgroundImage: 'url(/HostelHQ.png)',
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundPosition: 'center',
-                                    backgroundSize: 'contain',
+                                    fontSize: '8rem',
+                                    fontWeight: 'bold',
+                                    color: '#000',
+                                    transform: 'rotate(-45deg)',
+                                    userSelect: 'none',
                                   }}
-                                />
+                                >
+                                  HostelHQ
+                                </div>
                                 <div className="relative z-10">
                                     <h1 className="text-xl font-bold text-center mb-6">INVOICE</h1>
                                     
@@ -221,6 +225,8 @@ export default function InvoicePage() {
                                             <p>{booking.studentDetails.fullName}</p>
                                             <p>{booking.studentDetails.email}</p>
                                             <p>{booking.studentDetails.phoneNumber}</p>
+                                            {booking.studentDetails.indexNumber && <p className="text-xs text-gray-600 mt-1">Index: {booking.studentDetails.indexNumber}</p>}
+                                            {booking.studentDetails.ghanaCardNumber && <p className="text-xs text-gray-600">Ghana Card: {booking.studentDetails.ghanaCardNumber}</p>}
                                         </div>
                                         <div className="text-right">
                                             <p className="font-semibold">HostelHQ</p>
@@ -230,11 +236,27 @@ export default function InvoicePage() {
                                     </div>
 
                                     <div className="mb-8">
+                                        <h2 className="text-lg font-semibold mb-2">Student Details</h2>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                            <p><strong>Full Name:</strong> {booking.studentDetails.fullName}</p>
+                                            <p><strong>Index Number:</strong> {booking.studentDetails.indexNumber || 'N/A'}</p>
+                                            <p><strong>Department:</strong> {booking.studentDetails.program || 'N/A'}</p>
+                                            <p><strong>Level:</strong> {booking.studentDetails.level || 'N/A'}</p>
+                                            <p><strong>Email:</strong> {booking.studentDetails.email}</p>
+                                            <p><strong>Phone:</strong> {booking.studentDetails.phoneNumber}</p>
+                                            {booking.studentDetails.ghanaCardNumber && (
+                                                <p className="col-span-2"><strong>Ghana Card:</strong> {booking.studentDetails.ghanaCardNumber}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-8">
                                         <h2 className="text-lg font-semibold mb-2">Booking Details</h2>
                                         <p><strong>Hostel:</strong> {hostel.name}</p>
                                         <p><strong>Location:</strong> {hostel.location}</p>
                                         <p><strong>Room Type:</strong> {bookedRoom?.name || 'N/A'}</p>
                                         <p><strong>Booking Date:</strong> {new Date(booking.bookingDate).toLocaleDateString()}</p>
+                                        <p><strong>Payment Reference:</strong> {booking.paymentReference}</p>
                                     </div>
 
                                     <div className="mb-8">
@@ -276,10 +298,13 @@ export default function InvoicePage() {
                                 </div>
                             </div>
                         </CardContent>
-                        <CardFooter>
+                        <CardFooter className="flex justify-between items-center">
                             <p className="text-xs text-muted-foreground">
                                 This is an electronically generated invoice and may not require a signature.
                             </p>
+                            <Button variant="outline" onClick={() => router.push(`/agreement/${booking.id}`)}>
+                                View Tenancy Agreement
+                            </Button>
                         </CardFooter>
                     </Card>
                 </div>

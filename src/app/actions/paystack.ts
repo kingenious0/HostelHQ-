@@ -40,7 +40,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
-    callback_url.searchParams.set('visitDate', payload.visitDate);
+    callback_url.searchParams.set('bookingType', 'secure');    callback_url.searchParams.set('visitDate', payload.visitDate);
     callback_url.searchParams.set('visitTime', payload.visitTime);
     callback_url.searchParams.set('visitType', payload.visitType);
 
@@ -56,10 +56,11 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                 email: payload.email,
                 amount: payload.amount,
                 currency: 'GHS',
-                callback_url: callback_url.toString(), 
+                callback_url: callback_url.toString(),
                 metadata: {
                     label: payload.label || 'HostelHQ Payment',
                     visitType: payload.visitType,
+                    booking_type: 'visit'
                 },
                 channels: ['mobile_money'],
                 mobile_money: {
@@ -106,7 +107,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
-
+    callback_url.searchParams.set('bookingType', 'secure');
 
     try {
         const response = await fetch(paystackUrl, {
@@ -120,6 +121,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                 amount: payload.amount,
                 currency: 'GHS',
                 callback_url: callback_url.toString(),
+                reference: `SECURE_${Date.now()}`, // Generate a reference for secure hostel booking
                 metadata: {
                     custom_fields: [
                         {
@@ -131,6 +133,11 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                             display_name: "Hostel Name",
                             variable_name: "hostel_name",
                             value: payload.hostelName
+                        },
+                        {
+                            display_name: "Booking Type",
+                            variable_name: "booking_type",
+                            value: "secure"
                         }
                     ]
                 }

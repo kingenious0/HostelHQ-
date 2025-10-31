@@ -98,6 +98,20 @@ export default function SecureHostelPage() {
         toast({ title: "Initializing Payment..." });
 
         try {
+            // Store form data in sessionStorage to retrieve after payment confirmation
+            sessionStorage.setItem('pendingBookingData', JSON.stringify({
+                studentName: values.studentName,
+                indexNumber: values.indexNumber,
+                ghanaCardNumber: values.ghanaCardNumber,
+                departmentName: values.departmentName,
+                level: values.level,
+                phoneNumber: values.phoneNumber,
+                email: values.email,
+                roomTypeId: selectedRoom.id,
+                roomTypeName: selectedRoom.name,
+                roomPrice: selectedRoom.price,
+            }));
+
             const result = await initializeHostelPayment({
                 email: values.email,
                 amount: selectedRoom.price * 100, // Amount in pesewas
@@ -108,9 +122,7 @@ export default function SecureHostelPage() {
 
             if (result.status && result.authorization_url) {
                 toast({ title: "Redirecting to Payment", description: "Your payment page will open in a new tab."});
-                window.open(result.authorization_url, '_blank');
-                // Don't set isSubmitting to false, let the user complete payment.
-                // We can add a timeout or a manual cancel button if needed.
+                window.location.href = result.authorization_url; // Use location.href instead of window.open
             } else {
                 throw new Error(result.message || "Failed to initialize payment.");
             }

@@ -1,6 +1,7 @@
 // src/app/hostels/book/schedule/page.tsx
 "use client";
 
+import * as React from 'react';
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
@@ -37,6 +38,7 @@ type OnlineAgentData = {
 function useAgentPresence(): { agents: Agent[], loading: boolean } {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
+    const subscriptionRef = React.useRef<any>(null);
 
     useEffect(() => {
         const presenceChannel = ably.channels.get('agents:live');
@@ -61,10 +63,20 @@ function useAgentPresence(): { agents: Agent[], loading: boolean } {
         
         updatePresence(); // Initial fetch
         
-        const subscription = presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence);
+        presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence).then(sub => {
+            subscriptionRef.current = sub;
+        }).catch(err => {
+            console.error("Error subscribing to presence:", err);
+        });
 
         return () => {
-           subscription.then(sub => sub.unsubscribe());
+            if (subscriptionRef.current) {
+                try {
+                    subscriptionRef.current.unsubscribe();
+                } catch (err) {
+                    console.error("Error unsubscribing:", err);
+                }
+            }
         };
 
     }, []);

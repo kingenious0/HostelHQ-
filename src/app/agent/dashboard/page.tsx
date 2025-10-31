@@ -185,6 +185,8 @@ export default function AgentDashboard() {
         }
     }
 
+    const pendingVisitsCount = myVisits.filter(v => v.status === 'pending').length;
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -192,8 +194,21 @@ export default function AgentDashboard() {
                 <div className="container mx-auto">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
-                            <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
+                                    <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
+                                </div>
+                                {pendingVisitsCount > 0 && (
+                                    <Alert className="border-blue-500 bg-blue-50">
+                                        <AlertTriangle className="h-4 w-4 text-blue-600" />
+                                        <AlertTitle className="text-blue-800">{pendingVisitsCount} New Request{pendingVisitsCount > 1 ? 's' : ''}</AlertTitle>
+                                        <AlertDescription className="text-blue-700">
+                                            You have {pendingVisitsCount} pending visit request{pendingVisitsCount > 1 ? 's' : ''} requiring your attention.
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {loading ? (

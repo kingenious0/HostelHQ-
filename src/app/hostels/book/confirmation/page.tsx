@@ -16,8 +16,9 @@ function ConfirmationContent() {
     const { toast } = useToast();
     
     const hostelId = searchParams.get('hostelId');
-    const reference = searchParams.get('reference'); // For visit payments
-    const trxref = searchParams.get('trxref'); // For room security payments
+    const reference = searchParams.get('reference');
+    const trxref = searchParams.get('trxref');
+    const bookingType = searchParams.get('bookingType');
     const visitDate = searchParams.get('visitDate');
     const visitTime = searchParams.get('visitTime');
     const visitTypeParam = searchParams.get('visitType');
@@ -56,21 +57,35 @@ function ConfirmationContent() {
                 return;
             }
             
-            // This is a room security payment
-            if (trxref && hostelId) {
+            // This is a secure hostel payment (has bookingType=secure OR trxref parameter)
+            if ((bookingType === 'secure' || trxref) && hostelId && !visitTypeParam) {
                 try {
                      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
                      if(!userDoc.exists()) throw new Error("Student user record not found.");
 
+                    // Retrieve booking data from sessionStorage
+                    const bookingDataStr = sessionStorage.getItem('pendingBookingData');
+                    const bookingData = bookingDataStr ? JSON.parse(bookingDataStr) : {};
+                    
+                    // Clear the sessionStorage after retrieving
+                    sessionStorage.removeItem('pendingBookingData');
+
                     const bookingRef = await addDoc(collection(db, 'bookings'), {
                         studentId: currentUser.uid,
-                        studentDetails: userDoc.data(), // Store a snapshot of user details
+                        studentDetails: {
+                            fullName: bookingData.studentName || userDoc.data()?.fullName,
+                            email: bookingData.email || currentUser.email,
+                            phoneNumber: bookingData.phoneNumber || userDoc.data()?.phone,
+                            indexNumber: bookingData.indexNumber || '',
+                            ghanaCardNumber: bookingData.ghanaCardNumber || '',
+                            program: bookingData.departmentName || '',
+                            level: bookingData.level || '',
+                        },
                         hostelId: hostelId,
+                        roomTypeId: bookingData.roomTypeId || '',
                         paymentReference: trxref,
                         bookingDate: serverTimestamp(),
                         status: 'confirmed',
-                        roomNumber: 'Not Assigned',
-                        roomType: 'Standard'
                     });
 
                     toast({
@@ -124,7 +139,7 @@ function ConfirmationContent() {
 
         handleConfirmation();
 
-    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, toast, visitDate, visitTime, visitTypeParam]);
+    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, toast, visitDate, visitTime, visitTypeParam]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">
