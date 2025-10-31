@@ -26,7 +26,9 @@ import {
     CheckCircle,
     XCircle,
     FileText,
-    Menu
+    Menu,
+    Receipt,
+    Building2
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -54,6 +56,10 @@ interface Booking {
     roomNumber?: string;
     roomType?: string;
     status: 'confirmed' | 'pending' | 'cancelled';
+    amountPaid?: number;
+    paymentReference?: string;
+    bookingDate?: Timestamp | string;
+    roomTypeId?: string;
 }
 
 interface AppUser {
@@ -131,20 +137,51 @@ export default function PaymentsPage() {
                         const data = d.data();
                         const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
                         
+                        // Get room type name if available
+                        let roomTypeName = data.roomType || 'Standard';
+                        if (data.roomTypeId && hostelSnap.exists()) {
+                            const hostelData = hostelSnap.data();
+                            const roomTypes = hostelData.roomTypes || [];
+                            const roomType = roomTypes.find((rt: any) => rt.id === data.roomTypeId);
+                            if (roomType) {
+                                roomTypeName = roomType.name || roomTypeName;
+                            }
+                        }
+                        
                         const booking: Booking = {
                             id: d.id,
                             hostelId: data.hostelId,
                             hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
                             roomNumber: data.roomNumber,
-                            roomType: data.roomType,
+                            roomType: roomTypeName,
                             status: data.status || 'pending',
+                            amountPaid: data.amountPaid || 0,
+                            paymentReference: data.paymentReference,
+                            bookingDate: data.bookingDate,
+                            roomTypeId: data.roomTypeId,
                         };
                         fetchedBookings.push(booking);
 
-                        // Assuming payment info is directly on the booking document for simplicity
+                        // Create payment entry from booking if confirmed
+                        if (data.status === 'confirmed' && data.amountPaid) {
+                            fetchedPayments.push({
+                                id: d.id,
+                                bookingId: d.id,
+                                amount: data.amountPaid,
+                                currency: 'GHS',
+                                type: 'Room Rent',
+                                status: 'completed',
+                                deadline: null,
+                                damageMoney: 0,
+                                paymentDate: data.bookingDate || null,
+                                reference: data.paymentReference || null,
+                            });
+                        }
+
+                        // Also check for separate payment documents
                         if (data.paymentAmount) {
                             fetchedPayments.push({
-                                id: d.id, // Using booking ID as payment ID for now
+                                id: d.id + '_payment',
                                 bookingId: d.id,
                                 amount: data.paymentAmount,
                                 currency: data.paymentCurrency || 'GHS',
@@ -334,6 +371,146 @@ export default function PaymentsPage() {
                             {loading ? (
                                 <div className="flex justify-center py-12">
                                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : bookings.length > 0 ? (
+                                <div className="space-y-6">
+                                    {/* Payment Summary */}
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="flex items-center gap-2">
+                                                <DollarSign className="h-5 w-5" />
+                                                Payment Summary
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="p-4 bg-blue-50 rounded-lg">
+                                                    <p className="text-sm text-gray-600">Total Bookings</p>
+                                                    <p className="text-2xl font-bold text-blue-900">{bookings.filter(b => b.status === 'confirmed').length}</p>
+                                                </div>
+                                                <div className="p-4 bg-green-50 rounded-lg">
+                                                    <p className="text-sm text-gray-600">Total Paid</p>
+                                                    <p className="text-2xl font-bold text-green-900">
+                                                        GH₵ {bookings
+                                                            .filter(b => b.status === 'confirmed')
+                                                            .reduce((sum, b) => sum + (b.amountPaid || 0), 0)
+                                                            .toLocaleString('en-GH', { minimumFractionDigits: 2 })}
+                                                    </p>
+                                                </div>
+                                                <div className="p-4 bg-purple-50 rounded-lg">
+                                                    <p className="text-sm text-gray-600">Completed Payments</p>
+                                                    <p className="text-2xl font-bold text-purple-900">{payments.filter(p => p.status === 'completed').length}</p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Payment History */}
+                                    <div>
+                                        <h2 className="text-xl font-bold mb-4">Payment History</h2>
+                                        <div className="space-y-4">
+                                            {bookings
+                                                .filter(b => b.status === 'confirmed')
+                                                .map((booking) => {
+                                                    const bookingPayments = payments.filter(p => p.bookingId === booking.id && p.status === 'completed');
+                                                    const totalPaid = bookingPayments.reduce((sum, p) => sum + p.amount, 0) || booking.amountPaid || 0;
+                                                    
+                                                    return (
+                                                        <Card key={booking.id} className="hover:shadow-lg transition-shadow">
+                                                            <CardContent className="p-6">
+                                                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center gap-3 mb-2">
+                                                                            <Building2 className="h-5 w-5 text-primary" />
+                                                                            <h3 className="text-lg font-semibold">{booking.hostelName}</h3>
+                                                                            <Badge variant="default" className="bg-green-600">
+                                                                                <CheckCircle className="h-3 w-3 mr-1" />
+                                                                                Paid
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                                                                            <div>
+                                                                                <p className="text-gray-600">Room Type</p>
+                                                                                <p className="font-medium">{booking.roomType || 'N/A'}</p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-gray-600">Amount Paid</p>
+                                                                                <p className="font-medium text-green-600">GH₵ {totalPaid.toLocaleString('en-GH', { minimumFractionDigits: 2 })}</p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-gray-600">Payment Date</p>
+                                                                                <p className="font-medium">
+                                                                                    {booking.bookingDate 
+                                                                                        ? (booking.bookingDate instanceof Timestamp 
+                                                                                            ? booking.bookingDate.toDate().toLocaleDateString()
+                                                                                            : new Date(booking.bookingDate).toLocaleDateString())
+                                                                                        : 'N/A'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-gray-600">Reference</p>
+                                                                                <p className="font-medium font-mono text-xs">{booking.paymentReference || 'N/A'}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex flex-col gap-2">
+                                                                        <Button 
+                                                                            onClick={() => router.push(`/invoice/${booking.id}`)}
+                                                                            variant="outline"
+                                                                            className="w-full md:w-auto"
+                                                                        >
+                                                                            <Receipt className="mr-2 h-4 w-4" />
+                                                                            View Invoice
+                                                                        </Button>
+                                                                        <Button 
+                                                                            onClick={() => router.push(`/agreement/${booking.id}`)}
+                                                                            variant="outline"
+                                                                            className="w-full md:w-auto"
+                                                                        >
+                                                                            <FileText className="mr-2 h-4 w-4" />
+                                                                            View Agreement
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    );
+                                                })}
+                                            
+                                            {bookings.filter(b => b.status === 'confirmed').length === 0 && (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center">
+                                                        <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                                        <p className="text-muted-foreground">No completed payments found.</p>
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Pending Payments */}
+                                    {pendingPayment && associatedBooking && (
+                                        <Card className="border-yellow-200 bg-yellow-50">
+                                            <CardHeader>
+                                                <CardTitle className="flex items-center gap-2 text-yellow-900">
+                                                    <AlertTriangle className="h-5 w-5" />
+                                                    Payment Due
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <Alert variant="default" className="bg-blue-50 border-blue-200 text-blue-800">
+                                                    <AlertTriangle className="h-4 w-4 text-blue-600" />
+                                                    <AlertTitle className="font-semibold">Payment Deadline Approaching!</AlertTitle>
+                                                    <AlertDescription>
+                                                        Please complete your payment of <span className="font-bold">{pendingPayment.currency} {pendingPayment.amount.toLocaleString()}</span> by <span className="font-bold">{pendingPayment.deadline?.toDate().toLocaleDateString()}</span> to confirm your booking for {associatedBooking.hostelName} ({associatedBooking.roomType} {associatedBooking.roomNumber}).
+                                                    </AlertDescription>
+                                                </Alert>
+                                                <Button size="lg" className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white">
+                                                    <CreditCard className="h-5 w-5 mr-2" /> Pay MOMO / Debit Card
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    )}
                                 </div>
                             ) : (pendingPayment && associatedBooking) ? (
                                 <Card className="bg-white shadow-lg rounded-lg">

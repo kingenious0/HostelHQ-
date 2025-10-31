@@ -84,15 +84,17 @@ function ConfirmationContent() {
                         hostelId: hostelId,
                         roomTypeId: bookingData.roomTypeId || '',
                         paymentReference: trxref,
+                        amountPaid: bookingData.roomPrice || 0,
                         bookingDate: serverTimestamp(),
                         status: 'confirmed',
+                        invoiceGenerated: false,
                     });
 
                     toast({
                         title: "Room Secured!",
-                        description: "Your payment was successful. Generating your tenancy agreement...",
+                        description: "Your payment was successful. Redirecting to your invoice...",
                     });
-                     router.push(`/agreement/${bookingRef.id}`);
+                     router.push(`/hostels/book/success/${bookingRef.id}`);
 
                 } catch (error) {
                     console.error("Error creating booking record:", error);

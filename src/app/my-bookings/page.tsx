@@ -26,7 +26,9 @@ import {
     XCircle,
     Clock,
     Briefcase,
-    Menu
+    Menu,
+    FileText,
+    Receipt
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -441,13 +443,25 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                         </div>
                     </div>
                     
-                    <Button 
-                        size="sm"
-                        className="bg-purple-600 hover:bg-purple-700 w-full text-xs sm:text-sm"
-                        onClick={() => router.push(`/agreement/${booking.id}`)}
-                    >
-                        Manage Booking
-                    </Button>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Button 
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-xs sm:text-sm border-gray-600 text-gray-200 hover:bg-gray-700"
+                            onClick={() => router.push(`/invoice/${booking.id}`)}
+                        >
+                            <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                            Invoice
+                        </Button>
+                        <Button 
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 flex-1 text-xs sm:text-sm"
+                            onClick={() => router.push(`/agreement/${booking.id}`)}
+                        >
+                            <FileText className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                            Agreement
+                        </Button>
+                    </div>
                 </div>
             </CardContent>
         </Card>

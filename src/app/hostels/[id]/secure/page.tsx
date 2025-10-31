@@ -28,10 +28,14 @@ import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
+import { Loader2, CheckCircle2, FileText, Receipt } from "lucide-react"
 import { getHostel, Hostel, RoomType } from "@/lib/data"
 import { notFound } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
+import { auth, db } from '@/lib/firebase'
+import { collection, query, where, getDocs } from 'firebase/firestore'
+import { onAuthStateChanged } from 'firebase/auth'
+import type { User as FirebaseUser } from 'firebase/auth'
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -56,6 +60,34 @@ export default function SecureHostelPage() {
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
     const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
     const [loading, setLoading] = React.useState(true);
+    const [existingBooking, setExistingBooking] = React.useState<{ id: string } | null | undefined>(undefined);
+
+    React.useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
+            if (!user || typeof hostelId !== 'string') {
+                setExistingBooking(null);
+                return;
+            }
+
+            // Check if user already has a confirmed booking for this hostel
+            const bookingsQuery = query(
+                collection(db, 'bookings'),
+                where('studentId', '==', user.uid),
+                where('hostelId', '==', hostelId),
+                where('status', '==', 'confirmed')
+            );
+
+            const bookingSnapshot = await getDocs(bookingsQuery);
+            if (!bookingSnapshot.empty) {
+                const booking = bookingSnapshot.docs[0];
+                setExistingBooking({ id: booking.id });
+            } else {
+                setExistingBooking(null);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [hostelId]);
 
      React.useEffect(() => {
         const fetchHostelData = async () => {
@@ -64,13 +96,26 @@ export default function SecureHostelPage() {
             const hostelData = await getHostel(hostelId);
             if (!hostelData) {
                 notFound();
+                return;
             }
             setHostel(hostelData);
             
             const targetRoomId = roomTypeId || hostelData.roomTypes[0]?.id;
-            if (targetRoomId) {
+            if (targetRoomId && hostelData.roomTypes.length > 0) {
                 const room = hostelData.roomTypes.find(rt => rt.id === targetRoomId);
-                setSelectedRoom(room || null);
+                if (room) {
+                    setSelectedRoom(room);
+                } else {
+                    // Fallback to first room if specified room not found
+                    console.warn(`Room type ${targetRoomId} not found, using first available room`);
+                    setSelectedRoom(hostelData.roomTypes[0]);
+                }
+            } else if (hostelData.roomTypes.length > 0) {
+                // If no roomTypeId specified, use first room
+                setSelectedRoom(hostelData.roomTypes[0]);
+            } else {
+                console.error('No room types available for this hostel');
+                setSelectedRoom(null);
             }
             setLoading(false);
         };
@@ -81,6 +126,7 @@ export default function SecureHostelPage() {
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
+        mode: 'onChange', // Enable real-time validation
         defaultValues: {
             studentName: "",
             indexNumber: "",
@@ -139,6 +185,79 @@ export default function SecureHostelPage() {
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                </main>
+            </div>
+        )
+    }
+
+    // Check if hostel is already secured
+    if (existingBooking !== undefined && existingBooking !== null) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
+                    <Card className="w-full max-w-lg shadow-xl border-green-200">
+                        <CardHeader>
+                            <div className="flex items-center gap-3 mb-2">
+                                <CheckCircle2 className="h-8 w-8 text-green-600" />
+                                <CardTitle className="text-2xl font-headline text-green-900">Hostel Secured!</CardTitle>
+                            </div>
+                            <CardDescription className="text-base">
+                                This hostel has been successfully secured. Your payment has been processed and your booking is confirmed.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <p className="text-sm text-green-800 font-medium">
+                                    You can view your invoice and tenancy agreement below, or access them anytime from your bookings page.
+                                </p>
+                            </div>
+                        </CardContent>
+                        <CardFooter className="flex flex-col gap-3">
+                            <div className="flex flex-col sm:flex-row gap-3 w-full">
+                                <Button 
+                                    onClick={() => router.push(`/invoice/${existingBooking.id}`)} 
+                                    className="flex-1"
+                                    variant="outline"
+                                >
+                                    <Receipt className="mr-2 h-4 w-4"/>
+                                    View Invoice
+                                </Button>
+                                <Button 
+                                    onClick={() => router.push(`/agreement/${existingBooking.id}`)} 
+                                    className="flex-1"
+                                    variant="outline"
+                                >
+                                    <FileText className="mr-2 h-4 w-4"/>
+                                    View Agreement
+                                </Button>
+                            </div>
+                            <Button 
+                                onClick={() => router.push('/my-bookings')} 
+                                className="w-full"
+                            >
+                                Go to My Bookings
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </main>
+            </div>
+        );
+    }
+
+    if (!selectedRoom) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
+                    <Card className="w-full max-w-lg shadow-xl">
+                        <CardHeader>
+                            <CardTitle className="text-2xl font-headline text-destructive">Room Not Available</CardTitle>
+                            <CardDescription>
+                                No room type is available for this hostel. Please contact support or try selecting a different hostel.
+                            </CardDescription>
+                        </CardHeader>
+                    </Card>
                 </main>
             </div>
         )
@@ -266,9 +385,13 @@ export default function SecureHostelPage() {
                                 )}
                             />
                              <CardFooter className="px-0 pt-6">
-                                <Button type="submit" className="w-full" disabled={isSubmitting || !selectedRoom}>
+                                <Button 
+                                    type="submit" 
+                                    className="w-full" 
+                                    disabled={isSubmitting || !selectedRoom}
+                                >
                                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Proceed to Pay GH₵{selectedRoom?.price.toLocaleString() || 'N/A'}
+                                    Proceed to Pay GH₵{selectedRoom?.price?.toLocaleString() || 'N/A'}
                                 </Button>
                             </CardFooter>
                         </form>

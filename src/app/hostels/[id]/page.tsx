@@ -55,17 +55,46 @@ type Visit = {
   studentCompleted?: boolean;
 }
 
+type ExistingBooking = {
+  id: string;
+  status: string;
+  roomTypeId?: string;
+}
+
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: AppUser | null }) {
     const router = useRouter();
     const { toast } = useToast();
     const currentAvailability = availabilityInfo[hostel.availability || 'Full'];
     const [existingVisit, setExistingVisit] = useState<Visit | null | undefined>(undefined); // undefined: loading, null: not found
+    const [existingBooking, setExistingBooking] = useState<ExistingBooking | null | undefined>(undefined); // undefined: loading, null: not found
 
     useEffect(() => {
         if (!currentUser || !hostel.id) {
             setExistingVisit(null);
+            setExistingBooking(null);
             return;
         }
+
+        const checkExistingBooking = async () => {
+            const bookingsQuery = query(
+                collection(db, 'bookings'),
+                where('studentId', '==', currentUser.uid),
+                where('hostelId', '==', hostel.id),
+                where('status', '==', 'confirmed')
+            );
+
+            const bookingSnapshot = await getDocs(bookingsQuery);
+            if (!bookingSnapshot.empty) {
+                const booking = bookingSnapshot.docs[0];
+                setExistingBooking({
+                    id: booking.id,
+                    status: booking.data().status,
+                    roomTypeId: booking.data().roomTypeId
+                });
+            } else {
+                setExistingBooking(null);
+            }
+        };
 
         const checkExistingVisit = async () => {
             const visitsQuery = query(
@@ -100,6 +129,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             }
         };
 
+        // Check booking first (takes priority), then visit
+        checkExistingBooking();
         checkExistingVisit();
     }, [currentUser, hostel.id]);
 
@@ -114,6 +145,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     }
     
     const getVisitButton = (room: RoomType) => {
+        // First check if hostel is already secured
+        if (existingBooking !== undefined && existingBooking !== null) {
+            // Check if this room type matches the secured room
+            const isSecuredRoom = existingBooking.roomTypeId === room.id;
+            return (
+                <Button 
+                    size="sm"
+                    disabled
+                    className="bg-green-600 hover:bg-green-600 text-white cursor-not-allowed"
+                >
+                    <ShieldCheck className="mr-2 h-4 w-4"/>
+                    {isSecuredRoom ? 'Hostel Secured' : 'Room Secured'}
+                </Button>
+            );
+        }
+
         if (existingVisit === undefined) {
              return <Button variant="outline" size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking...</Button>;
         }
@@ -176,6 +223,40 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
     
     const getPrimaryCTA = () => {
+        // First check if hostel is already secured (takes priority)
+        if (existingBooking !== undefined && existingBooking !== null) {
+            return (
+                <div className="space-y-3 mt-6">
+                    <Button 
+                        size="lg" 
+                        className="w-full h-14 bg-green-600 hover:bg-green-600 text-white cursor-not-allowed" 
+                        disabled
+                    >
+                        <ShieldCheck className="mr-2 h-5 w-5"/>
+                        Hostel Secured
+                    </Button>
+                    <div className="flex gap-2">
+                        <Button 
+                            variant="outline" 
+                            className="flex-1" 
+                            onClick={() => router.push(`/invoice/${existingBooking.id}`)}
+                        >
+                            <FileText className="mr-2 h-4 w-4"/>
+                            View Invoice
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            className="flex-1" 
+                            onClick={() => router.push(`/agreement/${existingBooking.id}`)}
+                        >
+                            <FileText className="mr-2 h-4 w-4"/>
+                            View Agreement
+                        </Button>
+                    </div>
+                </div>
+            );
+        }
+
         if (existingVisit === undefined) {
              return <Button size="lg" className="w-full mt-6 h-14" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking Status...</Button>;
         }

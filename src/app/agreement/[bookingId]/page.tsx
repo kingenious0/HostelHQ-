@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Download, Printer } from 'lucide-react';
+import { Loader2, Download, Printer, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
@@ -51,6 +51,7 @@ export default function AgreementPage() {
     const [manager, setManager] = useState<Manager | null>(null);
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadCompleted, setDownloadCompleted] = useState(false);
     
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -148,10 +149,12 @@ export default function AgreementPage() {
 
             pdf.save(`tenancy-agreement-${hostel?.name?.replace(/\s/g, '-')}.pdf`);
             toast({ title: "Download started", description: "Your PDF is being downloaded."});
+            setDownloadCompleted(true);
 
         } catch (error) {
             console.error(error);
             toast({ title: "Download Failed", description: "Could not generate the PDF.", variant: "destructive"});
+            setDownloadCompleted(false);
         } finally {
             setIsDownloading(false);
         }
@@ -280,8 +283,19 @@ export default function AgreementPage() {
                                 </div>
                             </div>
                         </CardContent>
-                         <CardFooter>
-                            <p className="text-xs text-muted-foreground">
+                         <CardFooter className="flex flex-col gap-4">
+                            {downloadCompleted && (
+                                <Button 
+                                    onClick={() => router.push('/my-bookings')} 
+                                    variant="default"
+                                    size="lg"
+                                    className="w-full"
+                                >
+                                    <Calendar className="mr-2 h-4 w-4"/>
+                                    Go to your bookings
+                                </Button>
+                            )}
+                            <p className="text-xs text-muted-foreground text-center">
                                 Please keep a copy of this agreement for your records. You can access this page anytime from your "My Bookings" section.
                             </p>
                         </CardFooter>
