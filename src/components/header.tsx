@@ -282,9 +282,14 @@ export function Header() {
               </Link>
             )}
             {isAdmin && (
-              <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                Admin Dashboard
-              </Link>
+              <>
+                <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                  Admin Dashboard
+                </Link>
+                <Link href="/admin/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                  Upload Hostel
+                </Link>
+              </>
             )}
             {isManager && (
               <Link href="/manager/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
@@ -341,9 +346,14 @@ export function Header() {
                     </>
                   )}
                    {isAdmin && (
-                    <DropdownMenuItem asChild>
+                    <>
+                      <DropdownMenuItem asChild>
                         <Link href="/admin/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
-                    </DropdownMenuItem>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/upload"><ListPlus className="mr-2 h-4 w-4"/>Upload Hostel</Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
                    {isManager && (
                     <DropdownMenuItem asChild>

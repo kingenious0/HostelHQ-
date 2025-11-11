@@ -78,7 +78,6 @@ export default function AdminDashboard() {
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [pendingAgents, setPendingAgents] = useState<User[]>([]);
   const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -121,12 +120,6 @@ export default function AdminDashboard() {
       setUsers(usersData);
     });
 
-    // Fetch pending agents
-    const unsubPendingAgents = onSnapshot(collection(db, 'pendingUsers'), (snapshot) => {
-        const agentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setPendingAgents(agentsData);
-    });
-    
      // Real-time pending reviews
     const reviewsQuery = query(collection(db, 'reviews'), where('status', '==', 'pending'));
     const unsubReviews = onSnapshot(reviewsQuery, (snapshot) => {
@@ -161,7 +154,6 @@ export default function AdminDashboard() {
       unsubPending();
       unsubApproved();
       unsubUsers();
-      unsubPendingAgents();
       unsubReviews();
       presenceChannel.presence.unsubscribe();
     };
@@ -233,52 +225,6 @@ export default function AdminDashboard() {
     }
   };
   
-    const handleAgentApproval = async (agent: User) => {
-        setProcessingId(agent.id);
-        toast({ title: "Approving Agent..." });
-        try {
-            const batch = writeBatch(db);
-            const pendingAgentRef = doc(db, 'pendingUsers', agent.id);
-            const userRef = doc(db, 'users', agent.id);
-            
-            // Create a new object for the user, excluding the 'id' field to avoid undefined values.
-            const { id, ...agentDataForUser } = agent;
-
-            // Set the final user document with the 'agent' role
-            batch.set(userRef, { ...agentDataForUser, role: 'agent' });
-            
-            // Delete the pending user document
-            batch.delete(pendingAgentRef);
-
-            await batch.commit();
-
-            toast({ title: "Agent Approved", description: `${agent.fullName} is now an active agent.` });
-
-        } catch (error) {
-            console.error("Error approving agent:", error);
-            toast({ title: "Approval Failed", description: "An error occurred.", variant: "destructive" });
-        } finally {
-            setProcessingId(null);
-        }
-    };
-    
-    const handleAgentRejection = async (agentId: string) => {
-        if (!confirm("Are you sure you want to reject and delete this agent application? This action cannot be undone.")) return;
-        
-        setProcessingId(agentId);
-        toast({ title: "Rejecting Agent..." });
-        try {
-            // Note: A backend function would be needed to delete the Firebase Auth user.
-            // This client-side action can only delete the Firestore record.
-            await deleteDoc(doc(db, 'pendingUsers', agentId));
-            toast({ title: "Agent Rejected", description: "The application has been deleted." });
-        } catch (error) {
-            console.error("Error rejecting agent:", error);
-            toast({ title: "Rejection Failed", description: "An error occurred.", variant: "destructive" });
-        } finally {
-            setProcessingId(null);
-        }
-    };
 
     const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject') => {
         setProcessingId(reviewId);
@@ -394,7 +340,7 @@ export default function AdminDashboard() {
 
   const students = users.filter(u => u.role === 'student');
   const agents = users.filter(u => u.role === 'agent');
-  const totalPending = pendingHostels.length + pendingAgents.length + pendingReviews.length;
+  const totalPending = pendingHostels.length + pendingReviews.length;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -498,53 +444,6 @@ export default function AdminDashboard() {
                             </TableBody>
                         </Table>
                         )}
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Pending Agent Approvals</CardTitle>
-                        <CardDescription>Review and approve or reject new agent applications.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Full Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {pendingAgents.length > 0 ? (
-                                    pendingAgents.map(agent => (
-                                        <TableRow key={agent.id}>
-                                            <TableCell className="font-medium">{agent.fullName}</TableCell>
-                                            <TableCell>{agent.email}</TableCell>
-                                            <TableCell className="text-right space-x-2">
-                                                <Button
-                                                    variant="ghost" size="sm"
-                                                    disabled={processingId === agent.id}
-                                                    onClick={() => handleAgentRejection(agent.id)}
-                                                ><XCircle className="h-4 w-4" /></Button>
-                                                <Button
-                                                    size="sm"
-                                                    disabled={processingId === agent.id}
-                                                    onClick={() => handleAgentApproval(agent)}
-                                                >
-                                                    {processingId === agent.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCircle className="h-4 w-4" />}
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                     <TableRow>
-                                        <TableCell colSpan={3} className="text-center h-24">
-                                            No pending agent approvals.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
                     </CardContent>
                 </Card>
             </div>

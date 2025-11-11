@@ -223,6 +223,21 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
     
     const getPrimaryCTA = () => {
+        // If the hostel is marked Full by admin, block all CTAs
+        if (hostel.availability === 'Full') {
+            return (
+                <Button
+                    size="lg"
+                    className="w-full mt-6 h-14"
+                    variant="secondary"
+                    disabled
+                    title="This hostel is fully booked"
+                >
+                    Hostel Fully Booked
+                </Button>
+            );
+        }
+
         // First check if hostel is already secured (takes priority)
         if (existingBooking !== undefined && existingBooking !== null) {
             return (
@@ -281,9 +296,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
         
         return (
-             <Button size="lg" className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book`)}>
+             <Button
+                size="lg"
+                className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
+                onClick={() => router.push(`/hostels/${hostel.id}/book`)}
+             >
                 Book a Visit
-            </Button>
+             </Button>
         );
     };
 
@@ -549,9 +568,25 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                     <span className="text-base text-muted-foreground">/year</span>
                 </div>
 
-                <Button size="lg" className="w-full mt-6 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 text-lg h-14" onClick={handleLoginRedirect}>
-                    Apply to Secure Hostel
-                </Button>
+                {hostel.availability === 'Full' ? (
+                    <Button
+                        size="lg"
+                        className="w-full mt-6 text-lg h-14"
+                        variant="secondary"
+                        disabled
+                        title="This hostel is fully booked"
+                    >
+                        Hostel Fully Booked
+                    </Button>
+                ) : (
+                    <Button
+                        size="lg"
+                        className="w-full mt-6 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 text-lg h-14"
+                        onClick={handleLoginRedirect}
+                    >
+                        Apply to Secure Hostel
+                    </Button>
+                )}
 
                 <Card className="mt-8 bg-muted/30">
                     <CardHeader>

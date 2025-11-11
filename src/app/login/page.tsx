@@ -28,23 +28,31 @@ export default function LoginPage() {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Check if user is a pending agent first
-            const pendingUserDocRef = doc(db, 'pendingUsers', user.uid);
-            const pendingUserDocSnap = await getDoc(pendingUserDocRef);
+            // Check user role and redirect accordingly
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
 
-            if (pendingUserDocSnap.exists()) {
-                await auth.signOut(); // Log the user out immediately
-                toast({
-                    title: 'Account Pending Approval',
-                    description: 'Your agent account is still awaiting admin approval.',
-                    variant: 'destructive',
-                });
-                setIsSubmitting(false);
-                return;
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                const role = userData.role;
+
+                toast({ title: 'Login Successful!' });
+
+                // Redirect based on role
+                if (role === 'agent') {
+                    router.push('/agent/dashboard');
+                } else if (role === 'hostel_manager') {
+                    router.push('/manager/dashboard');
+                } else if (role === 'admin') {
+                    router.push('/admin/dashboard');
+                } else {
+                    router.push('/');
+                }
+            } else {
+                // User document doesn't exist, redirect to home
+                toast({ title: 'Login Successful!' });
+                router.push('/');
             }
-            
-            toast({ title: 'Login Successful!' });
-            router.push('/');
 
         } catch (error: any) {
             console.error("Login error:", error);

@@ -117,20 +117,83 @@ function SchedulingContent() {
 
         try {
             const visitRef = doc(db, 'visits', visitId);
+            const visitSnap = await getDoc(visitRef);
+            const visitData = visitSnap.data();
+            const hostelId = visitData?.hostelId;
+            const studentId = visitData?.studentId;
+
+            // Update visit with agent assignment
             await updateDoc(visitRef, {
                 agentId: selectedAgent.id,
                 visitDate: visitDate.toISOString(),
                 visitTime: visitTime,
                 status: 'pending' // Move to pending for agent to accept
             });
-            
-            const visitSnap = await getDoc(visitRef);
-            const hostelId = visitSnap.data()?.hostelId;
+
+            // Get student and hostel info for SMS
+            let studentName = 'A student';
+            let hostelName = 'a hostel';
+
+            try {
+                if (studentId) {
+                    const studentDoc = await getDoc(doc(db, 'users', studentId));
+                    if (studentDoc.exists()) {
+                        studentName = studentDoc.data().fullName || studentName;
+                    }
+                }
+                if (hostelId) {
+                    const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
+                    if (hostelDoc.exists()) {
+                        hostelName = hostelDoc.data().name || hostelName;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching student/hostel info:', error);
+            }
+
+            // Send SMS notification to agent
+            try {
+                // Get agent's phone number
+                const agentDoc = await getDoc(doc(db, 'users', selectedAgent.id));
+                if (agentDoc.exists()) {
+                    const agentData = agentDoc.data();
+                    const agentPhone = agentData.phoneNumber;
+
+                    if (agentPhone) {
+                        const visitDateFormatted = new Date(visitDate).toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                        });
+
+                        const message = `You have a new visit request! ${studentName} has selected you for a visit to ${hostelName} on ${visitDateFormatted} at ${visitTime}. Please log in to your HostelHQ dashboard to accept or decline the request.`;
+
+                        const smsResponse = await fetch('/api/sms/send-notification', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                phoneNumber: agentPhone,
+                                message: message,
+                            }),
+                        });
+
+                        if (!smsResponse.ok) {
+                            console.error('Failed to send SMS notification');
+                            // Don't block the booking if SMS fails
+                        }
+                    }
+                }
+            } catch (smsError) {
+                console.error('Error sending SMS notification:', smsError);
+                // Don't block the booking if SMS fails
+            }
 
             toast({title: "Request Sent!", description: `Your visit request has been sent to ${selectedAgent.fullName}.`});
             router.push(`/hostels/${hostelId}/book/tracking?visitId=${visitId}`);
 
         } catch (error) {
+             console.error("Scheduling error:", error);
              toast({ title: "Scheduling Failed", description: "Could not save your schedule. Please try again.", variant: "destructive"});
              setIsSubmitting(false);
         }
