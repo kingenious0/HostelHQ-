@@ -15,7 +15,7 @@ import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, PlusCircl
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, writeBatch, doc } from 'firebase/firestore';
+import { addDoc, collection, writeBatch, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
@@ -53,14 +53,33 @@ export default function AgentUploadPage() {
     // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
 
     const totalSteps = 5;
     const progress = (step / totalSteps) * 100;
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
+            if (user) {
+                // Fetch user role from Firestore
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        const userData = userDocSnap.data();
+                        setUserRole(userData.role || null);
+                    } else {
+                        setUserRole(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    setUserRole(null);
+                }
+            } else {
+                setUserRole(null);
+            }
             setLoadingAuth(false);
         });
         return () => unsubscribe();
@@ -231,7 +250,7 @@ export default function AgentUploadPage() {
         );
     }
 
-    if (!currentUser) {
+    if (!currentUser || userRole !== 'agent') {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />

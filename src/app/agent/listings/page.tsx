@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Edit, PlusCircle } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDocs, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -29,13 +29,32 @@ export default function AgentListingsPage() {
     const [myListings, setMyListings] = useState<Listing[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const { toast } = useToast();
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
+            if (user) {
+                // Fetch user role from Firestore
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        const userData = userDocSnap.data();
+                        setUserRole(userData.role || null);
+                    } else {
+                        setUserRole(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    setUserRole(null);
+                }
+            } else {
+                setUserRole(null);
+            }
             setLoadingAuth(false);
             if (!user) {
                 setLoading(false);
@@ -106,7 +125,7 @@ export default function AgentListingsPage() {
         );
     }
 
-    if (!currentUser) {
+    if (!currentUser || userRole !== 'agent') {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />

@@ -36,6 +36,7 @@ export default function EditListingPage() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
@@ -47,8 +48,26 @@ export default function EditListingPage() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
+            if (user) {
+                // Fetch user role from Firestore
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        const userData = userDocSnap.data();
+                        setUserRole(userData.role || null);
+                    } else {
+                        setUserRole(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    setUserRole(null);
+                }
+            } else {
+                setUserRole(null);
+            }
             setLoadingAuth(false);
         });
         return () => unsubscribe();
@@ -229,7 +248,7 @@ export default function EditListingPage() {
         );
     }
     
-    if (!currentUser) {
+    if (!currentUser || userRole !== 'agent') {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
@@ -238,7 +257,7 @@ export default function EditListingPage() {
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
-                            You must be logged in to edit a listing.
+                            You must be logged in as an Agent to edit a listing.
                         </AlertDescription>
                     </Alert>
                 </main>

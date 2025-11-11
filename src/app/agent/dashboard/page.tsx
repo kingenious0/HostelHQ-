@@ -38,6 +38,7 @@ export default function AgentDashboard() {
     const [myVisits, setMyVisits] = useState<EnrichedVisit[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [selectedVisit, setSelectedVisit] = useState<EnrichedVisit | null>(null);
@@ -46,8 +47,26 @@ export default function AgentDashboard() {
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
+            if (user) {
+                // Fetch user role from Firestore
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        const userData = userDocSnap.data();
+                        setUserRole(userData.role || null);
+                    } else {
+                        setUserRole(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    setUserRole(null);
+                }
+            } else {
+                setUserRole(null);
+            }
             setLoadingAuth(false);
             if (!user) {
                 setLoading(false);
@@ -158,7 +177,7 @@ export default function AgentDashboard() {
         );
     }
 
-    if (!currentUser || !currentUser.email?.endsWith('@agent.hostelhq.com')) {
+    if (!currentUser || userRole !== 'agent') {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />

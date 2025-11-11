@@ -312,6 +312,49 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleDeleteUser = async (user: User) => {
+    // Prevent deleting admin users
+    if (user.role === 'admin') {
+      toast({ 
+        title: 'Cannot Delete Admin', 
+        description: 'Admin users cannot be deleted for security reasons.', 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Confirmation dialog
+    if (!window.confirm(
+      `Are you sure you want to permanently delete ${user.fullName} (${user.email})?\n\n` +
+      `This will remove the user from Firestore. This action cannot be undone.`
+    )) {
+      return;
+    }
+
+    setProcessingId(user.id);
+    toast({ title: "Deleting User...", description: `Removing ${user.fullName} from the system.` });
+    
+    try {
+      // Delete user from Firestore
+      const userRef = doc(db, 'users', user.id);
+      await deleteDoc(userRef);
+      
+      toast({ 
+        title: "User Deleted", 
+        description: `${user.fullName} has been permanently removed from Firestore.` 
+      });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast({ 
+        title: "Deletion Failed", 
+        description: "Could not delete the user. Please try again.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
 
   const openHostelReviewDialog = async (hostel: PendingHostel) => {
     // Fetch full details including room types before opening dialog
@@ -550,19 +593,35 @@ export default function AdminDashboard() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => toggleUserRole(user)}
-                                                    disabled={processingId === user.id || user.role === 'admin'}
-                                                    title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
-                                                >
-                                                    {processingId === user.id ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
-                                                    )}
-                                                </Button>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => toggleUserRole(user)}
+                                                        disabled={processingId === user.id || user.role === 'admin'}
+                                                        title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
+                                                    >
+                                                        {processingId === user.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
+                                                        )}
+                                                    </Button>
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        onClick={() => handleDeleteUser(user)}
+                                                        disabled={processingId === user.id || user.role === 'admin'}
+                                                        title="Delete user"
+                                                    >
+                                                        {processingId === user.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))
