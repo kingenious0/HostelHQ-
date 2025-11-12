@@ -28,11 +28,12 @@ import {
     Briefcase,
     Menu,
     FileText,
-    Receipt
+    Receipt,
+    Trash2
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, Timestamp, deleteDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -542,7 +543,38 @@ export default function MyBookingsPage() {
 // Visit Card Component (for visit bookings - NO Agreement button)
 function VisitCard({ visit }: { visit: EnhancedVisit }) {
     const router = useRouter();
+    const { toast } = useToast();
     const statusInfo = getVisitStatusInfo(visit.status);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDelete = async () => {
+        if (!window.confirm(
+            `Are you sure you want to delete this visit booking for ${visit.hostelName}?\n\n` +
+            `This action cannot be undone.`
+        )) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const visitRef = doc(db, 'visits', visit.id);
+            await deleteDoc(visitRef);
+            
+            toast({
+                title: "Visit Deleted",
+                description: `Visit booking for ${visit.hostelName} has been deleted.`
+            });
+        } catch (error) {
+            console.error("Error deleting visit:", error);
+            toast({
+                title: "Deletion Failed",
+                description: "Could not delete the visit. Please try again.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     return (
         <Card className="bg-blue-50 border-blue-200 hover:bg-blue-100 transition-colors">
@@ -586,6 +618,20 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                             <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
                             Invoice
                         </Button>
+                        <Button 
+                            size="sm"
+                            variant="destructive"
+                            className="text-xs sm:text-sm"
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? (
+                                <Loader2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/>
+                            ) : (
+                                <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                            )}
+                            Delete
+                        </Button>
                         <div className="text-xs text-gray-500 italic px-2 py-1 flex items-center">
                             * No tenancy agreement for visits
                         </div>
@@ -599,17 +645,48 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
 // Booking Card Component (for secured hostels - WITH Agreement button)
 function BookingCard({ booking }: { booking: EnhancedBooking }) {
     const router = useRouter();
+    const { toast } = useToast();
     const statusInfo = getStatusInfo(booking.status);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDelete = async () => {
+        if (!window.confirm(
+            `Are you sure you want to delete this booking for ${booking.hostelName}?\n\n` +
+            `This will permanently remove the booking and associated data. This action cannot be undone.`
+        )) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const bookingRef = doc(db, 'bookings', booking.id);
+            await deleteDoc(bookingRef);
+            
+            toast({
+                title: "Booking Deleted",
+                description: `Booking for ${booking.hostelName} has been deleted.`
+            });
+        } catch (error) {
+            console.error("Error deleting booking:", error);
+            toast({
+                title: "Deletion Failed",
+                description: "Could not delete the booking. Please try again.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     return (
-        <Card className="bg-gray-800 text-white hover:bg-gray-700 transition-colors">
+        <Card className="bg-blue-50 border-blue-200 hover:bg-blue-100 transition-colors">
             <CardContent className="p-3 sm:p-4 md:p-6">
                 <div className="flex flex-col gap-3 sm:gap-4">
                     <div className="flex items-start space-x-2 sm:space-x-3">
-                        <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-gray-300 mt-1 flex-shrink-0" />
+                        <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-1 flex-shrink-0" />
                         <div className="min-w-0 flex-1">
-                            <h3 className="font-semibold text-sm sm:text-base md:text-lg text-white truncate">{booking.hostelName}</h3>
-                            <p className="text-xs sm:text-sm text-gray-300">Booking ID: {booking.id.slice(-4)}</p>
+                            <h3 className="font-semibold text-sm sm:text-base md:text-lg text-gray-900 truncate">{booking.hostelName}</h3>
+                            <p className="text-xs sm:text-sm text-gray-600">Booking ID: {booking.id.slice(-4)}</p>
                         </div>
                         <Badge variant={statusInfo.variant} className="flex items-center gap-1 text-xs">
                             {statusInfo.icon}
@@ -620,16 +697,16 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                     
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm">
                         <div>
-                            <p className="text-gray-300 text-xs">Room Number</p>
-                            <p className="font-medium text-white text-xs sm:text-sm">{booking.roomNumber}</p>
+                            <p className="text-gray-600 text-xs">Room Number</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm">{booking.roomNumber}</p>
                         </div>
                         <div>
-                            <p className="text-gray-300 text-xs">Room Type</p>
-                            <p className="font-medium text-white text-xs sm:text-sm">{booking.roomType}</p>
+                            <p className="text-gray-600 text-xs">Room Type</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm">{booking.roomType}</p>
                         </div>
                         <div>
-                            <p className="text-gray-300 text-xs">Booked by</p>
-                            <p className="font-medium text-white text-xs sm:text-sm truncate">{booking.bookedBy}</p>
+                            <p className="text-gray-600 text-xs">Booked by</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm truncate">{booking.bookedBy}</p>
                         </div>
                     </div>
                     
@@ -637,7 +714,7 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                         <Button 
                             size="sm"
                             variant="outline"
-                            className="flex-1 text-xs sm:text-sm border-gray-600 text-gray-200 hover:bg-gray-700"
+                            className="flex-1 text-xs sm:text-sm border-blue-300 text-blue-700 hover:bg-blue-200"
                             onClick={() => router.push(`/invoice/${booking.id}`)}
                         >
                             <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
@@ -650,6 +727,20 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                         >
                             <FileText className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
                             Agreement
+                        </Button>
+                        <Button 
+                            size="sm"
+                            variant="destructive"
+                            className="text-xs sm:text-sm"
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? (
+                                <Loader2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/>
+                            ) : (
+                                <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                            )}
+                            Delete
                         </Button>
                     </div>
                 </div>
