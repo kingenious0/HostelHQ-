@@ -13,9 +13,7 @@ import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } fro
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Hostel, RoomType } from '@/lib/data';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import { tenancyAgreementText, termsAndConditionsText } from '@/lib/legal';
+import { fillTenancyAgreementPDF, downloadPDF } from '@/lib/pdf-filler';
 import { BackButton } from '@/components/ui/back-button';
 
 type Booking = {
@@ -27,6 +25,8 @@ type Booking = {
       phoneNumber?: string;
       email: string;
       program?: string;
+      ghanaCard?: string;
+      address?: string;
     };
     hostelId: string;
     bookingDate: string;
@@ -52,8 +52,7 @@ export default function AgreementPage() {
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadCompleted, setDownloadCompleted] = useState(false);
-    
-    const printRef = useRef<HTMLDivElement>(null);
+    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (!bookingId) {
@@ -110,93 +109,61 @@ export default function AgreementPage() {
         fetchData();
     }, [bookingId, router, toast]);
 
+    // Generate and load the filled PDF when data is ready
+    useEffect(() => {
+        if (!booking || !hostel || !manager) return;
+
+        const generatePDF = async () => {
+            try {
+                const pdfBytes = await fillTenancyAgreementPDF(booking, hostel, manager);
+                const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                setPdfUrl(url);
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                toast({ 
+                    title: "PDF Generation Failed", 
+                    description: "Could not load the agreement PDF. Please try again.", 
+                    variant: "destructive" 
+                });
+            }
+        };
+
+        generatePDF();
+
+        // Cleanup URL on unmount
+        return () => {
+            if (pdfUrl) {
+                URL.revokeObjectURL(pdfUrl);
+            }
+        };
+    }, [booking, hostel, manager, toast]);
+
     const handleDownload = async () => {
-        if (!printRef.current) return;
+        if (!booking || !hostel || !manager) return;
+        
         setIsDownloading(true);
         toast({ title: "Generating PDF..."});
 
         try {
-            const canvas = await html2canvas(printRef.current, {
-                scale: 2, // Higher scale for better quality
-                useCORS: true,
-            });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'pt',
-                format: 'a4'
-            });
+            const pdfBytes = await fillTenancyAgreementPDF(booking, hostel, manager);
+            const filename = `tenancy-agreement-${hostel.name.replace(/\s/g, '-')}-${booking.id.slice(-4)}.pdf`;
+            downloadPDF(pdfBytes, filename);
             
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const ratio = canvasWidth / pdfWidth;
-            const finalHeight = canvasHeight / ratio;
-            
-            let position = 0;
-            let heightLeft = finalHeight;
-
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft > 0) {
-                position = heightLeft - pdfHeight; // Corrected: subtract pdfHeight not finalHeight
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-                heightLeft -= pdfHeight;
-            }
-
-            pdf.save(`tenancy-agreement-${hostel?.name?.replace(/\s/g, '-')}.pdf`);
             toast({ title: "Download started", description: "Your PDF is being downloaded."});
             setDownloadCompleted(true);
 
         } catch (error) {
             console.error(error);
-            toast({ title: "Download Failed", description: "Could not generate the PDF.", variant: "destructive"});
+            toast({ 
+                title: "Download Failed", 
+                description: "Could not generate the PDF. Please try again.", 
+                variant: "destructive"
+            });
             setDownloadCompleted(false);
         } finally {
             setIsDownloading(false);
         }
-    };
-    
-    const getFilledTemplate = () => {
-        if (!booking || !hostel || !manager) return "";
-        let content = tenancyAgreementText;
-        
-        const studentDetails = booking.studentDetails; // Assumed to be available from booking
-        // Defensively handle cases where roomTypes might be missing or empty
-        const roomTypes = Array.isArray(hostel.roomTypes) ? hostel.roomTypes : [];
-        const room = roomTypes.find(rt => rt.id === booking.roomTypeId) || roomTypes[0] || null;
-
-        const today = new Date();
-        const academicYearStart = today.getFullYear();
-        const academicYearEnd = today.getFullYear() + 1;
-
-        const replacements = {
-            '{{currentDate}}': today.toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' }),
-            '{{hostelName}}': hostel.name.toUpperCase(),
-            '{{hostelLocation}}': hostel.location,
-            '{{landlordName}}': manager?.fullName || 'Hostel Management',
-            '{{tenantName}}': studentDetails?.fullName || 'N/A',
-            '{{tenantProgram}}': studentDetails?.program || 'N/A',
-            '{{tenantIndexNumber}}': studentDetails?.indexNumber || 'N/A',
-            '{{tenantMobile}}': studentDetails?.phoneNumber || 'N/A',
-            '{{tenantEmail}}': studentDetails?.email || 'N/A',
-            '{{roomType}}': room?.name || 'N/A',
-            '{{roomPrice}}': room && typeof room.price === 'number' ? room.price.toLocaleString() : 'N/A',
-            '{{academicYear}}': `${academicYearStart}/${academicYearEnd}`,
-            '{{paymentDeadline}}': booking.paymentDeadline ? new Date(booking.paymentDeadline.seconds * 1000).toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
-            '{{roomSharingClause}}': hostel.roomSharingClause || 'Standard room sharing conditions apply.',
-            '{{accessRules}}': hostel.accessRules || 'Standard access rules apply.',
-            '{{termsAndConditions}}': termsAndConditionsText,
-        };
-
-        for (const [key, value] of Object.entries(replacements)) {
-            content = content.replace(new RegExp(key, 'g'), value);
-        }
-
-        return content;
     };
 
     if (loading) {
@@ -246,41 +213,21 @@ export default function AgreementPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800 relative overflow-hidden">
-                                <div
-                                  className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
-                                  style={{
-                                    fontSize: '8rem',
-                                    fontWeight: 'bold',
-                                    color: '#000',
-                                    transform: 'rotate(-45deg)',
-                                    userSelect: 'none',
-                                  }}
-                                >
-                                  HostelHQ
-                                </div>
-                                <h1 className="text-xl font-bold text-center mb-6 relative z-10">TENANCY AGREEMENT</h1>
-                                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed relative z-10">
-                                    {getFilledTemplate()}
-                                </pre>
-                                 <div className="mt-16 grid grid-cols-2 gap-16 relative z-10">
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Student Signature</p>
-                                            <p className="text-xs mb-8">&nbsp;</p>
-                                            <p className="text-xs">({booking.studentDetails.fullName})</p>
-                                            <p className="text-xs">Date: {new Date().toLocaleDateString()}</p>
+                            <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+                                {pdfUrl ? (
+                                    <iframe
+                                        src={pdfUrl}
+                                        className="w-full h-[800px] border-0"
+                                        title="Tenancy Agreement"
+                                    />
+                                ) : (
+                                    <div className="flex items-center justify-center h-[800px]">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                            <p className="text-muted-foreground">Loading agreement PDF...</p>
                                         </div>
                                     </div>
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Manager Signature</p>
-                                            <p className="text-xs mb-8">&nbsp;</p>
-                                            <p className="text-xs">({manager.fullName})</p>
-                                            <p className="text-xs">Date: {new Date().toLocaleDateString()}</p>
-                                        </div>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </CardContent>
                          <CardFooter className="flex flex-col gap-4">
