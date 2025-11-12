@@ -70,28 +70,61 @@ export default function InvoicePage() {
 
         const fetchData = async () => {
             try {
-                // Fetch Booking
-                const bookingRef = doc(db, 'bookings', bookingId as string);
-                const bookingSnap = await getDoc(bookingRef);
-                if (!bookingSnap.exists()) throw new Error("Booking not found.");
+                // Try to fetch from bookings first (secured bookings)
+                let bookingRef = doc(db, 'bookings', bookingId as string);
+                let bookingSnap = await getDoc(bookingRef);
+                let isVisit = false;
+                
+                // If not found in bookings, try visits collection
+                if (!bookingSnap.exists()) {
+                    bookingRef = doc(db, 'visits', bookingId as string);
+                    bookingSnap = await getDoc(bookingRef);
+                    isVisit = true;
+                    if (!bookingSnap.exists()) throw new Error("Booking or visit not found.");
+                }
+                
                 const bookingDataRaw = bookingSnap.data();
+                
+                // For visits, fetch student details from users collection if not present
+                let studentDetails = bookingDataRaw.studentDetails || {};
+                if (isVisit && bookingDataRaw.studentId) {
+                    try {
+                        const studentRef = doc(db, 'users', bookingDataRaw.studentId);
+                        const studentSnap = await getDoc(studentRef);
+                        if (studentSnap.exists()) {
+                            const studentData = studentSnap.data();
+                            studentDetails = {
+                                fullName: studentData.fullName || '',
+                                email: studentData.email || '',
+                                phoneNumber: studentData.phoneNumber || studentData.phone || '',
+                                indexNumber: studentData.indexNumber || '',
+                                program: studentData.program || studentData.departmentName || '',
+                                level: studentData.level || '',
+                                ghanaCardNumber: studentData.ghanaCardNumber || '',
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Error fetching student details:', error);
+                    }
+                }
+                
                 const bookingData = { 
                     id: bookingSnap.id, 
                     ...bookingDataRaw,
                     // Ensure studentDetails has all fields
                     studentDetails: {
-                        fullName: bookingDataRaw.studentDetails?.fullName || '',
-                        email: bookingDataRaw.studentDetails?.email || '',
-                        phoneNumber: bookingDataRaw.studentDetails?.phoneNumber || '',
-                        indexNumber: bookingDataRaw.studentDetails?.indexNumber || '',
-                        program: bookingDataRaw.studentDetails?.program || bookingDataRaw.studentDetails?.departmentName || '',
-                        level: bookingDataRaw.studentDetails?.level || '',
-                        ghanaCardNumber: bookingDataRaw.studentDetails?.ghanaCardNumber || '',
+                        fullName: studentDetails.fullName || bookingDataRaw.studentDetails?.fullName || '',
+                        email: studentDetails.email || bookingDataRaw.studentDetails?.email || '',
+                        phoneNumber: studentDetails.phoneNumber || bookingDataRaw.studentDetails?.phoneNumber || '',
+                        indexNumber: studentDetails.indexNumber || bookingDataRaw.studentDetails?.indexNumber || '',
+                        program: studentDetails.program || bookingDataRaw.studentDetails?.program || bookingDataRaw.studentDetails?.departmentName || '',
+                        level: studentDetails.level || bookingDataRaw.studentDetails?.level || '',
+                        ghanaCardNumber: studentDetails.ghanaCardNumber || bookingDataRaw.studentDetails?.ghanaCardNumber || '',
                     },
-                    amountPaid: bookingDataRaw.amountPaid || 0,
+                    amountPaid: bookingDataRaw.amountPaid || (isVisit ? 12 : 0), // Default visit fee is 12 GHS
                     paymentReference: bookingDataRaw.paymentReference || '',
-                    // Determine booking type: secure if has roomTypeId and amountPaid, otherwise visit
-                    bookingType: bookingDataRaw.roomTypeId && bookingDataRaw.amountPaid ? 'secure' : 'visit',
+                    // Determine booking type: visit if from visits collection, otherwise secure
+                    bookingType: isVisit ? 'visit' : (bookingDataRaw.roomTypeId && bookingDataRaw.amountPaid ? 'secure' : 'visit'),
                 } as Booking;
                 setBooking(bookingData);
 
@@ -277,18 +310,21 @@ export default function InvoicePage() {
                         </CardHeader>
                         <CardContent>
                             <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800 relative overflow-hidden">
-                                <div
-                                  className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
-                                  style={{
-                                    fontSize: '8rem',
-                                    fontWeight: 'bold',
-                                    color: '#000',
-                                    transform: 'rotate(-45deg)',
-                                    userSelect: 'none',
-                                  }}
-                                >
-                                  HostelHQ
-                                </div>
+                                {/* Watermark - Only show for secured bookings */}
+                                {isSecureBooking && (
+                                    <div
+                                      className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
+                                      style={{
+                                        fontSize: '8rem',
+                                        fontWeight: 'bold',
+                                        color: '#000',
+                                        transform: 'rotate(-45deg)',
+                                        userSelect: 'none',
+                                      }}
+                                    >
+                                      HostelHQ
+                                    </div>
+                                )}
                                 <div className="relative z-10">
                                     <div className="text-center mb-6 pb-4 border-b-2">
                                         <h1 className="text-2xl font-bold mb-2">INVOICE</h1>

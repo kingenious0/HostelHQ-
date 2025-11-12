@@ -52,6 +52,18 @@ type EnhancedBooking = {
     };
 }
 
+type EnhancedVisit = {
+    id: string;
+    hostelId: string;
+    hostelName: string;
+    visitDate: string;
+    visitTime: string;
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    agentId?: string;
+    agentName?: string;
+    paymentReference?: string;
+}
+
 interface AppUser {
   uid: string;
   email: string;
@@ -67,6 +79,7 @@ interface AppUser {
 
 export default function MyBookingsPage() {
     const [bookings, setBookings] = useState<EnhancedBooking[]>([]);
+    const [visits, setVisits] = useState<EnhancedVisit[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [appUser, setAppUser] = useState<AppUser | null>(null);
@@ -117,7 +130,7 @@ export default function MyBookingsPage() {
 
         setLoading(true);
 
-        // Fetch bookings with enhanced data
+        // Fetch secured bookings (from bookings collection)
         const bookingsQuery = query(collection(db, "bookings"), where("studentId", "==", currentUser.uid));
         const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
             const bookingsData = await Promise.all(snapshot.docs.map(async (d) => {
@@ -151,14 +164,65 @@ export default function MyBookingsPage() {
             }));
             
             setBookings(bookingsData);
+        });
+
+        // Fetch visit bookings (from visits collection)
+        const visitsQuery = query(collection(db, "visits"), where("studentId", "==", currentUser.uid));
+        const unsubscribeVisits = onSnapshot(visitsQuery, async (snapshot) => {
+            const visitsData = await Promise.all(snapshot.docs.map(async (d) => {
+                const data = d.data();
+                const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                
+                let agentName = 'Not Assigned';
+                if (data.agentId) {
+                    try {
+                        const agentSnap = await getDoc(doc(db, 'users', data.agentId));
+                        if (agentSnap.exists()) {
+                            agentName = agentSnap.data().fullName || agentName;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching agent:', error);
+                    }
+                }
+
+                let visitDate = 'N/A';
+                if (data.visitDate) {
+                    if (typeof data.visitDate === 'string') {
+                        visitDate = new Date(data.visitDate).toLocaleDateString();
+                    } else {
+                        visitDate = new Date().toLocaleDateString();
+                    }
+                }
+
+                return {
+                    id: d.id,
+                    hostelId: data.hostelId,
+                    hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
+                    visitDate: visitDate,
+                    visitTime: data.visitTime || 'N/A',
+                    status: data.status || 'pending',
+                    agentId: data.agentId,
+                    agentName: agentName,
+                    paymentReference: data.paymentReference,
+                } as EnhancedVisit;
+            }));
+            
+            setVisits(visitsData);
             setLoading(false);
         });
 
-        return () => unsubscribeBookings();
+        return () => {
+            unsubscribeBookings();
+            unsubscribeVisits();
+        };
     }, [currentUser]);
 
     const filteredBookings = (status: string) => {
         return bookings.filter(booking => booking.status === status);
+    };
+
+    const filteredVisits = (status: string) => {
+        return visits.filter(visit => visit.status === status);
     };
 
     if (loadingAuth) {
@@ -306,98 +370,167 @@ export default function MyBookingsPage() {
                                 </div>
                             </div>
 
-                            {/* Status Tabs */}
-                            <Tabs defaultValue="completed" className="mb-4 md:mb-6">
-                                <TabsList className="grid w-full grid-cols-3 gap-1 sm:gap-2 h-auto">
-                                    <TabsTrigger value="pending" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-1">
-                                        <Briefcase className="h-3 w-3 sm:h-4 sm:w-4" />
-                                        <span className="hidden sm:inline">Pending Booking</span>
-                                        <span className="sm:hidden">Pending</span>
-                                        <span className="text-xs">({filteredBookings('pending').length})</span>
-                                    </TabsTrigger>
-                                    <TabsTrigger value="cancelled" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-1">
-                                        <XCircle className="h-3 w-3 sm:h-4 sm:w-4" />
-                                        <span className="hidden sm:inline">Canceled Booking</span>
-                                        <span className="sm:hidden">Canceled</span>
-                                        <span className="text-xs">({filteredBookings('cancelled').length})</span>
-                                    </TabsTrigger>
-                                    <TabsTrigger value="completed" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-xs sm:text-sm py-2 sm:py-1">
-                                        <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4" />
-                                        <span className="hidden sm:inline">Completed Booking</span>
-                                        <span className="sm:hidden">Completed</span>
-                                        <span className="text-xs">({filteredBookings('confirmed').length})</span>
-                                    </TabsTrigger>
-                                </TabsList>
+                            {/* Visit Booking History Section */}
+                            <Card className="mb-6">
+                                <CardHeader>
+                                    <CardTitle className="text-xl font-headline">🚶‍♂️ Visit Booking History</CardTitle>
+                                    <CardDescription>Track all your hostel visit requests. These do not generate tenancy agreements.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Tabs defaultValue="pending" className="w-full">
+                                        <TabsList className="grid w-full grid-cols-4 gap-1">
+                                            <TabsTrigger value="pending" className="text-xs">
+                                                Pending ({filteredVisits('pending').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="accepted" className="text-xs">
+                                                Confirmed ({filteredVisits('accepted').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="completed" className="text-xs">
+                                                Completed ({filteredVisits('completed').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="cancelled" className="text-xs">
+                                                Cancelled ({filteredVisits('cancelled').length})
+                                            </TabsTrigger>
+                                        </TabsList>
+                                        <TabsContent value="pending" className="mt-4">
+                                            {loading ? (
+                                                <div className="flex justify-center py-8">
+                                                    <Loader2 className="h-8 w-8 animate-spin" />
+                                                </div>
+                                            ) : filteredVisits('pending').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredVisits('pending').map(visit => (
+                                                        <VisitCard key={visit.id} visit={visit} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No pending visits
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="accepted" className="mt-4">
+                                            {filteredVisits('accepted').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredVisits('accepted').map(visit => (
+                                                        <VisitCard key={visit.id} visit={visit} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No confirmed visits
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="completed" className="mt-4">
+                                            {filteredVisits('completed').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredVisits('completed').map(visit => (
+                                                        <VisitCard key={visit.id} visit={visit} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No completed visits
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="cancelled" className="mt-4">
+                                            {filteredVisits('cancelled').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredVisits('cancelled').map(visit => (
+                                                        <VisitCard key={visit.id} visit={visit} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No cancelled visits
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                    </Tabs>
+                                </CardContent>
+                            </Card>
 
-                                <TabsContent value="pending">
-                                    <div className="space-y-3 md:space-y-4">
-                                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 dark:text-white">Pending booking ({filteredBookings('pending').length})</h2>
-                                        {loading ? (
-                                            <div className="flex justify-center py-6 md:py-8">
-                                                <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
-                                            </div>
-                                        ) : filteredBookings('pending').length > 0 ? (
-                                            <div className="grid gap-3 md:gap-4">
-                                                {filteredBookings('pending').map(booking => (
-                                                    <BookingCard key={booking.id} booking={booking} />
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <Card>
-                                                <CardContent className="p-6 md:p-8 text-center text-gray-500 dark:text-gray-400">
-                                                    No pending bookings
-                                                </CardContent>
-                                            </Card>
-                                        )}
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="cancelled">
-                                    <div className="space-y-3 md:space-y-4">
-                                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 dark:text-white">Canceled booking ({filteredBookings('cancelled').length})</h2>
-                                        {loading ? (
-                                            <div className="flex justify-center py-6 md:py-8">
-                                                <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
-                                            </div>
-                                        ) : filteredBookings('cancelled').length > 0 ? (
-                                            <div className="grid gap-3 md:gap-4">
-                                                {filteredBookings('cancelled').map(booking => (
-                                                    <BookingCard key={booking.id} booking={booking} />
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <Card>
-                                                <CardContent className="p-6 md:p-8 text-center text-gray-500 dark:text-gray-400">
-                                                    No cancelled bookings
-                                                </CardContent>
-                                            </Card>
-                                        )}
-                                    </div>
-                                </TabsContent>
-
-                                <TabsContent value="completed">
-                                    <div className="space-y-3 md:space-y-4">
-                                        <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-900 dark:text-white">Confirmed booking ({filteredBookings('confirmed').length})</h2>
-                                        {loading ? (
-                                            <div className="flex justify-center py-6 md:py-8">
-                                                <Loader2 className="h-6 w-6 md:h-8 md:w-8 animate-spin text-muted-foreground" />
-                                            </div>
-                                        ) : filteredBookings('confirmed').length > 0 ? (
-                                            <div className="grid gap-3 md:gap-4">
-                                                {filteredBookings('confirmed').map(booking => (
-                                                    <BookingCard key={booking.id} booking={booking} />
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <Card>
-                                                <CardContent className="p-6 md:p-8 text-center text-gray-500 dark:text-gray-400">
-                                                    No confirmed bookings
-                                                </CardContent>
-                                            </Card>
-                                        )}
-                                    </div>
-                                </TabsContent>
-                            </Tabs>
+                            {/* Secured Hostels History Section */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-xl font-headline">🏠 Secured Hostels</CardTitle>
+                                    <CardDescription>Your paid bookings with official tenancy agreements and invoices.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Tabs defaultValue="confirmed" className="w-full">
+                                        <TabsList className="grid w-full grid-cols-3 gap-1">
+                                            <TabsTrigger value="pending" className="text-xs">
+                                                Pending ({filteredBookings('pending').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="confirmed" className="text-xs">
+                                                Secured ({filteredBookings('confirmed').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="cancelled" className="text-xs">
+                                                Cancelled ({filteredBookings('cancelled').length})
+                                            </TabsTrigger>
+                                        </TabsList>
+                                        <TabsContent value="pending" className="mt-4">
+                                            {loading ? (
+                                                <div className="flex justify-center py-8">
+                                                    <Loader2 className="h-8 w-8 animate-spin" />
+                                                </div>
+                                            ) : filteredBookings('pending').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredBookings('pending').map(booking => (
+                                                        <BookingCard key={booking.id} booking={booking} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No pending bookings
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="confirmed" className="mt-4">
+                                            {filteredBookings('confirmed').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredBookings('confirmed').map(booking => (
+                                                        <BookingCard key={booking.id} booking={booking} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No secured bookings
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="cancelled" className="mt-4">
+                                            {filteredBookings('cancelled').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredBookings('cancelled').map(booking => (
+                                                        <BookingCard key={booking.id} booking={booking} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No cancelled bookings
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                    </Tabs>
+                                </CardContent>
+                            </Card>
                         </div>
                     </main>
                 </SidebarInset>
@@ -406,7 +539,64 @@ export default function MyBookingsPage() {
     );
 }
 
-// Booking Card Component
+// Visit Card Component (for visit bookings - NO Agreement button)
+function VisitCard({ visit }: { visit: EnhancedVisit }) {
+    const router = useRouter();
+    const statusInfo = getVisitStatusInfo(visit.status);
+
+    return (
+        <Card className="bg-blue-50 border-blue-200 hover:bg-blue-100 transition-colors">
+            <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col gap-3 sm:gap-4">
+                    <div className="flex items-start space-x-2 sm:space-x-3">
+                        <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-1 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-sm sm:text-base md:text-lg text-gray-900 truncate">{visit.hostelName}</h3>
+                            <p className="text-xs sm:text-sm text-gray-600">Visit ID: {visit.id.slice(-4)}</p>
+                        </div>
+                        <Badge variant={statusInfo.variant} className="flex items-center gap-1 text-xs">
+                            {statusInfo.icon}
+                            <span className="hidden sm:inline">{statusInfo.text}</span>
+                            <span className="sm:hidden">{statusInfo.text.split(' ')[0]}</span>
+                        </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm">
+                        <div>
+                            <p className="text-gray-600 text-xs">Visit Date</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm">{visit.visitDate}</p>
+                        </div>
+                        <div>
+                            <p className="text-gray-600 text-xs">Visit Time</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm">{visit.visitTime}</p>
+                        </div>
+                        <div>
+                            <p className="text-gray-600 text-xs">Agent</p>
+                            <p className="font-medium text-gray-900 text-xs sm:text-sm truncate">{visit.agentName || 'Not Assigned'}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Button 
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-xs sm:text-sm border-blue-300 text-blue-700 hover:bg-blue-200"
+                            onClick={() => router.push(`/invoice/${visit.id}`)}
+                        >
+                            <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                            Invoice
+                        </Button>
+                        <div className="text-xs text-gray-500 italic px-2 py-1 flex items-center">
+                            * No tenancy agreement for visits
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+// Booking Card Component (for secured hostels - WITH Agreement button)
 function BookingCard({ booking }: { booking: EnhancedBooking }) {
     const router = useRouter();
     const statusInfo = getStatusInfo(booking.status);
@@ -471,11 +661,26 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
 function getStatusInfo(status: string) {
     switch (status) {
         case 'confirmed':
-            return { variant: 'default' as const, icon: <CheckCircle className="h-3 w-3" />, text: 'Booking Confirmed' };
+            return { variant: 'default' as const, icon: <CheckCircle className="h-3 w-3" />, text: 'Secured' };
         case 'pending':
-            return { variant: 'outline' as const, icon: <Clock className="h-3 w-3" />, text: 'Pending' };
+            return { variant: 'outline' as const, icon: <Clock className="h-3 w-3" />, text: 'Pending Payment' };
         case 'cancelled':
             return { variant: 'destructive' as const, icon: <XCircle className="h-3 w-3" />, text: 'Cancelled' };
+        default:
+            return { variant: 'outline' as const, icon: <Clock className="h-3 w-3" />, text: 'Unknown' };
+    }
+}
+
+function getVisitStatusInfo(status: string) {
+    switch (status) {
+        case 'accepted':
+            return { variant: 'default' as const, icon: <CheckCircle className="h-3 w-3" />, text: 'Confirmed Visit' };
+        case 'completed':
+            return { variant: 'default' as const, icon: <CheckCircle className="h-3 w-3" />, text: 'Completed Visit' };
+        case 'pending':
+            return { variant: 'outline' as const, icon: <Clock className="h-3 w-3" />, text: 'Pending Visit' };
+        case 'cancelled':
+            return { variant: 'destructive' as const, icon: <XCircle className="h-3 w-3" />, text: 'Cancelled Visit' };
         default:
             return { variant: 'outline' as const, icon: <Clock className="h-3 w-3" />, text: 'Unknown' };
     }
