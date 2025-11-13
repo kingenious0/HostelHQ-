@@ -1,19 +1,18 @@
 // src/app/agreement/[bookingId]/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Download, Printer, Calendar } from 'lucide-react';
+import { Loader2, Download, Calendar, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { Hostel, RoomType } from '@/lib/data';
-import { fillTenancyAgreementPDF, downloadPDF } from '@/lib/pdf-filler';
+import { Hostel } from '@/lib/data';
 import { BackButton } from '@/components/ui/back-button';
 
 type Booking = {
@@ -50,9 +49,9 @@ export default function AgreementPage() {
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [manager, setManager] = useState<Manager | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isDownloading, setIsDownloading] = useState(false);
     const [downloadCompleted, setDownloadCompleted] = useState(false);
-    const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+    const staticAgreementPath = encodeURI('/Professional_Hostel_Tenancy_Agreement_static new.pdf');
 
     useEffect(() => {
         if (!bookingId) {
@@ -109,46 +108,21 @@ export default function AgreementPage() {
         fetchData();
     }, [bookingId, router, toast]);
 
-    // Generate and load the filled PDF when data is ready
-    useEffect(() => {
-        if (!booking || !hostel || !manager) return;
-
-        const generatePDF = async () => {
-            try {
-                const pdfBytes = await fillTenancyAgreementPDF(booking, hostel, manager);
-                const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
-                const url = URL.createObjectURL(blob);
-                setPdfUrl(url);
-            } catch (error) {
-                console.error('Error generating PDF:', error);
-                toast({ 
-                    title: "PDF Generation Failed", 
-                    description: "Could not load the agreement PDF. Please try again.", 
-                    variant: "destructive" 
-                });
-            }
-        };
-
-        generatePDF();
-
-        // Cleanup URL on unmount
-        return () => {
-            if (pdfUrl) {
-                URL.revokeObjectURL(pdfUrl);
-            }
-        };
-    }, [booking, hostel, manager, toast]);
-
     const handleDownload = async () => {
         if (!booking || !hostel || !manager) return;
         
-        setIsDownloading(true);
         toast({ title: "Generating PDF..."});
 
         try {
-            const pdfBytes = await fillTenancyAgreementPDF(booking, hostel, manager);
             const filename = `tenancy-agreement-${hostel.name.replace(/\s/g, '-')}-${booking.id.slice(-4)}.pdf`;
-            downloadPDF(pdfBytes, filename);
+            const link = document.createElement('a');
+            link.href = staticAgreementPath;
+            link.download = filename;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
             
             toast({ title: "Download started", description: "Your PDF is being downloaded."});
             setDownloadCompleted(true);
@@ -161,8 +135,6 @@ export default function AgreementPage() {
                 variant: "destructive"
             });
             setDownloadCompleted(false);
-        } finally {
-            setIsDownloading(false);
         }
     };
 
@@ -205,29 +177,34 @@ export default function AgreementPage() {
                                 </div>
                                 <div className="flex gap-2">
                                     <BackButton fallbackHref="/my-bookings" />
-                                    <Button onClick={handleDownload} disabled={isDownloading}>
-                                        {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4"/>}
+                                    <Button onClick={handleDownload}>
+                                        <Download className="mr-2 h-4 w-4"/>
                                         Download PDF
                                     </Button>
                                 </div>
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
-                                {pdfUrl ? (
-                                    <iframe
-                                        src={pdfUrl}
-                                        className="w-full h-[800px] border-0"
-                                        title="Tenancy Agreement"
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center h-[800px]">
-                                        <div className="flex flex-col items-center gap-4">
-                                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                            <p className="text-muted-foreground">Loading agreement PDF...</p>
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="flex flex-col items-center justify-center gap-6 rounded-lg border border-dashed border-muted-foreground/40 bg-muted/30 py-20 px-6 text-center">
+                                <FileText className="h-20 w-20 text-primary" />
+                                <div className="space-y-2">
+                                    <h2 className="text-xl font-semibold">Professional Hostel Tenancy Agreement</h2>
+                                    <p className="text-muted-foreground max-w-md mx-auto">
+                                        Your tenancy agreement is ready. Download the PDF, fill it out manually, sign, and submit it to the hostel management.
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <Button asChild variant="secondary">
+                                        <a href={staticAgreementPath} target="_blank" rel="noopener">
+                                            <FileText className="mr-2 h-4 w-4" />
+                                            Open in new tab
+                                        </a>
+                                    </Button>
+                                    <Button onClick={handleDownload}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download PDF
+                                    </Button>
+                                </div>
                             </div>
                         </CardContent>
                          <CardFooter className="flex flex-col gap-4">
