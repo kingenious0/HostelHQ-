@@ -296,37 +296,55 @@ export default function SignupPage() {
             description: 'I manage hostel properties and oversee operations',
             color: 'text-purple-600',
         },
-                    <CardHeader>
-                        <CardTitle className="text-2xl font-headline text-slate-50">Create an Account</CardTitle>
-                        <CardDescription className="text-slate-100/80">
-                            {step === 1 && 'Choose your account type to get started'}
-                            {step === 2 && 'Enter your account information'}
-                            {step === 3 && selectedRole === 'agent' && 'Verify your phone number'}
-                            {step === 3 && selectedRole === 'hostel_manager' && 'Terms and Agreement'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Step 1: Role Selection */}
-                        {step === 1 && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {roleCards.map((card) => (
-                                    <button
-                                        key={card.role}
-                                        onClick={() => handleRoleSelect(card.role)}
-                                        className={cn(
-                                            "p-6 border-2 rounded-lg text-left transition-all hover:shadow-md",
-                                            selectedRole === card.role
-                                                ? "border-primary bg-primary/10"
-                                                : "border-border hover:border-primary/50"
-                                        )}
-                                    >
-                                        <div className={cn("mb-4", card.color)}>{card.icon}</div>
-                                        <h3 className="font-semibold text-lg mb-2">{card.title}</h3>
-                                        <p className="text-sm text-slate-100/80">{card.description}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+    ];
+
+    return (
+        <div className="flex flex-col min-h-screen">
+            <Header />
+            <main className="relative flex-1 bg-slate-900">
+                <div className="absolute inset-0">
+                    <Image
+                        src="https://images.pexels.com/photos/3755761/pexels-photo-3755761.jpeg?auto=compress&cs=tinysrgb&w=2000"
+                        alt="Students walking through a campus hostel corridor"
+                        fill
+                        priority
+                        className="object-cover brightness-[0.55]"
+                    />
+                </div>
+
+                <div className="relative flex h-full items-center justify-center py-10 px-4">
+                    <Card className="w-full max-w-3xl border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+                        <CardHeader>
+                            <CardTitle className="text-2xl font-headline text-slate-50">Create an Account</CardTitle>
+                            <CardDescription className="text-slate-100/80">
+                                {step === 1 && 'Choose your account type to get started'}
+                                {step === 2 && 'Enter your account information'}
+                                {step === 3 && selectedRole === 'agent' && 'Verify your phone number'}
+                                {step === 3 && selectedRole === 'hostel_manager' && 'Terms and Agreement'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Step 1: Role Selection */}
+                            {step === 1 && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {roleCards.map((card) => (
+                                        <button
+                                            key={card.role}
+                                            onClick={() => handleRoleSelect(card.role)}
+                                            className={cn(
+                                                "p-6 border-2 rounded-lg text-left transition-all hover:shadow-md",
+                                                selectedRole === card.role
+                                                    ? "border-primary bg-primary/10"
+                                                    : "border-border hover:border-primary/50"
+                                            )}
+                                        >
+                                            <div className={cn("mb-4", card.color)}>{card.icon}</div>
+                                            <h3 className="font-semibold text-lg mb-2">{card.title}</h3>
+                                            <p className="text-sm text-slate-100/80">{card.description}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
                         {/* Step 2: Basic Info Form */}
                         {step === 2 && (
@@ -541,4 +559,5 @@ export default function SignupPage() {
             </div>
         </main>
     </div>
-);
+    );
+}
