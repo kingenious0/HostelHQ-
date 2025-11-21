@@ -225,9 +225,17 @@ export default function MyRoommatesPage() {
                                 <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
                             </div>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 md:h-8 md:w-8 p-0">
-                                <Edit className="h-3 w-3 md:h-4 md:w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 md:h-8 md:w-8 p-0"
+                                    onClick={() => router.push('/profile')}
+                                >
+                                    <Edit className="h-3 w-3 md:h-4 md:w-4" />
+                                </Button>
+                                <SidebarTrigger className="h-8 w-8" />
+                            </div>
                         </div>
                     </SidebarHeader>
                     <SidebarSeparator />
@@ -304,7 +312,6 @@ export default function MyRoommatesPage() {
                             </SidebarGroupContent>
                         </SidebarGroup>
                     </SidebarContent>
-                    <SidebarFooter />
                     <SidebarRail />
                 </Sidebar>
 
@@ -314,13 +321,6 @@ export default function MyRoommatesPage() {
                         <div className="max-w-4xl mx-auto">
                             <div className="flex items-center justify-between mb-4 md:mb-6">
                                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">My Roommates</h1>
-                                <div className="flex items-center gap-2">
-                                    <SidebarTrigger className="md:hidden" />
-                                    <Button variant="outline" size="sm" className="hidden md:flex">
-                                        <Menu className="h-4 w-4 mr-2" />
-                                        Toggle Sidebar
-                                    </Button>
-                                </div>
                             </div>
 
                             {loading ? (

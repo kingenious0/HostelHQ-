@@ -1,6 +1,7 @@
 import type {Metadata, Viewport} from 'next';
-import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { RootLayoutShell } from "@/components/root-layout-shell";
 
 export const metadata: Metadata = {
   title: 'HostelHQ',
@@ -28,8 +29,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="font-body antialiased min-h-full flex flex-col" suppressHydrationWarning>
-        {children}
+      <body className="font-body antialiased min-h-full bg-background" suppressHydrationWarning>
+        <RootLayoutShell>
+          {children}
+        </RootLayoutShell>
         <Toaster />
       </body>
     </html>

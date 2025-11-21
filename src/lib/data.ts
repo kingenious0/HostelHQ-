@@ -11,6 +11,11 @@ export type RoomType = {
   availability: 'Available' | 'Limited' | 'Full';
   beds?: string;
   bathrooms?: string;
+  // Room-level amenities (e.g. AC, Private Washroom, Balcony, etc.)
+  roomAmenities?: string[];
+  occupancy?: number; // current number of occupants
+  capacity?: number; // total occupants allowed per room
+  numberOfRooms?: number; // number of rooms of this type (optional)
 };
 
 export type Review = {
@@ -26,6 +31,8 @@ export type Hostel = {
   id: string;
   name: string;
   location: string;
+  institution?: string;
+  gender?: string;
   rating: number;
   numberOfReviews: number;
   amenities: string[];
@@ -36,6 +43,7 @@ export type Hostel = {
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
   roomTypes: RoomType[];
+  roomTypeTags?: string[];
   priceRange: {
     min: number;
     max: number;
@@ -75,11 +83,22 @@ export type Visit = {
     status: 'pending' | 'accepted' | 'declined' | 'completed';
 }
 
+export type GetHostelsOptions = {
+  featured?: boolean;
+  institution?: string;
+  roomType?: string;
+  gender?: string;
+  search?: string;
+  location?: string;
+};
+
 export const staticHostels: Hostel[] = [
   {
     id: '1',
     name: 'Doku Hostel',
     location: 'AAMUSTED, Kumasi (~5 min walk)',
+    institution: 'A A M U S T E D',
+    gender: 'Male',
     rating: 4.5,
     numberOfReviews: 0,
     amenities: ['Balconies', 'TV Room', 'Comfortable'],
@@ -92,12 +111,46 @@ export const staticHostels: Hostel[] = [
     lng: -1.66,
     availability: 'Available',
     roomTypes: [
-        { id: 'rt1', name: '4 in a room', price: 3700, availability: 'Available' },
-        { id: 'rt2', name: '2 in a room', price: 4500, availability: 'Limited' },
+        { id: 'rt1', name: 'Four In A Room', price: 3700, availability: 'Available', capacity: 4, occupancy: 1 },
+        { id: 'rt2', name: 'Two In A Room', price: 4500, availability: 'Limited', capacity: 2, occupancy: 1 },
     ],
+    roomTypeTags: ['Four In A Room', 'Two In A Room'],
     priceRange: { min: 3700, max: 4500 },
+    reviews: [],
   },
 ];
+
+
+const normalizeText = (value?: string) => (value ?? '').toString().trim().toLowerCase();
+const normalizeRoomTypeTag = (value?: string) => normalizeText(value).replace(/\s+/g, ' ');
+
+const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
+  const normalizedInstitution = normalizeText(options.institution);
+  const normalizedGender = normalizeText(options.gender);
+  const normalizedRoomType = normalizeRoomTypeTag(options.roomType);
+  const normalizedSearch = normalizeText(options.search);
+  const normalizedLocation = normalizeText(options.location);
+
+  const hostelInstitution = normalizeText(hostel.institution);
+  const hostelGender = normalizeText(hostel.gender);
+  const hostelRoomTypeTags =
+    (hostel.roomTypeTags ?? []).map((tag) => normalizeRoomTypeTag(tag)).filter(Boolean);
+  const derivedRoomTypeTags =
+    (hostel.roomTypes ?? []).map((rt) => normalizeRoomTypeTag(rt.name)).filter(Boolean);
+  const allRoomTypeTags = hostelRoomTypeTags.length ? hostelRoomTypeTags : derivedRoomTypeTags;
+
+  const matchesInstitution = !options.institution || hostelInstitution === normalizedInstitution;
+  const matchesGender = !options.gender || hostelGender === normalizedGender;
+  const matchesRoomType =
+    !options.roomType ||
+    allRoomTypeTags.includes(normalizedRoomType);
+  const matchesSearch =
+    !options.search || normalizeText(hostel.name).includes(normalizedSearch);
+  const matchesLocation =
+    !options.location || normalizeText(hostel.location).includes(normalizedLocation);
+
+  return matchesInstitution && matchesGender && matchesRoomType && matchesSearch && matchesLocation;
+};
 
 
 let simulationInterval: NodeJS.Timeout | null = null;
@@ -240,7 +293,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 }
 
 
-export async function getHostels(options: { featured?: boolean, search?: string, location?: string } = {}): Promise<Hostel[]> {
+export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
      try {
         let hostelsQuery = query(collection(db, 'hostels'));
 
@@ -248,20 +301,14 @@ export async function getHostels(options: { featured?: boolean, search?: string,
         if (options.featured) {
             conditions.push(where("isFeatured", "==", true));
         }
-
-        // Firestore does not support case-insensitive search natively.
-        // A common workaround is to store a lowercased version of the fields you want to search.
-        // For simplicity here, we will perform an exact match on the name, which means search is case-sensitive.
-        // A more robust solution would involve a third-party search service like Algolia or Typesense.
-        if (options.search) {
-             // This performs a "starts-with" search, which is better than nothing.
-            conditions.push(where("name", ">=", options.search));
-            conditions.push(where("name", "<=", options.search + '\uf8ff'));
+        if (options.institution) {
+            conditions.push(where("institution", "==", options.institution));
         }
-        
-        if (options.location) {
-             conditions.push(where("location", ">=", options.location));
-             conditions.push(where("location", "<=", options.location + '\uf8ff'));
+        if (options.gender) {
+            conditions.push(where("gender", "==", options.gender));
+        }
+        if (options.roomType) {
+            conditions.push(where("roomTypeTags", "array-contains", options.roomType));
         }
 
         if (conditions.length > 0) {
@@ -290,20 +337,24 @@ export async function getHostels(options: { featured?: boolean, search?: string,
             const totalRating = reviewsSnapshot.docs.reduce((acc, doc) => acc + doc.data().rating, 0);
             const averageRating = reviewsCount > 0 ? totalRating / reviewsCount : 0;
 
+            const roomTypeTags = data.roomTypeTags ?? roomTypes.map(rt => rt.name);
 
             return convertTimestamps({ 
                 id: doc.id, 
                 ...data, 
                 roomTypes, 
+                roomTypeTags,
                 availability, 
                 priceRange,
                 reviews: reviewsCount,
                 rating: averageRating,
             }) as Hostel;
         }));
-        
-        if (firestoreHostels.length > 0 || options.search || options.location) {
-            return firestoreHostels;
+
+        const filteredHostels = firestoreHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+
+        if (filteredHostels.length > 0 || Object.values(options).some(Boolean)) {
+            return filteredHostels;
         }
     } catch (e: any) {
         console.error("\n--- FIRESTORE FETCH FAILED (DEV) ---");
@@ -313,11 +364,6 @@ export async function getHostels(options: { featured?: boolean, search?: string,
         console.error("--------------------------------------\n");
     }
     
-    // Only fall back to static data if no search is active
-    if (!options.search && !options.location) {
-        console.log("Falling back to static hostel data.");
-        return staticHostels;
-    }
-    
-    return [];
+    const fallbackHostels = staticHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+    return fallbackHostels;
 }

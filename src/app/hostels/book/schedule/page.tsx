@@ -26,6 +26,7 @@ type Agent = {
     fullName: string;
     email: string;
     status: 'Online' | 'Offline';
+    offlineSmsOptIn?: boolean;
 };
 
 type OnlineAgentData = {
@@ -45,7 +46,7 @@ function useAgentPresence(): { agents: Agent[], loading: boolean } {
 
         const updatePresence = async () => {
             const allAgentsSnapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'agent')));
-            const allAgents = allAgentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as {id: string, fullName: string, email: string}));
+            const allAgents = allAgentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as {id: string, fullName: string, email: string, offlineSmsOptIn?: boolean}));
             
             const presentMembers = await presenceChannel.presence.get();
             const presentAgentIds = new Set(presentMembers.map(m => (m.data as OnlineAgentData).id));
@@ -53,9 +54,9 @@ function useAgentPresence(): { agents: Agent[], loading: boolean } {
             const agentsWithStatus = allAgents
                 .filter(agent => agent.email !== 'admin@hostelhq.com') // Exclude admin
                 .map(agent => ({
-                ...agent,
-                status: presentAgentIds.has(agent.id) ? 'Online' : 'Offline'
-            } as Agent));
+                    ...agent,
+                    status: presentAgentIds.has(agent.id) ? 'Online' : 'Offline',
+                } as Agent));
             
             setAgents(agentsWithStatus.sort((a, b) => (a.status === 'Online' ? -1 : 1)));
             setLoading(false);
@@ -95,8 +96,6 @@ function SchedulingContent() {
     const { agents, loading } = useAgentPresence();
 
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-    const [visitDate, setVisitDate] = useState<Date>();
-    const [visitTime, setVisitTime] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     useEffect(() => {
@@ -108,8 +107,8 @@ function SchedulingContent() {
 
 
     const handleScheduleSubmit = async () => {
-        if (!selectedAgent || !visitDate || !visitTime || !visitId) {
-            toast({ title: "Missing Information", description: "Please select an agent, date, and time.", variant: "destructive" });
+        if (!selectedAgent || !visitId) {
+            toast({ title: "Missing Information", description: "Please select an available agent.", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
@@ -122,11 +121,9 @@ function SchedulingContent() {
             const hostelId = visitData?.hostelId;
             const studentId = visitData?.studentId;
 
-            // Update visit with agent assignment
+            // Update visit with agent assignment only; keep original date/time
             await updateDoc(visitRef, {
                 agentId: selectedAgent.id,
-                visitDate: visitDate.toISOString(),
-                visitTime: visitTime,
                 status: 'pending' // Move to pending for agent to accept
             });
 
@@ -160,18 +157,23 @@ function SchedulingContent() {
                     const agentPhone = agentData.phoneNumber;
 
                     if (agentPhone) {
-                        const visitDateFormatted = new Date(visitDate).toLocaleDateString('en-US', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                        });
+                        let visitDateFormatted = 'a scheduled date';
+                        const visitDateIso = visitData?.visitDate as string | undefined;
+                        const existingVisitTime = (visitData?.visitTime as string | undefined) || '';
+                        if (visitDateIso) {
+                            visitDateFormatted = new Date(visitDateIso).toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                            });
+                        }
 
                         // Get base URL - use current origin since this is client-side code
                         const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
                         const dashboardUrl = `${baseUrl}/agent/dashboard`;
 
-                        const message = `🔔 NEW VISIT REQUEST!\n\n${studentName} wants to visit ${hostelName} on ${visitDateFormatted} at ${visitTime}.\n\n👉 Open your dashboard: ${dashboardUrl}\n\nLog in to accept or decline this request.`;
+                        const message = `🔔 NEW VISIT REQUEST!\n\n${studentName} wants to visit ${hostelName} on ${visitDateFormatted}${existingVisitTime ? ` at ${existingVisitTime}` : ''}.\n\n👉 Open your dashboard: ${dashboardUrl}\n\nLog in to accept or decline this request.`;
 
                         const smsResponse = await fetch('/api/sms/send-notification', {
                             method: 'POST',
@@ -221,7 +223,7 @@ function SchedulingContent() {
                              {agents.map(agent => (
                                 <button key={agent.id}
                                     onClick={() => setSelectedAgent(agent)}
-                                    disabled={agent.status === 'Offline'}
+                                    disabled={agent.status === 'Offline' && !agent.offlineSmsOptIn}
                                     className={cn(
                                         "p-4 border rounded-lg flex items-center gap-4 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed",
                                         selectedAgent?.id === agent.id ? "ring-2 ring-primary bg-primary/5" : "hover:bg-accent/50"
@@ -234,6 +236,7 @@ function SchedulingContent() {
                                         <p className="font-medium">{agent.fullName}</p>
                                         <p className={`text-sm font-semibold ${agent.status === 'Online' ? 'text-green-600' : 'text-red-500'}`}>
                                             {agent.status}
+                                            {agent.status === 'Offline' && agent.offlineSmsOptIn && ' ||    This agent accepts offline requests.'}
                                         </p>
                                     </div>
                                 </button>
@@ -243,45 +246,20 @@ function SchedulingContent() {
                 </div>
 
                 {selectedAgent && (
-                     <div>
-                        <h3 className="font-semibold mb-4">2. Pick a date and time</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
-                            <div className="space-y-2">
-                                <Label htmlFor="visit-date">Visit Date</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-full justify-start text-left font-normal bg-background",
-                                        !visitDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {visitDate ? format(visitDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0">
-                                        <Calendar
-                                            mode="single"
-                                            selected={visitDate}
-                                            onSelect={setVisitDate}
-                                            initialFocus
-                                            disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() - 1))}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="visit-time">Proposed Time</Label>
-                                <Input id="visit-time" type="time" value={visitTime} onChange={e => setVisitTime(e.target.value)} className="bg-background"/>
-                            </div>
-                        </div>
+                    <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                        <h2 className="font-semibold mb-1 align-center">Please Note</h2>
+                        {selectedAgent.status === 'Online' ? (
+                            <p>Your selected agent is currently online and will receive this request immediately.</p>
+                        ) : selectedAgent.offlineSmsOptIn ? (
+                            <p>Your selected agent is currently offline but allows offline requests. An SMS will be sent so they can log in and accept or decline your visit.</p>
+                        ) : (
+                            <p>This agent is currently unavailable.</p>
+                        )}
                     </div>
                 )}
             </CardContent>
             <CardFooter>
-                 <Button className="w-full" onClick={handleScheduleSubmit} disabled={!selectedAgent || !visitDate || !visitTime || isSubmitting}>
+                 <Button className="w-full" onClick={handleScheduleSubmit} disabled={!selectedAgent || isSubmitting}>
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                     Send Visit Request
                  </Button>

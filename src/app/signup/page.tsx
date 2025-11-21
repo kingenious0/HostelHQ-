@@ -104,13 +104,7 @@ export default function SignupPage() {
             return;
         }
 
-        // Manager needs terms agreement
-        if (selectedRole === 'hostel_manager') {
-            setStep(3);
-            return;
-        }
-
-        // Student can proceed directly to signup
+        // Students and managers can proceed directly to signup
         handleSignup();
     };
 
@@ -210,11 +204,6 @@ export default function SignupPage() {
             return;
         }
 
-        if (selectedRole === 'hostel_manager' && !termsAccepted) {
-            toast({ title: "Agreement Required", description: "You must accept the terms and conditions.", variant: "destructive" });
-            return;
-        }
-
         if (selectedRole === 'agent' && !otpVerified) {
             toast({ title: "OTP Required", description: "Please verify your phone number first.", variant: "destructive" });
             return;
@@ -246,10 +235,7 @@ export default function SignupPage() {
                 userData.phoneNumber = countryCodeDigits + cleanedNumber;
             }
 
-            // Add terms acceptance for managers
-            if (selectedRole === 'hostel_manager') {
-                userData.termsAcceptedAt = new Date().toISOString();
-            }
+            // (Optional) additional metadata for managers could be added here later
 
             // Create user document (no more pendingUsers for agents)
             await setDoc(doc(db, "users", user.uid), userData);
@@ -502,33 +488,7 @@ export default function SignupPage() {
                             </div>
                         )}
 
-                        {/* Step 3: Terms Agreement (Manager) */}
-                        {step === 3 && selectedRole === 'hostel_manager' && (
-                            <div className="space-y-4">
-                                <p className="text-sm text-muted-foreground">Please read and agree to the standard Tenancy Agreement and Rent Control regulations before proceeding.</p>
-                                <Card>
-                                    <CardContent className="p-0">
-                                        <ScrollArea className="h-64 w-full p-4 border rounded-md">
-                                            <h4 className="font-bold mb-4">Master Tenancy Agreement Template</h4>
-                                            <p className="text-xs whitespace-pre-wrap">{tenancyAgreementText}</p>
-                                        </ScrollArea>
-                                    </CardContent>
-                                </Card>
-                                <div className="flex items-center space-x-2">
-                                    <Checkbox 
-                                        id="terms" 
-                                        checked={termsAccepted} 
-                                        onCheckedChange={(checked) => setTermsAccepted(!!checked)} 
-                                    />
-                                    <label
-                                        htmlFor="terms"
-                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                    >
-                                        I have read and accept the regulations and agreement template.
-                                    </label>
-                                </div>
-                            </div>
-                        )}
+                        {/* Step 3: Terms Agreement (Manager) removed - managers now sign up without viewing the tenancy template here */}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
                         {step === 1 && (
@@ -575,32 +535,7 @@ export default function SignupPage() {
                                 )}
                             </Button>
                         )}
-                        {step === 3 && selectedRole === 'hostel_manager' && (
-                            <div className="flex gap-2 w-full">
-                                <Button 
-                                    variant="outline" 
-                                    onClick={() => setStep(2)} 
-                                    className="flex-1"
-                                >
-                                    <ArrowLeft className="mr-2 h-4 w-4" />
-                                    Back
-                                </Button>
-                                <Button 
-                                    onClick={handleSignup} 
-                                    className="flex-1" 
-                                    disabled={isSubmitting || !termsAccepted}
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Creating Account...
-                                        </>
-                                    ) : (
-                                        'Create Manager Account'
-                                    )}
-                                </Button>
-                            </div>
-                        )}
+                        {/* Managers no longer have a separate Step 3; they complete signup directly after basic info. */}
                         <p className="text-sm text-muted-foreground text-center">
                             Already have an account?{' '}
                             <Link href="/login" className="text-primary hover:underline">

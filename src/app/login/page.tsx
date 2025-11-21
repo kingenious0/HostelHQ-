@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,16 @@ export default function LoginPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const redirectParam = searchParams.get('redirect');
+    const safeRedirect = redirectParam && redirectParam.startsWith('/') ? redirectParam : null;
+
+    const getRouteForRole = (role?: string) => {
+        if (role === 'agent') return '/agent/dashboard';
+        if (role === 'hostel_manager') return '/manager/dashboard';
+        if (role === 'admin') return '/admin/dashboard';
+        return '/';
+    };
 
     const handleLogin = async () => {
         setIsSubmitting(true);
@@ -39,19 +49,15 @@ export default function LoginPage() {
                 toast({ title: 'Login Successful!' });
 
                 // Redirect based on role
-                if (role === 'agent') {
-                    router.push('/agent/dashboard');
-                } else if (role === 'hostel_manager') {
-                    router.push('/manager/dashboard');
-                } else if (role === 'admin') {
-                    router.push('/admin/dashboard');
-                } else {
-                    router.push('/');
-                }
+                const destination =
+                    safeRedirect && (!role || role === 'student')
+                        ? safeRedirect
+                        : getRouteForRole(role);
+                router.push(destination);
             } else {
                 // User document doesn't exist, redirect to home
                 toast({ title: 'Login Successful!' });
-                router.push('/');
+                router.push(safeRedirect ?? '/');
             }
 
         } catch (error: any) {

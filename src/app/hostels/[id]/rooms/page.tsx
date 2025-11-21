@@ -1,0 +1,506 @@
+"use client";
+
+import { useState, useEffect, useMemo } from 'react';
+import { Header } from '@/components/header';
+import { getHostel, Hostel, RoomType } from '@/lib/data';
+import { notFound, useRouter, useParams } from 'next/navigation';
+import Image from 'next/image';
+import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import Link from 'next/link';
+
+interface AppUser {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: 'student' | 'agent' | 'admin';
+  profileImage?: string;
+}
+
+type RoomInventoryItem = {
+  id: string;
+  label: string;
+  type: string;
+  price: number;
+  occupancy: number;
+  capacity: number | null;
+  gender: string;
+  image: string;
+  roomNumber?: string;
+  totalRooms?: number | null;
+  amenities?: string[];
+};
+
+export default function RoomsPage() {
+  const [hostel, setHostel] = useState<Hostel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [hasCompletedVisit, setHasCompletedVisit] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'oldest'>('price-low');
+  const [roomTypeFilter, setRoomTypeFilter] = useState<string>('');
+  const [genderFilter, setGenderFilter] = useState<string>('');
+  const [rentDuration, setRentDuration] = useState<string>('year');
+  const routeParams = useParams();
+  const router = useRouter();
+  const { toast } = useToast();
+  const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
+
+  useEffect(() => {
+    const fetchHostelData = async () => {
+      if (id) {
+        const hostelData = await getHostel(id);
+        if (hostelData) {
+          setHostel(hostelData);
+        } else {
+          notFound();
+        }
+      }
+      setLoading(false);
+    };
+    fetchHostelData();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          setAppUser({
+            uid: user.uid,
+            email: user.email!,
+            fullName: userData.fullName,
+            role: userData.role,
+            profileImage: userData.profileImage,
+          });
+        } else {
+          const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
+          const pendingUserDocSnap = await getDoc(pendingUserDocRef);
+          if (pendingUserDocSnap.exists()) {
+            const userData = pendingUserDocSnap.data();
+            setAppUser({
+              uid: user.uid,
+              email: user.email!,
+              fullName: userData.fullName,
+              role: userData.role,
+              profileImage: userData.profileImage,
+            });
+          } else {
+            setAppUser(null);
+          }
+        }
+
+        // Check if this student has a completed visit for this hostel
+        if (id) {
+          try {
+            const visitsQuery = query(
+              collection(db, 'visits'),
+              where('studentId', '==', user.uid),
+              where('hostelId', '==', id)
+            );
+            const visitsSnapshot = await getDocs(visitsQuery);
+            if (!visitsSnapshot.empty) {
+              const hasCompleted = visitsSnapshot.docs.some((docSnap) => {
+                const data = docSnap.data() as any;
+                return data.status === 'completed' && data.studentCompleted === true;
+              });
+              setHasCompletedVisit(hasCompleted);
+            } else {
+              setHasCompletedVisit(false);
+            }
+          } catch (error) {
+            console.error('Error checking completed visit for rooms page:', error);
+            setHasCompletedVisit(false);
+          }
+        }
+      } else {
+        setAppUser(null);
+        setHasCompletedVisit(false);
+      }
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, [id]);
+
+  const parseCapacityFromName = (value?: string | null): number | null => {
+    if (!value) return null;
+    const match = value.match(/\d+/);
+    if (!match) return null;
+    const parsed = parseInt(match[0], 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const primaryImages = hostel?.images?.length ? hostel.images : ['/placeholder.jpg'];
+
+  const roomInventory = useMemo<RoomInventoryItem[]>(() => {
+    if (!hostel) return [];
+
+    const rooms = (hostel as any)?.rooms;
+    if (Array.isArray(rooms) && rooms.length > 0) {
+      return rooms.map((room: any, index: number) => {
+        const capacity = room.capacity ?? parseCapacityFromName(room.roomType ?? room.type);
+        return {
+          id: room.id ?? `room-${index}`,
+          label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
+          type: room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room',
+          price: room.price ?? hostel.priceRange?.min ?? 0,
+          occupancy: room.occupancy ?? room.occupants ?? 0,
+          capacity: capacity ?? null,
+          gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
+          image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
+          roomNumber: room.roomNumber ?? room.number,
+        };
+      });
+    }
+
+    const types = hostel.roomTypes ?? [];
+    if (types.length === 0) {
+      return [];
+    }
+
+    return types.map((roomType, typeIndex) => {
+      const capacity = roomType.capacity ?? parseCapacityFromName(roomType.name);
+      return {
+        id: roomType.id ?? `roomType-${typeIndex}`,
+        label: roomType.name,
+        type: roomType.name,
+        price: roomType.price,
+        occupancy: roomType.occupancy ?? 0,
+        capacity: capacity ?? null,
+        gender: hostel.gender || 'Mixed',
+        image: primaryImages[typeIndex % primaryImages.length],
+        roomNumber: undefined,
+        totalRooms: (roomType as any).numberOfRooms ?? null,
+        amenities: roomType.roomAmenities ?? [],
+      };
+    });
+  }, [hostel, primaryImages]);
+
+  const filteredAndSortedRooms = useMemo(() => {
+    let filtered = [...roomInventory];
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(room =>
+        room.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        room.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Filter by room type
+    if (roomTypeFilter) {
+      filtered = filtered.filter(room =>
+        room.type.toLowerCase().includes(roomTypeFilter.toLowerCase())
+      );
+    }
+
+    // Filter by gender
+    if (genderFilter) {
+      filtered = filtered.filter(room =>
+        room.gender.toLowerCase() === genderFilter.toLowerCase()
+      );
+    }
+
+    // Sort
+    switch (sortBy) {
+      case 'price-low':
+        filtered.sort((a, b) => a.price - b.price);
+        break;
+      case 'price-high':
+        filtered.sort((a, b) => b.price - a.price);
+        break;
+      case 'newest':
+        filtered.sort((a, b) => (b.roomNumber || '').localeCompare(a.roomNumber || ''));
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => (a.roomNumber || '').localeCompare(b.roomNumber || ''));
+        break;
+    }
+
+    return filtered;
+  }, [roomInventory, searchQuery, roomTypeFilter, genderFilter, sortBy]);
+
+  // Ensure we don't create <SelectItem> options with empty values
+  const uniqueRoomTypes = useMemo(
+    () => Array.from(new Set(roomInventory.map((r) => r.type).filter((t) => t && t.trim().length > 0))),
+    [roomInventory]
+  );
+
+  if (loading || !authChecked) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        </main>
+      </div>
+    );
+  }
+
+  if (!hostel) {
+    notFound();
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      <main className="flex-1 bg-slate-50">
+        {/* Hero Section */}
+        <section className="relative h-[300px] sm:h-[400px] w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/10">
+          <div className="absolute inset-0">
+            {hostel.images?.[0] && (
+              <Image
+                src={hostel.images[0]}
+                alt={hostel.name}
+                fill
+                className="object-cover opacity-80"
+                priority
+              />
+            )}
+          </div>
+          <div className="relative container mx-auto px-4 sm:px-6 h-full flex flex-col justify-center items-center text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.back()}
+              className="absolute top-4 left-4 sm:left-6 text-white hover:bg-white/20"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mt-8">
+              {roomInventory.length} Rooms in {hostel.name.toUpperCase()}
+            </h1>
+            <div className="flex items-center justify-center text-white/90 mt-3">
+              <MapPin className="h-5 w-5 mr-2" />
+              <span className="text-lg sm:text-xl font-medium">{hostel.location}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Filters Section */}
+        <section className="container mx-auto px-4 sm:px-6 -mt-2">
+          <Card className="shadow-lg border-2 align-center">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex justify-center gap-4 mb-4">
+                
+                <Select
+                  value={roomTypeFilter || '__all__'}
+                  onValueChange={(value) => setRoomTypeFilter(value === '__all__' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Room Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Room Types</SelectItem>
+                    {uniqueRoomTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={genderFilter || '__all__'}
+                  onValueChange={(value) => setGenderFilter(value === '__all__' ? '' : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Genders</SelectItem>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Rooms Section */}
+        <section className="container mx-auto px-4 sm:px-6 py-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <h2 className="text-2xl font-bold font-headline">Select Rooms</h2>
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search Room Number"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select Sort" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="price-low">PRICE: LOW TO HIGH</SelectItem>
+                  <SelectItem value="price-high">PRICE: HIGH TO LOW</SelectItem>
+                  <SelectItem value="newest">NEWEST</SelectItem>
+                  <SelectItem value="oldest">OLDEST</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2 border rounded-lg p-1">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                  className="h-9"
+                >
+                  <Grid3x3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className="h-9"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {filteredAndSortedRooms.length > 0 ? (
+            <div
+              className={cn(
+                "gap-6",
+                viewMode === 'grid'
+                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                  : "flex flex-col"
+              )}
+            >
+              {filteredAndSortedRooms.map((room) => (
+                <Card
+                  key={room.id}
+                  className={cn(
+                    "overflow-hidden transition-all hover:shadow-xl group",
+                    viewMode === 'list' && "flex flex-row"
+                  )}
+                >
+                  <div className={cn(
+                    "relative bg-slate-100 overflow-hidden",
+                    viewMode === 'grid' ? "h-48" : "h-32 w-32 flex-shrink-0"
+                  )}>
+                    <Image
+                      src={room.image}
+                      alt={room.label}
+                      fill
+                      className="object-cover transition-transform duration-300 group-hover:scale-110"
+                    />
+                    <Badge
+                      variant="secondary"
+                      className="absolute left-3 top-3 bg-slate-900/70 text-white border-0"
+                    >
+                      {room.occupancy} {room.occupancy === 1 ? 'Occupant' : 'Occupants'}
+                    </Badge>
+                    <div className="absolute right-3 top-3 flex gap-1">
+                      <Badge variant="outline" className="bg-white/90 text-xs">
+                        {room.gender === 'Male' ? '♂' : room.gender === 'Female' ? '♀' : 'Mixed'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <CardContent className={cn(
+                    "p-4 flex flex-col",
+                    viewMode === 'list' && "flex-1"
+                  )}>
+                    <div className="flex-1 space-y-2">
+                      <h3 className="font-bold text-lg text-slate-900">
+                        {room.label}
+                      </h3>
+                      <p className="text-sm text-slate-600">{room.type}</p>
+
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xl font-bold text-primary">
+                          GH₵{room.price.toLocaleString()}
+                        </span>
+                        <span className="text-xs text-slate-500">per year</span>
+                      </div>
+
+                      {room.capacity && room.totalRooms && (
+                        <p className="text-xs text-slate-600">
+                          {(() => {
+                            const totalSlots = room.capacity! * room.totalRooms!;
+                            const used = Math.max(0, Math.min(totalSlots, room.occupancy));
+                            const remainingSlots = Math.max(0, totalSlots - used);
+                            const remainingRooms = Math.round(remainingSlots / room.capacity!);
+                            return `${remainingRooms} of ${room.totalRooms} rooms available`;
+                          })()}
+                        </p>
+                      )}
+
+                      {room.amenities && room.amenities.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {room.amenities.slice(0, 3).map((amenity) => (
+                            <Badge key={amenity} variant="outline" className="text-[10px] px-1.5 py-0.5">
+                              {amenity}
+                            </Badge>
+                          ))}
+                          {room.amenities.length > 3 && (
+                            <span className="text-[10px] text-slate-500">+{room.amenities.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full mt-4"
+                      onClick={() => {
+                        const target = hasCompletedVisit
+                          ? `/hostels/${id}/secure?roomTypeId=${room.id}`
+                          : `/hostels/${id}/book?roomTypeId=${room.id}`;
+
+                        if (appUser) {
+                          router.push(target);
+                        } else {
+                          router.push(`/login?redirect=${encodeURIComponent(target)}`);
+                          toast({
+                            title: 'Login Required',
+                            description: hasCompletedVisit
+                              ? 'Please log in to secure this room.'
+                              : 'Please log in to book a visit for this room.',
+                          });
+                        }
+                      }}
+                    >
+                      {hasCompletedVisit ? 'Secure Room' : 'Book Room'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-slate-600">No rooms found matching your filters.</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setSearchQuery('');
+                  setRoomTypeFilter('');
+                  setGenderFilter('');
+                }}
+              >
+                Clear Filters
+              </Button>
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+

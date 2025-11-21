@@ -98,6 +98,13 @@ export default function PaymentsPage() {
     }, []);
 
     useEffect(() => {
+        if (!loadingAuth && !currentUser) {
+            const redirectParam = encodeURIComponent('/payments');
+            router.replace(`/login?redirect=${redirectParam}`);
+        }
+    }, [loadingAuth, currentUser, router]);
+
+    useEffect(() => {
         if (!currentUser) return;
 
         const userDocRef = doc(db, "users", currentUser.uid);
@@ -238,12 +245,26 @@ export default function PaymentsPage() {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
-                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
+                <main className="flex flex-1 items-center justify-center bg-gray-50/50 px-4 py-12">
+                    <div className="flex flex-col items-center gap-4 text-center text-muted-foreground">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <p className="text-sm sm:text-base">Redirecting to login…</p>
+                    </div>
+                </main>
+            </div>
+        );
+    }
+
+    if (appUser && appUser.role !== 'student') {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex flex-1 items-center justify-center bg-gray-50/50 px-4 py-12">
                     <Alert variant="destructive" className="max-w-lg">
                         <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Access Denied</AlertTitle>
+                        <AlertTitle>Restricted Access</AlertTitle>
                         <AlertDescription>
-                            You must be logged in to view your payments.
+                            Payment records are only visible to student accounts. Please switch to a student profile to continue.
                         </AlertDescription>
                     </Alert>
                 </main>
@@ -270,9 +291,17 @@ export default function PaymentsPage() {
                                 <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
                             </div>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 md:h-8 md:w-8 p-0">
-                                <Edit className="h-3 w-3 md:h-4 md:w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 md:h-8 md:w-8 p-0"
+                                    onClick={() => router.push('/profile')}
+                                >
+                                    <Edit className="h-3 w-3 md:h-4 md:w-4" />
+                                </Button>
+                                <SidebarTrigger className="h-8 w-8" />
+                            </div>
                         </div>
                     </SidebarHeader>
                     <SidebarSeparator />
@@ -349,7 +378,6 @@ export default function PaymentsPage() {
                             </SidebarGroupContent>
                         </SidebarGroup>
                     </SidebarContent>
-                    <SidebarFooter />
                     <SidebarRail />
                 </Sidebar>
 
@@ -359,12 +387,21 @@ export default function PaymentsPage() {
                         <div className="max-w-4xl mx-auto">
                             <div className="flex items-center justify-between mb-4 md:mb-6">
                                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Payments</h1>
-                                <div className="flex items-center gap-2">
-                                    <SidebarTrigger className="md:hidden" />
-                                    <Button variant="outline" size="sm" className="hidden md:flex">
-                                        <Menu className="h-4 w-4 mr-2" />
-                                        Toggle Sidebar
-                                    </Button>
+                            </div>
+
+                            <div className="mb-6 rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
+                                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">
+                                    Trusted payment partners
+                                </p>
+                                <div className="mt-4 flex flex-wrap items-center gap-4 text-sm font-semibold text-slate-600">
+                                    {['FROG.WIGAL', 'AAMUSTED', 'PAYSTACK'].map((brand) => (
+                                        <span
+                                            key={brand}
+                                            className="inline-flex items-center rounded-full border border-purple-200 px-4 py-1 text-purple-700"
+                                        >
+                                            {brand}
+                                        </span>
+                                    ))}
                                 </div>
                             </div>
 

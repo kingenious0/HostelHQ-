@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2, PlusCircle, ShieldCheck, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, writeBatch, addDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc as deleteRoomDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
@@ -47,6 +47,10 @@ export default function EditListingPage() {
     const { id: hostelId } = params;
     const { toast } = useToast();
 
+    const isAdmin = userRole === 'admin';
+    const isAgent = userRole === 'agent';
+    const returnPath = isAdmin ? '/admin/listings' : '/agent/listings';
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
@@ -74,7 +78,7 @@ export default function EditListingPage() {
     }, []);
 
     useEffect(() => {
-        if (!hostelId || !currentUser) return;
+        if (!hostelId || !currentUser || (!isAdmin && !isAgent)) return;
 
         const fetchHostelData = async () => {
             setLoading(true);
@@ -94,9 +98,9 @@ export default function EditListingPage() {
 
             if (docSnap.exists()) {
                 const hostelData = docSnap.data() as HostelData;
-                if (hostelData.agentId !== currentUser.uid) {
+                if (!isAdmin && hostelData.agentId !== currentUser.uid) {
                     toast({ title: "Access Denied", description: "You can only edit your own listings.", variant: "destructive" });
-                    router.push('/agent/listings');
+                    router.push(returnPath);
                     return;
                 }
                 setFormData(hostelData);
@@ -109,13 +113,13 @@ export default function EditListingPage() {
 
             } else {
                 toast({ title: "Not Found", description: "This listing does not exist.", variant: "destructive" });
-                router.push('/agent/listings');
+                router.push(returnPath);
             }
             setLoading(false);
         };
 
         fetchHostelData();
-    }, [hostelId, currentUser, router, toast]);
+    }, [hostelId, currentUser, router, toast, isAdmin, isAgent, returnPath]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { id, value } = e.target;
@@ -130,7 +134,7 @@ export default function EditListingPage() {
 
     const addRoomType = () => {
         const newId = `new-${Date.now()}`;
-        setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available' }]);
+        setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0 }]);
     };
 
     const removeRoomType = (index: number) => {
@@ -177,14 +181,27 @@ export default function EditListingPage() {
     const handleSubmit = async () => {
         if (!currentUser || !hostelId) return;
 
+        // Validate capacity and occupancy
+        for (const rt of roomTypes) {
+            const capacity = rt.capacity ?? 0;
+            const occupancy = rt.occupancy ?? 0;
+            if (capacity > 0 && occupancy > capacity) {
+                toast({ title: 'Invalid Occupancy', description: `Room type "${rt.name}" has occupancy (${occupancy}) greater than capacity (${capacity}).`, variant: 'destructive' });
+                return;
+            }
+            if (rt.numberOfRooms !== undefined && rt.numberOfRooms <= 0) {
+                toast({ title: 'Invalid Number of Rooms', description: `Room type "${rt.name}" must have at least 1 room if specified.`, variant: 'destructive' });
+                return;
+            }
+        }
+
         setIsSubmitting(true);
         toast({ title: 'Updating listing...' });
 
         try {
             const collectionName = isApprovedListing ? 'hostels' : 'pendingHostels';
             const hostelRef = doc(db, collectionName, hostelId as string);
-            
-            const batch = writeBatch(db);
+            const roomTypesCollection = collection(hostelRef, 'roomTypes');
 
             let updatedImageUrls = formData.images || [];
 
@@ -194,40 +211,43 @@ export default function EditListingPage() {
             }
 
             const { id, roomTypes: rt, priceRange, ...updateData } = formData;
-            
-            batch.update(hostelRef, {
+
+            await updateDoc(hostelRef, {
                 ...updateData,
                 images: updatedImageUrls,
                 updatedAt: serverTimestamp()
             });
 
-            const existingRoomTypeIds = (await getDocs(collection(hostelRef, 'roomTypes'))).docs.map(d => d.id);
-            const currentRoomTypeIds = roomTypes.map(rt => rt.id).filter(id => id && !id.startsWith('new-'));
+            const existingRoomTypeDocs = await getDocs(roomTypesCollection);
+            const existingRoomTypeIds = existingRoomTypeDocs.docs.map(d => d.id);
+            const desiredRoomTypeIds = new Set(
+                roomTypes
+                    .map((rt) => rt.id)
+                    .filter((roomId): roomId is string => Boolean(roomId) && !roomId.startsWith('new-'))
+            );
 
-            for (const id of existingRoomTypeIds) {
-                if (!currentRoomTypeIds.includes(id)) {
-                    batch.delete(doc(hostelRef, 'roomTypes', id));
-                }
+            const deletions = existingRoomTypeIds
+                .filter((id) => !desiredRoomTypeIds.has(id))
+                .map((id) => deleteRoomDoc(doc(roomTypesCollection, id)));
+            if (deletions.length) {
+                await Promise.all(deletions);
             }
-            
+
             for (const room of roomTypes) {
                 const { id: roomId, ...roomData } = room;
                 if (roomId && !roomId.startsWith('new-')) {
-                    batch.update(doc(hostelRef, 'roomTypes', roomId), roomData);
+                    await updateDoc(doc(roomTypesCollection, roomId), roomData);
                 } else {
-                    const newRoomRef = doc(collection(hostelRef, 'roomTypes'));
-                    batch.set(newRoomRef, roomData);
+                    await addDoc(roomTypesCollection, roomData);
                 }
             }
-
-            await batch.commit();
 
             const successMessage = isApprovedListing 
                 ? 'Your live listing has been updated.'
                 : 'Your changes have been submitted for review.';
 
             toast({ title: 'Listing Updated!', description: successMessage });
-            router.push('/agent/listings');
+            router.push(returnPath);
 
         } catch (error) {
             console.error("Update error: ", error);
@@ -248,7 +268,7 @@ export default function EditListingPage() {
         );
     }
     
-    if (!currentUser || userRole !== 'agent') {
+    if (!currentUser || (!isAgent && !isAdmin)) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
@@ -257,7 +277,7 @@ export default function EditListingPage() {
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
-                            You must be logged in as an Agent to edit a listing.
+                            You must be logged in as an Agent or Admin to edit a listing.
                         </AlertDescription>
                     </Alert>
                 </main>
@@ -272,7 +292,7 @@ export default function EditListingPage() {
                 <Card className="w-full max-w-3xl shadow-lg">
                     <CardHeader>
                         <div className="flex items-center justify-between">
-                            <BackButton fallbackHref="/agent/listings" />
+                            <BackButton fallbackHref={returnPath} />
                             <CardTitle className="text-2xl font-headline">Edit Hostel Listing</CardTitle>
                             <div className="w-10">{/* Placeholder to balance the layout */}</div>
                         </div>
@@ -298,47 +318,103 @@ export default function EditListingPage() {
                                 <Label htmlFor="distanceToUniversity">Distance to AAMUSTED University</Label>
                                 <Input id="distanceToUniversity" placeholder="e.g., 10mins" value={formData.distanceToUniversity || ''} onChange={handleInputChange} />
                             </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="gender">Gender</Label>
+                                <Select value={formData.gender || 'Mixed'} onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select gender" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Male">Male</SelectItem>
+                                        <SelectItem value="Female">Female</SelectItem>
+                                        <SelectItem value="Mixed">Mixed</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                         {/* Room Types */}
                         <div className="space-y-4">
                             <h3 className="font-semibold text-lg border-b pb-2">Room Types & Pricing</h3>
-                            {roomTypes.map((room, index) => (
-                                <div key={room.id} className="flex flex-col md:flex-row gap-3 p-4 border rounded-lg relative">
-                                    <div className="flex-1 space-y-2">
-                                        <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
-                                        <Input 
-                                            id={`room-name-${index}`} 
-                                            placeholder="e.g., 4 in a room, Annex"
-                                            value={room.name}
-                                            onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
-                                        />
-                                    </div>
-                                     <div className="w-full md:w-40 space-y-2">
-                                        <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
-                                        <Input
-                                            id={`room-price-${index}`}
-                                            type="number"
-                                            placeholder="3500"
-                                            value={room.price}
-                                            onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
-                                        />
-                                    </div>
-                                     <div className="w-full md:w-48 space-y-2">
-                                        <Label htmlFor={`room-availability-${index}`}>Availability</Label>
-                                         <Select 
-                                            value={room.availability} 
-                                            onValueChange={(value) => handleRoomTypeChange(index, 'availability', value)}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select status" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Available">Available</SelectItem>
-                                                <SelectItem value="Limited">Limited</SelectItem>
-                                                <SelectItem value="Full">Full</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                            {roomTypes.map((room, index) => {
+                                const capacity = room.capacity ?? 0;
+                                const occupancy = room.occupancy ?? 0;
+                                const hasError = capacity > 0 && occupancy > capacity;
+                                return (
+                                <div key={room.id} className="flex flex-col gap-3 p-4 border rounded-lg relative">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
+                                            <Input 
+                                                id={`room-name-${index}`} 
+                                                placeholder="e.g., 4 in a room, Annex"
+                                                value={room.name}
+                                                onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
+                                            <Input
+                                                id={`room-price-${index}`}
+                                                type="number"
+                                                placeholder="3500"
+                                                value={room.price}
+                                                onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-availability-${index}`}>Availability</Label>
+                                            <Select 
+                                                value={room.availability} 
+                                                onValueChange={(value) => handleRoomTypeChange(index, 'availability', value)}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Available">Available</SelectItem>
+                                                    <SelectItem value="Limited">Limited</SelectItem>
+                                                    <SelectItem value="Full">Full</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-capacity-${index}`}>Capacity (per room)</Label>
+                                            <Input
+                                                id={`room-capacity-${index}`}
+                                                type="number"
+                                                min="1"
+                                                placeholder="e.g., 4"
+                                                value={room.capacity || ''}
+                                                onChange={(e) => handleRoomTypeChange(index, 'capacity', Number(e.target.value) || 0)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-occupancy-${index}`}>Current Occupancy</Label>
+                                            <Input
+                                                id={`room-occupancy-${index}`}
+                                                type="number"
+                                                min="0"
+                                                placeholder="e.g., 2"
+                                                value={room.occupancy || ''}
+                                                onChange={(e) => handleRoomTypeChange(index, 'occupancy', Number(e.target.value) || 0)}
+                                                className={hasError ? 'border-red-500' : ''}
+                                            />
+                                            {hasError && (
+                                                <p className="text-xs text-red-500">Occupancy cannot exceed capacity</p>
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`room-number-${index}`}>Number of Rooms (optional)</Label>
+                                            <Input
+                                                id={`room-number-${index}`}
+                                                type="number"
+                                                min="1"
+                                                placeholder="e.g., 10"
+                                                value={room.numberOfRooms || ''}
+                                                onChange={(e) => handleRoomTypeChange(index, 'numberOfRooms', Number(e.target.value) || undefined)}
+                                            />
+                                        </div>
                                     </div>
                                     <Button 
                                         variant="ghost" 
@@ -349,7 +425,7 @@ export default function EditListingPage() {
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
-                            ))}
+                            )})}
                             <Button variant="outline" onClick={addRoomType} className="w-full">
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Add Another Room Type
@@ -411,7 +487,14 @@ export default function EditListingPage() {
                             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-4">
                                 {photoPreviews.map((preview, i) => (
                                     <div key={i} className="relative aspect-square">
-                                        <Image src={preview} alt={`Preview ${i+1}`} fill style={{objectFit: 'cover'}} className="rounded-md"/>
+                                        <Image
+                                            src={preview}
+                                            alt={`Preview ${i+1}`}
+                                            fill
+                                            sizes="(max-width: 640px) 100vw, 200px"
+                                            style={{objectFit: 'cover'}}
+                                            className="rounded-md"
+                                        />
                                         <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removePhoto(i, true)}>
                                             <Trash2 className="h-4 w-4"/>
                                         </Button>

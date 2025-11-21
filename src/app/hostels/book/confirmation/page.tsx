@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -89,6 +89,19 @@ function ConfirmationContent() {
                         status: 'confirmed',
                         invoiceGenerated: false,
                     });
+
+                    // Increment occupancy for the secured room type so availability can be derived later
+                    if (bookingData.roomTypeId) {
+                        try {
+                            const roomTypeRef = doc(db, 'hostels', hostelId, 'roomTypes', bookingData.roomTypeId);
+                            await updateDoc(roomTypeRef, {
+                                occupancy: increment(1),
+                            });
+                        } catch (e) {
+                            console.error('Failed to update room type occupancy:', e);
+                            // We deliberately do not block the booking flow if this fails
+                        }
+                    }
 
                     toast({
                         title: "Room Secured!",

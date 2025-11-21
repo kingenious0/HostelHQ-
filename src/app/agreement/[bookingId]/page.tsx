@@ -192,7 +192,7 @@ export default function AgreementPage() {
                                     <p className="text-muted-foreground max-w-md mx-auto">
                                         Your tenancy agreement is ready. Download the PDF, fill it out manually, sign, and submit it to the hostel management.
                                     </p>
-                                </div>
+                                        </div>
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <Button asChild variant="secondary">
                                         <a href={staticAgreementPath} target="_blank" rel="noopener">
@@ -204,7 +204,7 @@ export default function AgreementPage() {
                                         <Download className="mr-2 h-4 w-4" />
                                         Download PDF
                                     </Button>
-                                </div>
+                                    </div>
                             </div>
                         </CardContent>
                          <CardFooter className="flex flex-col gap-4">

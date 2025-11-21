@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
@@ -26,6 +26,8 @@ type Visit = {
     status: 'pending' | 'accepted' | 'completed' | 'cancelled';
     visitDate: string;
     visitTime: string;
+    studentCompleted?: boolean;
+    agentCompleted?: boolean;
 };
 
 type EnrichedVisit = Visit & {
@@ -44,6 +46,8 @@ export default function AgentDashboard() {
     const [selectedVisit, setSelectedVisit] = useState<EnrichedVisit | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const { toast } = useToast();
+    const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+    const previousCompletionRef = useRef<Record<string, { studentCompleted?: boolean; agentCompleted?: boolean }>>({});
     const router = useRouter();
 
     useEffect(() => {
@@ -111,7 +115,6 @@ export default function AgentDashboard() {
                 return { ...visit, hostelName, studentName, studentPhone };
             }));
             
-            // Sort by pending first, then by date
             const sortedVisits = enrichedVisits.sort((a,b) => {
                 if (a.status === 'pending' && b.status !== 'pending') return -1;
                 if (a.status !== 'pending' && b.status === 'pending') return 1;
@@ -119,6 +122,46 @@ export default function AgentDashboard() {
                 if (a.status !== 'accepted' && b.status === 'accepted') return 1;
                 return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime();
             });
+
+            const previousState = previousCompletionRef.current || {};
+            const newState: Record<string, { studentCompleted?: boolean; agentCompleted?: boolean }> = { ...previousState };
+
+            sortedVisits.forEach(v => {
+                const currentStudentCompleted = (v as any).studentCompleted;
+                const currentAgentCompleted = (v as any).agentCompleted;
+
+                const prev = previousState[v.id];
+                const prevStudentCompleted = prev?.studentCompleted ?? false;
+
+                const storageKey = `visit_studentCompleted_notified_${v.id}`;
+                const alreadyNotified = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === '1';
+
+                const justCompletedByStudent = !alreadyNotified && !prevStudentCompleted && !!currentStudentCompleted && !currentAgentCompleted;
+
+                if (justCompletedByStudent) {
+                    if (notificationAudioRef.current) {
+                        console.log('Playing visit notification sound (agent dashboard)');
+                        notificationAudioRef.current.play().catch((err) => {
+                            console.error('Audio play failed:', err);
+                        });
+                    }
+                    toast({
+                        title: 'Student confirmed visit completion',
+                        description: 'Please review and confirm if this visit is truly completed.',
+                    });
+
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.setItem(storageKey, '1');
+                    }
+                }
+
+                newState[v.id] = {
+                    studentCompleted: !!currentStudentCompleted,
+                    agentCompleted: !!currentAgentCompleted,
+                };
+            });
+
+            previousCompletionRef.current = newState;
 
             setMyVisits(sortedVisits);
             setLoading(false);
@@ -131,28 +174,35 @@ export default function AgentDashboard() {
         setProcessingId(visitId);
         try {
             const visitRef = doc(db, 'visits', visitId);
-            await updateDoc(visitRef, { status: newStatus });
-            
-            let title = '';
-            if (newStatus === 'accepted') title = 'Request Accepted';
-            else if (newStatus === 'cancelled') title = 'Request Declined';
-            else if (newStatus === 'completed') title = 'Visit Marked as Complete';
-            
-            toast({
-                title: title,
-                description: "The student has been notified."
-            });
 
-            // Close dialog only if rejecting or completing a visit
-            if(newStatus === 'cancelled' || newStatus === 'completed'){
-                setIsDetailsOpen(false);
-                setSelectedVisit(null);
+            if (newStatus === 'completed') {
+                const visitSnap = await getDoc(visitRef);
+                const data = visitSnap.data() as any | undefined;
+                const studentCompleted = data?.studentCompleted;
+                const updatePayload: Record<string, any> = { agentCompleted: true };
+                if (studentCompleted) {
+                    updatePayload.status = 'completed';
+                }
+                await updateDoc(visitRef, updatePayload);
+
+                toast({
+                    title: studentCompleted ? 'Visit Marked as Complete' : 'Awaiting student confirmation',
+                    description: studentCompleted
+                        ? 'Both you and the student have confirmed this visit.'
+                        : 'The student has been asked to confirm if this visit was truly completed.',
+                });
             } else {
-                // If accepting, just update the state locally to reflect the change
-                setSelectedVisit(prev => prev ? {...prev, status: 'accepted'} : null);
-                setMyVisits(prev => prev.map(v => v.id === visitId ? {...v, status: 'accepted'} : v));
-            }
+                await updateDoc(visitRef, { status: newStatus });
 
+                let title = '';
+                if (newStatus === 'accepted') title = 'Request Accepted';
+                else if (newStatus === 'cancelled') title = 'Request Declined';
+
+                toast({
+                    title: title,
+                    description: 'The student has been notified.',
+                });
+            }
         } catch (error) {
             toast({ title: "Update Failed", description: "Could not update the request.", variant: "destructive" });
             console.error("Error updating visit status:", error);
@@ -209,24 +259,32 @@ export default function AgentDashboard() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
+            <audio ref={notificationAudioRef} src="/sounds/visit-notification.mp3" preload="auto" />
             <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
                 <div className="container mx-auto">
                     <Card>
                         <CardHeader>
-                            <div className="flex items-start justify-between">
+                            <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
                                     <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
                                 </div>
-                                {pendingVisitsCount > 0 && (
-                                    <Alert className="border-blue-500 bg-blue-50">
-                                        <AlertTriangle className="h-4 w-4 text-blue-600" />
-                                        <AlertTitle className="text-blue-800">{pendingVisitsCount} New Request{pendingVisitsCount > 1 ? 's' : ''}</AlertTitle>
-                                        <AlertDescription className="text-blue-700">
-                                            You have {pendingVisitsCount} pending visit request{pendingVisitsCount > 1 ? 's' : ''} requiring your attention.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
+                                <div className="flex flex-col items-end gap-2">
+                                    <Link href="/settings">
+                                        <Button variant="outline" size="sm">
+                                            Settings
+                                        </Button>
+                                    </Link>
+                                    {pendingVisitsCount > 0 && (
+                                        <Alert className="border-blue-500 bg-blue-50">
+                                            <AlertTriangle className="h-4 w-4 text-blue-600" />
+                                            <AlertTitle className="text-blue-800">{pendingVisitsCount} New Request{pendingVisitsCount > 1 ? 's' : ''}</AlertTitle>
+                                            <AlertDescription className="text-blue-700">
+                                                You have {pendingVisitsCount} pending visit request{pendingVisitsCount > 1 ? 's' : ''} requiring your attention.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>

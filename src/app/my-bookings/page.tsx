@@ -273,9 +273,17 @@ export default function MyBookingsPage() {
                                 <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
                             </div>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 md:h-8 md:w-8 p-0">
-                                <Edit className="h-3 w-3 md:h-4 md:w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 md:h-8 md:w-8 p-0"
+                                    onClick={() => router.push('/profile')}
+                                >
+                                    <Edit className="h-3 w-3 md:h-4 md:w-4" />
+                                </Button>
+                                <SidebarTrigger className="h-8 w-8" />
+                            </div>
                         </div>
                     </SidebarHeader>
                     <SidebarSeparator />
@@ -352,7 +360,6 @@ export default function MyBookingsPage() {
                             </SidebarGroupContent>
                         </SidebarGroup>
                     </SidebarContent>
-                    <SidebarFooter />
                     <SidebarRail />
                 </Sidebar>
 
@@ -362,13 +369,6 @@ export default function MyBookingsPage() {
                         <div className="max-w-4xl mx-auto">
                             <div className="flex items-center justify-between mb-4 md:mb-6">
                                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">My Bookings</h1>
-                                <div className="flex items-center gap-2">
-                                    <SidebarTrigger className="md:hidden" />
-                                    <Button variant="outline" size="sm" className="hidden md:flex">
-                                        <Menu className="h-4 w-4 mr-2" />
-                                        Toggle Sidebar
-                                    </Button>
-                                </div>
                             </div>
 
                             {/* Visit Booking History Section */}
@@ -576,6 +576,9 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
         }
     };
 
+    const isCompleted = visit.status === 'completed';
+    const isPending = visit.status === 'pending';
+
     return (
         <Card className="bg-blue-50 border-blue-200 hover:bg-blue-100 transition-colors">
             <CardContent className="p-4 md:p-6">
@@ -613,10 +616,25 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                             size="sm"
                             variant="outline"
                             className="flex-1 text-xs sm:text-sm border-blue-300 text-blue-700 hover:bg-blue-200"
-                            onClick={() => router.push(`/invoice/${visit.id}`)}
+                            onClick={() => {
+                                if (isCompleted) {
+                                    router.push(`/invoice/${visit.id}`);
+                                } else {
+                                    router.push(`/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`);
+                                }
+                            }}
                         >
-                            <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
-                            Invoice
+                            {isCompleted ? (
+                                <>
+                                    <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                                    Invoice
+                                </>
+                            ) : (
+                                <>
+                                    <FileText className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                                    Track Visit Status
+                                </>
+                            )}
                         </Button>
                         <Button 
                             size="sm"
@@ -633,7 +651,9 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                             Delete
                         </Button>
                         <div className="text-xs text-gray-500 italic px-2 py-1 flex items-center">
-                            * No tenancy agreement for visits
+                            {isPending
+                                ? '* Invoice will be available after your visit is completed'
+                                : '* No tenancy agreement for visits'}
                         </div>
                     </div>
                 </div>

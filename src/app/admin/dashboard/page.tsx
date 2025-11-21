@@ -751,10 +751,16 @@ export default function AdminDashboard() {
                   <h3 className="font-semibold text-lg">Images</h3>
                   <Carousel className="w-full">
                     <CarouselContent>
-                      {selectedHostel.images.map((img, index) => (
-                        <CarouselItem key={index}>
+                          {selectedHostel.images.map((img, index) => (
+                            <CarouselItem key={index}>
                           <div className="relative h-64 w-full rounded-md overflow-hidden">
-                            <Image src={img} alt={`Hostel image ${index + 1}`} fill style={{ objectFit: 'cover' }} />
+                            <Image
+                              src={img}
+                              alt={`Hostel image ${index + 1}`}
+                              fill
+                              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 50vw"
+                              style={{ objectFit: 'cover' }}
+                            />
                           </div>
                         </CarouselItem>
                       ))}
@@ -771,8 +777,7 @@ export default function AdminDashboard() {
                             <TableRow>
                                 <TableHead>Room Name</TableHead>
                                 <TableHead>Price/Year</TableHead>
-                                <TableHead>Beds</TableHead>
-                                <TableHead>Bathroom</TableHead>
+                                
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -780,8 +785,7 @@ export default function AdminDashboard() {
                                 <TableRow key={room.id}>
                                     <TableCell className="font-medium">{room.name}</TableCell>
                                     <TableCell>GH₵{room.price.toLocaleString()}</TableCell>
-                                    <TableCell>{room.beds || 'N/A'}</TableCell>
-                                    <TableCell>{room.bathrooms || 'N/A'}</TableCell>
+                                    
                                 </TableRow>
                             ))}
                         </TableBody>

@@ -2,10 +2,35 @@
 "use client";
 
 import Link from 'next/link';
-import { Hotel, User, LogOut, Loader2, LayoutDashboard, ListPlus, UserPlus, Briefcase, Building, Camera, Save, X, Phone, MapPin, Mail, UserCheck } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Hotel,
+  User,
+  LogOut,
+  Loader2,
+  LayoutDashboard,
+  ListPlus,
+  UserPlus,
+  Briefcase,
+  Building,
+  Save,
+  X,
+  Phone,
+  MapPin,
+  Mail,
+  UserCheck,
+  Menu,
+  HelpCircle,
+  Check,
+  Sun,
+  Moon,
+  MonitorCog,
+  FileText,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,17 +41,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { auth, db } from '@/lib/firebase';
-import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { useState, useEffect, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
-import { ably } from '@/lib/ably';
-import { Types } from 'ably';
+} from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 import { uploadImage } from '@/lib/cloudinary';
+import { auth, db } from '@/lib/firebase';
+import { ably } from '@/lib/ably';
+import { cn } from '@/lib/utils';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 type AppUser = {
   uid: string;
@@ -39,12 +63,16 @@ type AppUser = {
   bio?: string;
 }
 
+type ThemeMode = 'light' | 'dark' | 'system';
+type FontScale = 'normal' | 'large' | 'xlarge';
+
 export function Header() {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [authAction, setAuthAction] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const [profileData, setProfileData] = useState<Partial<AppUser>>({
     fullName: '',
     email: '',
@@ -54,21 +82,79 @@ export function Header() {
     profileImage: ''
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [fontScale, setFontScale] = useState<FontScale>('normal');
   const { toast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
   const locationWatcherId = useRef<number | null>(null);
-  const agentPresenceChannel = useRef<Types.RealtimeChannelPromise | null>(null);
+  const agentPresenceChannel = useRef<any>(null);
+  const applyTheme = useCallback((value: ThemeMode) => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldUseDark = value === 'dark' || (value === 'system' && prefersDark);
+    document.documentElement.classList.remove('light', 'dark');
+    if (shouldUseDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.add('light');
+    }
+  }, []);
+
+  const applyFontScale = useCallback((value: FontScale) => {
+    if (typeof document === 'undefined') return;
+    const scale = value === 'large' ? 1.1 : value === 'xlarge' ? 1.25 : 1;
+    document.documentElement.style.setProperty('--font-scale', String(scale));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
+    const initial = stored ?? 'light';
+    setThemeMode(initial);
+    applyTheme(initial);
+  }, [applyTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('hostelhq-font-scale') as FontScale | null;
+    const initial = stored ?? 'normal';
+    setFontScale(initial);
+    applyFontScale(initial);
+  }, [applyFontScale]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('hostelhq-theme', themeMode);
+    applyTheme(themeMode);
+  }, [themeMode, applyTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('hostelhq-font-scale', fontScale);
+    applyFontScale(fontScale);
+  }, [fontScale, applyFontScale]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (themeMode !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const listener = () => applyTheme('system');
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, [themeMode, applyTheme]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        if (!ably.auth.options) {
-          (ably.auth.options as any) = {};
+        const ablyClient = ably;
+        if (ablyClient?.auth) {
+          const authOptions = ((ablyClient.auth as any).options ??= {});
+          authOptions.clientId = user.uid;
         }
-        ably.auth.options.clientId = user.uid;
 
         const userDocRef = doc(db, "users", user.uid);
-        const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+        const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap: any) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as AppUser;
             const currentUser: AppUser = {
@@ -90,14 +176,15 @@ export function Header() {
             setProfileData({});
           }
           setLoading(false);
-        }, (error) => {
+        }, (error: any) => {
           console.error("Error listening to user document:", error);
           setLoading(false);
         });
         return () => unsubscribeFirestore(); // Unsubscribe from Firestore listener
       } else {
-        if (ably.auth && ably.auth.options) {
-          ably.auth.options.clientId = undefined;
+        const ablyClient = ably;
+        if (ablyClient?.auth && (ablyClient.auth as any).options) {
+          (ablyClient.auth as any).options.clientId = undefined;
         }
         setAppUser(null);
         setProfileData({});
@@ -184,9 +271,10 @@ export function Header() {
 
   useEffect(() => {
     // This effect handles Ably presence and location tracking for agents.
-    if (appUser?.role === 'agent') {
+    const ablyClient = ably;
+    if (appUser?.role === 'agent' && ablyClient) {
       // --- Enter Presence ---
-      agentPresenceChannel.current = ably.channels.get('agents:live');
+      agentPresenceChannel.current = ablyClient.channels.get('agents:live');
       const enterPresence = async () => {
         try {
           await agentPresenceChannel.current?.presence.enter({ 
@@ -205,7 +293,7 @@ export function Header() {
         locationWatcherId.current = navigator.geolocation.watchPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
-            const agentGpsChannel = ably.channels.get(`agent:${appUser.uid}:gps`);
+            const agentGpsChannel = ablyClient.channels.get(`agent:${appUser.uid}:gps`);
             
             // Publish to Ably for real-time map updates
             agentGpsChannel.publish('location', { lat: latitude, lng: longitude });
@@ -242,7 +330,6 @@ export function Header() {
     };
   }, [appUser, toast]);
 
-
   const handleLogout = async () => {
     setAuthAction(true);
     try {
@@ -264,122 +351,331 @@ export function Header() {
   const isPending = appUser?.role === 'pending_agent';
   const isManager = appUser?.role === 'hostel_manager';
 
+  const baseNavLinks = [
+    { label: 'Home', href: '/' },
+    { label: 'About', href: '/about' },
+    { label: 'Contact', href: '/contact' },
+    { label: 'All Hostels', href: '/#all-hostels' },
+  ];
+
+  const fontSizeOptions: { value: FontScale; label: string }[] = [
+    { value: 'normal', label: 'Normal' },
+    { value: 'large', label: 'Large' },
+    { value: 'xlarge', label: 'Extra large' },
+  ];
+
+  const roleNavLinks: { label: string; href: string }[] = [];
+
+  if (isStudent) {
+    roleNavLinks.push(
+      { label: 'My Bookings', href: '/my-bookings' },
+      { label: 'Payments', href: '/payments' },
+    );
+  }
+  if (isAgent) {
+    roleNavLinks.push(
+      { label: 'Agent Dashboard', href: '/agent/dashboard' },
+      { label: 'My Listings', href: '/agent/listings' }
+    );
+  }
+  if (isAdmin) {
+    roleNavLinks.push(
+      { label: 'Admin Console', href: '/admin/dashboard' },
+      { label: 'Admin Listings', href: '/admin/listings' },
+    );
+  }
+  if (isManager) {
+    roleNavLinks.push({ label: 'Manager Console', href: '/manager/dashboard' });
+  }
+
+  const navLinks = [...baseNavLinks, ...roleNavLinks];
+
+  const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
+    { value: 'system', label: 'System', icon: <MonitorCog className="h-4 w-4" /> },
+    { value: 'light', label: 'Light', icon: <Sun className="h-4 w-4" /> },
+    { value: 'dark', label: 'Dark', icon: <Moon className="h-4 w-4" /> },
+  ];
+
+  const navLinkClasses = (href: string) =>
+    cn(
+      'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+      pathname === href
+        ? 'bg-primary/10 text-primary'
+        : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
+    );
+
   return (
-    <header className="bg-background/80 backdrop-blur-sm border-b sticky top-0 z-40">
-      <div className="container mx-auto flex h-16 sm:h-20 items-center justify-between px-3 sm:px-4 md:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <Hotel className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-          <span className="text-xl sm:text-2xl font-bold text-foreground font-headline">HostelHQ</span>
-        </Link>
-        <div className="flex items-center gap-4">
-           <nav className="hidden items-center gap-6 md:flex">
-            <Link href="/" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-              Hostels
+    <header className="sticky top-0 z-50">
+      <div className="border-b border-border/60 bg-background/80 backdrop-blur">
+        <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:h-20 sm:px-6">
+          <div className="flex flex-1 items-center gap-3">
+            <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] sm:w-[320px]">
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2 text-lg">
+                    <Hotel className="h-5 w-5 text-primary" />
+                    HostelHQ
+                  </SheetTitle>
+                  <SheetDescription>Curated hostels, transparent pricing, and trusted support for students.</SheetDescription>
+                </SheetHeader>
+                <nav className="mt-6 flex flex-col gap-2">
+                  {navLinks.map((link) => (
+                    <SheetClose asChild key={`${link.href}-${link.label}`}>
+                      <Link
+                        href={link.href}
+                        onClick={() => setIsNavOpen(false)}
+                        className={cn(
+                          'rounded-lg px-3 py-2 text-sm font-medium transition',
+                          pathname === link.href
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:bg-primary/5 hover:text-primary'
+                        )}
+                      >
+                        {link.label}
+                      </Link>
+                    </SheetClose>
+                  ))}
+                </nav>
+                <div className="mt-6 space-y-3">
+                  <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="h-4 w-4 text-primary" />
+                    +233 (0) 20 123 4567
+                  </Link>
+                  <Link href="mailto:support@hostelhq.africa" className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-4 w-4 text-primary" />
+                    support@hostelhq.africa
+                  </Link>
+                  {!appUser && !loading && (
+                    <div className="flex gap-2 pt-2">
+                      <SheetClose asChild>
+                        <Button asChild variant="outline" className="flex-1">
+                          <Link href="/login">Login</Link>
+                        </Button>
+                      </SheetClose>
+                      <SheetClose asChild>
+                        <Button asChild className="flex-1">
+                          <Link href="/signup">Sign Up</Link>
+                        </Button>
+                      </SheetClose>
+                    </div>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Link href="/" className="flex items-center gap-2">
+              <Hotel className="h-6 w-6 text-primary sm:h-8 sm:w-8" />
+              <span className="text-xl font-bold text-foreground font-headline sm:text-2xl">HostelHQ</span>
             </Link>
-            {isAgent && (
-              <Link href="/agent/listings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                My Listings
+          </div>
+          <nav className="hidden flex-1 items-center justify-center gap-2 md:flex">
+            {navLinks.map((link) => (
+              <Link key={`${link.href}-${link.label}`} href={link.href} className={navLinkClasses(link.href)}>
+                {link.label}
               </Link>
-            )}
-            {isAdmin && (
+            ))}
+          </nav>
+          <div className="flex flex-1 items-center justify-end gap-3">
+            {!loading && !appUser && (
               <>
-                <Link href="/admin/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Admin Dashboard
-                </Link>
-                <Link href="/admin/upload" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                  Upload Hostel
-                </Link>
+                <Button asChild variant="ghost" className="hidden md:inline-flex">
+                  <Link href="/login">Login</Link>
+                </Button>
+                <Button asChild className="hidden rounded-full md:inline-flex">
+                  <Link href="/signup">Sign Up</Link>
+                </Button>
               </>
             )}
-            {isManager && (
-              <Link href="/manager/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                Manager Dashboard
-              </Link>
-            )}
-            {isStudent && (
-                 <Link href="/my-bookings" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
-                    My Bookings
-                </Link>
-            )}
-          </nav>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={loading}>
-                {loading || authAction ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                  <Avatar className="h-9 w-9">
-                    {appUser?.profileImage ? (
-                      <AvatarImage src={appUser.profileImage} alt="Profile" />
-                    ) : (
-                      <AvatarFallback>{appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}</AvatarFallback>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" disabled={loading}>
+                  {loading || authAction ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Avatar className="h-9 w-9">
+                      {appUser?.profileImage ? (
+                        <AvatarImage src={appUser.profileImage} alt="Profile" />
+                      ) : (
+                        <AvatarFallback>{appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}</AvatarFallback>
+                      )}
+                    </Avatar>
+                  )}
+                  <span className="sr-only">User Menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 max-h-[calc(100vh-4rem)] overflow-y-auto">
+                    {appUser ? (
+                  <>
+                    <DropdownMenuLabel>
+                      <div className="font-semibold">{appUser.fullName}</div>
+                      <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
+                      {isPending && <Badge variant="secondary" className="mt-1">Pending Approval</Badge>}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    {isStudent && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/my-bookings">
+                          <Briefcase className="mr-2 h-4 w-4" />
+                          My Bookings
+                        </Link>
+                      </DropdownMenuItem>
                     )}
-                  </Avatar>
-                )}
-                <span className="sr-only">User Menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {appUser ? (
-                <>
-                  <DropdownMenuLabel>
-                    <div className="font-semibold">{appUser.fullName}</div>
-                    <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
-                     {isPending && <Badge variant="secondary" className="mt-1">Pending Approval</Badge>}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                    <User className="mr-2 h-4 w-4"/>
-                    <span>Profile</span>
-                  </DropdownMenuItem>
-                  {isStudent && (
-                     <DropdownMenuItem asChild>
-                        <Link href="/my-bookings"><Briefcase className="mr-2 h-4 w-4"/>My Bookings</Link>
-                    </DropdownMenuItem>
-                  )}
-                  {isAgent && (
-                    <>
-                       <DropdownMenuItem asChild>
-                        <Link href="/agent/dashboard" className="flex items-center justify-between w-full"><div className="flex items-center"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</div></Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/agent/listings"><ListPlus className="mr-2 h-4 w-4"/>My Listings</Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                   {isAdmin && (
-                    <>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/upload"><ListPlus className="mr-2 h-4 w-4"/>Upload Hostel</Link>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                   {isManager && (
                     <DropdownMenuItem asChild>
-                        <Link href="/manager/dashboard"><Building className="mr-2 h-4 w-4"/>Manager Dashboard</Link>
+                      <Link href="/help-center">
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Help Center
+                      </Link>
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} disabled={authAction}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Logout</span>
-                  </DropdownMenuItem>
-                </>
-              ) : (
-                <>
-                  <DropdownMenuLabel>Welcome</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/login"><User className="mr-2 h-4 w-4" />Login</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/signup"><UserPlus className="mr-2 h-4 w-4" />Sign Up</Link>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                    {isAgent && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href="/agent/dashboard">
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/agent/listings">
+                            <ListPlus className="mr-2 h-4 w-4" />
+                            My Listings
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/dashboard">
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/listings">
+                            <ListPlus className="mr-2 h-4 w-4" />
+                            Admin Listings
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/hostel-requests">
+                            <FileText className="mr-2 h-4 w-4" />
+                            Hostel Requests
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/brands">
+                            <Building className="mr-2 h-4 w-4" />
+                            Brand Partners
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {isManager && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/manager/dashboard">
+                          <Building className="mr-2 h-4 w-4" />
+                          Manager Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
+                    <div className="space-y-1 px-1 pb-1">
+                      {themeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setThemeMode(option.value)}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
+                            themeMode === option.value ? "bg-primary/5 text-primary" : "text-foreground hover:bg-muted"
+                          )}
+                        >
+                          <span className="flex items-center gap-3">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background">
+                              {option.icon}
+                            </span>
+                            {option.label}
+                          </span>
+                          {themeMode === option.value && <Check className="h-4 w-4 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                    <DropdownMenuLabel className="mt-1 text-xs text-muted-foreground">Text size</DropdownMenuLabel>
+                    <div className="space-y-1 px-1 pb-2">
+                      {fontSizeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFontScale(option.value)}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors",
+                            fontScale === option.value ? "bg-primary/5 text-primary" : "text-foreground hover:bg-muted"
+                          )}
+                        >
+                          <span>{option.label}</span>
+                          {fontScale === option.value && <Check className="h-4 w-4 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} disabled={authAction}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Logout</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuLabel>Welcome</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/login">
+                        <User className="mr-2 h-4 w-4" />
+                        Login
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/signup">
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Sign Up
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
+                    <div className="space-y-1 px-1 pb-1">
+                      {themeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setThemeMode(option.value)}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
+                            themeMode === option.value ? "bg-primary/5 text-primary" : "text-foreground hover:bg-muted"
+                          )}
+                        >
+                          <span className="flex items-center gap-3">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background">
+                              {option.icon}
+                            </span>
+                            {option.label}
+                          </span>
+                          {themeMode === option.value && <Check className="h-4 w-4 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>

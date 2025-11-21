@@ -22,7 +22,29 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'Study Area'];
+const hostelAmenitiesList = [
+    'WiFi',
+    'Car Parking Space',
+    'DSTV Room',
+    'General Kitchen',
+    'Study Room',
+    'Laundry',
+    'Gym',
+    'Security',
+];
+
+const roomAmenitiesList = [
+    'Private Washroom',
+    'Shared Washroom',
+    'Mattress',
+    'Wardrobe',
+    'Furniture (Table, Chair)',
+    'TV',
+    'Ceiling Fan',
+    'Balcony',
+    'Private Kitchen',
+    'AC',
+];
 const billsIncludedList = ['Water', 'Refuse'];
 const billsExcludedList = ['Gas', 'Electricity'];
 const securitySafetyList = ['Security Alarm', 'Maintenance Team (24-hour on call)', 'Entire Building Fenced', 'Controlled Access Gate (24-hour)', 'Tanoso Police Station (close)'];
@@ -41,8 +63,9 @@ export default function AdminUploadPage() {
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
     const [gpsLocation, setGpsLocation] = useState('');
     const [description, setDescription] = useState('');
+    const [gender, setGender] = useState<string>('Mixed');
     const [roomTypes, setRoomTypes] = useState<Partial<RoomType>[]>([
-        { name: '', price: 0, availability: 'Available' }
+        { name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0, roomAmenities: [] }
     ]);
     const [distanceToUni, setDistanceToUni] = useState('');
     const [billsIncluded, setBillsIncluded] = useState<string[]>([]);
@@ -81,7 +104,10 @@ export default function AdminUploadPage() {
     };
 
     const addRoomType = () => {
-        setRoomTypes([...roomTypes, { name: '', price: 0, availability: 'Available' }]);
+        setRoomTypes([
+            ...roomTypes,
+            { name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0, roomAmenities: [] },
+        ]);
     };
 
     const removeRoomType = (index: number) => {
@@ -129,6 +155,20 @@ export default function AdminUploadPage() {
         if (roomTypes.some(rt => !rt.name || !rt.price || rt.price <= 0)) {
             toast({ title: 'Invalid Room Types', description: 'Please ensure all room types have a name and a valid price.', variant: 'destructive' });
             return;
+        }
+
+        // Validate capacity and occupancy
+        for (const rt of roomTypes) {
+            const capacity = rt.capacity ?? 0;
+            const occupancy = rt.occupancy ?? 0;
+            if (capacity > 0 && occupancy > capacity) {
+                toast({ title: 'Invalid Occupancy', description: `Room type "${rt.name}" has occupancy (${occupancy}) greater than capacity (${capacity}).`, variant: 'destructive' });
+                return;
+            }
+            if (rt.numberOfRooms !== undefined && rt.numberOfRooms <= 0) {
+                toast({ title: 'Invalid Number of Rooms', description: `Room type "${rt.name}" must have at least 1 room if specified.`, variant: 'destructive' });
+                return;
+            }
         }
 
         setIsSubmitting(true);
@@ -201,11 +241,21 @@ export default function AdminUploadPage() {
                 billsIncluded: billsIncluded,
                 billsExcluded: billsExcluded,
                 securityAndSafety: securityAndSafety,
+                gender: gender,
             });
             
             roomTypes.forEach(room => {
                 const roomTypeRef = doc(collection(hostelRef, 'roomTypes'));
-                batch.set(roomTypeRef, room);
+
+                // Firestore does not allow undefined values; strip them out before saving
+                const sanitizedRoom: any = { ...room };
+                Object.keys(sanitizedRoom).forEach((key) => {
+                    if (sanitizedRoom[key] === undefined) {
+                        delete sanitizedRoom[key];
+                    }
+                });
+
+                batch.set(roomTypeRef, sanitizedRoom);
             });
 
             await batch.commit();
@@ -303,48 +353,128 @@ export default function AdminUploadPage() {
                                         <Label htmlFor="distance">Distance to AAMUSTED University</Label>
                                         <Input id="distance" placeholder="e.g., 10mins" value={distanceToUni} onChange={(e) => setDistanceToUni(e.target.value)} />
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="gender">Gender</Label>
+                                        <Select value={gender} onValueChange={setGender}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select gender" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Male">Male</SelectItem>
+                                                <SelectItem value="Female">Female</SelectItem>
+                                                <SelectItem value="Mixed">Mixed</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                             )}
                              {step === 2 && (
                                 <div className="space-y-4">
                                     <Label className="text-base font-semibold">Room Types & Pricing</Label>
                                     <p className="text-sm text-muted-foreground">Add all the different types of rooms available in this hostel.</p>
-                                    {roomTypes.map((room, index) => (
-                                        <div key={index} className="flex flex-col md:flex-row gap-3 p-4 border rounded-lg relative">
-                                            <div className="flex-1 space-y-2">
-                                                <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
-                                                <Input 
-                                                    id={`room-name-${index}`} 
-                                                    placeholder="e.g., 4 in a room, Annex"
-                                                    value={room.name}
-                                                    onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
-                                                />
+                                    {roomTypes.map((room, index) => {
+                                        const capacity = room.capacity ?? 0;
+                                        const occupancy = room.occupancy ?? 0;
+                                        const hasError = capacity > 0 && occupancy > capacity;
+                                        return (
+                                        <div key={index} className="flex flex-col gap-3 p-4 border rounded-lg relative">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
+                                                    <Input 
+                                                        id={`room-name-${index}`} 
+                                                        placeholder="e.g., 4 in a room, Annex"
+                                                        value={room.name}
+                                                        onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
+                                                    <Input
+                                                        id={`room-price-${index}`}
+                                                        type="number"
+                                                        placeholder="3500"
+                                                        value={room.price}
+                                                        onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
+                                                    />
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`room-capacity-${index}`}>Capacity (per room)</Label>
+                                                    <Input
+                                                        id={`room-capacity-${index}`}
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="e.g., 4"
+                                                        value={room.capacity || ''}
+                                                        onChange={(e) => handleRoomTypeChange(index, 'capacity', Number(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`room-occupancy-${index}`}>Current Occupancy</Label>
+                                                    <Input
+                                                        id={`room-occupancy-${index}`}
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="e.g., 2"
+                                                        value={room.occupancy || ''}
+                                                        onChange={(e) => handleRoomTypeChange(index, 'occupancy', Number(e.target.value) || 0)}
+                                                        className={hasError ? 'border-red-500' : ''}
+                                                    />
+                                                    {hasError && (
+                                                        <p className="text-xs text-red-500">Occupancy cannot exceed capacity</p>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`room-number-${index}`}>Number of Rooms (optional)</Label>
+                                                    <Input
+                                                        id={`room-number-${index}`}
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="e.g., 10"
+                                                        value={room.numberOfRooms || ''}
+                                                        onChange={(e) => handleRoomTypeChange(index, 'numberOfRooms', Number(e.target.value) || undefined)}
+                                                    />
+                                                </div>
                                             </div>
-                                             <div className="w-full md:w-40 space-y-2">
-                                                <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
-                                                <Input
-                                                    id={`room-price-${index}`}
-                                                    type="number"
-                                                    placeholder="3500"
-                                                    value={room.price}
-                                                    onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
-                                                />
-                                            </div>
-                                             <div className="w-full md:w-48 space-y-2">
-                                                <Label htmlFor={`room-availability-${index}`}>Availability</Label>
-                                                 <Select 
-                                                    value={room.availability} 
-                                                    onValueChange={(value) => handleRoomTypeChange(index, 'availability', value)}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select status" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Available">Available</SelectItem>
-                                                        <SelectItem value="Limited">Limited</SelectItem>
-                                                        <SelectItem value="Full">Full</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                            <div className="mt-4 space-y-2">
+                                                <Label>Room Amenities</Label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {roomAmenitiesList.map((amenity) => {
+                                                        const currentAmenities = room.roomAmenities || [];
+                                                        const checked = currentAmenities.includes(amenity);
+
+                                                        return (
+                                                            <div key={amenity} className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`room-${index}-amenity-${amenity}`}
+                                                                    checked={checked}
+                                                                    onCheckedChange={(isChecked) => {
+                                                                        const newRoomTypes = [...roomTypes];
+                                                                        const rt = { ...(newRoomTypes[index] as RoomType) };
+                                                                        const next = new Set(rt.roomAmenities || []);
+
+                                                                        if (isChecked) {
+                                                                            next.add(amenity);
+                                                                        } else {
+                                                                            next.delete(amenity);
+                                                                        }
+
+                                                                        rt.roomAmenities = Array.from(next);
+                                                                        newRoomTypes[index] = rt;
+                                                                        setRoomTypes(newRoomTypes);
+                                                                    }}
+                                                                />
+                                                                <label
+                                                                    htmlFor={`room-${index}-amenity-${amenity}`}
+                                                                    className="text-xs sm:text-sm"
+                                                                >
+                                                                    {amenity}
+                                                                </label>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                             <Button 
                                                 variant="ghost" 
@@ -355,7 +485,7 @@ export default function AdminUploadPage() {
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
-                                    ))}
+                                    )})}
                                     <Button variant="outline" onClick={addRoomType} className="w-full">
                                         <PlusCircle className="mr-2 h-4 w-4" />
                                         Add Another Room Type
@@ -365,9 +495,9 @@ export default function AdminUploadPage() {
                              {step === 3 && (
                                 <div className="space-y-6">
                                      <div>
-                                        <Label className="text-base font-semibold">Amenities</Label>
+                                        <Label className="text-base font-semibold">Amenities & Services</Label>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                                            {amenitiesList.map(item => (
+                                            {hostelAmenitiesList.map(item => (
                                                 <div key={item} className="flex items-center space-x-2">
                                                     <Checkbox id={`amenity-${item}`} checked={selectedAmenities.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setSelectedAmenities, item, !!checked)} />
                                                     <label htmlFor={`amenity-${item}`} className="text-sm font-medium">{item}</label>
@@ -426,7 +556,13 @@ export default function AdminUploadPage() {
                                         <div className="grid grid-cols-5 gap-2 mt-2">
                                             {photoPreviews.map((preview, i) => (
                                                 <div key={i} className="relative bg-muted aspect-square rounded-md flex items-center justify-center overflow-hidden">
-                                                    <Image src={preview} alt={`Preview ${i+1}`} fill style={{objectFit: 'cover'}}/>
+                                                    <Image
+                                                        src={preview}
+                                                        alt={`Preview ${i+1}`}
+                                                        fill
+                                                        sizes="(max-width: 640px) 100vw, 200px"
+                                                        style={{objectFit: 'cover'}}
+                                                    />
                                                 </div>
                                             ))}
                                             {[...Array(5 - photoPreviews.length)].map((_, i) => (

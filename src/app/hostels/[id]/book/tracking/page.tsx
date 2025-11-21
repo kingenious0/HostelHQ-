@@ -26,6 +26,7 @@ type Visit = {
     hostelId: string;
     status: 'pending' | 'accepted' | 'completed' | 'cancelled' | 'scheduling';
     studentCompleted: boolean;
+    agentCompleted?: boolean;
     createdAt: string;
     visitDate: string;
     visitTime: string;
@@ -41,7 +42,6 @@ type OnlineAgent = {
     }
 }
 
-
 export default function TrackingPage() {
     const params = useParams();
     const searchParams = useSearchParams();
@@ -56,10 +56,12 @@ export default function TrackingPage() {
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [isCompleting, setIsCompleting] = useState(false);
+    const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+    const previousAgentCompletedRef = useRef<boolean | null>(null);
 
     const isSelfVisit = visit?.visitType === 'self';
 
-     useEffect(() => {
+    useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
         });
@@ -102,6 +104,34 @@ export default function TrackingPage() {
             }
 
             const visitData = { id: docSnap.id, ...docSnap.data() } as Visit;
+
+            const previousAgentCompleted = previousAgentCompletedRef.current ?? false;
+            const currentAgentCompleted = !!visitData.agentCompleted;
+
+            const storageKey = `visit_agentCompleted_notified_${visitData.id}`;
+            const alreadyNotified = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === '1';
+
+            const justCompletedByAgent = !alreadyNotified && !previousAgentCompleted && currentAgentCompleted && !visitData.studentCompleted;
+
+            if (justCompletedByAgent) {
+                if (notificationAudioRef.current) {
+                    console.log('Playing visit notification sound (student tracking)');
+                    notificationAudioRef.current.play().catch((err) => {
+                        console.error('Audio play failed:', err);
+                    });
+                }
+                toast({
+                    title: 'Agent marked your visit as complete',
+                    description: 'Please confirm if you actually completed this tour.',
+                });
+
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(storageKey, '1');
+                }
+            }
+
+            previousAgentCompletedRef.current = currentAgentCompleted;
+
             setVisit(visitData);
             setLoading(false);
 
@@ -119,28 +149,59 @@ export default function TrackingPage() {
     
 
     const handleStudentComplete = async () => {
-        if(!visitId) return;
+        if (!visitId) return;
         setIsCompleting(true);
         try {
-            await updateDoc(doc(db, 'visits', visitId as string), { studentCompleted: true });
-            toast({ title: "Visit Complete!", description: "Thank you for using HostelHQ. Please rate your experience."});
-            router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
+            if (isSelfVisit) {
+                await updateDoc(doc(db, 'visits', visitId as string), {
+                    studentCompleted: true,
+                    status: 'completed',
+                });
+                toast({
+                    title: 'Visit Complete!',
+                    description: 'Thank you for using HostelHQ. Please rate your experience.',
+                });
+                router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
+            } else {
+                const currentAgentCompleted = visit?.agentCompleted;
+                const updatePayload: Record<string, any> = { studentCompleted: true };
+                if (currentAgentCompleted) {
+                    updatePayload.status = 'completed';
+                }
+                await updateDoc(doc(db, 'visits', visitId as string), updatePayload);
+
+                if (currentAgentCompleted) {
+                    toast({
+                        title: 'Visit Complete!',
+                        description: 'Thank you for confirming. Please rate your experience.',
+                    });
+                    router.push(`/hostels/${hostelId}/book/rating?visitId=${visitId}`);
+                } else {
+                    toast({
+                        title: 'Waiting for agent confirmation',
+                        description: 'Your agent has been notified to confirm that this visit was truly completed.',
+                    });
+                }
+            }
         } catch (error) {
-            console.error("Failed to mark visit as complete:", error);
-            toast({ title: "Update Failed", description: "Could not mark visit as complete.", variant: 'destructive'});
+            console.error('Failed to mark visit as complete:', error);
+            toast({
+                title: 'Update Failed',
+                description: 'Could not mark visit as complete.',
+                variant: 'destructive',
+            });
         } finally {
             setIsCompleting(false);
         }
     }
 
-    
     if (loading || !hostel || !visit) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
-                     <p className="ml-4 text-muted-foreground">Loading your visit details...</p>
+                    <p className="ml-4 text-muted-foreground">Loading your visit details...</p>
                 </main>
             </div>
         )
@@ -152,13 +213,13 @@ export default function TrackingPage() {
         if (!hostel?.lat || !hostel?.lng) {
             return (
                 <div className="text-center py-8">
-                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
                     <p className="font-semibold">Loading hostel location...</p>
                 </div>
             )
         }
         if (visit?.studentCompleted) {
-             return (
+            return (
                 <div className="text-center py-8">
                     <CheckCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
                     <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
@@ -177,7 +238,7 @@ export default function TrackingPage() {
                             <p className="font-semibold">{hostel.name}</p>
                         </div>
                     </div>
-                     <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3">
                         <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
                         <div>
                             <p className="text-sm text-muted-foreground">Location</p>
@@ -185,7 +246,7 @@ export default function TrackingPage() {
                         </div>
                     </div>
                 </div>
-                 <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
+                <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
                     Open in Google Maps
                 </Button>
                 <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
@@ -202,8 +263,8 @@ export default function TrackingPage() {
 
         if (visit.status === 'scheduling') {
             return (
-                 <div className="text-center py-8">
-                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                <div className="text-center py-8">
+                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
                     <p className="font-semibold">Your visit is being scheduled.</p>
                     <p className="text-sm text-muted-foreground mt-1">Please select an agent and time on the scheduling page.</p>
                     <Button variant="outline" className="mt-4" onClick={() => router.push(`/hostels/book/schedule?visitId=${visitId}`)}>
@@ -216,7 +277,7 @@ export default function TrackingPage() {
         if (visit.status === 'pending' && agent) {
             return (
                 <div className="text-center py-8">
-                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
+                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
                     <p className="font-semibold">Waiting for {agent.fullName || 'Agent'} to accept...</p>
                     <p className="text-sm text-muted-foreground mt-1">You will be notified once they confirm your visit request.</p>
                 </div>
@@ -224,17 +285,68 @@ export default function TrackingPage() {
         }
 
         if (visit.status === 'accepted' && agent) {
-            if (visit.studentCompleted) {
-                 return (
+            if (visit.studentCompleted && !visit.agentCompleted) {
+                return (
                     <div className="text-center py-8">
                         <Loader2 className="h-10 w-10 animate-spin text-muted-foreground mx-auto mb-4" />
                         <p className="font-semibold">Waiting for agent to confirm completion...</p>
-                        <p className="text-sm text-muted-foreground mt-1">Your visit will be marked as complete once both parties confirm.</p>
+                        <p className="text-sm text-muted-foreground mt-1">Your visit will be fully completed once your agent confirms.</p>
                     </div>
                 );
             }
+
+            if (visit.agentCompleted && !visit.studentCompleted) {
+                return (
+                    <div className="space-y-4">
+                        <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
+                            <div className="flex items-start gap-3">
+                                <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Hostel</p>
+                                    <p className="font-semibold">{hostel.name}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Your Agent</p>
+                                    <p className="font-semibold">{agent.fullName}</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-start gap-3">
+                                    <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Date</p>
+                                        <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Time</p>
+                                        <p className="font-semibold">{visit.visitTime}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        <p className="text-sm text-muted-foreground text-center">
+                            Your agent has confirmed that the visit is complete. Please confirm your side to fully complete this visit.
+                        </p>
+
+                        <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
+                            {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
+                            Mark Visit as Complete
+                        </Button>
+                    </div>
+                );
+            }
+
             return (
-                 <div className="space-y-4">
+                <div className="space-y-4">
                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
                         <div className="flex items-start gap-3">
                             <Home className="h-5 w-5 text-muted-foreground mt-1"/>
@@ -243,7 +355,7 @@ export default function TrackingPage() {
                                 <p className="font-semibold">{hostel.name}</p>
                             </div>
                         </div>
-                         <div className="flex items-start gap-3">
+                        <div className="flex items-start gap-3">
                             <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
                             <div>
                                 <p className="text-sm text-muted-foreground">Your Agent</p>
@@ -258,7 +370,7 @@ export default function TrackingPage() {
                                     <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
                                 </div>
                             </div>
-                             <div className="flex items-start gap-3">
+                            <div className="flex items-start gap-3">
                                 <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
                                 <div>
                                     <p className="text-sm text-muted-foreground">Time</p>
@@ -270,24 +382,17 @@ export default function TrackingPage() {
                     
                     <Separator />
                     
-                    <div className="flex w-full gap-2">
-                        <a href={`tel:${agentPhoneNumber}`} className="flex-1">
-                            <Button className="w-full" variant="outline"><Phone className="mr-2 h-4 w-4" /> Call Agent</Button>
-                        </a>
-                        <a href={`https://wa.me/${agentPhoneNumber}`} target="_blank" rel="noopener noreferrer" className="flex-1">
-                            <Button className="w-full" variant="outline"><MessageSquare className="mr-2 h-4 w-4" /> WhatsApp</Button>
-                        </a>
-                    </div>
-                     <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                         {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
+                    
+                    <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
+                        {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
                         Mark Visit as Complete
-                     </Button>
+                    </Button>
                 </div>
             );
         }
 
         if (visit.status === 'completed') {
-             return (
+            return (
                 <div className="text-center py-8">
                     <CheckCheck className="h-10 w-10 text-green-500 mx-auto mb-4" />
                     <p className="text-muted-foreground mb-4">Your visit is complete. We hope you liked it!</p>
@@ -297,7 +402,7 @@ export default function TrackingPage() {
         }
         
         if (visit.status === 'cancelled') {
-             return (
+            return (
                 <div className="text-center py-8">
                     <XCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
                     <p className="font-semibold">Visit Cancelled</p>
@@ -336,9 +441,10 @@ export default function TrackingPage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
+            <audio ref={notificationAudioRef} src="/sounds/visit-notification.mp3" preload="auto" />
             <main className="flex-1 grid md:grid-cols-2">
                 <div className="flex flex-col items-center justify-center p-4 md:p-8 bg-gray-50/50">
-                     <Card className="w-full max-w-md shadow-xl">
+                    <Card className="w-full max-w-md shadow-xl">
                         <CardHeader>
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
                                 {getCardTitle()}

@@ -30,6 +30,7 @@ interface AppUser {
     showPhoneNumber: boolean;
     showEmailAddress: boolean;
   };
+  offlineSmsOptIn?: boolean;
 }
 
 export default function SettingsPage() {
@@ -48,6 +49,7 @@ export default function SettingsPage() {
       showPhoneNumber: true,
       showEmailAddress: true,
     });
+    const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
 
     useEffect(() => {
         const unsubAuth = onAuthStateChanged(auth, async (u) => {
@@ -84,6 +86,7 @@ export default function SettingsPage() {
                       showPhoneNumber: true,
                       showEmailAddress: true,
                     });
+                    setOfflineSmsOptIn(!!userData.offlineSmsOptIn);
                 } else {
                     // If user exists in Auth but not in DB, create a basic profile
                     const newUser: AppUser = {
@@ -104,6 +107,7 @@ export default function SettingsPage() {
                       showPhoneNumber: true,
                       showEmailAddress: true,
                     });
+                    setOfflineSmsOptIn(false);
                 }
                 setLoading(false);
             }, (error) => {
@@ -177,6 +181,27 @@ export default function SettingsPage() {
       }));
     };
 
+    const handleOfflineSmsToggle = async (checked: boolean) => {
+      if (!user) return;
+      setSaving(true);
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, { offlineSmsOptIn: checked });
+        setOfflineSmsOptIn(checked);
+        toast({
+          title: checked ? 'Offline SMS enabled' : 'Offline SMS disabled',
+          description: checked
+            ? 'Students can select you while you are offline and you will receive SMS alerts.'
+            : 'Students will only be able to select you when you are online.',
+        });
+      } catch (e) {
+        console.error('Error updating offline SMS preference:', e);
+        toast({ title: 'Failed to update agent notification setting', variant: 'destructive' });
+      } finally {
+        setSaving(false);
+      }
+    };
+
     return (
         <div className="flex flex-col min-h-screen bg-gray-50/50">
             <Header />
@@ -204,73 +229,25 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                    {/* Account Privacy Section */}
-                    <div>
-                        <h2 className="text-lg font-semibold">Account Privacy</h2>
-                        <p className="text-sm text-muted-foreground">Control what information other roommates can see.</p>
-                        <div className="mt-4 space-y-3">
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Picture</p>
-                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your profile picture.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showPicture}
-                                    onCheckedChange={(checked) => handlePrivacyToggle('showPicture', checked)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Profile</p>
-                                    <p className="text-sm text-muted-foreground">Allow other roommates to view your full profile.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showProfile}
-                                    onCheckedChange={(checked) => handlePrivacyToggle('showProfile', checked)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Programme of Study</p>
-                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your programme of study.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showProgrammeOfStudy}
-                                    onCheckedChange={(checked) => handlePrivacyToggle('showProgrammeOfStudy', checked)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Phone Number</p>
-                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your phone number.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showPhoneNumber}
-                                    onCheckedChange={(checked) => handlePrivacyToggle('showPhoneNumber', checked)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Email Address</p>
-                                    <p className="text-sm text-muted-foreground">Allow other roommates to see your email address.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showEmailAddress}
-                                    onCheckedChange={(checked) => handlePrivacyToggle('showEmailAddress', checked)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                            <div className="flex justify-end">
-                                <Button onClick={handleSavePrivacy} disabled={!canSavePrivacy || saving}>
-                                  {saving ? 'Saving...' : 'Save Changes'}
-                                </Button>
-                            </div>
+                   
+
+                    {appUser?.role === 'agent' && (
+                      <div>
+                        <h2 className="text-lg font-semibold">Agent notifications</h2>
+                        <p className="text-sm text-muted-foreground">Control whether students can select you for visits while you are offline.</p>
+                        <div className="mt-4 flex items-center justify-between border rounded-md p-3">
+                          <div>
+                            <p className="font-medium">Allow offline visit requests</p>
+                            <p className="text-sm text-muted-foreground">When you are offline, students can still pick you and you will receive SMS alerts.</p>
+                          </div>
+                          <Switch
+                            checked={offlineSmsOptIn}
+                            onCheckedChange={handleOfflineSmsToggle}
+                            disabled={loading || saving}
+                          />
                         </div>
-                    </div>
+                      </div>
+                    )}
 
                     <div>
                         <h2 className="text-lg font-semibold">Appearance</h2>

@@ -2,7 +2,7 @@
 // Client-side Firebase SDK (no Admin SDK)
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence, clearIndexedDbPersistence } from 'firebase/firestore';
 // Lazy read of client setting for persistence; safe on server as it checks window
 function shouldEnablePersistence(): boolean {
   if (typeof window === 'undefined') return true; // default on SSR
@@ -39,17 +39,21 @@ export const db = getFirestore(app);
 // Enable persistence based on client setting
 if (typeof window !== 'undefined' && firebaseConfig.apiKey && shouldEnablePersistence()) {
     try {
-        enableIndexedDbPersistence(db)
-        .catch((err) => {
+        enableIndexedDbPersistence(db).catch(async (err) => {
             if (err.code === 'failed-precondition') {
-                // Multiple tabs open, persistence can only be enabled in one tab at a time.
                 console.warn('Firestore persistence failed: multiple tabs open.');
             } else if (err.code === 'unimplemented') {
-                // The current browser does not support all of the
-                // features required to enable persistence
                 console.warn('Firestore persistence not available in this browser.');
+            } else if (err.code === 'unavailable' || err.message?.includes('Version change transaction was aborted')) {
+                console.warn('Firestore persistence unavailable, attempting to clear IndexedDB cache…');
+                try {
+                    await clearIndexedDbPersistence(db);
+                    console.info('Cleared cached Firestore data successfully after persistence failure.');
+                } catch (clearError) {
+                    console.error('Failed to clear Firestore IndexedDB cache.', clearError);
+                }
             } else {
-                 console.error("An error occurred while enabling Firestore persistence:", err);
+                console.error('An error occurred while enabling Firestore persistence:', err);
             }
         });
     } catch (e: any) {
