@@ -33,6 +33,18 @@ const nextConfig: NextConfig = {
         hostname: 'res.cloudinary.com',
         port: '',
         pathname: '/**',
+      },
+      {
+      protocol: 'https',
+      hostname: 'as1.ftcdn.net',
+      port: '',
+      pathname: '/**',
+      },
+      {
+      protocol: 'https',
+      hostname: 'images.pexels.com',
+      port: '',
+      pathname: '/**', 
       }
     ],
   },

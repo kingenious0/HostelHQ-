@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,6 +87,7 @@ export default function MyBookingsPage() {
     const [loadingAuth, setLoadingAuth] = useState(true);
     const { toast } = useToast();
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {

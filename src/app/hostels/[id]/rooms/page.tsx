@@ -387,9 +387,10 @@ export default function RoomsPage() {
                 <Card
                   key={room.id}
                   className={cn(
-                    "overflow-hidden transition-all hover:shadow-xl group",
+                    "overflow-hidden transition-all hover:shadow-xl group cursor-pointer",
                     viewMode === 'list' && "flex flex-row"
                   )}
+                  onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
                 >
                   <div className={cn(
                     "relative bg-slate-100 overflow-hidden",
@@ -458,7 +459,13 @@ export default function RoomsPage() {
                     <Button
                       variant="outline"
                       className="w-full mt-4"
-                      onClick={() => {
+                      disabled={hostel?.availability === 'Full'}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!hostel || hostel.availability === 'Full') {
+                          return;
+                        }
+
                         const target = hasCompletedVisit
                           ? `/hostels/${id}/secure?roomTypeId=${room.id}`
                           : `/hostels/${id}/book?roomTypeId=${room.id}`;
@@ -476,7 +483,11 @@ export default function RoomsPage() {
                         }
                       }}
                     >
-                      {hasCompletedVisit ? 'Secure Room' : 'Book Room'}
+                      {hostel?.availability === 'Full'
+                        ? 'Hostel Fully Booked'
+                        : hasCompletedVisit
+                        ? 'Secure Room'
+                        : 'Book Room'}
                     </Button>
                   </CardContent>
                 </Card>

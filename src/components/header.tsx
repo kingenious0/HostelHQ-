@@ -27,6 +27,11 @@ import {
   Moon,
   MonitorCog,
   FileText,
+  ChevronDown,
+  CreditCard,
+  Users,
+  Banknote,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -424,7 +429,7 @@ export function Header() {
                   <SheetDescription>Curated hostels, transparent pricing, and trusted support for students.</SheetDescription>
                 </SheetHeader>
                 <nav className="mt-6 flex flex-col gap-2">
-                  {navLinks.map((link) => (
+                  {baseNavLinks.map((link) => (
                     <SheetClose asChild key={`${link.href}-${link.label}`}>
                       <Link
                         href={link.href}
@@ -441,6 +446,70 @@ export function Header() {
                     </SheetClose>
                   ))}
                 </nav>
+
+                {isStudent && (
+                  <div className="mt-4">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="w-full justify-between rounded-full bg-primary/5 text-primary hover:bg-primary/10">
+                          <span>My Bookings</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/profile">
+                              <User className="mr-2 h-4 w-4" />
+                              <span>My Profile</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/my-bookings">
+                              <Briefcase className="mr-2 h-4 w-4" />
+                              <span>My Bookings</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/payments">
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              <span>Payments</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/my-roommates">
+                              <Users className="mr-2 h-4 w-4" />
+                              <span>My Roommates</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/bank-accounts">
+                              <Banknote className="mr-2 h-4 w-4" />
+                              <span>Bank Accounts</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <DropdownMenuItem asChild>
+                            <Link href="/settings">
+                              <Settings className="mr-2 h-4 w-4" />
+                              <span>Settings</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </SheetClose>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+
                 <div className="mt-6 space-y-3">
                   <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="h-4 w-4 text-primary" />

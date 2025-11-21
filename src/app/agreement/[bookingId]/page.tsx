@@ -51,7 +51,7 @@ export default function AgreementPage() {
     const [loading, setLoading] = useState(true);
     const [downloadCompleted, setDownloadCompleted] = useState(false);
 
-    const staticAgreementPath = encodeURI('/Professional_Hostel_Tenancy_Agreement_static new.pdf');
+    const staticAgreementPath = encodeURI('/Hostel_Tenancy_Agreement_static new.pdf');
 
     useEffect(() => {
         if (!bookingId) {

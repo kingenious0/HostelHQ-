@@ -44,7 +44,7 @@ export default function AboutPage() {
               <section className="relative overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 text-white">
                   <div className="absolute inset-0">
                       <Image
-                          src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop"
+                          src="https://images.pexels.com/photos/4907200/pexels-photo-4907200.jpeg"
                           alt="Students moving into a hostel"
                           fill
                           className="object-cover opacity-20"
@@ -59,14 +59,14 @@ export default function AboutPage() {
                           We connect students with safe, verified hostels — hassle free.
                       </h1>
                       <p className="max-w-2xl text-lg text-white/80">
-                          HostelHQ was founded by former students who experienced how stressful securing accommodation
+                          HostelHQ was brought to life by with a team of students who experienced how stressful securing accommodation
                           can be. Today we are on a mission to make campus living transparent, affordable, and delightful.
                       </p>
                       <div className="flex flex-wrap gap-4">
                           <Button size="lg" className="h-12 rounded-full">
                               Explore Hostels
                           </Button>
-                          <Button variant="outline" size="lg" className="h-12 rounded-full border-white/60 text-white hover:bg-white/10">
+                          <Button variant="outline" size="lg" className="h-12 rounded-full bg-white text-primary hover:bg-white/90">
                               Become a Partner Hostel
                           </Button>
                       </div>

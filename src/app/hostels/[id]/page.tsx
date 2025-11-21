@@ -317,6 +317,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     }
     
     const getVisitButton = (room: RoomType) => {
+        // If the hostel is marked Full by admin, block all room-level CTAs
+        if (hostel.availability === 'Full') {
+            return (
+                <Button
+                    size="sm"
+                    className="bg-muted text-muted-foreground cursor-not-allowed w-full justify-center"
+                    disabled
+                >
+                    Hostel Fully Booked
+                </Button>
+            );
+        }
+
         // First check if hostel is already secured
         if (existingBooking !== undefined && existingBooking !== null) {
             // Check if this room type matches the secured room
@@ -716,7 +729,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         </div>
                         <div className="space-y-4">
                             <h4 className="text-lg font-semibold">Latest reviews</h4>
-                        {hostel.reviews.length > 0 ? (
+                        {(hostel.reviews && hostel.reviews.length > 0) ? (
                             <div className="space-y-6">
                                     {hostel.reviews.map((review) => (
                                         <div key={review.id} className="flex gap-4 rounded-xl border border-border/40 bg-background/80 p-4">
@@ -894,7 +907,6 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 </div>
 
                 {(hostel.roomTypes?.length ?? 0) === 1 && (
-                    <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
                         <Card className="mt-6 sm:mt-8 shadow-md">
                         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -915,31 +927,51 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 </TableHeader>
                                 <TableBody>
                                     {hostel.roomTypes?.map((room) => (
-                                    <TableRow key={room.id}>
-                                        <TableCell>
-                                            <p className="font-medium text-sm sm:text-base">{room.name}</p>
-                                            <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
-                                                        {room.beds && <span className="flex items-center gap-1"><Bed className="h-3 w-3" /> {room.beds} Beds</span>}
-                                                        {room.bathrooms && <span className="flex items-center gap-1"><Bath className="h-3 w-3" /> {room.bathrooms}</span>}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={getRoomAvailabilityVariant(room.availability)} className="text-xs">{room.availability}</Badge>
-                                        </TableCell>
-                                        <TableCell className="font-semibold text-sm sm:text-base">
-                                            GH₵{room.price.toLocaleString()}
-                                        </TableCell>
-                                    <TableCell className="text-right">
-                                        {getVisitButton(room)}
-                                    </TableCell>
-                                </TableRow>
-                                ))}
-                            </TableBody>
+                                        <TableRow key={room.id}>
+                                            <TableCell>
+                                                <p className="font-medium text-sm sm:text-base">{room.name}</p>
+                                                <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
+                                                    {room.beds && (
+                                                        <span className="flex items-center gap-1">
+                                                            <Bed className="h-3 w-3" /> {room.beds} Beds
+                                                        </span>
+                                                    )}
+                                                    {room.bathrooms && (
+                                                        <span className="flex items-center gap-1">
+                                                            <Bath className="h-3 w-3" /> {room.bathrooms}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant={getRoomAvailabilityVariant(room.availability)}
+                                                    className="text-xs"
+                                                >
+                                                    {hostel.availability === 'Full' ? 'Full' : room.availability}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="font-semibold text-sm sm:text-base">
+                                                GH₵{room.price.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-right space-y-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full justify-center mb-1"
+                                                    onClick={() => router.push(`/hostels/${hostel.id}/rooms/${room.id}`)}
+                                                >
+                                                    View details
+                                                </Button>
+                                                {getVisitButton(room)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
                         </Table>
                     </div>
                     </CardContent>
                         </Card>
-                    </Dialog>
                 )}
 
             </div>
@@ -979,7 +1011,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
             <div>
                  <Carousel className="w-full" autoPlay autoPlayInterval={4500}>
                     <CarouselContent>
-                    {hostel.images.map((img: string, index: number) => (
+                    {(hostel.images ?? ['/placeholder.jpg']).map((img: string, index: number) => (
                             <CarouselItem key={index}>
                                 <div className="relative h-80 sm:h-96 w-full overflow-hidden rounded-2xl">
                             <Image
@@ -1020,7 +1052,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                 <div className="mt-8">
                     <h3 className="text-lg font-semibold font-headline mb-3">Amenities</h3>
                     <div className="flex flex-wrap gap-3">
-                        {hostel.amenities.slice(0, 4).map((amenity: string) => (
+                        {(hostel.amenities ?? []).slice(0, 4).map((amenity: string) => (
                             <Badge key={amenity} variant="outline" className="text-sm p-2 flex items-center gap-2">
                                 {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
                                 <span className="font-medium capitalize">{amenity}</span>
