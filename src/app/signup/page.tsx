@@ -293,26 +293,34 @@ export default function SignupPage() {
                 const studentId = `STD-${firstThree}${lastThree}`;
 
                 authEmail = `${studentId.toLowerCase()}@students.hostelhq.com`;
-
-                // Derive fullName for storage
-                const parts = [firstName, middleName, lastName].filter(Boolean);
-                const derivedFullName = parts.join(' ');
-                setFullName(derivedFullName);
             }
+
+            // Derive a local full name string for storage
+            const derivedStudentFullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+            const localFullName = selectedRole === 'student' ? derivedStudentFullName : fullName;
 
             const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
             const user = userCredential.user;
 
             let userData: any = {
                 uid: user.uid,
-                fullName: fullName || undefined,
-                firstName: firstName || undefined,
-                middleName: middleName || undefined,
-                lastName: lastName || undefined,
                 email: authEmail,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
             };
+
+            if (localFullName) {
+                userData.fullName = localFullName;
+            }
+            if (firstName) {
+                userData.firstName = firstName;
+            }
+            if (middleName) {
+                userData.middleName = middleName;
+            }
+            if (lastName) {
+                userData.lastName = lastName;
+            }
 
             // Add phone number for agents and students (store in numeric E.164-like format)
             if ((selectedRole === 'agent' || selectedRole === 'student') && phoneNumber) {
