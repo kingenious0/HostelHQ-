@@ -48,6 +48,8 @@ export default function RoomsPage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [hasCompletedVisit, setHasCompletedVisit] = useState<boolean>(false);
+  const [hasSecuredHostel, setHasSecuredHostel] = useState<boolean>(false);
+  const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'oldest'>('price-low');
   const [roomTypeFilter, setRoomTypeFilter] = useState<string>('');
@@ -124,10 +126,26 @@ export default function RoomsPage() {
             console.error('Error checking completed visit for rooms page:', error);
             setHasCompletedVisit(false);
           }
+
+          // Check if this student already has a confirmed/secured booking in this hostel
+          try {
+            const bookingsQuery = query(
+              collection(db, 'bookings'),
+              where('studentId', '==', user.uid),
+              where('hostelId', '==', id),
+              where('status', '==', 'confirmed')
+            );
+            const bookingsSnapshot = await getDocs(bookingsQuery);
+            setHasSecuredHostel(!bookingsSnapshot.empty);
+          } catch (error) {
+            console.error('Error checking secured booking for rooms page:', error);
+            setHasSecuredHostel(false);
+          }
         }
       } else {
         setAppUser(null);
         setHasCompletedVisit(false);
+        setHasSecuredHostel(false);
       }
       setAuthChecked(true);
     });
@@ -151,12 +169,16 @@ export default function RoomsPage() {
     if (Array.isArray(rooms) && rooms.length > 0) {
       return rooms.map((room: any, index: number) => {
         const capacity = room.capacity ?? parseCapacityFromName(room.roomType ?? room.type);
+        const id = room.id ?? `room-${index}`;
+        const typeName = room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
+        const occupancyFromBookings =
+          roomOccupancy[id] ?? roomOccupancy[typeName] ?? 0;
         return {
-          id: room.id ?? `room-${index}`,
+          id,
           label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
-          type: room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room',
+          type: typeName,
           price: room.price ?? hostel.priceRange?.min ?? 0,
-          occupancy: room.occupancy ?? room.occupants ?? 0,
+          occupancy: room.occupancy ?? room.occupants ?? occupancyFromBookings,
           capacity: capacity ?? null,
           gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
           image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
@@ -172,12 +194,15 @@ export default function RoomsPage() {
 
     return types.map((roomType, typeIndex) => {
       const capacity = roomType.capacity ?? parseCapacityFromName(roomType.name);
+      const roomTypeId = roomType.id ?? `roomType-${typeIndex}`;
+      const occupancyFromBookings =
+        roomOccupancy[roomTypeId] ?? roomOccupancy[roomType.name] ?? 0;
       return {
-        id: roomType.id ?? `roomType-${typeIndex}`,
+        id: roomTypeId,
         label: roomType.name,
         type: roomType.name,
         price: roomType.price,
-        occupancy: roomType.occupancy ?? 0,
+        occupancy: roomType.occupancy ?? occupancyFromBookings,
         capacity: capacity ?? null,
         gender: hostel.gender || 'Mixed',
         image: primaryImages[typeIndex % primaryImages.length],
@@ -186,7 +211,39 @@ export default function RoomsPage() {
         amenities: roomType.roomAmenities ?? [],
       };
     });
-  }, [hostel, primaryImages]);
+  }, [hostel, primaryImages, roomOccupancy]);
+
+  // Load current occupancy per room/roomType based on confirmed bookings
+  useEffect(() => {
+    const loadOccupancy = async () => {
+      if (!id) return;
+      try {
+        const bookingsQuery = query(
+          collection(db, 'bookings'),
+          where('hostelId', '==', id),
+          where('status', '==', 'confirmed')
+        );
+        const snapshot = await getDocs(bookingsQuery);
+        const counts: Record<string, number> = {};
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          const roomTypeId = data.roomTypeId || null;
+          const roomTypeName = data.roomTypeName || data.roomType || null;
+          if (roomTypeId) {
+            counts[String(roomTypeId)] = (counts[String(roomTypeId)] || 0) + 1;
+          }
+          if (roomTypeName) {
+            counts[String(roomTypeName)] = (counts[String(roomTypeName)] || 0) + 1;
+          }
+        });
+        setRoomOccupancy(counts);
+      } catch (error) {
+        console.error('Error loading room occupancy for hostel rooms page:', error);
+      }
+    };
+
+    loadOccupancy();
+  }, [id]);
 
   const filteredAndSortedRooms = useMemo(() => {
     let filtered = [...roomInventory];
@@ -402,12 +459,35 @@ export default function RoomsPage() {
                       fill
                       className="object-cover transition-transform duration-300 group-hover:scale-110"
                     />
-                    <Badge
-                      variant="secondary"
-                      className="absolute left-3 top-3 bg-slate-900/70 text-white border-0"
-                    >
-                      {room.occupancy} {room.occupancy === 1 ? 'Occupant' : 'Occupants'}
-                    </Badge>
+                    {(() => {
+                      const perRoomCapacity = room.capacity ?? null;
+                      const totalCapacity =
+                        perRoomCapacity && room.totalRooms
+                          ? perRoomCapacity * room.totalRooms
+                          : perRoomCapacity;
+                      const used = totalCapacity != null
+                        ? Math.max(0, Math.min(totalCapacity, room.occupancy))
+                        : room.occupancy;
+                      const isFull = totalCapacity != null && used >= totalCapacity;
+                      const label = totalCapacity != null
+                        ? isFull
+                          ? 'Room Full'
+                          : `${used} of ${totalCapacity} Occupied`
+                        : `${room.occupancy} ${room.occupancy === 1 ? 'Occupant' : 'Occupants'}`;
+                      return (
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "absolute left-3 top-3 border-0",
+                            isFull
+                              ? "bg-red-600 text-white"
+                              : "bg-slate-900/70 text-white"
+                          )}
+                        >
+                          {label}
+                        </Badge>
+                      );
+                    })()}
                     <div className="absolute right-3 top-3 flex gap-1">
                       <Badge variant="outline" className="bg-white/90 text-xs">
                         {room.gender === 'Male' ? '♂' : room.gender === 'Female' ? '♀' : 'Mixed'}
@@ -459,10 +539,10 @@ export default function RoomsPage() {
                     <Button
                       variant="outline"
                       className="w-full mt-4"
-                      disabled={hostel?.availability === 'Full'}
+                      disabled={hostel?.availability === 'Full' || hasSecuredHostel}
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (!hostel || hostel.availability === 'Full') {
+                        if (!hostel || hostel.availability === 'Full' || hasSecuredHostel) {
                           return;
                         }
 
@@ -485,6 +565,8 @@ export default function RoomsPage() {
                     >
                       {hostel?.availability === 'Full'
                         ? 'Hostel Fully Booked'
+                        : hasSecuredHostel
+                        ? 'You already secured a room here'
                         : hasCompletedVisit
                         ? 'Secure Room'
                         : 'Book Room'}

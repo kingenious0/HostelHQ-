@@ -31,9 +31,9 @@ const milestones = [
 ];
 
 const team = [
-  { name: 'Edmund Okai', role: 'CEO & Co-Founder', bio: 'Product strategist passionate about student housing equity.' },
-  { name: 'Priscilla Awuah', role: 'Head of Operations', bio: 'Manages hostel partnerships and experience quality.' },
-  { name: 'Yaw Frimpong', role: 'Lead Engineer', bio: 'Builds reliable, secure systems that scale with our community.' },
+  { name: 'Elliot Paakow Entsiwah', role: 'Co-Founder & Lead Engineer'   , image: '/elliot.jpg' },
+  { name: 'David Amankwah', role: 'Co-Founder & Head of Operations', image: '/david.jpg' },
+  //{ name: 'Yaw Frimpong', role: 'Lead Engineer', image: '/yaw.jpg' },
 ];
 
 export default function AboutPage() {

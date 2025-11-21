@@ -89,6 +89,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [roomsDialogOpen, setRoomsDialogOpen] = useState(false);
     const [selectedRating, setSelectedRating] = useState('5');
     const [draftReview, setDraftReview] = useState('');
+    const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
 
     useEffect(() => {
         if (!currentUser || !hostel.id) {
@@ -174,6 +175,38 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         };
     }, [shareCopied]);
 
+    // Load current occupancy per roomType based on confirmed bookings
+    useEffect(() => {
+        const loadOccupancy = async () => {
+            if (!hostel.id) return;
+            try {
+                const bookingsQuery = query(
+                    collection(db, 'bookings'),
+                    where('hostelId', '==', hostel.id),
+                    where('status', '==', 'confirmed')
+                );
+                const snapshot = await getDocs(bookingsQuery);
+                const counts: Record<string, number> = {};
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data() as any;
+                    const roomTypeId = data.roomTypeId || null;
+                    const roomTypeName = data.roomTypeName || data.roomType || null;
+                    if (roomTypeId) {
+                        counts[String(roomTypeId)] = (counts[String(roomTypeId)] || 0) + 1;
+                    }
+                    if (roomTypeName) {
+                        counts[String(roomTypeName)] = (counts[String(roomTypeName)] || 0) + 1;
+                    }
+                });
+                setRoomOccupancy(counts);
+            } catch (error) {
+                console.error('Error loading room occupancy for hostel detail page:', error);
+            }
+        };
+
+        loadOccupancy();
+    }, [hostel.id]);
+
     const reviewStats = useMemo(() => {
         const reviews = Array.isArray(hostel.reviews) ? hostel.reviews : [];
         if (reviews.length === 0) {
@@ -222,12 +255,15 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         if (Array.isArray(rooms) && rooms.length > 0) {
             return rooms.map((room: any, index: number) => {
                 const capacity = room.capacity ?? parseCapacityFromName(room.roomType ?? room.type);
+                const fallbackId = room.id ?? `room-${index}`;
+                const typeName = room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
+                const occupancyFromBookings = roomOccupancy[fallbackId] ?? roomOccupancy[typeName] ?? 0;
                 return {
-                    id: room.id ?? `room-${index}`,
+                    id: fallbackId,
                     label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
-                    type: room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room',
+                    type: typeName,
                     price: room.price ?? hostel.priceRange?.min ?? 0,
-                    occupancy: room.occupancy ?? room.occupants ?? 0,
+                    occupancy: room.occupancy ?? room.occupants ?? occupancyFromBookings,
                     capacity: capacity ?? null,
                     gender: room.gender ?? room.genderTag ?? 'Mixed',
                     image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
@@ -242,26 +278,26 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
         return types.flatMap((roomType, typeIndex) => {
             const capacity = parseCapacityFromName(roomType.name);
+            const roomTypeId = roomType.id ?? `roomType-${typeIndex}`;
+            const confirmedOccupants =
+                roomOccupancy[roomTypeId] ?? roomOccupancy[roomType.name] ?? 0;
+            const baseOccupancy = typeof (roomType as any).occupancy === 'number'
+                ? (roomType as any).occupancy
+                : confirmedOccupants;
             const sampleSize = Math.max(2, Math.min(4, capacity ?? 3));
-            const occupancy =
-                roomType.availability === 'Full'
-                    ? capacity ?? 0
-                    : roomType.availability === 'Limited'
-                        ? Math.max(0, (capacity ?? 0) - 1)
-                        : 0;
 
             return Array.from({ length: sampleSize }, (_, idx) => ({
-                id: `${roomType.id ?? typeIndex}-sample-${idx}`,
+                id: `${roomTypeId}-sample-${idx}`,
                 label: `Room #${typeIndex + 1}${String.fromCharCode(65 + idx)}`,
                 type: roomType.name,
                 price: roomType.price,
-                occupancy,
+                occupancy: baseOccupancy,
                 capacity,
                 gender: idx % 2 === 0 ? 'Female' : 'Male',
                 image: primaryImages[(idx + typeIndex) % primaryImages.length],
             }));
         });
-    }, [hostel, primaryImages]);
+    }, [hostel, primaryImages, roomOccupancy]);
 
     type SharePlatform = 'whatsapp' | 'twitter' | 'facebook' | 'copy';
 

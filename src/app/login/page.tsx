@@ -4,6 +4,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -79,55 +80,69 @@ function LoginPageInner() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                <Card className="w-full max-w-md shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Welcome Back</CardTitle>
-                        <CardDescription>Log in to your HostelHQ account.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email Address</Label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                <Input 
-                                    id="email" 
-                                    type="email" 
-                                    placeholder="e.g. name@student.hostelhq.com" 
-                                    className="pl-10" 
-                                    value={email} 
-                                    onChange={(e) => setEmail(e.target.value)} 
-                                />
+            <main className="relative flex-1 bg-slate-900">
+                <div className="absolute inset-0">
+                    <Image
+                        src="https://images.pexels.com/photos/3768236/pexels-photo-3768236.jpeg?auto=compress&cs=tinysrgb&w=2000"
+                        alt="Students in a hostel common area"
+                        fill
+                        priority
+                        className="object-cover brightness-[0.55]"
+                    />
+                </div>
+
+                <div className="relative flex h-full items-center justify-center py-12 px-4">
+                    <Card className="w-full max-w-md border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+                        <CardHeader>
+                            <CardTitle className="text-2xl font-headline text-slate-50">Welcome Back</CardTitle>
+                            <CardDescription className="text-slate-100/80">
+                                Log in to your HostelHQ account.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email Address</Label>
+                                <div className="relative">
+                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        placeholder="e.g. name@student.hostelhq.com"
+                                        className="pl-10"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                             <div className="relative">
-                                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                <Input 
-                                    id="password" 
-                                    type="password" 
-                                    placeholder="••••••••" 
-                                    className="pl-10" 
-                                    value={password} 
-                                    onChange={(e) => setPassword(e.target.value)}
-                                />
+                            <div className="space-y-2">
+                                <Label htmlFor="password">Password</Label>
+                                <div className="relative">
+                                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    <Input
+                                        id="password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        className="pl-10"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    </CardContent>
-                    <CardFooter className="flex flex-col gap-4">
-                        <Button onClick={handleLogin} className="w-full" disabled={isSubmitting}>
-                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Log In
-                        </Button>
-                        <p className="text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <Link href="/signup" className="text-primary hover:underline">
-                                Sign Up
-                            </Link>
-                        </p>
-                    </CardFooter>
-                </Card>
+                        </CardContent>
+                        <CardFooter className="flex flex-col gap-4">
+                            <Button onClick={handleLogin} className="w-full" disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Log In
+                            </Button>
+                            <p className="text-sm text-slate-100/80">
+                                Don't have an account?{' '}
+                                <Link href="/signup" className="text-accent font-semibold hover:underline">
+                                    Sign Up
+                                </Link>
+                            </p>
+                        </CardFooter>
+                    </Card>
+                </div>
             </main>
         </div>
     );

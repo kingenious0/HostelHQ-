@@ -58,45 +58,46 @@ export default async function Home({ searchParams }: HomeProps) {
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
       <main className="flex-1 bg-slate-50">
-        <section className="container mx-auto px-4 pb-16 pt-10 sm:px-6 lg:px-10">
-          <div className="rounded-3xl bg-white shadow-xl ring-1 ring-slate-100">
-            <div className="grid gap-8 p-8 lg:grid-cols-[1.05fr_0.95fr] lg:p-12">
-              <div className="flex flex-col justify-center">
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-primary/80">Modern hostel booking</p>
-                <h1 className="mt-4 text-4xl font-headline font-bold text-slate-900 sm:text-5xl">
-                  Book verified hostels in minutes
-                </h1>
-                <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg">
-                  Compare hostels, check real-time availability, and reserve beds confidently with our team guiding every step.
-                </p>
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <Button asChild size="lg" className="w-full rounded-full sm:w-auto">
-                    <Link href="#all-hostels">Browse hostels</Link>
-                  </Button>
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="lg"
-                    className="w-full rounded-full border-slate-200 text-slate-900 hover:bg-slate-50 sm:w-auto"
-                  >
-                    <Link href="/contact">Talk to support</Link>
-                  </Button>
-                </div>
+        {/* Hero Section with glassmorphism overlay */}
+        <section className="relative w-full overflow-hidden bg-slate-900">
+          <div className="absolute inset-0">
+            <Image
+              src="https://images.pexels.com/photos/5927532/pexels-photo-5927532.jpeg?auto=compress&cs=tinysrgb&w=2000"
+              alt="Students relaxing in a modern hostel room"
+              fill
+              priority
+              className="object-cover brightness-[0.55]"
+            />
+          </div>
+
+          <div className="relative container mx-auto flex min-h-[420px] flex-col items-center justify-center px-4 pt-24 pb-20 sm:px-6 lg:px-10">
+            <div className="max-w-3xl rounded-3xl border border-white/15 bg-white/10 px-6 py-7 text-center shadow-[0_18px_45px_rgba(15,23,42,0.55)] backdrop-blur-xl sm:px-10 sm:py-10">
+              <p className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/15 px-4 py-1 text-xs font-medium uppercase tracking-[0.35em] text-slate-50/90">
+                Make off‑campus living easier
+              </p>
+              <h1 className="mt-5 text-3xl font-headline font-extrabold text-slate-50 sm:text-4xl lg:text-5xl">
+                Find verified hostels  fast, easy & secure.
+              </h1>
+              <p className="mt-4 text-sm leading-relaxed text-slate-100/85 sm:text-base">
+                Compare real student hostels, check availability, and secure your bed online in a few clicks.
+                HostelHQ keeps payments, agreements and landlord communication all in one safe place.
+              </p>
+              <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:justify-center">
+                <Button asChild size="lg" className="w-full rounded-full bg-primary text-primary-foreground sm:w-auto">
+                  <Link href="#all-hostels">Get started  browse hostels</Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="w-full rounded-full border-white/40 bg-white/10 text-slate-50 hover:bg-white/20 sm:w-auto"
+                >
+                  <Link href="/contact">Talk to a student advisor</Link>
+                </Button>
               </div>
-              <div className="relative h-64 overflow-hidden rounded-2xl bg-slate-100 sm:h-72 lg:h-auto">
-                <Image
-                  src="https://images.unsplash.com/photo-1444418776041-9c7e33cc5a9c?q=80&w=2000&auto=format&fit=crop"
-                  alt="Students inspecting a modern hostel"
-                  fill
-                  priority
-                  className="object-cover"
-                />
-                <div className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/90 p-4 shadow-lg backdrop-blur">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Currently securing</p>
-                  <p className="text-base font-semibold text-slate-900">KNUST • Ayeduase - 2 bed ensuite</p>
-                  <p className="text-sm text-slate-600">$ 4800 / annum • flexible payment plans</p>
-                </div>
-              </div>
+              <p className="mt-3 text-xs text-slate-100/70">
+                No extra agent fees. Just transparent prices and support before, during and after movein.
+              </p>
             </div>
           </div>
         </section>

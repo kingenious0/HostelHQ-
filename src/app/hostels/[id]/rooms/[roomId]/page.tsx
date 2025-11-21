@@ -47,6 +47,7 @@ export default function RoomDetailPage() {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [hasCompletedVisit, setHasCompletedVisit] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasSecuredHostel, setHasSecuredHostel] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -101,10 +102,26 @@ export default function RoomDetailPage() {
             console.error("Error checking completed visit for room detail page:", e);
             setHasCompletedVisit(false);
           }
+
+          // Check if this student already has a confirmed/secured booking in this hostel
+          try {
+            const bookingsQuery = query(
+              collection(db, 'bookings'),
+              where('studentId', '==', user.uid),
+              where('hostelId', '==', hostelId),
+              where('status', '==', 'confirmed')
+            );
+            const bookingsSnapshot = await getDocs(bookingsQuery);
+            setHasSecuredHostel(!bookingsSnapshot.empty);
+          } catch (error) {
+            console.error('Error checking secured booking for room detail page:', error);
+            setHasSecuredHostel(false);
+          }
         }
       } else {
         setAppUser(null);
         setHasCompletedVisit(false);
+        setHasSecuredHostel(false);
       }
     });
 
@@ -184,7 +201,7 @@ export default function RoomDetailPage() {
   }
 
   const handlePrimaryAction = () => {
-    if (hostel.availability === 'Full') {
+    if (hostel.availability === 'Full' || hasSecuredHostel) {
       return;
     }
     const baseTarget = hasCompletedVisit
@@ -261,7 +278,7 @@ export default function RoomDetailPage() {
                 {room.capacity && (
                   <span className="flex items-center gap-1">
                     <Bed className="h-4 w-4" />
-                    Sleeps {room.capacity} per room
+                     {room.capacity} Beds per room
                   </span>
                 )}
                 <span className="flex items-center gap-1">
@@ -302,11 +319,13 @@ export default function RoomDetailPage() {
                 <Button
                   className="w-full h-11 flex items-center justify-center gap-2"
                   onClick={handlePrimaryAction}
-                  disabled={hostel.availability === 'Full'}
+                  disabled={hostel.availability === 'Full' || hasSecuredHostel}
                 >
                   <ShieldCheck className="h-4 w-4" />
                   {hostel.availability === 'Full'
                     ? 'Hostel Fully Booked'
+                    : hasSecuredHostel
+                    ? 'You already secured a room here'
                     : hasCompletedVisit
                     ? 'Secure this room'
                     : 'Book a visit for this room'}

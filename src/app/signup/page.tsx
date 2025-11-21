@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -295,16 +296,9 @@ export default function SignupPage() {
             description: 'I manage hostel properties and oversee operations',
             color: 'text-purple-600',
         },
-    ];
-
-    return (
-        <div className="flex flex-col min-h-screen">
-            <Header />
-            <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                <Card className="w-full max-w-2xl shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Create an Account</CardTitle>
-                        <CardDescription>
+                        <CardTitle className="text-2xl font-headline text-slate-50">Create an Account</CardTitle>
+                        <CardDescription className="text-slate-100/80">
                             {step === 1 && 'Choose your account type to get started'}
                             {step === 2 && 'Enter your account information'}
                             {step === 3 && selectedRole === 'agent' && 'Verify your phone number'}
@@ -328,7 +322,7 @@ export default function SignupPage() {
                                     >
                                         <div className={cn("mb-4", card.color)}>{card.icon}</div>
                                         <h3 className="font-semibold text-lg mb-2">{card.title}</h3>
-                                        <p className="text-sm text-muted-foreground">{card.description}</p>
+                                        <p className="text-sm text-slate-100/80">{card.description}</p>
                                     </button>
                                 ))}
                             </div>
@@ -536,15 +530,15 @@ export default function SignupPage() {
                             </Button>
                         )}
                         {/* Managers no longer have a separate Step 3; they complete signup directly after basic info. */}
-                        <p className="text-sm text-muted-foreground text-center">
+                        <p className="text-sm text-slate-100/80 text-center">
                             Already have an account?{' '}
-                            <Link href="/login" className="text-primary hover:underline">
+                            <Link href="/login" className="text-accent font-semibold hover:underline">
                                 Log In
                             </Link>
                         </p>
                     </CardFooter>
                 </Card>
-            </main>
-        </div>
-    );
-}
+            </div>
+        </main>
+    </div>
+);
