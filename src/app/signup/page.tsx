@@ -421,7 +421,7 @@ export default function SignupPage() {
                             <CardDescription className="text-slate-100/80">
                                 {step === 1 && 'Choose your account type to get started'}
                                 {step === 2 && 'Enter your account information'}
-                                {step === 3 && selectedRole === 'agent' && 'Verify your phone number'}
+                                {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && 'Verify your phone number'}
                                 {step === 3 && selectedRole === 'hostel_manager' && 'Terms and Agreement'}
                             </CardDescription>
                         </CardHeader>
@@ -654,8 +654,8 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                            {/* Step 3: OTP Verification (Agent) */}
-                        {step === 3 && selectedRole === 'agent' && (
+                            {/* Step 3: OTP Verification (Students & Agents) */}
+                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && (
                             <div className="space-y-4">
                                 <Alert>
                                     <Info className="h-4 w-4" />
@@ -761,7 +761,7 @@ export default function SignupPage() {
                                 </Button>
                             </div>
                         )}
-                        {step === 3 && selectedRole === 'agent' && otpVerified && (
+                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && otpVerified && (
                             <Button 
                                 onClick={handleSignup} 
                                 className="w-full" 
