@@ -23,9 +23,41 @@ import { cn } from '@/lib/utils';
 
 type UserRole = 'student' | 'agent' | 'hostel_manager' | null;
 
+const facultyDepartments: Record<string, string[]> = {
+    'Faculty of Technical Education (FTE)': [
+        'Department of Construction Technology and Management Education',
+        'Department of Wood Science and Technology Education',
+        'Department of Electrical and Electronics Technology Education',
+        'Department of Mechanical and Automotive Technology Education',
+        'Department of Civil Engineering',
+    ],
+    'Faculty of Vocational Education (FVE)': [
+        'Department of Catering & Hospitality Education',
+        'Department of Fashion & Textiles Design Education',
+    ],
+    'Faculty of Applied Sciences and Mathematics Education (FASME)': [
+        'Department of Information Technology Education',
+        'Department of Mathematics Education',
+    ],
+    'Faculty of Business Education (FBE)': [
+        'Department of Accounting Studies Education',
+        'Department of Management Education',
+        'Department of Economics Education',
+        'Department of Human Resource and Strategy',
+    ],
+    'Faculty of Education and Communication Sciences (FECS)': [
+        'Department of Languages Education',
+        'Department of Interdisciplinary Studies',
+        'Department of Educational Leadership',
+    ],
+};
+
 export default function SignupPage() {
     const [selectedRole, setSelectedRole] = useState<UserRole>(null);
     const [fullName, setFullName] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [middleName, setMiddleName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -37,6 +69,8 @@ export default function SignupPage() {
     const [otpSent, setOtpSent] = useState(false);
     const [otpVerified, setOtpVerified] = useState(false);
     const [resendCooldown, setResendCooldown] = useState(0);
+    const [faculty, setFaculty] = useState('');
+    const [department, setDepartment] = useState('');
     const { toast } = useToast();
     const router = useRouter();
 
@@ -74,13 +108,8 @@ export default function SignupPage() {
 
     // Handle next step from basic info
     const handleBasicInfoNext = () => {
-        if (!fullName || !email || !password) {
-            toast({ title: "Missing Fields", description: "Please fill out all required fields.", variant: "destructive" });
-            return;
-        }
-
-        if (!isValidEmail(email)) {
-            toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+        if (!selectedRole) {
+            toast({ title: "Missing Role", description: "Please select an account type.", variant: "destructive" });
             return;
         }
 
@@ -89,8 +118,35 @@ export default function SignupPage() {
             return;
         }
 
-        // Agent needs phone number
+        // Student-specific validation
+        if (selectedRole === 'student') {
+            if (!firstName || !lastName || !phoneNumber || !faculty || !department) {
+                toast({ title: "Missing Fields", description: "Please fill in all required details for student signup.", variant: "destructive" });
+                return;
+            }
+
+            if (!isValidPhoneNumber(phoneNumber)) {
+                toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
+                return;
+            }
+
+            setStep(3);
+            handleSendOTP();
+            return;
+        }
+
+        // Agent validation (uses phone + OTP)
         if (selectedRole === 'agent') {
+            if (!fullName || !email) {
+                toast({ title: "Missing Fields", description: "Please fill out all required fields.", variant: "destructive" });
+                return;
+            }
+
+            if (!isValidEmail(email)) {
+                toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+                return;
+            }
+
             if (!phoneNumber) {
                 toast({ title: "Phone Number Required", description: "Please enter your phone number.", variant: "destructive" });
                 return;
@@ -99,14 +155,26 @@ export default function SignupPage() {
                 toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
                 return;
             }
-            // Send OTP for agents
+
             setStep(3);
             handleSendOTP();
             return;
         }
 
-        // Students and managers can proceed directly to signup
-        handleSignup();
+        // Hostel managers: keep email-based signup without OTP for now
+        if (selectedRole === 'hostel_manager') {
+            if (!fullName || !email) {
+                toast({ title: "Missing Fields", description: "Please fill out all required fields.", variant: "destructive" });
+                return;
+            }
+
+            if (!isValidEmail(email)) {
+                toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+                return;
+            }
+
+            handleSignup();
+        }
     };
 
     // Send OTP to agent's phone
@@ -205,26 +273,49 @@ export default function SignupPage() {
             return;
         }
 
-        if (selectedRole === 'agent' && !otpVerified) {
+        if ((selectedRole === 'agent' || selectedRole === 'student') && !otpVerified) {
             toast({ title: "OTP Required", description: "Please verify your phone number first.", variant: "destructive" });
             return;
         }
         
         setIsSubmitting(true);
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            let authEmail = email;
+
+            // Build synthetic auth email for students so they never need to type one
+            if (selectedRole === 'student') {
+                const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                const countryCodeDigits = countryCode.replace(/\D/g, '');
+                const combinedPhone = countryCodeDigits + cleanedNumber;
+
+                const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                const lastThree = combinedPhone.slice(-3);
+                const studentId = `STD-${firstThree}${lastThree}`;
+
+                authEmail = `${studentId.toLowerCase()}@students.hostelhq.com`;
+
+                // Derive fullName for storage
+                const parts = [firstName, middleName, lastName].filter(Boolean);
+                const derivedFullName = parts.join(' ');
+                setFullName(derivedFullName);
+            }
+
+            const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
             const user = userCredential.user;
 
             let userData: any = {
                 uid: user.uid,
-                fullName: fullName,
-                email: email,
+                fullName: fullName || undefined,
+                firstName: firstName || undefined,
+                middleName: middleName || undefined,
+                lastName: lastName || undefined,
+                email: authEmail,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
             };
 
-            // Add phone number for agents (store in E.164 format: country code + number without leading 0)
-            if (selectedRole === 'agent' && phoneNumber) {
+            // Add phone number for agents and students (store in numeric E.164-like format)
+            if ((selectedRole === 'agent' || selectedRole === 'student') && phoneNumber) {
                 // Remove all non-digits
                 let cleanedNumber = phoneNumber.replace(/\D/g, '');
                 // Remove leading 0 if present (Ghana numbers start with 0)
@@ -233,7 +324,18 @@ export default function SignupPage() {
                 }
                 // Remove + from country code and combine
                 const countryCodeDigits = countryCode.replace(/\D/g, '');
-                userData.phoneNumber = countryCodeDigits + cleanedNumber;
+                const combined = countryCodeDigits + cleanedNumber;
+                userData.phoneNumber = combined;
+
+                if (selectedRole === 'student') {
+                    const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                    const lastThree = combined.slice(-3);
+                    const studentId = `STD-${firstThree}${lastThree}`;
+                    userData.studentId = studentId;
+                    userData.faculty = faculty;
+                    userData.department = department;
+                    userData.authEmail = authEmail;
+                }
             }
 
             // (Optional) additional metadata for managers could be added here later
@@ -346,58 +448,50 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                        {/* Step 2: Basic Info Form */}
-                        {step === 2 && (
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="fullname">Full Name</Label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input 
-                                            id="fullname" 
-                                            placeholder="e.g., Jane Doe" 
-                                            className="pl-10" 
-                                            value={fullName} 
-                                            onChange={(e) => setFullName(e.target.value)} 
-                                        />
+                            {/* Step 2: Basic Info Form - Student */}
+                            {step === 2 && selectedRole === 'student' && (
+                                <div className="space-y-4">
+                                    <div className="grid gap-4 md:grid-cols-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="firstName">First Name</Label>
+                                            <div className="relative">
+                                                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                <Input
+                                                    id="firstName"
+                                                    placeholder="e.g., Elliot"
+                                                    className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                    value={firstName}
+                                                    onChange={(e) => setFirstName(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="middleName">Middle Name</Label>
+                                            <Input
+                                                id="middleName"
+                                                placeholder="Optional"
+                                                className="bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={middleName}
+                                                onChange={(e) => setMiddleName(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <Input
+                                                id="lastName"
+                                                placeholder="e.g., Entsiwah"
+                                                className="bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={lastName}
+                                                onChange={(e) => setLastName(e.target.value)}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input 
-                                            id="email" 
-                                            type="email" 
-                                            placeholder="your.email@example.com" 
-                                            className="pl-10" 
-                                            value={email} 
-                                            onChange={(e) => setEmail(e.target.value)} 
-                                        />
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">You can use any valid email address</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
-                                    <div className="relative">
-                                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input 
-                                            id="password" 
-                                            type="password" 
-                                            placeholder="••••••••" 
-                                            className="pl-10" 
-                                            value={password} 
-                                            onChange={(e) => setPassword(e.target.value)}
-                                        />
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
-                                </div>
-                                {selectedRole === 'agent' && (
+
                                     <div className="space-y-2">
-                                        <Label htmlFor="phone">Phone Number</Label>
+                                        <Label htmlFor="phone-student">Phone Number</Label>
                                         <div className="flex gap-2">
                                             <Select value={countryCode} onValueChange={setCountryCode}>
-                                                <SelectTrigger className="w-24">
+                                                <SelectTrigger className="w-24 bg-white/90 text-slate-900">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -408,23 +502,159 @@ export default function SignupPage() {
                                             </Select>
                                             <div className="relative flex-1">
                                                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                <Input 
-                                                    id="phone" 
-                                                    type="tel" 
-                                                    placeholder="0244123456" 
-                                                    className="pl-10" 
-                                                    value={phoneNumber} 
-                                                    onChange={(e) => setPhoneNumber(e.target.value)} 
+                                                <Input
+                                                    id="phone-student"
+                                                    type="tel"
+                                                    placeholder="0244123456"
+                                                    className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                    value={phoneNumber}
+                                                    onChange={(e) => setPhoneNumber(e.target.value)}
                                                 />
                                             </div>
                                         </div>
-                                        <p className="text-xs text-muted-foreground">We'll send a verification code to this number</p>
+                                        <p className="text-xs text-muted-foreground">We will send a verification code to this number.</p>
                                     </div>
-                                )}
-                            </div>
-                        )}
 
-                        {/* Step 3: OTP Verification (Agent) */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password-student">Password</Label>
+                                        <div className="relative">
+                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input
+                                                id="password-student"
+                                                type="password"
+                                                placeholder="••••••••"
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+                                    </div>
+
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label>Faculty</Label>
+                                            <Select
+                                                value={faculty}
+                                                onValueChange={(value) => {
+                                                    setFaculty(value);
+                                                    setDepartment('');
+                                                }}
+                                            >
+                                                <SelectTrigger className="bg-white/90 text-slate-900">
+                                                    <SelectValue placeholder="Select your faculty" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.keys(facultyDepartments).map((fac) => (
+                                                        <SelectItem key={fac} value={fac}>
+                                                            {fac}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Department</Label>
+                                            <Select
+                                                value={department}
+                                                onValueChange={setDepartment}
+                                                disabled={!faculty}
+                                            >
+                                                <SelectTrigger className="bg-white/90 text-slate-900">
+                                                    <SelectValue placeholder={faculty ? 'Select your department' : 'Select a faculty first'} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(facultyDepartments[faculty] || []).map((dept) => (
+                                                        <SelectItem key={dept} value={dept}>
+                                                            {dept}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step 2: Basic Info Form - Agent / Manager */}
+                            {step === 2 && selectedRole !== 'student' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="fullname">Full Name</Label>
+                                        <div className="relative">
+                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input 
+                                                id="fullname" 
+                                                placeholder="e.g., Jane Doe" 
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
+                                                value={fullName} 
+                                                onChange={(e) => setFullName(e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="email">Email Address</Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input 
+                                                id="email" 
+                                                type="email" 
+                                                placeholder="your.email@example.com" 
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
+                                                value={email} 
+                                                onChange={(e) => setEmail(e.target.value)} 
+                                            />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">You can use any valid email address</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password">Password</Label>
+                                        <div className="relative">
+                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input 
+                                                id="password" 
+                                                type="password" 
+                                                placeholder="••••••••" 
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
+                                                value={password} 
+                                                onChange={(e) => setPassword(e.target.value)}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+                                    </div>
+                                    {selectedRole === 'agent' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="phone">Phone Number</Label>
+                                            <div className="flex gap-2">
+                                                <Select value={countryCode} onValueChange={setCountryCode}>
+                                                    <SelectTrigger className="w-24 bg-white/90 text-slate-900">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="+233">+233 (GH)</SelectItem>
+                                                        <SelectItem value="+234">+234 (NG)</SelectItem>
+                                                        <SelectItem value="+254">+254 (KE)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <div className="relative flex-1">
+                                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                    <Input 
+                                                        id="phone" 
+                                                        type="tel" 
+                                                        placeholder="0244123456" 
+                                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
+                                                        value={phoneNumber} 
+                                                        onChange={(e) => setPhoneNumber(e.target.value)} 
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">We'll send a verification code to this number</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Step 3: OTP Verification (Agent) */}
                         {step === 3 && selectedRole === 'agent' && (
                             <div className="space-y-4">
                                 <Alert>
@@ -447,7 +677,7 @@ export default function SignupPage() {
                                                 maxLength={6}
                                                 value={otp} 
                                                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
-                                                className="text-center text-2xl tracking-widest"
+                                                className="text-center text-2xl tracking-widest bg-white/95 text-slate-900 placeholder:text-slate-500"
                                             />
                                         </div>
                                         <div className="flex gap-2">
@@ -517,7 +747,7 @@ export default function SignupPage() {
                                 <Button 
                                     variant="outline" 
                                     onClick={() => setStep(1)} 
-                                    className="flex-1"
+                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
                                 >
                                     <ArrowLeft className="mr-2 h-4 w-4" />
                                     Back

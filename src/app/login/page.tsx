@@ -14,10 +14,10 @@ import { Loader2, KeyRound, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 function LoginPageInner() {
-    const [email, setEmail] = useState('');
+    const [identifier, setIdentifier] = useState(''); // email or phone
     const [password, setPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
@@ -36,7 +36,34 @@ function LoginPageInner() {
     const handleLogin = async () => {
         setIsSubmitting(true);
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            let loginEmail = identifier.trim();
+
+            const isEmailLike = loginEmail.includes('@');
+
+            // If identifier is a phone number, resolve it to the stored authEmail/email
+            if (!isEmailLike) {
+                const cleaned = loginEmail.replace(/\D/g, '');
+                if (!cleaned) {
+                    throw new Error('invalid-phone');
+                }
+
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('phoneNumber', '==', cleaned));
+                const snap = await getDocs(q);
+
+                if (snap.empty) {
+                    throw new Error('user-not-found');
+                }
+
+                const userData = snap.docs[0].data() as any;
+                loginEmail = (userData.authEmail as string) || (userData.email as string);
+
+                if (!loginEmail) {
+                    throw new Error('missing-email');
+                }
+            }
+
+            const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password);
             const user = userCredential.user;
 
             // Check user role and redirect accordingly
@@ -44,10 +71,11 @@ function LoginPageInner() {
             const userDocSnap = await getDoc(userDocRef);
 
             if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                const role = userData.role;
+                const userData = userDocSnap.data() as any;
+                const role = userData.role as string | undefined;
 
-                toast({ title: 'Login Successful!' });
+                const displayName = (userData.fullName as string) || (userData.firstName as string) || '';
+                toast({ title: displayName ? `Welcome ${displayName}!` : 'Login Successful!' });
 
                 // Redirect based on role
                 const destination =
@@ -101,16 +129,16 @@ function LoginPageInner() {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="email">Email Address</Label>
+                                <Label htmlFor="identifier">Email or Phone</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder="e.g. name@student.hostelhq.com"
-                                        className="pl-10"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
+                                        id="identifier"
+                                        type="text"
+                                        placeholder="Phone number or email"
+                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                        value={identifier}
+                                        onChange={(e) => setIdentifier(e.target.value)}
                                     />
                                 </div>
                             </div>
@@ -122,7 +150,7 @@ function LoginPageInner() {
                                         id="password"
                                         type="password"
                                         placeholder="••••••••"
-                                        className="pl-10"
+                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                     />
