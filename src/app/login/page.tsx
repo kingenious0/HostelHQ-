@@ -47,8 +47,18 @@ function LoginPageInner() {
                     throw new Error('invalid-phone');
                 }
 
+                // Normalize phone to match signup storage format
+                // Signup stores phoneNumber as: countryCodeDigits + localWithoutLeadingZero (e.g. 233244123456)
+                let normalized = cleaned;
+                if (normalized.startsWith('0') && normalized.length === 10) {
+                    // Assume Ghana local format like 0244xxxxxx -> 233244xxxxxx
+                    normalized = '233' + normalized.substring(1);
+                } else if (normalized.startsWith('233') && normalized.length === 12) {
+                    // Already in 233 + 9-digit form; keep as is
+                }
+
                 const usersRef = collection(db, 'users');
-                const q = query(usersRef, where('phoneNumber', '==', cleaned));
+                const q = query(usersRef, where('phoneNumber', '==', normalized));
                 const snap = await getDocs(q);
 
                 if (snap.empty) {
