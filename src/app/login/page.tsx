@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/header';
@@ -15,7 +15,7 @@ import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-export default function LoginPage() {
+function LoginPageInner() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -130,5 +130,22 @@ export default function LoginPage() {
                 </Card>
             </main>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex flex-col min-h-screen">
+                    <Header />
+                    <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </main>
+                </div>
+            }
+        >
+            <LoginPageInner />
+        </Suspense>
     );
 }
