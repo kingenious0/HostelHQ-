@@ -30,9 +30,11 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs, Timestamp, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+
+type RoommateContactMode = 'phone' | 'whatsapp' | 'basic';
 
 interface Roommate {
     uid: string;
@@ -40,7 +42,9 @@ interface Roommate {
     profileImage?: string;
     email: string;
     phone?: string;
-    // Add privacy settings if needed
+    program?: string;
+    level?: string;
+    contactMode: RoommateContactMode;
 }
 
 interface Booking {
@@ -51,6 +55,13 @@ interface Booking {
     roomType?: string;
     status: 'confirmed' | 'pending' | 'cancelled';
     studentId: string;
+    studentDetails?: {
+      fullName?: string;
+      email?: string;
+      phoneNumber?: string;
+      program?: string;
+      level?: string;
+    };
 }
 
 interface AppUser {
@@ -70,6 +81,7 @@ interface AppUser {
     showProgrammeOfStudy: boolean;
     showPhoneNumber: boolean;
     showEmailAddress: boolean;
+    roommateContactMode?: RoommateContactMode;
   };
 }
 
@@ -80,6 +92,7 @@ export default function MyRoommatesPage() {
     const [appUser, setAppUser] = useState<AppUser | null>(null);
     const [roommates, setRoommates] = useState<Roommate[]>([]);
     const [userBookings, setUserBookings] = useState<Booking[]>([]);
+    const [contactMode, setContactMode] = useState<RoommateContactMode>('phone');
     const { toast } = useToast();
     const router = useRouter();
 
@@ -116,6 +129,9 @@ export default function MyRoommatesPage() {
                     gender: userData.gender || '',
                     privacySettings: userData.privacySettings, // Fetch privacy settings
                 });
+                if (userData.privacySettings?.roommateContactMode) {
+                    setContactMode(userData.privacySettings.roommateContactMode);
+                }
             } else {
                 setAppUser(null);
             }
@@ -152,13 +168,17 @@ export default function MyRoommatesPage() {
                         const roommateUserDoc = await getDoc(doc(db, "users", roommateBookingData.studentId));
                         if (roommateUserDoc.exists()) {
                             const roommateData = roommateUserDoc.data() as AppUser;
-                            // Apply privacy settings: for now, assume all visible if no setting specified
+                            const roommateContactMode: RoommateContactMode =
+                              roommateData.privacySettings?.roommateContactMode || 'phone';
                             currentRoommates.push({
                                 uid: roommateUserDoc.id,
                                 fullName: roommateData.fullName || 'Unknown Roommate',
-                                email: roommateData.email || '',
+                                email: roommateData.email || roommateBookingData.studentDetails?.email || '',
                                 profileImage: roommateData.profileImage || '',
-                                phone: roommateData.phone || '',
+                                phone: roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '',
+                                program: roommateBookingData.studentDetails?.program,
+                                level: roommateBookingData.studentDetails?.level,
+                                contactMode: roommateContactMode,
                             });
                         }
                     }
@@ -177,6 +197,21 @@ export default function MyRoommatesPage() {
             unsubscribeBookings();
         };
     }, [currentUser]);
+
+    const handleContactModeChange = async (mode: RoommateContactMode) => {
+        if (!currentUser) return;
+        setContactMode(mode);
+        try {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            await updateDoc(userDocRef, {
+                'privacySettings.roommateContactMode': mode,
+            });
+            toast({ title: 'Privacy updated' });
+        } catch (error) {
+            console.error('Failed to update roommate privacy mode', error);
+            toast({ title: 'Could not update privacy settings', variant: 'destructive' });
+        }
+    };
 
     if (loadingAuth) {
         return (
@@ -323,6 +358,46 @@ export default function MyRoommatesPage() {
                                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">My Roommates</h1>
                             </div>
 
+                            <Card className="mb-6 border border-muted/40 bg-card/60">
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base sm:text-lg">Safety &amp; privacy</CardTitle>
+                                    <CardDescription>
+                                        Choose how much contact information your roommates can see. This only affects how your details appear on their My Roommates page.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="space-y-1 text-sm text-muted-foreground max-w-md">
+                                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">Roommate contact visibility</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={contactMode === 'phone' ? 'default' : 'outline'}
+                                            onClick={() => handleContactModeChange('phone')}
+                                        >
+                                            Show phone to roommates
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={contactMode === 'whatsapp' ? 'default' : 'outline'}
+                                            onClick={() => handleContactModeChange('whatsapp')}
+                                        >
+                                            WhatsApp only
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant={contactMode === 'basic' ? 'default' : 'outline'}
+                                            onClick={() => handleContactModeChange('basic')}
+                                        >
+                                            Name &amp; programme only
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
                             {loading ? (
                                 <div className="flex justify-center py-12">
                                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
@@ -330,19 +405,44 @@ export default function MyRoommatesPage() {
                             ) : roommates.length > 0 ? (
                                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                     {roommates.map(roommate => (
-                                        <Card key={roommate.uid} className="bg-white shadow-md rounded-lg p-6 flex items-center space-x-4">
-                                            <Avatar className="h-16 w-16">
+                                        <Card key={roommate.uid} className="bg-white shadow-md rounded-lg p-6 flex flex-col gap-4">
+                                            <div className="flex items-center gap-4">
+                                              <Avatar className="h-12 w-12">
                                                 {roommate.profileImage ? (
                                                     <AvatarImage src={roommate.profileImage} alt={roommate.fullName} />
                                                 ) : (
                                                     <AvatarFallback>{roommate.fullName.charAt(0)}</AvatarFallback>
                                                 )}
-                                            </Avatar>
-                                            <div>
-                                                <h3 className="font-semibold text-lg">{roommate.fullName}</h3>
-                                                <p className="text-sm text-muted-foreground">{roommate.email}</p>
-                                                {roommate.phone && <p className="text-sm text-muted-foreground">{roommate.phone}</p>}
+                                              </Avatar>
+                                              <div className="space-y-1">
+                                                <h3 className="font-semibold text-base sm:text-lg">{roommate.fullName}</h3>
+                                                {(roommate.program || roommate.level) && (
+                                                  <p className="text-xs sm:text-sm text-muted-foreground">
+                                                    {[roommate.program, roommate.level && `Level ${roommate.level}`].filter(Boolean).join(' • ')}
+                                                  </p>
+                                                )}
+                                                {roommate.contactMode !== 'basic' && roommate.email && (
+                                                  <p className="text-xs sm:text-sm text-muted-foreground break-words">{roommate.email}</p>
+                                                )}
+                                              </div>
                                             </div>
+                                            {roommate.contactMode === 'phone' && roommate.phone && (
+                                              <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
+                                                <p className="font-medium text-foreground">Phone: {roommate.phone}</p>
+                                                <p className="text-[11px] text-muted-foreground">This roommate chose to share their phone number with you.</p>
+                                              </div>
+                                            )}
+                                            {roommate.contactMode === 'whatsapp' && roommate.phone && (
+                                              <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
+                                                <p className="font-medium text-foreground">WhatsApp available</p>
+                                                <p className="text-[11px] text-muted-foreground">This roommate prefers WhatsApp only. Use the number provided in your booking receipt to reach them.</p>
+                                              </div>
+                                            )}
+                                            {roommate.contactMode === 'basic' && (
+                                              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                                                This roommate prefers to only share their name and programme. You can connect with them on campus.
+                                              </p>
+                                            )}
                                         </Card>
                                     ))}
                                 </div>

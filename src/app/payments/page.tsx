@@ -394,7 +394,7 @@ export default function PaymentsPage() {
                                     Trusted payment partners
                                 </p>
                                 <div className="mt-4 flex flex-wrap items-center gap-4 text-sm font-semibold text-slate-600">
-                                    {['FROG.WIGAL', 'AAMUSTED', 'PAYSTACK'].map((brand) => (
+                                    {['MTN', 'Airteltigo', 'Telecel', 'PAYSTACK'].map((brand) => (
                                         <span
                                             key={brand}
                                             className="inline-flex items-center rounded-full border border-purple-200 px-4 py-1 text-purple-700"
