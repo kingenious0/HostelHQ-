@@ -311,9 +311,9 @@ export default function RoomsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-background">
       <Header />
-      <main className="flex-1 bg-slate-50">
+      <main className="flex-1 bg-background">
         {/* Hero Section */}
         <section className="relative h-[300px] sm:h-[400px] w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/10">
           <div className="absolute inset-0">
@@ -349,7 +349,7 @@ export default function RoomsPage() {
 
         {/* Filters Section */}
         <section className="container mx-auto px-4 sm:px-6 -mt-2">
-          <Card className="shadow-lg border-2 align-center">
+          <Card className="shadow-lg border border-border align-center bg-card">
             <CardContent className="p-4 sm:p-6">
               <div className="flex justify-center gap-4 mb-4">
                 
@@ -388,10 +388,10 @@ export default function RoomsPage() {
         {/* Rooms Section */}
         <section className="container mx-auto px-4 sm:px-6 py-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-            <h2 className="text-2xl font-bold font-headline">Select Rooms</h2>
+            <h2 className="text-2xl font-bold font-headline text-foreground">Select Rooms</h2>
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search Room Number"
                   value={searchQuery}
@@ -450,7 +450,7 @@ export default function RoomsPage() {
                   onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
                 >
                   <div className={cn(
-                    "relative bg-slate-100 overflow-hidden",
+                    "relative bg-background/40 overflow-hidden",
                     viewMode === 'grid' ? "h-48" : "h-32 w-32 flex-shrink-0"
                   )}>
                     <Image
@@ -489,7 +489,7 @@ export default function RoomsPage() {
                       );
                     })()}
                     <div className="absolute right-3 top-3 flex gap-1">
-                      <Badge variant="outline" className="bg-white/90 text-xs">
+                      <Badge variant="outline" className="bg-card/90 text-xs">
                         {room.gender === 'Male' ? '♂' : room.gender === 'Female' ? '♀' : 'Mixed'}
                       </Badge>
                     </div>
@@ -499,20 +499,20 @@ export default function RoomsPage() {
                     viewMode === 'list' && "flex-1"
                   )}>
                     <div className="flex-1 space-y-2">
-                      <h3 className="font-bold text-lg text-slate-900">
+                      <h3 className="font-bold text-lg text-foreground">
                         {room.label}
                       </h3>
-                      <p className="text-sm text-slate-600">{room.type}</p>
+                      <p className="text-sm text-muted-foreground">{room.type}</p>
 
                       <div className="flex items-baseline justify-between">
                         <span className="text-xl font-bold text-primary">
                           GH₵{room.price.toLocaleString()}
                         </span>
-                        <span className="text-xs text-slate-500">per year</span>
+                        <span className="text-xs text-muted-foreground">per year</span>
                       </div>
 
                       {room.capacity && room.totalRooms && (
-                        <p className="text-xs text-slate-600">
+                        <p className="text-xs text-muted-foreground">
                           {(() => {
                             const totalSlots = room.capacity! * room.totalRooms!;
                             const used = Math.max(0, Math.min(totalSlots, room.occupancy));
@@ -577,7 +577,7 @@ export default function RoomsPage() {
             </div>
           ) : (
             <div className="text-center py-12">
-              <p className="text-slate-600">No rooms found matching your filters.</p>
+              <p className="text-muted-foreground">No rooms found matching your filters.</p>
               <Button
                 variant="outline"
                 className="mt-4"

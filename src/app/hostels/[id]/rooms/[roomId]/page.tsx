@@ -231,7 +231,7 @@ export default function RoomDetailPage() {
   })();
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-background">
       <Header />
       <main className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-xl">
@@ -245,7 +245,7 @@ export default function RoomDetailPage() {
             Back to rooms
           </Button>
 
-          <Card className="overflow-hidden shadow-xl border border-slate-200">
+          <Card className="overflow-hidden shadow-xl border border-border bg-card">
             <div className="relative h-56 w-full">
               <Image
                 src={room.image}
@@ -274,7 +274,7 @@ export default function RoomDetailPage() {
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                 {room.capacity && (
                   <span className="flex items-center gap-1">
                     <Bed className="h-4 w-4" />
@@ -299,7 +299,7 @@ export default function RoomDetailPage() {
 
               {room.amenities && room.amenities.length > 0 && (
                 <div className="pt-2">
-                  <p className="text-xs font-medium text-slate-600 mb-1">Key amenities</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Key amenities</p>
                   <div className="flex flex-wrap gap-1.5">
                     {room.amenities.slice(0, 6).map((amenity) => (
                       <Badge key={amenity} variant="outline" className="text-[10px] px-2 py-0.5">
@@ -307,7 +307,7 @@ export default function RoomDetailPage() {
                       </Badge>
                     ))}
                     {room.amenities.length > 6 && (
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-muted-foreground">
                         +{room.amenities.length - 6} more
                       </span>
                     )}

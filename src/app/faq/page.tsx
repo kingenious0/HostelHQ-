@@ -182,15 +182,15 @@ export default function FAQPage() {
                 <div className="space-y-2">
                   <div>
                     <p className="text-xs uppercase tracking-widest text-white/70">Call us</p>
-                    <p className="font-semibold text-white text-sm">+233 (0) 20 123 4567</p>
+                    <p className="font-semibold text-white text-sm">233 (0) 506 746 307 / 233 (0) 536 282 694</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-widest text-white/70">Email</p>
-                    <p className="font-semibold text-white text-sm">support@hostelhq.africa</p>
+                    <p className="font-semibold text-white text-sm">hostelhqghana@gmail.com</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-widest text-white/70">WhatsApp</p>
-                    <p className="font-semibold text-white text-sm">+233 (0) 59 876 5432</p>
+                    <p className="font-semibold text-white text-sm">+233 (0) 597626090 / +233 (0) 536 282 694</p>
                   </div>
                 </div>
                 <Button variant="secondary" className="w-full text-primary text-sm py-2">

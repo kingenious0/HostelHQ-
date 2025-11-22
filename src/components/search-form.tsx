@@ -39,14 +39,14 @@ export function SearchForm() {
     };
 
     return (
-        <Card className="bg-white/90 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow-2xl mx-2 sm:mx-0">
+        <Card className="bg-card/90 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow-2xl mx-2 sm:mx-0 border border-border/60">
             <CardContent className="p-2 sm:p-3">
                 <form onSubmit={handleSearch} className="flex flex-col gap-5 sm:gap-6">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div className="relative">
                             <University className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setInstitution} value={institution}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
                                     <SelectValue placeholder="Select Institution" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -61,7 +61,7 @@ export function SearchForm() {
                         <div className="relative">
                             <DoorOpen className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setRoomType} value={roomType}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
                                     <SelectValue placeholder="Select Room Type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -77,12 +77,13 @@ export function SearchForm() {
                         <div className="relative">
                             <Users className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
                             <Select onValueChange={setGender} value={gender}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
                                     <SelectValue placeholder="Select Gender" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Male">Male</SelectItem>
                                     <SelectItem value="Female">Female</SelectItem>
+                                    <SelectItem value="Mixed">Mixed</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -93,7 +94,7 @@ export function SearchForm() {
                             <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Search hostel name..." 
-                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white"
+                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -102,7 +103,7 @@ export function SearchForm() {
                             <MapPin className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Enter location" 
-                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-white"
+                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90"
                                 value={locationQuery}
                                 onChange={(e) => setLocationQuery(e.target.value)}
                             />
@@ -112,9 +113,9 @@ export function SearchForm() {
                     <Button
                         type="submit"
                         size="lg"
-                        className="w-full h-12 sm:h-14 rounded-lg bg-orange-500 text-white hover:bg-orange-500/90 text-base sm:text-lg font-semibold tracking-wide"
+                        className="w-full h-12 sm:h-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-semibold tracking-wide"
                     >
-                        Selects
+                        Search hostels
                     </Button>
                 </form>
             </CardContent>

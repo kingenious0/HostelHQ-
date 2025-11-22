@@ -140,7 +140,8 @@ const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
   const allRoomTypeTags = hostelRoomTypeTags.length ? hostelRoomTypeTags : derivedRoomTypeTags;
 
   const matchesInstitution = !options.institution || hostelInstitution === normalizedInstitution;
-  const matchesGender = !options.gender || hostelGender === normalizedGender;
+  // Use substring match for gender to be more forgiving (e.g., 'mixed hostel' should match 'Mixed' filter)
+  const matchesGender = !options.gender || hostelGender.includes(normalizedGender);
   const matchesRoomType =
     !options.roomType ||
     allRoomTypeTags.includes(normalizedRoomType);

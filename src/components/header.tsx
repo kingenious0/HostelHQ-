@@ -87,7 +87,11 @@ export function Header() {
     profileImage: ''
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'system';
+    const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
+    return stored ?? 'system';
+  });
   const [fontScale, setFontScale] = useState<FontScale>('normal');
   const { toast } = useToast();
   const router = useRouter();
@@ -111,14 +115,6 @@ export function Header() {
     const scale = value === 'large' ? 1.1 : value === 'xlarge' ? 1.25 : 1;
     document.documentElement.style.setProperty('--font-scale', String(scale));
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
-    const initial = stored ?? 'light';
-    setThemeMode(initial);
-    applyTheme(initial);
-  }, [applyTheme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -513,11 +509,11 @@ export function Header() {
                 <div className="mt-6 space-y-3">
                   <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="h-4 w-4 text-primary" />
-                    +233 (0) 20 123 4567
+                    233 (0) 597626090 / 233 (0) 536 282 694
                   </Link>
-                  <Link href="mailto:support@hostelhq.africa" className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Link href="mailto:hostelhqghana@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Mail className="h-4 w-4 text-primary" />
-                    support@hostelhq.africa
+                    hostelhqghana@gmail.com
                   </Link>
                   {!appUser && !loading && (
                     <div className="flex gap-2 pt-2">

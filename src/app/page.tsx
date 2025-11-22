@@ -57,17 +57,19 @@ export default async function Home({ searchParams }: HomeProps) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
-      <main className="flex-1 bg-slate-50">
+      <main className="flex-1 bg-background">
         {/* Hero Section with glassmorphism overlay */}
         <section className="relative w-full overflow-hidden bg-slate-900">
           <div className="absolute inset-0">
-            <Image
-              src="https://images.pexels.com/photos/5927532/pexels-photo-5927532.jpeg?auto=compress&cs=tinysrgb&w=2000"
-              alt="Students relaxing in a modern hostel room"
-              fill
-              priority
-              className="object-cover brightness-[0.55]"
-            />
+            <video
+  className="absolute inset-0 h-full w-full object-cover brightness-[0.55]"
+  autoPlay
+  loop
+  muted
+  playsInline
+>
+  <source src="/videos/building-tour.mp4" type="video/mp4" />
+</video>
           </div>
 
           <div className="relative container mx-auto flex min-h-[420px] flex-col items-center justify-center px-4 pt-24 pb-20 sm:px-6 lg:px-10">
@@ -103,7 +105,7 @@ export default async function Home({ searchParams }: HomeProps) {
         </section>
 
         <section className="container mx-auto -mt-12 px-4 sm:px-6 lg:px-10">
-          <div className="rounded-3xl border border-border/60 bg-white p-6 shadow-2xl sm:p-8">
+          <div className="rounded-3xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.55)] backdrop-blur-xl sm:p-8">
             <h2 className="sr-only">Find a hostel</h2>
             <SearchForm />
           </div>
@@ -112,19 +114,25 @@ export default async function Home({ searchParams }: HomeProps) {
         <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-12 sm:px-6 lg:px-10">
           <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 {filteredHostels.length} {filteredHostels.length === 1 ? "hostel" : "hostels"} curated for students
               </p>
-              <h2 className="text-3xl font-headline font-semibold text-slate-900">
+              <h2 className="text-3xl font-headline font-semibold text-foreground">
                 {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery
                   ? "Search results"
                   : "All verified hostels"}
               </h2>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-              <span className="rounded-full border border-slate-200 px-3 py-1">Trusted landlords</span>
-              <span className="rounded-full border border-slate-200 px-3 py-1">Digital agreements</span>
-              <span className="rounded-full border border-slate-200 px-3 py-1">Campus transfers</span>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
+                Trusted landlords
+              </span>
+              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
+                Digital agreements
+              </span>
+              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
+                Campus transfers
+              </span>
             </div>
           </header>
 
@@ -169,7 +177,7 @@ export default async function Home({ searchParams }: HomeProps) {
           )}
         </section>
 
-        <section className="bg-white">
+        <section className="bg-background border-t border-border/40">
           <div className="container mx-auto flex flex-wrap items-center justify-center gap-8 px-4 py-12 sm:px-6 lg:px-10">
             {(brands.length ? brands : [
               { id: "frog", name: "Frog.wigal", logoUrl: "/brands/frog-wigal.svg" },

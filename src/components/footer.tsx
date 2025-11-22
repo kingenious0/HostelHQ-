@@ -65,11 +65,11 @@ export function Footer() {
           <ul className="space-y-3 text-sm text-slate-300">
             <li className="flex items-center gap-3">
               <PhoneCall className="h-4 w-4 text-primary" />
-              <span>+233 (0) 20 123 4567</span>
+              <span>233 (0) 597626090 / 233 (0) 536 282 694</span>
             </li>
             <li className="flex items-center gap-3">
               <Mail className="h-4 w-4 text-primary" />
-              <span>support@hostelhq.africa</span>
+              <span>hostelhqghana@gmail.com</span>
             </li>
             <li className="flex items-start gap-3">
               <MapPin className="mt-1 h-4 w-4 text-primary" />

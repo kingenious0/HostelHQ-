@@ -605,7 +605,7 @@ export default function SecureHostelPage() {
                         </div>
                         <div className="rounded-xl bg-muted/40 p-4 text-muted-foreground">
                             <p className="font-semibold text-foreground">Having issues?</p>
-                            <p className="mt-1">Call our support team on <span className="text-primary font-semibold">+233 20 123 4567</span> or email support@hostelhq.africa.</p>
+                            <p className="mt-1">Call our support team on <span className="text-primary font-semibold">+233 20 123 4567</span> or email hostelhqghana@gmail.com.</p>
                         </div>
                         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
                             <p className="font-semibold text-primary text-sm">AI Helper (coming alive soon)</p>

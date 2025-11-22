@@ -121,11 +121,11 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   const distanceText = hostel.distanceToUniversity || 'N/A';
 
   return (
-    <Card className="w-full overflow-hidden transition-all hover:shadow-2xl duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col group border border-slate-200 rounded-2xl bg-white shadow-sm">
+    <Card className="w-full overflow-hidden transition-all hover:shadow-2xl duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col group border border-border rounded-2xl bg-card shadow-sm">
         <Link href={`/hostels/${hostel.id}`} className="block flex flex-col flex-grow">
             {/* Image Section - Top Half */}
             <CardHeader className="p-0">
-            <div className="relative h-64 w-full overflow-hidden bg-slate-100">
+            <div className="relative h-64 w-full overflow-hidden bg-background/40">
                 <Carousel autoPlay={false} className="h-full">
                     <CarouselContent className="h-64">
                         {(hostel.images?.length ? hostel.images.slice(0, 4) : ['/placeholder.jpg']).map((image, index) => (
@@ -152,10 +152,10 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
             </CardHeader>
             
             {/* Information Section - Bottom Half */}
-            <CardContent className="p-5 flex-grow bg-white">
+            <CardContent className="p-5 flex-grow bg-card">
                 {/* Rating & availability */}
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1 rounded-full bg-slate-900/5 px-3 py-1 text-sm font-semibold text-slate-900">
+                    <div className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm font-semibold text-foreground">
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />
                         {hostel.rating.toFixed(1)}
                         {typeof hostel.numberOfReviews === "number" && (
@@ -171,19 +171,19 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 </div>
 
                 {/* Hostel Name */}
-                <CardTitle className="text-2xl font-bold font-headline text-slate-900 mb-2 leading-tight line-clamp-2">
+                <CardTitle className="text-2xl font-bold font-headline text-foreground mb-2 leading-tight line-clamp-2">
                     {hostel.name}
                 </CardTitle>
                 
                 {/* Location with Primary Map Pin */}
-                <div className="flex items-center text-slate-700 text-sm mb-2">
+                <div className="flex items-center text-muted-foreground text-sm mb-2">
                     <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0 text-primary" />
                     <span className="truncate font-medium">{hostel.location}</span>
                 </div>
                 
                 {/* Distance from Campus with Primary Walking Person Icon */}
                 {distanceText !== 'N/A' && (
-                    <div className="flex items-center text-slate-700 text-sm mb-4">
+                    <div className="flex items-center text-muted-foreground text-sm mb-4">
                         <User className="h-4 w-4 mr-1.5 flex-shrink-0 text-primary" />
                         <span className="font-medium uppercase">{distanceText} FROM CAMPUS</span>
                     </div>
@@ -193,18 +193,18 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 <div className="flex items-center gap-4 mb-4">
                     <div className="flex items-center gap-1.5">
                         <User className="h-5 w-5 text-primary" strokeWidth={2} fill="none" />
-                        <span className="text-sm font-semibold text-slate-900">{displayMaleCount}</span>
+                        <span className="text-sm font-semibold text-foreground">{displayMaleCount}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <UserCircle2 className="h-5 w-5 text-primary" strokeWidth={2} fill="none" />
-                        <span className="text-sm font-semibold text-slate-900">{displayFemaleCount}</span>
+                        <span className="text-sm font-semibold text-foreground">{displayFemaleCount}</span>
                     </div>
                     {/* Additional room type indicators - can be used for other categories */}
                     {roomTypes.length > 1 && (
                         <>
                             <div className="flex items-center gap-1.5">
                                 <div className="h-5 w-5 rounded-full border-2 border-primary bg-transparent"></div>
-                                <span className="text-sm font-semibold text-slate-900">0</span>
+                                <span className="text-sm font-semibold text-foreground">0</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="h-5 w-5 rounded-full border-2 border-primary bg-transparent"></div>
@@ -217,13 +217,13 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 {/* Pricing with Primary Cash Register Icon */}
                 <div className="flex items-center gap-2 mb-4">
                     <Receipt className="h-5 w-5 text-primary" />
-                    <span className="text-base font-semibold text-slate-900">{renderPrice()} starting price</span>
+                    <span className="text-base font-semibold text-foreground">{renderPrice()} starting price</span>
                 </div>
             </CardContent>
         </Link>
         
         {/* View Detail Button */}
-        <CardFooter className="p-4 sm:p-5 pt-0 bg-white">
+        <CardFooter className="p-4 sm:p-5 pt-0 bg-card">
             <Link href={`/hostels/${hostel.id}`} className="w-full">
                 <Button className="w-full bg-primary hover:bg-primary/90 text-white font-semibold px-4 py-2.5 rounded-lg shadow-sm flex items-center justify-center gap-2">
                     View Detail
