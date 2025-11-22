@@ -139,13 +139,13 @@ function LoginPageInner() {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="identifier">Email or Phone</Label>
+                                <Label htmlFor="identifier">Unique ID</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                     <Input
                                         id="identifier"
                                         type="text"
-                                        placeholder="Phone number or email"
+                                        placeholder="e.g. std-ell205@hostelhq.com"
                                         className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
                                         value={identifier}
                                         onChange={(e) => setIdentifier(e.target.value)}

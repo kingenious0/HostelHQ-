@@ -14,7 +14,7 @@ import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { tenancyAgreementText } from '@/lib/legal';
@@ -71,17 +71,35 @@ export default function SignupPage() {
     const [resendCooldown, setResendCooldown] = useState(0);
     const [faculty, setFaculty] = useState('');
     const [department, setDepartment] = useState('');
+    const [managerHostels, setManagerHostels] = useState<{ id: string; name?: string; location?: string; managerId?: string }[]>([]);
+    const [loadingManagerHostels, setLoadingManagerHostels] = useState(false);
+    const [selectedManagerHostelId, setSelectedManagerHostelId] = useState('');
     const { toast } = useToast();
     const router = useRouter();
 
     // State for multi-step form
-    const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP/Terms, 4: Complete
+    const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP, 4: Manager hostel selection
     const [termsAccepted, setTermsAccepted] = useState(false);
 
     // Validate email format
     const isValidEmail = (email: string): boolean => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
+    };
+
+    // Load available hostels (without a manager) for manager signup step
+    const loadManagerHostels = async () => {
+        setLoadingManagerHostels(true);
+        try {
+            const snap = await getDocs(collection(db, 'hostels'));
+            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+            const filtered = list.filter((h) => !h.managerId);
+            setManagerHostels(filtered);
+        } catch (error) {
+            console.error('Error loading hostels for manager signup:', error);
+        } finally {
+            setLoadingManagerHostels(false);
+        }
     };
 
     // Validate Ghana phone number
@@ -95,6 +113,8 @@ export default function SignupPage() {
     // Handle role selection
     const handleRoleSelect = (role: UserRole) => {
         setSelectedRole(role);
+        // Immediately move to the next step so users don't have to press Continue again
+        setStep(2);
     };
 
     // Handle next step from role selection
@@ -135,15 +155,10 @@ export default function SignupPage() {
             return;
         }
 
-        // Agent validation (uses phone + OTP)
+        // Agent validation (uses phone + OTP, no email field shown)
         if (selectedRole === 'agent') {
-            if (!fullName || !email) {
-                toast({ title: "Missing Fields", description: "Please fill out all required fields.", variant: "destructive" });
-                return;
-            }
-
-            if (!isValidEmail(email)) {
-                toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+            if (!fullName) {
+                toast({ title: "Missing Fields", description: "Please enter your full name.", variant: "destructive" });
                 return;
             }
 
@@ -161,19 +176,24 @@ export default function SignupPage() {
             return;
         }
 
-        // Hostel managers: keep email-based signup without OTP for now
+        // Hostel managers: full name + phone + OTP (same pattern as agents, no email field)
         if (selectedRole === 'hostel_manager') {
-            if (!fullName || !email) {
-                toast({ title: "Missing Fields", description: "Please fill out all required fields.", variant: "destructive" });
+            if (!fullName) {
+                toast({ title: "Missing Fields", description: "Please enter your full name.", variant: "destructive" });
                 return;
             }
 
-            if (!isValidEmail(email)) {
-                toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+            if (!phoneNumber) {
+                toast({ title: "Phone Number Required", description: "Please enter your phone number.", variant: "destructive" });
+                return;
+            }
+            if (!isValidPhoneNumber(phoneNumber)) {
+                toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
                 return;
             }
 
-            handleSignup();
+            setStep(3);
+            handleSendOTP();
         }
     };
 
@@ -253,8 +273,14 @@ export default function SignupPage() {
             if (data.success) {
                 setOtpVerified(true);
                 toast({ title: "OTP Verified", description: "Phone number verified successfully!" });
-                // Proceed to signup
-                handleSignup();
+
+                // For managers, go to hostel selection step; others can complete signup immediately
+                if (selectedRole === 'hostel_manager') {
+                    setStep(4);
+                    await loadManagerHostels();
+                } else {
+                    handleSignup();
+                }
             } else {
                 toast({ title: "Invalid OTP", description: data.error || "Please check your OTP and try again.", variant: "destructive" });
             }
@@ -273,8 +299,15 @@ export default function SignupPage() {
             return;
         }
 
-        if ((selectedRole === 'agent' || selectedRole === 'student') && !otpVerified) {
+        if ((selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && !otpVerified) {
             toast({ title: "OTP Required", description: "Please verify your phone number first.", variant: "destructive" });
+            return;
+        }
+
+        // Managers must choose a hostel on Step 4 before completing signup
+        if (selectedRole === 'hostel_manager' && !selectedManagerHostelId) {
+            toast({ title: "Select Hostel", description: "Please choose the hostel you manage before finishing signup.", variant: "destructive" });
+            setStep(4);
             return;
         }
         
@@ -282,8 +315,9 @@ export default function SignupPage() {
         try {
             let authEmail = email;
 
-            // Build synthetic auth email for students so they never need to type one
+            // Build synthetic auth emails so users can log in with role-based IDs
             if (selectedRole === 'student') {
+                // Students: STD-XXXNNN based on firstName + phone
                 const cleanedNumber = phoneNumber.replace(/\D/g, '');
                 const countryCodeDigits = countryCode.replace(/\D/g, '');
                 const combinedPhone = countryCodeDigits + cleanedNumber;
@@ -292,7 +326,27 @@ export default function SignupPage() {
                 const lastThree = combinedPhone.slice(-3);
                 const studentId = `STD-${firstThree}${lastThree}`;
 
-                authEmail = `${studentId.toLowerCase()}@students.hostelhq.com`;
+                // Students will log in using this unique ID email, e.g. std-ell205@hostelhq.com
+                authEmail = `${studentId.toLowerCase()}@hostelhq.com`;
+            } else if (selectedRole === 'agent') {
+                // Agents: AGT-XXXNNN based on first word of fullName + phone
+                const namePart = (fullName || '').trim().split(/\s+/)[0] || 'AGENT';
+                const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                const countryCodeDigits = countryCode.replace(/\D/g, '');
+                const combinedPhone = countryCodeDigits + cleanedNumber;
+                const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                const lastThree = combinedPhone.slice(-3);
+                const agentId = `AGT-${firstThree}${lastThree}`;
+
+                authEmail = `${agentId.toLowerCase()}@hostelhq.com`;
+            } else if (selectedRole === 'hostel_manager') {
+                // Managers: MNG-XXXNNN based on first word of fullName + random digits
+                const namePart = (fullName || '').trim().split(/\s+/)[0] || 'MGR';
+                const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                const randomDigits = Math.floor(100 + Math.random() * 900).toString();
+                const managerId = `MNG-${firstThree}${randomDigits}`;
+
+                authEmail = `${managerId.toLowerCase()}@hostelhq.com`;
             }
 
             // Derive a local full name string for storage
@@ -322,8 +376,8 @@ export default function SignupPage() {
                 userData.lastName = lastName;
             }
 
-            // Add phone number for agents and students (store in numeric E.164-like format)
-            if ((selectedRole === 'agent' || selectedRole === 'student') && phoneNumber) {
+            // Add phone number for agents, students, and managers (store in numeric E.164-like format)
+            if ((selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && phoneNumber) {
                 // Remove all non-digits
                 let cleanedNumber = phoneNumber.replace(/\D/g, '');
                 // Remove leading 0 if present (Ghana numbers start with 0)
@@ -346,10 +400,57 @@ export default function SignupPage() {
                 }
             }
 
+            // Store authEmail and role-based IDs for agents and managers
+            if (selectedRole === 'agent') {
+                userData.authEmail = authEmail;
+                // Extract agent ID prefix from authEmail if possible (before @)
+                const emailLocal = authEmail.split('@')[0];
+                if (emailLocal.toUpperCase().startsWith('AGT-')) {
+                    userData.agentId = emailLocal.toUpperCase();
+                }
+            } else if (selectedRole === 'hostel_manager') {
+                userData.authEmail = authEmail;
+                const emailLocal = authEmail.split('@')[0];
+                if (emailLocal.toUpperCase().startsWith('MNG-')) {
+                    userData.managerId = emailLocal.toUpperCase();
+                }
+            }
+
             // (Optional) additional metadata for managers could be added here later
 
             // Create user document (no more pendingUsers for agents)
             await setDoc(doc(db, "users", user.uid), userData);
+
+            // If this is a manager and they selected a hostel, assign that hostel to the new manager
+            if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
+                try {
+                    await updateDoc(doc(db, 'hostels', selectedManagerHostelId), {
+                        managerId: user.uid,
+                    });
+                } catch (assignError) {
+                    console.error('Failed to assign hostel to manager during signup:', assignError);
+                }
+            }
+
+            // After successful signup, send SMS with unique login ID email (best-effort, non-blocking)
+            if (userData.phoneNumber) {
+                try {
+                    let messageRole = 'user';
+                    if (selectedRole === 'student') messageRole = 'student';
+                    else if (selectedRole === 'agent') messageRole = 'agent';
+                    else if (selectedRole === 'hostel_manager') messageRole = 'manager';
+
+                    const message = `Hello ${localFullName || messageRole}, this is your HostelHQ ${messageRole} login ID: ${authEmail}. Please use this ID to log into the app anytime and keep it safe. Thank you.`;
+
+                    await fetch('/api/sms/send-notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phoneNumber: userData.phoneNumber, message }),
+                    });
+                } catch (smsError) {
+                    console.error('Failed to send login ID SMS:', smsError);
+                }
+            }
 
             toast({ title: 'Account Created Successfully!', description: 'Welcome to HostelHQ!' });
 
@@ -429,8 +530,7 @@ export default function SignupPage() {
                             <CardDescription className="text-slate-100/80">
                                 {step === 1 && 'Choose your account type to get started'}
                                 {step === 2 && 'Enter your account information'}
-                                {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && 'Verify your phone number'}
-                                {step === 3 && selectedRole === 'hostel_manager' && 'Terms and Agreement'}
+                                {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && 'Verify your phone number'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
@@ -453,6 +553,41 @@ export default function SignupPage() {
                                             <p className="text-sm text-slate-100/80">{card.description}</p>
                                         </button>
                                     ))}
+                                </div>
+                            )}
+
+                            {/* Step 4: Manager Hostel Selection */}
+                            {step === 4 && selectedRole === 'hostel_manager' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="manager-hostel">Select Your Hostel</Label>
+                                        <Select
+                                            value={selectedManagerHostelId}
+                                            onValueChange={setSelectedManagerHostelId}
+                                            disabled={loadingManagerHostels}
+                                        >
+                                            <SelectTrigger id="manager-hostel" className="bg-white/90 text-slate-900">
+                                                <SelectValue placeholder={loadingManagerHostels ? 'Loading hostels...' : 'Choose the hostel you manage'} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {managerHostels.map((h) => (
+                                                    <SelectItem key={h.id} value={h.id}>
+                                                        {h.name || 'Unnamed hostel'}{h.location ? ` – ${h.location}` : ''}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {!loadingManagerHostels && managerHostels.length === 0 && (
+                                            <p className="text-xs text-red-300">
+                                                No available hostels without a manager were found. You can request a new hostel later from your dashboard.
+                                            </p>
+                                        )}
+                                        {selectedManagerHostelId && (
+                                            <p className="text-xs text-muted-foreground">
+                                                This hostel will be linked to your manager account.
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -584,7 +719,7 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                            {/* Step 2: Basic Info Form - Agent / Manager */}
+                            {/* Step 2: Basic Info Form - Agent / Manager (no email field) */}
                             {step === 2 && selectedRole !== 'student' && (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
@@ -601,21 +736,6 @@ export default function SignupPage() {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="email">Email Address</Label>
-                                        <div className="relative">
-                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input 
-                                                id="email" 
-                                                type="email" 
-                                                placeholder="your.email@example.com" 
-                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
-                                                value={email} 
-                                                onChange={(e) => setEmail(e.target.value)} 
-                                            />
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">You can use any valid email address</p>
-                                    </div>
-                                    <div className="space-y-2">
                                         <Label htmlFor="password">Password</Label>
                                         <div className="relative">
                                             <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -630,7 +750,7 @@ export default function SignupPage() {
                                         </div>
                                         <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
                                     </div>
-                                    {selectedRole === 'agent' && (
+                                    {(selectedRole === 'agent' || selectedRole === 'hostel_manager') && (
                                         <div className="space-y-2">
                                             <Label htmlFor="phone">Phone Number</Label>
                                             <div className="flex gap-2">
@@ -662,8 +782,8 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                            {/* Step 3: OTP Verification (Students & Agents) */}
-                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && (
+                            {/* Step 3: OTP Verification (Students, Agents & Managers) */}
+                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && (
                             <div className="space-y-4">
                                 <Alert>
                                     <Info className="h-4 w-4" />
@@ -741,15 +861,6 @@ export default function SignupPage() {
                         {/* Step 3: Terms Agreement (Manager) removed - managers now sign up without viewing the tenancy template here */}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
-                        {step === 1 && (
-                            <Button 
-                                onClick={handleRoleSelectionNext} 
-                                className="w-full" 
-                                disabled={!selectedRole}
-                            >
-                                Continue
-                            </Button>
-                        )}
                         {step === 2 && (
                             <div className="flex gap-2 w-full">
                                 <Button 
@@ -782,6 +893,22 @@ export default function SignupPage() {
                                     </>
                                 ) : (
                                     'Create Account'
+                                )}
+                            </Button>
+                        )}
+                        {step === 4 && selectedRole === 'hostel_manager' && otpVerified && (
+                            <Button
+                                onClick={handleSignup}
+                                className="w-full"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Finishing Setup...
+                                    </>
+                                ) : (
+                                    'Finish Setup'
                                 )}
                             </Button>
                         )}

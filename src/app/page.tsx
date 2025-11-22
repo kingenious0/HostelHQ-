@@ -76,7 +76,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 Make off‑campus living easier
               </p>
               <h1 className="mt-5 text-3xl font-headline font-extrabold text-slate-50 sm:text-4xl lg:text-5xl">
-                Find verified hostels  fast, easy & secure.
+                Find verified hostels fast, easy & secure.
               </h1>
               <p className="mt-4 text-sm leading-relaxed text-slate-100/85 sm:text-base">
                 Compare real student hostels, check availability, and secure your bed online in a few clicks.
@@ -84,7 +84,7 @@ export default async function Home({ searchParams }: HomeProps) {
               </p>
               <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:justify-center">
                 <Button asChild size="lg" className="w-full rounded-full bg-primary text-primary-foreground sm:w-auto">
-                  <Link href="#all-hostels">Get started  browse hostels</Link>
+                  <Link href="#all-hostels">Get started . browse hostels</Link>
                 </Button>
                 <Button
                   asChild
@@ -96,7 +96,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 </Button>
               </div>
               <p className="mt-3 text-xs text-slate-100/70">
-                No extra agent fees. Just transparent prices and support before, during and after movein.
+                No extra agent fees. Just transparent prices and support before, during and after movein.
               </p>
             </div>
           </div>
