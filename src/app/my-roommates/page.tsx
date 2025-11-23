@@ -45,6 +45,7 @@ interface Roommate {
     program?: string;
     level?: string;
     contactMode: RoommateContactMode;
+    whatsappNumber?: string;
 }
 
 interface Booking {
@@ -82,6 +83,7 @@ interface AppUser {
     showPhoneNumber: boolean;
     showEmailAddress: boolean;
     roommateContactMode?: RoommateContactMode;
+    whatsappNumber?: string;
   };
 }
 
@@ -191,6 +193,7 @@ export default function MyRoommatesPage() {
                                   canShowPhone && roommateContactMode !== 'basic'
                                     ? (roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '')
                                     : undefined,
+                                whatsappNumber: privacy.whatsappNumber,
                                 program: canShowProgramme ? roommateBookingData.studentDetails?.program : undefined,
                                 level: canShowProgramme ? roommateBookingData.studentDetails?.level : undefined,
                                 contactMode: roommateContactMode,
@@ -237,6 +240,7 @@ export default function MyRoommatesPage() {
                               canShowPhone && contactModeForMate !== 'basic'
                                 ? (mateUser.phone || mateBooking.studentDetails?.phoneNumber || '')
                                 : undefined,
+                            whatsappNumber: privacy.whatsappNumber,
                             program: canShowProgramme ? mateBooking.studentDetails?.program : undefined,
                             level: canShowProgramme ? mateBooking.studentDetails?.level : undefined,
                             contactMode: contactModeForMate,
@@ -505,7 +509,19 @@ export default function MyRoommatesPage() {
                                             {roommate.contactMode === 'whatsapp' && roommate.phone && (
                                               <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
                                                 <p className="font-medium text-foreground">WhatsApp available</p>
-                                                <p className="text-[11px] text-muted-foreground">This roommate prefers WhatsApp only. Use the number provided in your booking receipt to reach them.</p>
+                                                {roommate.whatsappNumber && (
+                                                  <a
+                                                    href={`https://wa.me/${roommate.whatsappNumber.replace(/[^0-9+]/g, '')}?text=${encodeURIComponent("Hi, I'm your roommate from HostelHQ.")}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-green-600 hover:underline text-xs sm:text-sm"
+                                                  >
+                                                    Tap to chat on WhatsApp
+                                                  </a>
+                                                )}
+                                                {!roommate.whatsappNumber && (
+                                                  <p className="text-[11px] text-muted-foreground">This roommate prefers WhatsApp only.</p>
+                                                )}
                                               </div>
                                             )}
                                             {roommate.contactMode === 'basic' && (

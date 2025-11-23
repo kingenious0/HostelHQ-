@@ -80,6 +80,7 @@ function ConfirmationContent() {
                             ghanaCardNumber: bookingData.ghanaCardNumber || '',
                             program: bookingData.departmentName || '',
                             level: bookingData.level || '',
+                            guardianEmail: bookingData.guardianEmail || '',
                         },
                         hostelId: hostelId,
                         roomTypeId: bookingData.roomTypeId || '',

@@ -30,6 +30,7 @@ interface AppUser {
     showPhoneNumber: boolean;
     showEmailAddress: boolean;
     roommateContactMode?: 'phone' | 'whatsapp' | 'basic';
+    whatsappNumber?: string;
   };
   offlineSmsOptIn?: boolean;
 }
@@ -50,6 +51,7 @@ export default function SettingsPage() {
       showPhoneNumber: true,
       showEmailAddress: true,
       roommateContactMode: 'phone' as 'phone' | 'whatsapp' | 'basic',
+      whatsappNumber: '',
     });
     const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
 
@@ -88,6 +90,7 @@ export default function SettingsPage() {
                       showPhoneNumber: true,
                       showEmailAddress: true,
                       roommateContactMode: 'phone',
+                      whatsappNumber: userData.phone || '',
                     });
                     setOfflineSmsOptIn(!!userData.offlineSmsOptIn);
                 } else {
@@ -110,6 +113,7 @@ export default function SettingsPage() {
                       showPhoneNumber: true,
                       showEmailAddress: true,
                       roommateContactMode: 'phone',
+                      whatsappNumber: '',
                     });
                     setOfflineSmsOptIn(false);
                 }
@@ -170,6 +174,35 @@ export default function SettingsPage() {
       } finally {
         setSaving(false);
       }
+    };
+
+    const handleRoommateContactModeClick = (mode: 'phone' | 'whatsapp' | 'basic') => {
+      if (!user) return;
+
+      if (mode === 'whatsapp') {
+        try {
+          const existing = privacySettings.whatsappNumber || appUser?.phone || '';
+          const input = window.prompt('Enter your WhatsApp number (include country code)', existing);
+          if (!input) return;
+          const cleaned = input.replace(/[^0-9+]/g, '');
+          if (!cleaned) return;
+          setPrivacySettings(prev => ({
+            ...prev,
+            roommateContactMode: 'whatsapp',
+            whatsappNumber: cleaned,
+          }));
+          handleSavePrivacy();
+        } catch {
+          // ignore prompt errors
+        }
+        return;
+      }
+
+      setPrivacySettings(prev => ({
+        ...prev,
+        roommateContactMode: mode,
+      }));
+      handleSavePrivacy();
     };
 
     const updateSetting = <K extends keyof ClientSettings>(section: K, updater: (prev: ClientSettings[K]) => ClientSettings[K]) => {
@@ -335,7 +368,7 @@ export default function SettingsPage() {
                             type="button"
                             size="sm"
                             variant={privacySettings.roommateContactMode === 'phone' ? 'default' : 'outline'}
-                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'phone' }))}
+                            onClick={() => handleRoommateContactModeClick('phone')}
                             disabled={loading || saving}
                           >
                             Show phone to roommates
@@ -344,7 +377,7 @@ export default function SettingsPage() {
                             type="button"
                             size="sm"
                             variant={privacySettings.roommateContactMode === 'whatsapp' ? 'default' : 'outline'}
-                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'whatsapp' }))}
+                            onClick={() => handleRoommateContactModeClick('whatsapp')}
                             disabled={loading || saving}
                           >
                             WhatsApp only
@@ -353,7 +386,7 @@ export default function SettingsPage() {
                             type="button"
                             size="sm"
                             variant={privacySettings.roommateContactMode === 'basic' ? 'default' : 'outline'}
-                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'basic' }))}
+                            onClick={() => handleRoommateContactModeClick('basic')}
                             disabled={loading || saving}
                           >
                             Name &amp; programme only

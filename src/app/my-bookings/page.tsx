@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, Timestamp, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, Timestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -43,7 +43,7 @@ type EnhancedBooking = {
     hostelName: string;
     bookingDate: string;
     paymentReference: string;
-    status: 'confirmed' | 'pending' | 'cancelled';
+    status: 'confirmed' | 'pending' | 'cancelled' | 'completed';
     roomNumber?: string;
     roomType?: string;
     bookedBy: string;
@@ -470,7 +470,7 @@ export default function MyBookingsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Tabs defaultValue="confirmed" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-3 gap-1">
+                                        <TabsList className="grid w-full grid-cols-4 gap-1">
                                             <TabsTrigger value="pending" className="text-xs">
                                                 Pending ({filteredBookings('pending').length})
                                             </TabsTrigger>
@@ -479,6 +479,9 @@ export default function MyBookingsPage() {
                                             </TabsTrigger>
                                             <TabsTrigger value="cancelled" className="text-xs">
                                                 Cancelled ({filteredBookings('cancelled').length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="completed" className="text-xs">
+                                                Completed ({filteredBookings('completed').length})
                                             </TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="pending" className="mt-4">
@@ -526,6 +529,21 @@ export default function MyBookingsPage() {
                                                 <Card>
                                                     <CardContent className="p-8 text-center text-gray-500">
                                                         No cancelled bookings
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="completed" className="mt-4">
+                                            {filteredBookings('completed').length > 0 ? (
+                                                <div className="grid gap-4">
+                                                    {filteredBookings('completed').map(booking => (
+                                                        <BookingCard key={booking.id} booking={booking} />
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <Card>
+                                                    <CardContent className="p-8 text-center text-gray-500">
+                                                        No completed stays
                                                     </CardContent>
                                                 </Card>
                                             )}
@@ -669,6 +687,9 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
     const { toast } = useToast();
     const statusInfo = getStatusInfo(booking.status);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
+
+    const isCompleted = booking.status === 'completed';
 
     const handleDelete = async () => {
         if (!window.confirm(
@@ -696,6 +717,24 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
             });
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleMarkCompleted = async () => {
+        if (isCompleted) return;
+        if (!window.confirm(`Mark your stay at ${booking.hostelName} as finished?`)) {
+            return;
+        }
+        setIsCompleting(true);
+        try {
+            const bookingRef = doc(db, 'bookings', booking.id);
+            await updateDoc(bookingRef, { status: 'completed' });
+            toast({ title: 'Stay marked as finished' });
+        } catch (error) {
+            console.error('Error marking stay as finished:', error);
+            toast({ title: 'Update failed', description: 'Could not mark this stay as finished.', variant: 'destructive' });
+        } finally {
+            setIsCompleting(false);
         }
     };
 
@@ -737,6 +776,7 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                             variant="outline"
                             className="flex-1 text-xs sm:text-sm border-blue-300 text-blue-700 hover:bg-blue-200"
                             onClick={() => router.push(`/invoice/${booking.id}`)}
+                            disabled={isCompleted}
                         >
                             <Receipt className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
                             Invoice
@@ -745,23 +785,24 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                             size="sm"
                             className="bg-purple-600 hover:bg-purple-700 flex-1 text-xs sm:text-sm"
                             onClick={() => router.push(`/agreement/${booking.id}`)}
+                            disabled={isCompleted}
                         >
                             <FileText className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
                             Agreement
                         </Button>
                         <Button 
                             size="sm"
-                            variant="destructive"
-                            className="text-xs sm:text-sm"
-                            onClick={handleDelete}
-                            disabled={isDeleting}
+                            variant="outline"
+                            className="text-xs sm:text-sm border-green-300 text-green-700 hover:bg-green-200"
+                            onClick={handleMarkCompleted}
+                            disabled={isCompleting || isCompleted}
                         >
-                            {isDeleting ? (
+                            {isCompleting ? (
                                 <Loader2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/>
                             ) : (
-                                <Trash2 className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
+                                <CheckCircle className="mr-1 h-3 w-3 sm:h-4 sm:w-4"/>
                             )}
-                            Delete
+                            {isCompleted ? 'Stay finished' : 'Mark stay as finished'}
                         </Button>
                     </div>
                 </div>

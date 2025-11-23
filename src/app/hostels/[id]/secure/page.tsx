@@ -48,6 +48,7 @@ const formSchema = z.object({
   guardianName: z.string().min(2, { message: "Guardian name must be at least 2 characters." }),
   guardianRelationship: z.string().min(3, { message: "Relationship is required." }),
   guardianPhoneNumber: z.string().regex(/^\+?[0-9]{10,13}$/, { message: "Invalid guardian phone number." }),
+  guardianEmail: z.string().email({ message: "Invalid guardian email address." }),
 })
 
 
@@ -65,7 +66,7 @@ export default function SecureHostelPage() {
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
     const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
     const [loading, setLoading] = React.useState(true);
-    const [existingBooking, setExistingBooking] = React.useState<{ id: string } | null | undefined>(undefined);
+    const [existingBooking, setExistingBooking] = React.useState<{ id: string } | null | undefined>(null);
     const [aiQuestion, setAiQuestion] = React.useState("");
     const [aiAnswer, setAiAnswer] = React.useState<string | null>(null);
     const [aiLoading, setAiLoading] = React.useState(false);
@@ -102,24 +103,31 @@ export default function SecureHostelPage() {
                     guardianName: "",
                     guardianRelationship: "",
                     guardianPhoneNumber: "",
+                    guardianEmail: "",
                 });
                 return;
             }
 
-            // Check if user already has a confirmed booking for this hostel
-            const bookingsQuery = query(
-                collection(db, 'bookings'),
-                where('studentId', '==', user.uid),
-                where('hostelId', '==', hostelId),
-                where('status', '==', 'confirmed')
-            );
+            setExistingBooking(null);
 
-            const bookingSnapshot = await getDocs(bookingsQuery);
-            if (!bookingSnapshot.empty) {
-                const booking = bookingSnapshot.docs[0];
-                setExistingBooking({ id: booking.id });
-            } else {
-                setExistingBooking(null);
+            try {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                const userData = userDoc.exists() ? userDoc.data() as any : {};
+                form.reset({
+                    studentName: userData.fullName || user.displayName || "",
+                    indexNumber: "",
+                    ghanaCardNumber: "",
+                    departmentName: userData.department || userData.programme || "",
+                    level: "100",
+                    phoneNumber: userData.phone || user.phoneNumber || "",
+                    email: user.email || "",
+                    guardianName: "",
+                    guardianRelationship: "",
+                    guardianPhoneNumber: "",
+                    guardianEmail: "",
+                });
+            } catch {
+                // ignore profile load errors
             }
         });
 
@@ -226,6 +234,7 @@ export default function SecureHostelPage() {
                 guardianName: values.guardianName,
                 guardianRelationship: values.guardianRelationship,
                 guardianPhoneNumber: values.guardianPhoneNumber,
+                guardianEmail: values.guardianEmail,
                 roomTypeId: selectedRoom.id,
                 roomTypeName: selectedRoom.name,
                 roomPrice: selectedRoom.price,
@@ -265,60 +274,7 @@ export default function SecureHostelPage() {
         )
     }
 
-    // Check if hostel is already secured
-    if (existingBooking !== undefined && existingBooking !== null) {
-        return (
-            <div className="flex flex-col min-h-screen">
-                <Header />
-                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                    <Card className="w-full max-w-lg shadow-xl border-green-200">
-                        <CardHeader>
-                            <div className="flex items-center gap-3 mb-2">
-                                <CheckCircle2 className="h-8 w-8 text-green-600" />
-                                <CardTitle className="text-2xl font-headline text-green-900">Hostel Secured!</CardTitle>
-                            </div>
-                            <CardDescription className="text-base">
-                                This hostel has been successfully secured. Your payment has been processed and your booking is confirmed.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <p className="text-sm text-green-800 font-medium">
-                                    You can view your invoice and tenancy agreement below, or access them anytime from your bookings page.
-                                </p>
-                            </div>
-                        </CardContent>
-                        <CardFooter className="flex flex-col gap-3">
-                            <div className="flex flex-col sm:flex-row gap-3 w-full">
-                                <Button 
-                                    onClick={() => router.push(`/invoice/${existingBooking.id}`)} 
-                                    className="flex-1"
-                                    variant="outline"
-                                >
-                                    <Receipt className="mr-2 h-4 w-4"/>
-                                    View Invoice
-                                </Button>
-                                <Button 
-                                    onClick={() => router.push(`/agreement/${existingBooking.id}`)} 
-                                    className="flex-1"
-                                    variant="outline"
-                                >
-                                    <FileText className="mr-2 h-4 w-4"/>
-                                    View Agreement
-                                </Button>
-                            </div>
-                            <Button 
-                                onClick={() => router.push('/my-bookings')} 
-                                className="w-full"
-                            >
-                                Go to My Bookings
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                </main>
-            </div>
-        );
-    }
+    // existingBooking is no longer used to block the form; always show the secure form
 
     if (!selectedRoom) {
         return (
@@ -511,9 +467,24 @@ export default function SecureHostelPage() {
                                             render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Relationship</FormLabel>
-                                                    <FormControl>
-                                                        <Input placeholder="Mother, Father, Guardian" {...field} />
-                                                    </FormControl>
+                                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select relationship" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="mother">Mother</SelectItem>
+                                                            <SelectItem value="father">Father</SelectItem>
+                                                            <SelectItem value="guardian">Guardian</SelectItem>
+                                                            <SelectItem value="aunt">Aunt</SelectItem>
+                                                            <SelectItem value="uncle">Uncle</SelectItem>
+                                                            <SelectItem value="grandmother">Grandmother</SelectItem>
+                                                            <SelectItem value="grandfather">Grandfather</SelectItem>
+                                                            <SelectItem value="sibling">Sibling</SelectItem>
+                                                            <SelectItem value="other">Other</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
                                                     <FormMessage />
                                                 </FormItem>
                                             )}
@@ -534,7 +505,7 @@ export default function SecureHostelPage() {
                                     </div>
                                 </div>
 
-                            <FormField
+                                <FormField
                                     control={form.control}
                                     name="email"
                                     render={({ field }) => (
@@ -545,6 +516,22 @@ export default function SecureHostelPage() {
                                             </FormControl>
                                             <FormDescription>
                                                 We&apos;ll send your payment receipt and tenancy agreement here.
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="guardianEmail"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Guardian Email Address</FormLabel>
+                                            <FormControl>
+                                                <Input type="email" placeholder="parent@example.com" {...field} />
+                                            </FormControl>
+                                            <FormDescription>
+                                                We&apos;ll send a copy of the receipt and tenancy agreement to your guardian.
                                             </FormDescription>
                                             <FormMessage />
                                         </FormItem>
