@@ -167,17 +167,40 @@ export default function RoomsPage() {
 
     const rooms = (hostel as any)?.rooms;
     if (Array.isArray(rooms) && rooms.length > 0) {
+      const formatLabel = (raw: any, index: number) => {
+        const value = String(raw ?? '').trim();
+        if (!value) return `Room ${index + 1}`;
+        if (value.toLowerCase().startsWith('room ')) return value;
+        return `Room ${value}`;
+      };
+
       return rooms.map((room: any, index: number) => {
-        const capacity = room.capacity ?? parseCapacityFromName(room.roomType ?? room.type);
         const id = room.id ?? `room-${index}`;
-        const typeName = room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
+
+        // Try to resolve the correct RoomType for this physical room using roomTypeId
+        const matchingType: RoomType | undefined = hostel.roomTypes?.find(
+          (rt) => String(rt.id ?? '') === String(room.roomTypeId ?? '')
+        );
+
+        const typeName =
+          room.roomType ??
+          room.type ??
+          matchingType?.name ??
+          hostel.roomTypes?.[0]?.name ??
+          'Room';
+
+        const capacity =
+          room.capacity ??
+          matchingType?.capacity ??
+          parseCapacityFromName(room.roomType ?? room.type ?? matchingType?.name);
+
         const occupancyFromBookings =
-          roomOccupancy[id] ?? roomOccupancy[typeName] ?? 0;
+          roomOccupancy[id] ?? roomOccupancy[String(matchingType?.id ?? typeName)] ?? 0;
         return {
           id,
-          label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
+          label: formatLabel(room.roomNumber ?? room.number ?? room.name, index),
           type: typeName,
-          price: room.price ?? hostel.priceRange?.min ?? 0,
+          price: room.price ?? matchingType?.price ?? hostel.priceRange?.min ?? 0,
           occupancy: room.occupancy ?? room.occupants ?? occupancyFromBookings,
           capacity: capacity ?? null,
           gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
@@ -288,6 +311,16 @@ export default function RoomsPage() {
 
     return filtered;
   }, [roomInventory, searchQuery, roomTypeFilter, genderFilter, sortBy]);
+
+  const groupedRoomsByType = useMemo(() => {
+    const groups: Record<string, RoomInventoryItem[]> = {};
+    filteredAndSortedRooms.forEach((room) => {
+      const key = room.type && room.type.trim().length > 0 ? room.type : 'Other Rooms';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(room);
+    });
+    return groups;
+  }, [filteredAndSortedRooms]);
 
   // Ensure we don't create <SelectItem> options with empty values
   const uniqueRoomTypes = useMemo(
@@ -432,23 +465,34 @@ export default function RoomsPage() {
           </div>
 
           {filteredAndSortedRooms.length > 0 ? (
-            <div
-              className={cn(
-                "gap-6",
-                viewMode === 'grid'
-                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                  : "flex flex-col"
-              )}
-            >
-              {filteredAndSortedRooms.map((room) => (
-                <Card
-                  key={room.id}
-                  className={cn(
-                    "overflow-hidden transition-all hover:shadow-xl group cursor-pointer",
-                    viewMode === 'list' && "flex flex-row"
-                  )}
-                  onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
-                >
+            <div className="space-y-10">
+              {Object.entries(groupedRoomsByType).map(([typeName, roomsForType]) => (
+                <div key={typeName} className="space-y-4">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="text-xl font-semibold font-headline text-foreground">
+                      {typeName.toUpperCase()}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {roomsForType.length} room{roomsForType.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "gap-6",
+                      viewMode === 'grid'
+                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                        : "flex flex-col"
+                    )}
+                  >
+                    {roomsForType.map((room) => (
+                      <Card
+                        key={room.id}
+                        className={cn(
+                          "overflow-hidden transition-all hover:shadow-xl group cursor-pointer",
+                          viewMode === 'list' && "flex flex-row"
+                        )}
+                        onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
+                      >
                   <div className={cn(
                     "relative bg-background/40 overflow-hidden",
                     viewMode === 'grid' ? "h-48" : "h-32 w-32 flex-shrink-0"
@@ -546,9 +590,13 @@ export default function RoomsPage() {
                           return;
                         }
 
-                        const target = hasCompletedVisit
-                          ? `/hostels/${id}/secure?roomTypeId=${room.id}`
-                          : `/hostels/${id}/book?roomTypeId=${room.id}`;
+                        const params = new URLSearchParams();
+                        params.set('roomTypeId', room.id);
+                        if (room.id) params.set('roomId', room.id);
+                        if (room.roomNumber) params.set('roomNumber', room.roomNumber);
+
+                        const base = hasCompletedVisit ? 'secure' : 'book';
+                        const target = `/hostels/${id}/${base}?${params.toString()}`;
 
                         if (appUser) {
                           router.push(target);
@@ -573,6 +621,9 @@ export default function RoomsPage() {
                     </Button>
                   </CardContent>
                 </Card>
+              ))}
+            </div>
+          </div>
               ))}
             </div>
           ) : (

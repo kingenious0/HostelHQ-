@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, HeartHandshake, MapPin, Users, Building2 } from 'lucide-react';
-
 const milestones = [
   {
       year: '2021',
@@ -43,13 +42,15 @@ export default function AboutPage() {
           <main className="flex-1">
               <section className="relative overflow-hidden bg-gradient-to-br from-primary/90 via-primary to-primary/80 text-white">
                   <div className="absolute inset-0">
-                      <Image
-                          src="https://images.pexels.com/photos/4907200/pexels-photo-4907200.jpeg"
-                          alt="Students moving into a hostel"
-                          fill
-                          className="object-cover opacity-20"
-                          priority
-                      />
+                      <video 
+                        className="absolute inset-0 h-full w-full object-cover brightness-[0.55]"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                      >
+                        <source src="/videos/half-sky.mp4" type="video/mp4" />
+                      </video>
                   </div>
                   <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 py-20 sm:px-6 lg:px-8">
                       <Badge variant="secondary" className="w-fit bg-white/20 text-white backdrop-blur">

@@ -1,5 +1,3 @@
-
-
 import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy, or } from "firebase/firestore";
 import { ably } from './ably';
@@ -16,6 +14,17 @@ export type RoomType = {
   occupancy?: number; // current number of occupants
   capacity?: number; // total occupants allowed per room
   numberOfRooms?: number; // number of rooms of this type (optional)
+  roomNumbers?: string[]; // explicit physical room numbers for this type (optional)
+};
+
+// A physical numbered room inside a hostel. Stored under hostels/{hostelId}/rooms/{roomId}.
+export type Room = {
+  id?: string;
+  roomNumber: string; // e.g. "101", "B12"
+  roomTypeId: string; // references a RoomType id in hostels/{hostelId}/roomTypes
+  capacity: number; // total beds in this room
+  currentOccupancy: number; // confirmed occupants
+  status: 'active' | 'inactive';
 };
 
 export type Review = {
@@ -239,6 +248,11 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
+
+            // Fetch physical numbered rooms from subcollection (if any)
+            const roomsCollectionRef = collection(db, 'hostels', hostelId, 'rooms');
+            const roomsSnapshot = await getDocs(roomsCollectionRef);
+            const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
             
              // Fetch all reviews for the hostel (no status filter)
             const reviewsQuery = query(
@@ -271,7 +285,8 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             return convertTimestamps({ 
                 id: hostelDoc.id, 
                 ...data, 
-                roomTypes, 
+                roomTypes,
+                rooms,
                 priceRange, 
                 lat: typeof data.lat === 'number' ? data.lat : staticHostels[0].lat, 
                 lng: typeof data.lng === 'number' ? data.lng : staticHostels[0].lng, 

@@ -58,6 +58,8 @@ export default function SecureHostelPage() {
     const searchParams = useSearchParams();
     const hostelId = params.id as string;
     const roomTypeId = searchParams.get('roomTypeId');
+    const roomId = searchParams.get('roomId');
+    const roomNumber = searchParams.get('roomNumber');
 
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
@@ -227,6 +229,8 @@ export default function SecureHostelPage() {
                 roomTypeId: selectedRoom.id,
                 roomTypeName: selectedRoom.name,
                 roomPrice: selectedRoom.price,
+                roomId,
+                roomNumber,
             }));
 
             const result = await initializeHostelPayment({

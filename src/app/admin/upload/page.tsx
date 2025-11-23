@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardFooter, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,6 +49,15 @@ const billsIncludedList = ['Water', 'Refuse'];
 const billsExcludedList = ['Gas', 'Electricity'];
 const securitySafetyList = ['Security Alarm', 'Maintenance Team (24-hour on call)', 'Entire Building Fenced', 'Controlled Access Gate (24-hour)', 'Tanoso Police Station (close)'];
 
+
+const deriveCapacityFromName = (name?: string | null) => {
+    if (!name) return 0;
+    const numericMatch = name.match(/\d+/);
+    if (numericMatch) return Number(numericMatch[0]);
+    const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 };
+    const first = name.trim().split(' ')[0]?.toLowerCase() ?? '';
+    return words[first] ?? 0;
+};
 
 export default function AdminUploadPage() {
     const [step, setStep] = useState(1);
@@ -97,9 +106,38 @@ export default function AdminUploadPage() {
         return () => unsubscribe();
     }, []);
 
-    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number) => {
+    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number | undefined) => {
         const newRoomTypes = [...roomTypes];
         (newRoomTypes[index] as any)[field] = value;
+
+        // Auto-derive capacity from room type name like "3 in a room"
+        if (field === 'name') {
+            const derived = deriveCapacityFromName(String(value));
+            if (derived > 0) {
+                (newRoomTypes[index] as any).capacity = derived;
+            }
+        }
+
+        setRoomTypes(newRoomTypes);
+    };
+
+    const toggleRoomNumberForType = (index: number, value: string, checked: boolean) => {
+        const newRoomTypes = [...roomTypes];
+        const current = newRoomTypes[index].roomNumbers || [];
+        const targetCount = newRoomTypes[index].numberOfRooms ?? 0;
+
+        if (checked && targetCount > 0 && current.length >= targetCount) {
+            toast({
+                title: 'Room number limit reached',
+                description: `You set Number of Rooms to ${targetCount}. You cannot select more than ${targetCount} room numbers.`,
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        newRoomTypes[index].roomNumbers = checked
+            ? Array.from(new Set([...current, value]))
+            : current.filter((v) => v !== value);
         setRoomTypes(newRoomTypes);
     };
 
@@ -157,7 +195,7 @@ export default function AdminUploadPage() {
             return;
         }
 
-        // Validate capacity and occupancy
+        // Validate capacity, occupancy and room numbers
         for (const rt of roomTypes) {
             const capacity = rt.capacity ?? 0;
             const occupancy = rt.occupancy ?? 0;
@@ -167,6 +205,16 @@ export default function AdminUploadPage() {
             }
             if (rt.numberOfRooms !== undefined && rt.numberOfRooms <= 0) {
                 toast({ title: 'Invalid Number of Rooms', description: `Room type "${rt.name}" must have at least 1 room if specified.`, variant: 'destructive' });
+                return;
+            }
+            const targetCount = rt.numberOfRooms ?? 0;
+            const selectedCount = rt.roomNumbers?.length ?? 0;
+            if (targetCount > 0 && selectedCount > 0 && selectedCount !== targetCount) {
+                toast({
+                    title: 'Room numbers mismatch',
+                    description: `Room type "${rt.name}" must have exactly ${targetCount} room numbers selected (currently ${selectedCount}).`,
+                    variant: 'destructive',
+                });
                 return;
             }
         }
@@ -244,6 +292,9 @@ export default function AdminUploadPage() {
                 gender: gender,
             });
             
+            // 4. Save room types and create physical numbered rooms based on roomNumbers or numberOfRooms
+            const roomTypeRefs: string[] = [];
+
             roomTypes.forEach(room => {
                 const roomTypeRef = doc(collection(hostelRef, 'roomTypes'));
 
@@ -256,6 +307,45 @@ export default function AdminUploadPage() {
                 });
 
                 batch.set(roomTypeRef, sanitizedRoom);
+                roomTypeRefs.push(roomTypeRef.id);
+            });
+
+            // For each room type, create physical rooms under hostels/{hostelId}/rooms
+            roomTypes.forEach((room, index) => {
+                const capacityPerRoom = room.capacity ?? 0;
+                const roomTypeId = roomTypeRefs[index];
+                const explicitNumbers = room.roomNumbers || [];
+                const numberOfRooms = room.numberOfRooms ?? 0;
+
+                if (!roomTypeId) return;
+
+                if (explicitNumbers.length > 0) {
+                    // Use explicitly selected room numbers
+                    explicitNumbers.forEach((num) => {
+                        const physicalRoomRef = doc(collection(hostelRef, 'rooms'));
+                        batch.set(physicalRoomRef, {
+                            roomNumber: `Room ${num}`,
+                            roomTypeId,
+                            capacity: capacityPerRoom,
+                            currentOccupancy: 0,
+                            status: 'active',
+                        });
+                    });
+                } else if (numberOfRooms > 0) {
+                    // Fallback: auto-generate simple sequential numbers per type
+                    for (let i = 0; i < numberOfRooms; i++) {
+                        const physicalRoomRef = doc(collection(hostelRef, 'rooms'));
+                        const rawNumber = `T${index + 1}-${i + 1}`;
+
+                        batch.set(physicalRoomRef, {
+                            roomNumber: `Room ${rawNumber}`,
+                            roomTypeId,
+                            capacity: capacityPerRoom,
+                            currentOccupancy: 0,
+                            status: 'active',
+                        });
+                    }
+                }
             });
 
             await batch.commit();
@@ -400,7 +490,7 @@ export default function AdminUploadPage() {
                                                 </div>
                                                 
                                                 <div className="space-y-2">
-                                                    <Label htmlFor={`room-capacity-${index}`}>Capacity (per room)</Label>
+                                                    <Label htmlFor={`room-capacity-${index}`}>Persons (per room)</Label>
                                                     <Input
                                                         id={`room-capacity-${index}`}
                                                         type="number"
@@ -435,6 +525,35 @@ export default function AdminUploadPage() {
                                                         value={room.numberOfRooms || ''}
                                                         onChange={(e) => handleRoomTypeChange(index, 'numberOfRooms', Number(e.target.value) || undefined)}
                                                     />
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 space-y-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <Label>Room Numbers (optional)</Label>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        Pick real room numbers, or leave empty and we will auto-generate.
+                                                    </p>
+                                                </div>
+                                                <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
+                                                    <div className="grid grid-cols-6 gap-1 text-xs">
+                                                        {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
+                                                            const selected = (room.roomNumbers || []).includes(num);
+                                                            return (
+                                                                <button
+                                                                    key={num}
+                                                                    type="button"
+                                                                    onClick={() => toggleRoomNumberForType(index, num, !selected)}
+                                                                    className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
+                                                                        selected
+                                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                                            : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                                    }`}
+                                                                >
+                                                                    {num}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="mt-4 space-y-2">

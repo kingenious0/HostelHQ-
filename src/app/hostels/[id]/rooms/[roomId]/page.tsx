@@ -142,6 +142,13 @@ export default function RoomDetailPage() {
     };
 
     const rooms = (hostel as any)?.rooms;
+
+    const formatLabel = (raw: any, index: number) => {
+      const value = String(raw ?? '').trim();
+      if (!value) return `Room ${index + 1}`;
+      if (value.toLowerCase().startsWith('room ')) return value;
+      return `Room ${value}`;
+    };
     if (Array.isArray(rooms) && rooms.length > 0) {
       const found = rooms.find((r: any, index: number) => {
         const fallbackId = r.id ?? `room-${index}`;
@@ -152,7 +159,7 @@ export default function RoomDetailPage() {
         const capacity = found.capacity ?? parseCapacity(found.roomType ?? found.type);
         return {
           id: found.id ?? `room-${index}`,
-          label: found.roomNumber ?? found.number ?? found.name ?? `Room ${index + 1}`,
+          label: formatLabel(found.roomNumber ?? found.number ?? found.name, index),
           type: found.roomType ?? found.type ?? hostel.roomTypes?.[0]?.name ?? "Room",
           price: found.price ?? hostel.priceRange?.min ?? 0,
           occupancy: found.occupancy ?? found.occupants ?? 0,

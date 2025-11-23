@@ -29,6 +29,7 @@ interface AppUser {
     showProgrammeOfStudy: boolean;
     showPhoneNumber: boolean;
     showEmailAddress: boolean;
+    roommateContactMode?: 'phone' | 'whatsapp' | 'basic';
   };
   offlineSmsOptIn?: boolean;
 }
@@ -41,13 +42,14 @@ export default function SettingsPage() {
     const [initialName, setInitialName] = useState('');
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [settings, setSettings] = useState<ClientSettings>(loadSettings());
+    const [settings, setSettings] = useState<ClientSettings | null>(null);
     const [privacySettings, setPrivacySettings] = useState({
       showPicture: true,
       showProfile: true,
       showProgrammeOfStudy: true,
       showPhoneNumber: true,
       showEmailAddress: true,
+      roommateContactMode: 'phone' as 'phone' | 'whatsapp' | 'basic',
     });
     const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
 
@@ -85,6 +87,7 @@ export default function SettingsPage() {
                       showProgrammeOfStudy: true,
                       showPhoneNumber: true,
                       showEmailAddress: true,
+                      roommateContactMode: 'phone',
                     });
                     setOfflineSmsOptIn(!!userData.offlineSmsOptIn);
                 } else {
@@ -106,6 +109,7 @@ export default function SettingsPage() {
                       showProgrammeOfStudy: true,
                       showPhoneNumber: true,
                       showEmailAddress: true,
+                      roommateContactMode: 'phone',
                     });
                     setOfflineSmsOptIn(false);
                 }
@@ -123,6 +127,12 @@ export default function SettingsPage() {
 
     const canSave = user && fullName.trim() && fullName.trim() !== initialName.trim() && !saving;
     const canSavePrivacy = user && !loading && !saving; // Simplistic check for now
+
+    useEffect(() => {
+        // Load client-side UI settings (theme, data usage) after mount to avoid hydration mismatch
+        const clientSettings = loadSettings();
+        setSettings(clientSettings);
+    }, []);
 
     const handleSave = async () => {
         if (!user) return;
@@ -163,13 +173,15 @@ export default function SettingsPage() {
     };
 
     const updateSetting = <K extends keyof ClientSettings>(section: K, updater: (prev: ClientSettings[K]) => ClientSettings[K]) => {
-        const next = { ...settings, [section]: updater(settings[section]) } as ClientSettings;
+        if (!settings) return; // Ignore updates until settings are loaded
+        const nextSection = updater(settings[section]);
+        const next = { ...settings, [section]: nextSection } as ClientSettings;
         setSettings(next);
         saveSettings(next);
         
         // Apply theme change immediately
-        if (section === 'profile' && 'theme' in updater(settings[section])) {
-            const newTheme = (updater(settings[section]) as any).theme;
+        if (section === 'profile' && 'theme' in nextSection) {
+            const newTheme = (nextSection as any).theme;
             document.documentElement.classList.toggle('dark', newTheme === 'dark');
         }
     };
@@ -229,7 +241,137 @@ export default function SettingsPage() {
                         </div>
                     </div>
 
-                   
+                    {/* General profile sharing controls */}
+                    <div>
+                        <h2 className="text-lg font-semibold">Profile sharing</h2>
+                        <p className="text-sm text-muted-foreground">Choose what parts of your profile your roommates and hostel mates can see.</p>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Show picture</p>
+                                    <p className="text-sm text-muted-foreground">Allow others to see your profile photo.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showPicture}
+                                    onCheckedChange={(v) => handlePrivacyToggle('showPicture', v)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Show profile</p>
+                                    <p className="text-sm text-muted-foreground">Turn this off to hide your profile completely from roommate lists.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showProfile}
+                                    onCheckedChange={(v) => handlePrivacyToggle('showProfile', v)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Show programme & level</p>
+                                    <p className="text-sm text-muted-foreground">Share your programme of study and level.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showProgrammeOfStudy}
+                                    onCheckedChange={(v) => handlePrivacyToggle('showProgrammeOfStudy', v)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Show phone number</p>
+                                    <p className="text-sm text-muted-foreground">Let roommates see your phone when contact mode allows it.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showPhoneNumber}
+                                    onCheckedChange={(v) => handlePrivacyToggle('showPhoneNumber', v)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-between border rounded-md p-3">
+                                <div>
+                                    <p className="font-medium">Show email address</p>
+                                    <p className="text-sm text-muted-foreground">Allow roommates to see your email.</p>
+                                </div>
+                                <Switch
+                                    checked={privacySettings.showEmailAddress}
+                                    onCheckedChange={(v) => handlePrivacyToggle('showEmailAddress', v)}
+                                    disabled={loading || saving}
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-3">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={handleSavePrivacy}
+                                disabled={!canSavePrivacy}
+                            >
+                                {saving ? 'Saving...' : 'Save profile sharing'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Privacy settings for roommates / hostel mates */}
+                    <div>
+                      <h2 className="text-lg font-semibold">Roommates &amp; hostel mates</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Control how much contact information your roommates and hostel mates can see.
+                      </p>
+                      <div className="mt-4 space-y-4 border rounded-md p-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">Roommate contact visibility</p>
+                          <p className="text-sm text-muted-foreground">This affects how your details appear on the My Roommates and Hostel Mates pages.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={privacySettings.roommateContactMode === 'phone' ? 'default' : 'outline'}
+                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'phone' }))}
+                            disabled={loading || saving}
+                          >
+                            Show phone to roommates
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={privacySettings.roommateContactMode === 'whatsapp' ? 'default' : 'outline'}
+                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'whatsapp' }))}
+                            disabled={loading || saving}
+                          >
+                            WhatsApp only
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={privacySettings.roommateContactMode === 'basic' ? 'default' : 'outline'}
+                            onClick={() => setPrivacySettings(prev => ({ ...prev, roommateContactMode: 'basic' }))}
+                            disabled={loading || saving}
+                          >
+                            Name &amp; programme only
+                          </Button>
+                        </div>
+                        <div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSavePrivacy}
+                            disabled={!canSavePrivacy}
+                          >
+                            {saving ? 'Saving...' : 'Save roommate privacy'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
 
                     {appUser?.role === 'agent' && (
                       <div>
@@ -258,8 +400,9 @@ export default function SettingsPage() {
                                     <p className="text-sm text-muted-foreground">Use a dark theme for low light environments.</p>
                                 </div>
                                 <Switch
-                                    checked={settings.profile.theme === 'dark'}
+                                    checked={settings?.profile.theme === 'dark'}
                                     onCheckedChange={(v) => updateSetting('profile', (p) => ({ ...p, theme: v ? 'dark' : 'light' }))}
+                                    disabled={!settings}
                                 />
                             </div>
 
@@ -269,8 +412,9 @@ export default function SettingsPage() {
                                     <p className="text-sm text-muted-foreground">Minimize animations to reduce motion.</p>
                                 </div>
                                 <Switch
-                                    checked={settings.profile.reducedMotion}
+                                    checked={!!settings?.profile.reducedMotion}
                                     onCheckedChange={(v) => updateSetting('profile', (p) => ({ ...p, reducedMotion: !!v }))}
+                                    disabled={!settings}
                                 />
                             </div>
                         </div>
@@ -285,8 +429,9 @@ export default function SettingsPage() {
                                     <p className="text-sm text-muted-foreground">Defer heavy images and maps to save bandwidth.</p>
                                 </div>
                                 <Switch
-                                    checked={settings.data.lowDataMode}
+                                    checked={!!settings?.data.lowDataMode}
                                     onCheckedChange={(v) => updateSetting('data', (d) => ({ ...d, lowDataMode: !!v }))}
+                                    disabled={!settings}
                                 />
                             </div>
                             <div className="flex items-center justify-between border rounded-md p-3">
@@ -295,8 +440,9 @@ export default function SettingsPage() {
                                     <p className="text-sm text-muted-foreground">Keep data available offline using browser storage.</p>
                                 </div>
                                 <Switch
-                                    checked={settings.data.firestorePersistence}
+                                    checked={!!settings?.data.firestorePersistence}
                                     onCheckedChange={(v) => updateSetting('data', (d) => ({ ...d, firestorePersistence: !!v }))}
+                                    disabled={!settings}
                                 />
                             </div>
                         </div>

@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
-import { Hostel, RoomType } from '@/lib/data';
+import { Hostel, RoomType, Room } from '@/lib/data';
 import { BookingsChart } from '@/components/bookings-chart';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -25,7 +25,7 @@ import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
-    roomTypes: Pick<RoomType, 'price'>[];
+    roomTypes: Pick<RoomType, 'id' | 'name' | 'price'>[];
 };
 
 type Booking = {
@@ -73,6 +73,20 @@ export default function ManagerDashboard() {
     const [requestPhotos, setRequestPhotos] = useState<File[]>([]);
     const [requestPhotoPreviews, setRequestPhotoPreviews] = useState<string[]>([]);
     const [requestSubmitting, setRequestSubmitting] = useState(false);
+
+    // Manage Rooms dialog state
+    const [roomsDialogOpen, setRoomsDialogOpen] = useState(false);
+    const [roomsHostelId, setRoomsHostelId] = useState<string | null>(null);
+    const [rooms, setRooms] = useState<Room[]>([]);
+    const [loadingRooms, setLoadingRooms] = useState(false);
+    const [newRoomNumber, setNewRoomNumber] = useState('');
+    const [newRoomTypeId, setNewRoomTypeId] = useState<string>('');
+    const [newRoomCapacity, setNewRoomCapacity] = useState('');
+    const [newNumberOfRooms, setNewNumberOfRooms] = useState('');
+    const [newRoomNumbers, setNewRoomNumbers] = useState<string[]>([]);
+    const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+    const [editRoomNumber, setEditRoomNumber] = useState('');
+    const [savingRoomEdit, setSavingRoomEdit] = useState(false);
     const router = useRouter();
     const { toast } = useToast();
 
@@ -117,7 +131,10 @@ export default function ManagerDashboard() {
         const unsubscribeHostels = onSnapshot(hostelsQuery, async (snapshot) => {
             const fetchedHostels = await Promise.all(snapshot.docs.map(async (doc) => {
                 const roomTypesSnap = await getDocs(collection(doc.ref, 'roomTypes'));
-                const roomTypes = roomTypesSnap.docs.map(rtDoc => rtDoc.data() as RoomType);
+                const roomTypes = roomTypesSnap.docs.map(rtDoc => {
+                    const data = rtDoc.data() as RoomType;
+                    return { id: rtDoc.id, name: data.name, price: data.price } as Pick<RoomType, 'id' | 'name' | 'price'>;
+                });
                 return { id: doc.id, ...doc.data(), roomTypes } as ManagerHostel;
             }));
             
@@ -291,6 +308,8 @@ export default function ManagerDashboard() {
         'Full': 'destructive'
     }
 
+    const hostelForRooms = roomsHostelId ? hostels.find((h) => h.id === roomsHostelId) : undefined;
+
     const handleAttachHostel = async () => {
         if (!currentUser || !selectedHostelId) return;
         const hostelDoc = allHostels.find((h) => h.id === selectedHostelId);
@@ -326,6 +345,150 @@ export default function ManagerDashboard() {
             });
         } finally {
             setAttachSubmitting(false);
+        }
+    };
+
+    const openRoomsDialogForHostel = async (hostelId: string) => {
+        setRoomsHostelId(hostelId);
+        setRoomsDialogOpen(true);
+        setLoadingRooms(true);
+        setNewRoomNumber('');
+        setNewRoomTypeId('');
+        setNewRoomCapacity('');
+        setNewNumberOfRooms('');
+        setNewRoomNumbers([]);
+        setEditingRoomId(null);
+        setEditRoomNumber('');
+
+        try {
+            const roomsCol = collection(db, 'hostels', hostelId, 'rooms');
+            const snap = await getDocs(roomsCol);
+            const list: Room[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Room) }));
+            setRooms(list);
+        } catch (error) {
+            console.error('Error loading rooms for hostel', hostelId, error);
+            toast({ title: 'Could not load rooms', variant: 'destructive' });
+        } finally {
+            setLoadingRooms(false);
+        }
+    };
+
+    const toggleNewRoomNumber = (value: string) => {
+        const targetCount = Number(newNumberOfRooms) || 0;
+        const current = newRoomNumbers;
+
+        if (!current.includes(value)) {
+            if (targetCount > 0 && current.length >= targetCount) {
+                toast({
+                    title: 'Room number limit reached',
+                    description: `You set Number of Rooms to ${targetCount}. You cannot select more than ${targetCount} room numbers.`,
+                    variant: 'destructive',
+                });
+                return;
+            }
+            setNewRoomNumbers([...current, value]);
+        } else {
+            setNewRoomNumbers(current.filter((v) => v !== value));
+        }
+    };
+
+    const startEditRoom = (room: Room) => {
+        setEditingRoomId(room.id ?? null);
+        const raw = room.roomNumber || '';
+        setEditRoomNumber(raw.toLowerCase().startsWith('room ') ? raw.slice(5) : raw);
+    };
+
+    const saveRoomEdit = async () => {
+        if (!roomsHostelId || !editingRoomId) return;
+        const trimmed = editRoomNumber.trim();
+        if (!trimmed) {
+            toast({ title: 'Missing room number', description: 'Please enter a room number.', variant: 'destructive' });
+            return;
+        }
+        try {
+            setSavingRoomEdit(true);
+            const ref = doc(db, 'hostels', roomsHostelId, 'rooms', editingRoomId);
+            const roomNumber = trimmed.toLowerCase().startsWith('room ') ? trimmed : `Room ${trimmed}`;
+            await updateDoc(ref, { roomNumber });
+            setRooms((prev) => prev.map((r) => (r.id === editingRoomId ? { ...r, roomNumber } : r)));
+            setEditingRoomId(null);
+            setEditRoomNumber('');
+            toast({ title: 'Room updated', description: `Room number updated to ${roomNumber}.` });
+        } catch (error) {
+            console.error('Error updating room:', error);
+            toast({ title: 'Could not update room', description: 'Please try again later.', variant: 'destructive' });
+        } finally {
+            setSavingRoomEdit(false);
+        }
+    };
+
+    const handleCreateRoom = async () => {
+        if (!roomsHostelId) return;
+        if (!newRoomTypeId || !newRoomCapacity) {
+            toast({ title: 'Missing room details', description: 'Please enter room type and capacity, and at least a room number, numbers grid, or number of rooms.', variant: 'destructive' });
+            return;
+        }
+        const capacity = Number(newRoomCapacity);
+        if (Number.isNaN(capacity) || capacity <= 0) {
+            toast({ title: 'Invalid capacity', description: 'Capacity must be a positive number.', variant: 'destructive' });
+            return;
+        }
+
+        const targetCount = Number(newNumberOfRooms) || 0;
+        const selectedCount = newRoomNumbers.length;
+        if (targetCount > 0 && selectedCount > 0 && selectedCount !== targetCount) {
+            toast({
+                title: 'Room numbers mismatch',
+                description: `You set Number of Rooms to ${targetCount}. Please select exactly ${targetCount} room numbers (currently ${selectedCount}).`,
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        try {
+            const roomsCol = collection(db, 'hostels', roomsHostelId, 'rooms');
+            const creations: Promise<void>[] = [];
+
+            const createOne = (label: string) => {
+                const raw = label.trim();
+                const roomNumber = raw.toLowerCase().startsWith('room ') ? raw : `Room ${raw}`;
+                const roomData: Omit<Room, 'id'> = {
+                    roomNumber,
+                    roomTypeId: newRoomTypeId,
+                    capacity,
+                    currentOccupancy: 0,
+                    status: 'active',
+                };
+                const p = addDoc(roomsCol, roomData).then((ref) => {
+                    setRooms((prev) => [...prev, { ...roomData, id: ref.id }]);
+                });
+                creations.push(p.then(() => undefined));
+            };
+
+            if (newRoomNumbers.length > 0) {
+                newRoomNumbers.forEach((num) => createOne(num));
+            } else if (targetCount > 0) {
+                for (let i = 0; i < targetCount; i++) {
+                    const rawNumber = `T${1}-${i + 1}`;
+                    createOne(rawNumber);
+                }
+            } else if (newRoomNumber.trim()) {
+                createOne(newRoomNumber.trim());
+            } else {
+                toast({ title: 'Missing room number', description: 'Please specify at least one room number.', variant: 'destructive' });
+                return;
+            }
+
+            await Promise.all(creations);
+            setNewRoomNumber('');
+            setNewRoomTypeId('');
+            setNewRoomCapacity('');
+            setNewNumberOfRooms('');
+            setNewRoomNumbers([]);
+            toast({ title: 'Room(s) created', description: 'The selected rooms have been added.' });
+        } catch (error) {
+            console.error('Error creating room:', error);
+            toast({ title: 'Could not create room', description: 'Please try again later.', variant: 'destructive' });
         }
     };
 
@@ -560,15 +723,26 @@ export default function ManagerDashboard() {
                                                         {stats.secured}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="xs"
-                                                            className="text-[11px]"
-                                                            onClick={handleDetach}
-                                                        >
-                                                            Remove
-                                                        </Button>
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="xs"
+                                                                className="text-[11px]"
+                                                                onClick={() => openRoomsDialogForHostel(hostel.id)}
+                                                            >
+                                                                Manage Rooms
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="xs"
+                                                                className="text-[11px]"
+                                                                onClick={handleDetach}
+                                                            >
+                                                                Remove
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -924,6 +1098,168 @@ export default function ManagerDashboard() {
                                 {requestSubmitting ? 'Submitting...' : 'Submit Request'}
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Manage Rooms dialog for managers */}
+                <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
+                    <DialogContent className="max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle>Manage Rooms</DialogTitle>
+                            <DialogDescription>
+                                Create and view numbered rooms for this hostel. Students will be able to pick from these rooms when securing a bed.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-medium">Existing rooms</h3>
+                                {loadingRooms ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : rooms.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No rooms added yet for this hostel.</p>
+                                ) : (
+                                    <div className="max-h-60 overflow-y-auto rounded-md border border-muted/40">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Room</TableHead>
+                                                    <TableHead className="w-32">Actions</TableHead>
+                                                    <TableHead className="text-right">Occupancy</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {rooms.map((room) => (
+                                                    <TableRow key={room.id}>
+                                                        <TableCell className="font-medium">
+                                                            {editingRoomId === room.id ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <Input
+                                                                        value={editRoomNumber}
+                                                                        onChange={(e) => setEditRoomNumber(e.target.value)}
+                                                                        className="h-8 max-w-[140px]"
+                                                                    />
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="icon"
+                                                                        className="h-8 w-8"
+                                                                        onClick={saveRoomEdit}
+                                                                        disabled={savingRoomEdit}
+                                                                    >
+                                                                        {savingRoomEdit ? (
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        ) : (
+                                                                            '✓'
+                                                                        )}
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                room.roomNumber || '—'
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {editingRoomId !== room.id && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="xs"
+                                                                    onClick={() => startEditRoom(room)}
+                                                                >
+                                                                    Edit
+                                                                </Button>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-sm text-muted-foreground">
+                                                            {room.currentOccupancy} / {room.capacity}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-3 border-t border-muted/40 pt-4">
+                                <h3 className="text-sm font-medium">Add new rooms</h3>
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="manager-room-type">Room type ID</Label>
+                                        <Input
+                                            id="manager-room-type"
+                                            placeholder="roomTypeId"
+                                            value={newRoomTypeId}
+                                            onChange={(e) => setNewRoomTypeId(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="manager-capacity">Persons (per room)</Label>
+                                        <Input
+                                            id="manager-capacity"
+                                            type="number"
+                                            min={1}
+                                            value={newRoomCapacity}
+                                            onChange={(e) => setNewRoomCapacity(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="manager-number-of-rooms">Number of Rooms (optional)</Label>
+                                        <Input
+                                            id="manager-number-of-rooms"
+                                            type="number"
+                                            min={1}
+                                            placeholder="e.g., 4"
+                                            value={newNumberOfRooms}
+                                            onChange={(e) => setNewNumberOfRooms(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="manager-room-number">Single room number (optional)</Label>
+                                    <Input
+                                        id="manager-room-number"
+                                        placeholder="e.g., 101"
+                                        value={newRoomNumber}
+                                        onChange={(e) => setNewRoomNumber(e.target.value)}
+                                    />
+                                </div>
+                                <div className="mt-2 space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <Label>Room Numbers (optional)</Label>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            Pick real room numbers, or leave empty and we will auto-generate.
+                                        </p>
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
+                                        <div className="grid grid-cols-6 gap-1 text-xs">
+                                            {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
+                                                const selected = newRoomNumbers.includes(num);
+                                                return (
+                                                    <button
+                                                        key={num}
+                                                        type="button"
+                                                        onClick={() => toggleNewRoomNumber(num)}
+                                                        className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
+                                                            selected
+                                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                                : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                        }`}
+                                                    >
+                                                        {num}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end pt-2">
+                                    <Button type="button" size="sm" onClick={handleCreateRoom}>
+                                        Add rooms
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </DialogContent>
                 </Dialog>
             </main>

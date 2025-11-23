@@ -83,6 +83,8 @@ function ConfirmationContent() {
                         },
                         hostelId: hostelId,
                         roomTypeId: bookingData.roomTypeId || '',
+                        roomId: bookingData.roomId || '',
+                        roomNumber: bookingData.roomNumber || '',
                         paymentReference: trxref,
                         amountPaid: bookingData.roomPrice || 0,
                         bookingDate: serverTimestamp(),
@@ -101,6 +103,18 @@ function ConfirmationContent() {
                             console.error('Failed to update room type occupancy:', e);
                             // We deliberately do not block the booking flow if this fails
                         }
+
+                    // Increment occupancy for the specific physical room if provided
+                    if (bookingData.roomId) {
+                        try {
+                            const roomRef = doc(db, 'hostels', hostelId, 'rooms', bookingData.roomId);
+                            await updateDoc(roomRef, {
+                                currentOccupancy: increment(1),
+                            });
+                        } catch (e) {
+                            console.error('Failed to update room occupancy:', e);
+                        }
+                    }
                     }
 
                     toast({

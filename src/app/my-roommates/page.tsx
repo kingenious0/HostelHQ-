@@ -92,6 +92,7 @@ export default function MyRoommatesPage() {
     const [appUser, setAppUser] = useState<AppUser | null>(null);
     const [roommates, setRoommates] = useState<Roommate[]>([]);
     const [userBookings, setUserBookings] = useState<Booking[]>([]);
+    const [hostelMates, setHostelMates] = useState<Record<string, { hostelName: string; mates: Roommate[] }>>({});
     const [contactMode, setContactMode] = useState<RoommateContactMode>('phone');
     const { toast } = useToast();
     const router = useRouter();
@@ -147,44 +148,106 @@ export default function MyRoommatesPage() {
             where("status", "==", "confirmed")
         );
         const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
-            const fetchedBookings = snapshot.docs.map(d => d.data() as Booking);
+            const fetchedBookings = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Booking[];
             setUserBookings(fetchedBookings);
 
-            // Find roommates based on confirmed bookings
             const currentRoommates: Roommate[] = [];
+            const hostelMateGroups: Record<string, { hostelName: string; mates: Roommate[] }> = {};
+
             for (const booking of fetchedBookings) {
-                if (booking.hostelId && booking.roomNumber) {
+                if (!booking.hostelId) continue;
+
+                // 1) Roommates in the SAME ROOM
+                if (booking.roomNumber) {
                     const roommatesInRoomQuery = query(
                         collection(db, "bookings"),
                         where("hostelId", "==", booking.hostelId),
                         where("roomNumber", "==", booking.roomNumber),
                         where("status", "==", "confirmed"),
-                        where("studentId", "!=", currentUser.uid) // Exclude current user
+                        where("studentId", "!=", currentUser.uid)
                     );
-                    const roommateSnapshots = await getDocs(roommatesInRoomQuery); // Use getDocs for a one-time fetch
+                    const roommateSnapshots = await getDocs(roommatesInRoomQuery);
 
                     for (const rDoc of roommateSnapshots.docs) {
                         const roommateBookingData = rDoc.data() as Booking;
                         const roommateUserDoc = await getDoc(doc(db, "users", roommateBookingData.studentId));
                         if (roommateUserDoc.exists()) {
                             const roommateData = roommateUserDoc.data() as AppUser;
+                            const privacy = roommateData.privacySettings || {};
+                            if (privacy.showProfile === false) continue; // Do not display if profile sharing is off
+
                             const roommateContactMode: RoommateContactMode =
-                              roommateData.privacySettings?.roommateContactMode || 'phone';
+                              privacy.roommateContactMode || 'phone';
+                            const canShowPhone = privacy.showPhoneNumber !== false;
+                            const canShowEmail = privacy.showEmailAddress !== false;
+                            const canShowProgramme = privacy.showProgrammeOfStudy !== false;
+
                             currentRoommates.push({
                                 uid: roommateUserDoc.id,
                                 fullName: roommateData.fullName || 'Unknown Roommate',
-                                email: roommateData.email || roommateBookingData.studentDetails?.email || '',
-                                profileImage: roommateData.profileImage || '',
-                                phone: roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '',
-                                program: roommateBookingData.studentDetails?.program,
-                                level: roommateBookingData.studentDetails?.level,
+                                email: canShowEmail ? (roommateData.email || roommateBookingData.studentDetails?.email || '') : '',
+                                profileImage: privacy.showPicture === false ? '' : (roommateData.profileImage || ''),
+                                phone:
+                                  canShowPhone && roommateContactMode !== 'basic'
+                                    ? (roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '')
+                                    : undefined,
+                                program: canShowProgramme ? roommateBookingData.studentDetails?.program : undefined,
+                                level: canShowProgramme ? roommateBookingData.studentDetails?.level : undefined,
                                 contactMode: roommateContactMode,
                             });
                         }
                     }
                 }
+
+                // 2) Hostel mates in the SAME HOSTEL (any room)
+                const hostelmatesQuery = query(
+                    collection(db, "bookings"),
+                    where("hostelId", "==", booking.hostelId),
+                    where("status", "==", "confirmed"),
+                    where("studentId", "!=", currentUser.uid)
+                );
+                const hostelmateSnapshots = await getDocs(hostelmatesQuery);
+
+                for (const hDoc of hostelmateSnapshots.docs) {
+                    const mateBooking = hDoc.data() as Booking;
+                    const mateUserDoc = await getDoc(doc(db, "users", mateBooking.studentId));
+                    if (!mateUserDoc.exists()) continue;
+                    const mateUser = mateUserDoc.data() as AppUser;
+                    const privacy = mateUser.privacySettings || {};
+                    if (privacy.showProfile === false) continue;
+
+                    const contactModeForMate: RoommateContactMode =
+                        privacy.roommateContactMode || 'phone';
+
+                    const hostelName = mateBooking.hostelName || booking.hostelName || 'Hostel';
+                    const group = hostelMateGroups[booking.hostelId] || { hostelName, mates: [] };
+
+                    // avoid duplicates by uid
+                    if (!group.mates.some(m => m.uid === mateUserDoc.id)) {
+                        const canShowPhone = privacy.showPhoneNumber !== false;
+                        const canShowEmail = privacy.showEmailAddress !== false;
+                        const canShowProgramme = privacy.showProgrammeOfStudy !== false;
+
+                        group.mates.push({
+                            uid: mateUserDoc.id,
+                            fullName: mateUser.fullName || 'Hostel mate',
+                            email: canShowEmail ? (mateUser.email || mateBooking.studentDetails?.email || '') : '',
+                            profileImage: privacy.showPicture === false ? '' : (mateUser.profileImage || ''),
+                            phone:
+                              canShowPhone && contactModeForMate !== 'basic'
+                                ? (mateUser.phone || mateBooking.studentDetails?.phoneNumber || '')
+                                : undefined,
+                            program: canShowProgramme ? mateBooking.studentDetails?.program : undefined,
+                            level: canShowProgramme ? mateBooking.studentDetails?.level : undefined,
+                            contactMode: contactModeForMate,
+                        });
+                        hostelMateGroups[booking.hostelId] = group;
+                    }
+                }
             }
+
             setRoommates(currentRoommates);
+            setHostelMates(hostelMateGroups);
             setLoading(false);
         }, (error) => {
             console.error("Error fetching bookings for roommates:", error);
@@ -398,13 +461,20 @@ export default function MyRoommatesPage() {
                                 </CardContent>
                             </Card>
 
-                            {loading ? (
-                                <div className="flex justify-center py-12">
-                                    <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : roommates.length > 0 ? (
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {roommates.map(roommate => (
+                            <Tabs defaultValue="roommates" className="w-full">
+                                <TabsList className="mb-4">
+                                    <TabsTrigger value="roommates">Roommates</TabsTrigger>
+                                    <TabsTrigger value="hostelMates">Hostel Mates</TabsTrigger>
+                                </TabsList>
+
+                                <TabsContent value="roommates">
+                                  {loading ? (
+                                    <div className="flex justify-center py-12">
+                                        <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                                    </div>
+                                  ) : roommates.length > 0 ? (
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                      {roommates.map(roommate => (
                                         <Card key={roommate.uid} className="bg-white shadow-md rounded-lg p-6 flex flex-col gap-4">
                                             <div className="flex items-center gap-4">
                                               <Avatar className="h-12 w-12">
@@ -444,15 +514,72 @@ export default function MyRoommatesPage() {
                                               </p>
                                             )}
                                         </Card>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-16">
-                                    <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                                    <p className="text-lg text-muted-foreground">No Room Bundles in this room yet!</p>
-                                    <p className="text-muted-foreground mt-2">Details of your other roommates will not be displayed if their profile sharing is off.</p>
-                                </div>
-                            )}
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-16">
+                                        <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                                        <p className="text-lg text-muted-foreground">No Room Bundles in this room yet!</p>
+                                        <p className="text-muted-foreground mt-2">Details of your other roommates will not be displayed if their profile sharing is off.</p>
+                                    </div>
+                                  )}
+                                </TabsContent>
+
+                                <TabsContent value="hostelMates">
+                                  {loading ? (
+                                    <div className="flex justify-center py-12">
+                                      <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                                    </div>
+                                  ) : Object.keys(hostelMates).length > 0 ? (
+                                    <div className="space-y-8">
+                                      {Object.entries(hostelMates).map(([hostelId, data]) => (
+                                        <div key={hostelId} className="space-y-3">
+                                          <div className="flex items-baseline justify-between">
+                                            <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white">
+                                              Hostel mates – {data.hostelName}
+                                            </h2>
+                                            <span className="text-xs text-muted-foreground">
+                                              {data.mates.length} student{data.mates.length !== 1 ? 's' : ''}
+                                            </span>
+                                          </div>
+                                          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                            {data.mates.map(mate => (
+                                              <Card key={mate.uid} className="bg-white shadow-md rounded-lg p-6 flex flex-col gap-4">
+                                                <div className="flex items-center gap-4">
+                                                  <Avatar className="h-12 w-12">
+                                                    {mate.profileImage ? (
+                                                      <AvatarImage src={mate.profileImage} alt={mate.fullName} />
+                                                    ) : (
+                                                      <AvatarFallback>{mate.fullName.charAt(0)}</AvatarFallback>
+                                                    )}
+                                                  </Avatar>
+                                                  <div className="space-y-1">
+                                                    <h3 className="font-semibold text-base sm:text-lg">{mate.fullName}</h3>
+                                                    {(mate.program || mate.level) && (
+                                                      <p className="text-xs sm:text-sm text-muted-foreground">
+                                                        {[mate.program, mate.level && `Level ${mate.level}`].filter(Boolean).join(' • ')}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                                <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                                                  Lives in the same hostel as you. Exact contact details depend on their privacy settings.
+                                                </p>
+                                              </Card>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-16">
+                                      <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                                      <p className="text-lg text-muted-foreground">No other students secured in your hostel yet.</p>
+                                      <p className="text-muted-foreground mt-2">As more students secure this hostel, they will appear here.</p>
+                                    </div>
+                                  )}
+                                </TabsContent>
+                            </Tabs>
                         </div>
                     </main>
                 </SidebarInset>
