@@ -5,6 +5,61 @@ import { generateAndSendOTP, formatPhoneNumber } from '@/lib/wigal';
 
 export async function POST(req: NextRequest) {
   try {
+    const { phoneNumber } = await req.json();
+
+    if (!phoneNumber) {
+      return NextResponse.json(
+        { success: false, error: 'Phone number is required' },
+        { status: 400 }
+      );
+    }
+
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+
+    // 🔧 DEVELOPMENT MODE: Bypass SMS in localhost
+    const isDevelopment = process.env.NODE_ENV === 'development' || 
+                         process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+    
+    if (isDevelopment) {
+      console.log('🔧 DEVELOPMENT MODE: Simulating OTP send');
+      console.log('📱 Phone:', formattedPhone);
+      console.log('🔑 Use OTP: 123456 (dev mode)');
+      
+      // Store a dev OTP in Firestore
+      const otpCollection = collection(db, 'otpVerifications');
+      
+      // Delete existing OTPs for this phone
+      const existingOTPQuery = query(
+        otpCollection,
+        where('phoneNumber', '==', formattedPhone),
+        where('verified', '==', false)
+      );
+      const existingOTPs = await getDocs(existingOTPQuery);
+      const deletePromises = existingOTPs.docs.map((doc: any) => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      
+      // Store dev OTP (always 123456 in dev mode)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+      
+      await addDoc(otpCollection, {
+        phoneNumber: formattedPhone,
+        otp: '123456', // Dev mode OTP
+        expiresAt: Timestamp.fromDate(expiresAt),
+        verified: false,
+        createdAt: Timestamp.now(),
+        length: 6,
+        isDev: true,
+      });
+      
+      return NextResponse.json({
+        success: true,
+        message: 'OTP sent successfully (DEV MODE - Use: 123456)',
+        devMode: true,
+      });
+    }
+
+    // 🚀 PRODUCTION MODE: Use real SMS API
     // Debug: Log environment variable status (without exposing values)
     const apiKeyValue = process.env.WIGAL_API_KEY || process.env.FROG_SMS_API_KEY;
     const usernameValue = process.env.WIGAL_USERNAME || process.env.FROG_SMS_USERNAME;
@@ -38,17 +93,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { phoneNumber } = await req.json();
-
-    if (!phoneNumber) {
-      return NextResponse.json(
-        { success: false, error: 'Phone number is required' },
-        { status: 400 }
-      );
-    }
-
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-
     // Check for existing unexpired OTP
     const otpCollection = collection(db, 'otpVerifications');
     const existingOTPQuery = query(
@@ -59,7 +103,7 @@ export async function POST(req: NextRequest) {
     const existingOTPs = await getDocs(existingOTPQuery);
 
     // Delete existing unexpired OTPs for this phone number
-    const deletePromises = existingOTPs.docs.map(doc => deleteDoc(doc.ref));
+    const deletePromises = existingOTPs.docs.map((doc: any) => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
 
     // Generate and send OTP via Wigal FROG API

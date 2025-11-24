@@ -207,20 +207,41 @@ export default function InvoicePage() {
     const roomPrice = bookedRoom && typeof bookedRoom.price === 'number' ? bookedRoom.price : (booking.amountPaid || 0);
     const balanceDue = isSecureBooking ? roomPrice - totalAmountPaid : 0;
     
-    // Format booking date properly
+    // Format booking date properly with time
     const formatBookingDate = () => {
-        if (!booking.bookingDate) return 'N/A';
-        if (booking.bookingDate instanceof Timestamp) {
-            return booking.bookingDate.toDate().toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' });
-        }
-        if (booking.bookingDate.seconds) {
-            return new Date(booking.bookingDate.seconds * 1000).toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' });
-        }
+        // Check for both bookingDate (secure bookings) and createdAt (visit bookings)
+        const dateField = booking.bookingDate || (booking as any).createdAt;
+        if (!dateField) return 'N/A';
         try {
-            return new Date(booking.bookingDate).toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' });
+            let date: Date;
+            if (dateField instanceof Timestamp) {
+                date = dateField.toDate();
+            } else if (dateField.seconds) {
+                date = new Date(dateField.seconds * 1000);
+            } else {
+                date = new Date(dateField);
+            }
+            return date.toLocaleDateString('en-GH', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         } catch {
             return 'N/A';
         }
+    };
+
+    // Format current date and time for invoice generation
+    const formatInvoiceGenerationTime = () => {
+        return new Date().toLocaleDateString('en-GH', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
 
     // Generate professional invoice ID: INV-{first 3 letters capitalized}{last 3 digits}
@@ -262,7 +283,7 @@ export default function InvoicePage() {
                                         {isSecureBooking ? 'Hostel Securing Invoice' : 'Visit Booking Invoice'} #{customInvoiceId}
                                     </CardTitle>
                                     <CardDescription className="text-sm sm:text-base mt-1">
-                                        {isSecureBooking ? 'Invoice for secured hostel room' : 'Invoice for hostel visit booking'} • Generated on {new Date().toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' })}.
+                                        {isSecureBooking ? 'Invoice for secured hostel room' : 'Invoice for hostel visit booking'} • Generated on {formatInvoiceGenerationTime()}.
                                     </CardDescription>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">

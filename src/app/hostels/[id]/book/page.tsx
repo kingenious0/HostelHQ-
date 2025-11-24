@@ -21,9 +21,48 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 
 type VisitType = 'agent' | 'self';
+
+// Helper function to detect mobile money provider from phone number
+const detectProvider = (phoneNumber: string): string => {
+    if (!phoneNumber) return '';
+    
+    // Remove any spaces, dashes, or other non-digit characters except +
+    let cleaned = phoneNumber.replace(/[\s\-()]/g, '');
+    
+    // Convert +233 to 0 format for consistent prefix detection
+    if (cleaned.startsWith('+233')) {
+        cleaned = '0' + cleaned.substring(4);
+    } else if (cleaned.startsWith('233')) {
+        cleaned = '0' + cleaned.substring(3);
+    }
+    
+    // Now get the first 3 digits (should be 0XX format)
+    const prefix = cleaned.substring(0, 3);
+    
+    // Telecel (formerly Vodafone): 020, 050
+    if (prefix === '020' || prefix === '050') {
+        return 'vod';
+    }
+    
+    // MTN: 024, 025, 053, 054, 055, 059
+    if (['024', '025', '053', '054', '055', '059'].includes(prefix)) {
+        return 'mtn';
+    }
+    
+    // AirtelTigo: 026, 027, 056, 057
+    if (['026', '027', '056', '057'].includes(prefix)) {
+        return 'tgo';
+    }
+    
+    return ''; // Unknown provider
+};
 
 const visitOptions = {
     agent: {
@@ -50,7 +89,8 @@ export default function BookingPage() {
     const [visitType, setVisitType] = useState<VisitType>('agent');
     const [phone, setPhone] = useState('');
     const [provider, setProvider] = useState('');
-    const [email, setEmail] = useState('student@test.com'); // Default email
+    const [email, setEmail] = useState('');
+    const [studentName, setStudentName] = useState('');
     const [visitDate, setVisitDate] = useState<Date>();
     const [visitTime, setVisitTime] = useState('');
 
@@ -61,6 +101,50 @@ export default function BookingPage() {
     const { toast } = useToast();
     const id = params.id as string;
     const roomTypeId = searchParams.get('roomTypeId');
+
+    // Fetch user data and prefill form
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    // Get user document from Firestore
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        
+                        // Prefill email
+                        if (userData.email) {
+                            setEmail(userData.email);
+                        } else if (user.email) {
+                            setEmail(user.email);
+                        }
+                        
+                        // Prefill student name
+                        if (userData.fullName) {
+                            setStudentName(userData.fullName);
+                        }
+                        
+                        // Prefill phone number
+                        if (userData.phoneNumber) {
+                            setPhone(userData.phoneNumber);
+                            // Auto-detect provider
+                            const detectedProvider = detectProvider(userData.phoneNumber);
+                            if (detectedProvider) {
+                                setProvider(detectedProvider);
+                            }
+                        }
+                    } else if (user.email) {
+                        // Fallback to auth email if no Firestore doc
+                        setEmail(user.email);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                }
+            }
+        });
+        
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         const fetchHostelData = async () => {
@@ -73,6 +157,16 @@ export default function BookingPage() {
         };
         fetchHostelData();
     }, [id]);
+
+    // Auto-detect provider when phone number changes
+    useEffect(() => {
+        if (phone) {
+            const detectedProvider = detectProvider(phone);
+            if (detectedProvider && detectedProvider !== provider) {
+                setProvider(detectedProvider);
+            }
+        }
+    }, [phone]);
 
     const handlePayment = async () => {
         const isAgentVisit = visitType === 'agent';
@@ -111,6 +205,7 @@ export default function BookingPage() {
                 visitDate: isAgentVisit && visitDate ? visitDate.toISOString() : new Date().toISOString(), // Use current date for self-visit
                 visitTime: isAgentVisit ? visitTime : '',
                 visitType: visitType,
+                studentName: studentName, // Pass student name for payment reference generation
             });
 
             if (result.status && result.authorization_url) {

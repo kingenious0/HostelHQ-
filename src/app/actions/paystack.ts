@@ -14,6 +14,7 @@ type MomoPaymentPayload = {
     visitDate: string; 
     visitTime: string; 
     visitType: 'agent' | 'self';
+    studentName?: string; // For generating payment reference
 }
 
 type HostelPaymentPayload = {
@@ -44,6 +45,28 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     callback_url.searchParams.set('visitTime', payload.visitTime);
     callback_url.searchParams.set('visitType', payload.visitType);
 
+    // Generate professional payment reference: VISIT-{first3letters}{last3digits}
+    const generatePaymentReference = () => {
+        const name = payload.studentName || 'Student';
+        const phone = payload.phone || '';
+        
+        // Extract first 3 letters of name (remove spaces, capitalize first letter)
+        const nameNoSpaces = name.replace(/\s+/g, '');
+        const namePart = nameNoSpaces.length >= 3
+            ? nameNoSpaces.substring(0, 3).charAt(0).toUpperCase() + nameNoSpaces.substring(1, 3).toLowerCase()
+            : (nameNoSpaces.charAt(0).toUpperCase() + nameNoSpaces.substring(1).toLowerCase()).padEnd(3, 'x');
+        
+        // Extract last 3 digits of phone (remove all non-digits first)
+        const digitsOnly = phone.replace(/\D/g, '');
+        const phonePart = digitsOnly.length >= 3 
+            ? digitsOnly.slice(-3)
+            : digitsOnly.padStart(3, '0');
+        
+        return `VISIT-${namePart}${phonePart}`;
+    };
+    
+    const paymentReference = generatePaymentReference();
+
 
     try {
         const response = await fetch(paystackUrl, {
@@ -56,11 +79,13 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                 email: payload.email,
                 amount: payload.amount,
                 currency: 'GHS',
+                reference: paymentReference,
                 callback_url: callback_url.toString(),
                 metadata: {
                     label: payload.label || 'HostelHQ Payment',
                     visitType: payload.visitType,
-                    booking_type: 'visit'
+                    booking_type: 'visit',
+                    student_name: payload.studentName || 'N/A'
                 },
                 channels: ['mobile_money'],
                 mobile_money: {

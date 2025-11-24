@@ -135,17 +135,28 @@ function ConfirmationContent() {
             // This is a visit-only payment
             if (reference && hostelId && visitTypeParam) {
                 try {
-                     const visitRef = await addDoc(collection(db, 'visits'), {
+                    // Fetch student details for the visit record
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    const userData = userDoc.exists() ? userDoc.data() : {};
+                    
+                    const visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
+                        studentDetails: {
+                            fullName: userData.fullName || '',
+                            email: userData.email || currentUser.email || '',
+                            phoneNumber: userData.phoneNumber || userData.phone || '',
+                        },
                         hostelId: hostelId,
                         agentId: null,
                         status: visitTypeParam === 'self' ? 'accepted' : 'scheduling',
-                        paymentReference: reference,
+                        paymentReference: reference, // This is the professional reference from Paystack
                         createdAt: serverTimestamp(),
                         visitDate: visitDate || new Date().toISOString(),
                         visitTime: visitTime || new Date().toLocaleTimeString(),
                         visitType: visitTypeParam as 'agent' | 'self',
                         studentCompleted: false,
+                        amountPaid: visitTypeParam === 'agent' ? 1 : 15, // Store the amount paid
+                        bookingType: 'visit', // Mark as visit booking
                     });
                     
                     const redirectUrl = visitTypeParam === 'self'

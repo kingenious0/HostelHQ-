@@ -16,7 +16,52 @@ export async function POST(req: NextRequest) {
 
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
-    // Verify OTP via Wigal FROG API
+    // 🔧 DEVELOPMENT MODE: Check for dev OTP
+    const isDevelopment = process.env.NODE_ENV === 'development' || 
+                         process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+    
+    const otpCollection = collection(db, 'otpVerifications');
+    const otpQuery = query(
+      otpCollection,
+      where('phoneNumber', '==', formattedPhone),
+      where('verified', '==', false)
+    );
+    const otpDocs = await getDocs(otpQuery);
+
+    if (isDevelopment) {
+      console.log('🔧 DEVELOPMENT MODE: Verifying OTP');
+      console.log('📱 Phone:', formattedPhone);
+      console.log('🔑 Entered OTP:', otp);
+      
+      // Check if dev OTP exists in Firestore
+      const devOtpDoc = otpDocs.docs.find((doc: any) => doc.data().isDev === true);
+      
+      if (devOtpDoc) {
+        const storedOtp = devOtpDoc.data().otp;
+        console.log('✅ Found dev OTP:', storedOtp);
+        
+        if (otp === storedOtp) {
+          // Mark as verified
+          await updateDoc(devOtpDoc.ref, {
+            verified: true,
+            verifiedAt: Timestamp.now(),
+          });
+          
+          return NextResponse.json({
+            success: true,
+            message: 'OTP verified successfully (DEV MODE)',
+            devMode: true,
+          });
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Invalid OTP. Use 123456 in dev mode.' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // 🚀 PRODUCTION MODE: Verify OTP via Wigal FROG API
     const verifyResult = await verifyOTP(formattedPhone, otp);
 
     if (!verifyResult.success) {
@@ -26,17 +71,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update Firestore record to mark as verified (if exists)
-    const otpCollection = collection(db, 'otpVerifications');
-    const otpQuery = query(
-      otpCollection,
-      where('phoneNumber', '==', formattedPhone),
-      where('verified', '==', false)
-    );
-    const otpDocs = await getDocs(otpQuery);
-
     // Update all unverified records for this phone number
-    const updatePromises = otpDocs.docs.map(doc => 
+    const updatePromises = otpDocs.docs.map((doc: any) => 
       updateDoc(doc.ref, {
         verified: true,
         verifiedAt: Timestamp.now(),

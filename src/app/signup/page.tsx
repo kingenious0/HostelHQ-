@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft } from 'lucide-react';
+import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -20,6 +20,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { tenancyAgreementText } from '@/lib/legal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { FaceCaptureDialog } from '@/components/FaceCaptureDialog';
+import { getFaceDescriptorFromBase64, descriptorToArray } from '@/lib/faceDetection';
 
 type UserRole = 'student' | 'agent' | 'hostel_manager' | null;
 
@@ -78,8 +80,12 @@ export default function SignupPage() {
     const router = useRouter();
 
     // State for multi-step form
-    const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP, 4: Manager hostel selection
+    const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP, 4: Face capture, 5: Manager hostel selection
     const [termsAccepted, setTermsAccepted] = useState(false);
+    const [isFaceCaptureOpen, setIsFaceCaptureOpen] = useState(false);
+    const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+    const [isProcessingFace, setIsProcessingFace] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     // Validate email format
     const isValidEmail = (email: string): boolean => {
@@ -274,13 +280,9 @@ export default function SignupPage() {
                 setOtpVerified(true);
                 toast({ title: "OTP Verified", description: "Phone number verified successfully!" });
 
-                // For managers, go to hostel selection step; others can complete signup immediately
-                if (selectedRole === 'hostel_manager') {
-                    setStep(4);
-                    await loadManagerHostels();
-                } else {
-                    handleSignup();
-                }
+                // MANDATORY: Go to face capture step for ALL users
+                setStep(4);
+                setIsFaceCaptureOpen(true);
             } else {
                 toast({ title: "Invalid OTP", description: data.error || "Please check your OTP and try again.", variant: "destructive" });
             }
@@ -289,6 +291,55 @@ export default function SignupPage() {
             toast({ title: "Error", description: "Failed to verify OTP. Please try again.", variant: "destructive" });
         } finally {
             setIsVerifyingOTP(false);
+        }
+    };
+
+    // Handle face capture (MANDATORY)
+    const handleFaceCapture = async (capturedImageBase64: string) => {
+        setIsProcessingFace(true);
+        
+        try {
+            // Extract face descriptor from captured image
+            const descriptor = await getFaceDescriptorFromBase64(capturedImageBase64);
+            
+            if (!descriptor) {
+                toast({
+                    title: 'No Face Detected',
+                    description: 'Please ensure your face is clearly visible and try again.',
+                    variant: 'destructive'
+                });
+                setIsProcessingFace(false);
+                setIsFaceCaptureOpen(true); // Reopen to try again
+                return;
+            }
+
+            // Convert descriptor to array for storage
+            const descriptorArray = descriptorToArray(descriptor);
+            setFaceDescriptor(descriptorArray);
+
+            toast({
+                title: '✅ Face Captured!',
+                description: 'Your face has been registered successfully.',
+            });
+
+            setIsProcessingFace(false);
+
+            // For managers, go to hostel selection; others complete signup
+            if (selectedRole === 'hostel_manager') {
+                setStep(5);
+                await loadManagerHostels();
+            } else {
+                handleSignup();
+            }
+        } catch (error: any) {
+            console.error('Face capture error:', error);
+            toast({
+                title: 'Face Capture Failed',
+                description: error.message || 'Could not capture face. Please try again.',
+                variant: 'destructive'
+            });
+            setIsProcessingFace(false);
+            setIsFaceCaptureOpen(true); // Reopen to try again
         }
     };
 
@@ -304,10 +355,18 @@ export default function SignupPage() {
             return;
         }
 
-        // Managers must choose a hostel on Step 4 before completing signup
+        // MANDATORY: Face verification must be completed
+        if (!faceDescriptor) {
+            toast({ title: "Face Verification Required", description: "Please complete face verification to continue.", variant: "destructive" });
+            setStep(4);
+            setIsFaceCaptureOpen(true);
+            return;
+        }
+
+        // Managers must choose a hostel on Step 5 before completing signup
         if (selectedRole === 'hostel_manager' && !selectedManagerHostelId) {
             toast({ title: "Select Hostel", description: "Please choose the hostel you manage before finishing signup.", variant: "destructive" });
-            setStep(4);
+            setStep(5);
             return;
         }
         
@@ -361,6 +420,8 @@ export default function SignupPage() {
                 email: authEmail,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
+                faceDescriptor: faceDescriptor, // MANDATORY: Store face data
+                faceSetupDate: new Date().toISOString(),
             };
 
             if (localFullName) {
@@ -531,7 +592,25 @@ export default function SignupPage() {
                                 {step === 1 && 'Choose your account type to get started'}
                                 {step === 2 && 'Enter your account information'}
                                 {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && 'Verify your phone number'}
+                                {step === 4 && '🔒 Secure your account with face verification'}
+                                {step === 5 && selectedRole === 'hostel_manager' && 'Select the hostel you manage'}
                             </CardDescription>
+                            
+                            {/* Progress Indicator */}
+                            {step > 1 && (
+                                <div className="mt-4 space-y-2">
+                                    <div className="flex items-center justify-between text-xs text-slate-100/60">
+                                        <span>Step {step} of {selectedRole === 'hostel_manager' ? '5' : '4'}</span>
+                                        <span>{Math.round((step / (selectedRole === 'hostel_manager' ? 5 : 4)) * 100)}% Complete</span>
+                                    </div>
+                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 ease-out"
+                                            style={{ width: `${(step / (selectedRole === 'hostel_manager' ? 5 : 4)) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {/* Step 1: Role Selection */}
@@ -556,8 +635,60 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                            {/* Step 4: Manager Hostel Selection */}
-                            {step === 4 && selectedRole === 'hostel_manager' && (
+                            {/* Step 4: Face Capture (MANDATORY) */}
+                            {step === 4 && (
+                                <div className="space-y-4">
+                                    <Alert className="bg-blue-50/10 border-blue-500/50">
+                                        <Info className="h-4 w-4" />
+                                        <AlertTitle>🔒 Face Verification Required</AlertTitle>
+                                        <AlertDescription className="text-slate-100/80">
+                                            For your security, we require face verification during signup. This helps protect your account from unauthorized access.
+                                        </AlertDescription>
+                                    </Alert>
+                                    
+                                    <div className="text-center space-y-4 py-6">
+                                        {!faceDescriptor ? (
+                                            <>
+                                                <div className="text-6xl mb-4">📸</div>
+                                                <h3 className="text-xl font-semibold">Capture Your Face</h3>
+                                                <p className="text-slate-100/80 max-w-md mx-auto">
+                                                    Click the button below to open your camera and take a selfie. Make sure your face is clearly visible.
+                                                </p>
+                                                <Button
+                                                    onClick={() => setIsFaceCaptureOpen(true)}
+                                                    size="lg"
+                                                    className="mt-4"
+                                                    disabled={isProcessingFace}
+                                                >
+                                                    {isProcessingFace ? (
+                                                        <>
+                                                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                                                            Processing...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <User className="h-5 w-5 mr-2" />
+                                                            Open Camera
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-6xl mb-4">✅</div>
+                                                <h3 className="text-xl font-semibold text-green-400">Face Captured Successfully!</h3>
+                                                <p className="text-slate-100/80">
+                                                    Your face has been registered. Proceeding to complete signup...
+                                                </p>
+                                                <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step 5: Manager Hostel Selection */}
+                            {step === 5 && selectedRole === 'hostel_manager' && (
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="manager-hostel">Select Your Hostel</Label>
@@ -664,12 +795,23 @@ export default function SignupPage() {
                                             <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                             <Input
                                                 id="password-student"
-                                                type="password"
+                                                type={showPassword ? "text" : "password"}
                                                 placeholder="••••••••"
-                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                className="pl-10 pr-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-900 transition-colors"
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
                                         </div>
                                         <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
                                     </div>
@@ -741,12 +883,23 @@ export default function SignupPage() {
                                             <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                                             <Input 
                                                 id="password" 
-                                                type="password" 
+                                                type={showPassword ? "text" : "password"}
                                                 placeholder="••••••••" 
-                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
+                                                className="pl-10 pr-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
                                                 value={password} 
                                                 onChange={(e) => setPassword(e.target.value)}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-900 transition-colors"
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
                                         </div>
                                         <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
                                     </div>
@@ -861,6 +1014,7 @@ export default function SignupPage() {
                         {/* Step 3: Terms Agreement (Manager) removed - managers now sign up without viewing the tenancy template here */}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
+                        {/* Step 2: Basic Info - Back to Role Selection */}
                         {step === 2 && (
                             <div className="flex gap-2 w-full">
                                 <Button 
@@ -876,41 +1030,75 @@ export default function SignupPage() {
                                     className="flex-1" 
                                     disabled={isSubmitting}
                                 >
-                                    {selectedRole === 'agent' || selectedRole === 'hostel_manager' ? 'Next' : 'Create Account'}
+                                    Next
                                 </Button>
                             </div>
                         )}
-                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student') && otpVerified && (
-                            <Button 
-                                onClick={handleSignup} 
-                                className="w-full" 
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Creating Account...
-                                    </>
-                                ) : (
-                                    'Create Account'
-                                )}
-                            </Button>
+
+                        {/* Step 3: OTP Verification - Back to Basic Info */}
+                        {step === 3 && (
+                            <div className="flex gap-2 w-full">
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => {
+                                        setStep(2);
+                                        setOtp('');
+                                        setOtpSent(false);
+                                    }} 
+                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
+                                    disabled={isVerifyingOTP}
+                                >
+                                    <ArrowLeft className="mr-2 h-4 w-4" />
+                                    Back
+                                </Button>
+                            </div>
                         )}
-                        {step === 4 && selectedRole === 'hostel_manager' && otpVerified && (
-                            <Button
-                                onClick={handleSignup}
-                                className="w-full"
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Finishing Setup...
-                                    </>
-                                ) : (
-                                    'Finish Setup'
-                                )}
-                            </Button>
+
+                        {/* Step 4: Face Capture - Back to OTP (but keep OTP verified) */}
+                        {step === 4 && !faceDescriptor && (
+                            <div className="flex gap-2 w-full">
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => {
+                                        setStep(3);
+                                        setIsFaceCaptureOpen(false);
+                                    }} 
+                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
+                                    disabled={isProcessingFace}
+                                >
+                                    <ArrowLeft className="mr-2 h-4 w-4" />
+                                    Back
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* Step 5: Manager Hostel Selection - Back to Face Capture */}
+                        {step === 5 && selectedRole === 'hostel_manager' && (
+                            <div className="flex gap-2 w-full">
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => setStep(4)} 
+                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
+                                    disabled={isSubmitting}
+                                >
+                                    <ArrowLeft className="mr-2 h-4 w-4" />
+                                    Back
+                                </Button>
+                                <Button
+                                    onClick={handleSignup}
+                                    className="flex-1"
+                                    disabled={isSubmitting || !selectedManagerHostelId}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Finishing Setup...
+                                        </>
+                                    ) : (
+                                        'Finish Setup'
+                                    )}
+                                </Button>
+                            </div>
                         )}
                         {/* Managers no longer have a separate Step 3; they complete signup directly after basic info. */}
                         <p className="text-sm text-slate-100/80 text-center">
@@ -923,6 +1111,15 @@ export default function SignupPage() {
                 </Card>
             </div>
         </main>
+
+        {/* Face Capture Dialog (MANDATORY) */}
+        <FaceCaptureDialog
+            open={isFaceCaptureOpen}
+            onOpenChange={setIsFaceCaptureOpen}
+            onCapture={handleFaceCapture}
+            title="📸 Capture Your Face"
+            description="Position your face in the center and ensure good lighting. This is required for account security."
+        />
     </div>
     );
 }

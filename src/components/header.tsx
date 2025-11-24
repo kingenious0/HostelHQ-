@@ -56,6 +56,9 @@ import { ably } from '@/lib/ably';
 import { cn } from '@/lib/utils';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { FaceCaptureDialog } from '@/components/FaceCaptureDialog';
+import { SecurityAlarm } from '@/components/SecurityAlarm';
+import { getFaceDescriptorFromBase64, verifyFace, descriptorToArray } from '@/lib/faceDetection';
 
 type AppUser = {
   uid: string;
@@ -87,6 +90,17 @@ export function Header() {
     profileImage: ''
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [originalPhone, setOriginalPhone] = useState('');
+  const [originalName, setOriginalName] = useState('');
+  const [isPhoneChangeDialogOpen, setIsPhoneChangeDialogOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isFaceCaptureOpen, setIsFaceCaptureOpen] = useState(false);
+  const [isSecurityAlarmOpen, setIsSecurityAlarmOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'system';
     const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
@@ -196,6 +210,59 @@ export function Header() {
     return () => unsubscribeAuth(); // Unsubscribe from Auth state changes
   }, []);
 
+  const handleEditProfile = async () => {
+    setIsProfileOpen(true);
+    if (!appUser) return;
+    
+    try {
+        const userDocRef = doc(db, "users", appUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            
+            // Check all possible phone field names (phoneNumber is the primary field)
+            const phone = userData.phoneNumber || userData.phone || appUser.phone || '';
+            const fullName = userData.fullName || appUser.fullName || '';
+            const email = userData.email || appUser.email || '';
+            
+            // If we have phone but no email, generate it
+            const displayEmail = email || (phone && fullName ? generateEmail(fullName, phone) : '');
+            
+            setProfileData({
+                fullName: fullName,
+                email: displayEmail,
+                phone: phone,
+                address: userData.address || '',
+                bio: userData.bio || '',
+                profileImage: userData.profileImage || appUser.profileImage || ''
+            });
+            
+            // Store original values for comparison
+            setOriginalPhone(phone);
+            setOriginalName(fullName);
+        } else {
+            // Fallback to appUser data
+            const phone = appUser.phone || '';
+            const fullName = appUser.fullName || '';
+            const email = appUser.email || (phone && fullName ? generateEmail(fullName, phone) : '');
+            
+            setProfileData({
+                fullName: fullName,
+                email: email,
+                phone: phone,
+                address: '',
+                bio: '',
+                profileImage: appUser.profileImage || ''
+            });
+            setOriginalPhone(phone);
+            setOriginalName(fullName);
+        }
+    } catch (error) {
+        console.error('Error loading profile:', error);
+    }
+  };
+
   const loadProfileData = async () => {
     if (!appUser) return;
     
@@ -228,31 +295,256 @@ export function Header() {
     }
   };
 
+  // Generate email from name and phone
+  const generateEmail = (fullName: string, phone: string) => {
+    if (!fullName || !phone) return '';
+    
+    // Extract first 3 letters of name
+    const nameNoSpaces = fullName.replace(/\s+/g, '');
+    const namePart = nameNoSpaces.length >= 3
+      ? nameNoSpaces.substring(0, 3).toLowerCase()
+      : nameNoSpaces.toLowerCase().padEnd(3, 'x');
+    
+    // Extract last 3 digits of phone
+    const digitsOnly = phone.replace(/\D/g, '');
+    const phonePart = digitsOnly.length >= 3 
+      ? digitsOnly.slice(-3)
+      : digitsOnly.padStart(3, '0');
+    
+    return `std-${namePart}${phonePart}@hostelhq.com`;
+  };
+
   const handleSaveProfile = async () => {
     if (!appUser) return;
+    
+    // Check if phone number changed
+    const phoneChanged = profileData.phone !== originalPhone;
+    const nameChanged = profileData.fullName !== originalName;
+    
+    if (phoneChanged) {
+      // Show warning dialog for phone change
+      setNewPhone(profileData.phone || '');
+      setIsPhoneChangeDialogOpen(true);
+      return;
+    }
     
     setIsSavingProfile(true);
     try {
         const userDocRef = doc(db, "users", appUser.uid);
-        await updateDoc(userDocRef, {
+        const updateData: any = {
             fullName: profileData.fullName,
             phone: profileData.phone,
+            phoneNumber: profileData.phone, // Store in both fields for compatibility
             address: profileData.address,
             bio: profileData.bio,
             profileImage: profileData.profileImage,
             updatedAt: new Date().toISOString()
-        });
+        };
+        
+        // If name changed, update email
+        if (nameChanged && profileData.phone) {
+            const newEmail = generateEmail(profileData.fullName || '', profileData.phone);
+            updateData.email = newEmail;
+            
+            toast({ 
+                title: 'Email Updated', 
+                description: `Your email has been updated to ${newEmail}` 
+            });
+        }
+        
+        await updateDoc(userDocRef, updateData);
         
         // Update appUser state to reflect changes immediately in header
-        setAppUser(prev => prev ? { ...prev, ...profileData } as AppUser : null);
+        setAppUser(prev => prev ? { ...prev, ...profileData, email: updateData.email || prev.email } as AppUser : null);
 
         toast({ title: 'Profile updated successfully!' });
         setIsProfileOpen(false);
+        setOriginalName(profileData.fullName || '');
     } catch (error) {
         console.error('Error saving profile:', error);
         toast({ title: 'Failed to update profile', variant: 'destructive' });
     } finally {
         setIsSavingProfile(false);
+    }
+  };
+
+  const handlePhoneChangeConfirm = () => {
+    setIsPhoneChangeDialogOpen(false);
+    setIsPasswordDialogOpen(true);
+  };
+
+  const handlePasswordVerify = async () => {
+    if (!password || !appUser) {
+      toast({ title: 'Please enter your password', variant: 'destructive' });
+      return;
+    }
+    
+    setIsVerifying(true);
+    try {
+      // Import reauthenticateWithCredential and EmailAuthProvider
+      const { reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth');
+      const credential = EmailAuthProvider.credential(appUser.email, password);
+      
+      await reauthenticateWithCredential(auth.currentUser!, credential);
+      
+      // Password verified, now send OTP
+      setIsPasswordDialogOpen(false);
+      setPassword('');
+      
+      // In production, you would send SMS OTP here
+      // For now, we'll simulate it
+      toast({ 
+        title: 'Verification Code Sent', 
+        description: `A 6-digit code has been sent to ${newPhone}` 
+      });
+      
+      setIsOtpDialogOpen(true);
+    } catch (error: any) {
+      console.error('Password verification error:', error);
+      toast({ 
+        title: 'Incorrect Password', 
+        description: 'Please check your password and try again', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleOtpVerify = async () => {
+    if (!otp || otp.length !== 6) {
+      toast({ title: 'Please enter the 6-digit code', variant: 'destructive' });
+      return;
+    }
+    
+    // OTP verified, now trigger face capture
+    setIsOtpDialogOpen(false);
+    setOtp('');
+    setIsFaceCaptureOpen(true);
+  };
+
+  const handleFaceCapture = async (capturedImageBase64: string) => {
+    setIsVerifying(true);
+    
+    try {
+      // Get user's stored face descriptor
+      const userDocRef = doc(db, "users", appUser!.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (!userDoc.exists()) {
+        throw new Error('User document not found');
+      }
+      
+      const userData = userDoc.data();
+      const storedFaceDescriptor = userData.faceDescriptor;
+      
+      if (!storedFaceDescriptor || !Array.isArray(storedFaceDescriptor)) {
+        // No face descriptor stored, allow change but warn
+        toast({
+          title: 'No Face Data Found',
+          description: 'Proceeding without face verification. Please set up face verification in settings.',
+          variant: 'default'
+        });
+        await completePhoneChange();
+        return;
+      }
+      
+      // Verify face
+      const verificationResult = await verifyFace(
+        capturedImageBase64,
+        storedFaceDescriptor,
+        0.6 // Threshold
+      );
+      
+      if (!verificationResult.success) {
+        toast({
+          title: 'Face Detection Failed',
+          description: verificationResult.error || 'Could not detect face in image',
+          variant: 'destructive'
+        });
+        setIsVerifying(false);
+        return;
+      }
+      
+      if (verificationResult.isMatch) {
+        // Face matches! Complete phone change
+        toast({
+          title: '✅ Face Verified!',
+          description: `Match confidence: ${verificationResult.similarity}%`,
+        });
+        await completePhoneChange();
+      } else {
+        // Face doesn't match! Trigger alarm
+        toast({
+          title: '❌ Face Verification Failed',
+          description: `Match confidence: ${verificationResult.similarity}% (Required: 60%)`,
+          variant: 'destructive'
+        });
+        
+        // Trigger security alarm
+        setIsSecurityAlarmOpen(true);
+        
+        // Reset states
+        setProfileData(p => ({ ...p, phone: originalPhone }));
+        setNewPhone('');
+        setIsVerifying(false);
+      }
+    } catch (error: any) {
+      console.error('Face verification error:', error);
+      toast({
+        title: 'Verification Error',
+        description: error.message || 'Face verification failed',
+        variant: 'destructive'
+      });
+      setIsVerifying(false);
+    }
+  };
+
+  const completePhoneChange = async () => {
+    try {
+      const userDocRef = doc(db, "users", appUser!.uid);
+      const newEmail = generateEmail(profileData.fullName || '', newPhone);
+      
+      await updateDoc(userDocRef, {
+        phone: newPhone,
+        phoneNumber: newPhone,
+        email: newEmail,
+        fullName: profileData.fullName,
+        address: profileData.address,
+        bio: profileData.bio,
+        profileImage: profileData.profileImage,
+        updatedAt: new Date().toISOString()
+      });
+      
+      // Update appUser state
+      setAppUser(prev => prev ? { 
+        ...prev, 
+        ...profileData, 
+        phone: newPhone, 
+        email: newEmail 
+      } as AppUser : null);
+      
+      // Update profileData
+      setProfileData(prev => ({ ...prev, phone: newPhone, email: newEmail }));
+      setOriginalPhone(newPhone);
+      
+      toast({ 
+        title: 'Phone Number Updated Successfully!', 
+        description: `Your email has been updated to ${newEmail}. All your bookings and data have been preserved.` 
+      });
+      
+      // Close all dialogs
+      setIsProfileOpen(false);
+      setNewPhone('');
+      setIsVerifying(false);
+    } catch (error) {
+      console.error('Phone change error:', error);
+      toast({ 
+        title: 'Update Failed', 
+        description: 'Could not update phone number. Please try again.', 
+        variant: 'destructive' 
+      });
+      setIsVerifying(false);
     }
   };
 
@@ -826,6 +1118,151 @@ export function Header() {
             </div>
         </DialogContent>
       </Dialog>
+
+      {/* Phone Change Warning Dialog */}
+      <Dialog open={isPhoneChangeDialogOpen} onOpenChange={setIsPhoneChangeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>⚠️ Change Phone Number</DialogTitle>
+            <DialogDescription>
+              Changing your phone number requires verification for security purposes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-4 border border-amber-200 dark:border-amber-800">
+              <p className="text-sm text-amber-900 dark:text-amber-100 font-medium mb-2">
+                You will need to:
+              </p>
+              <ol className="text-sm text-amber-800 dark:text-amber-200 space-y-1 list-decimal list-inside">
+                <li>Enter your account password</li>
+                <li>Verify the new number via SMS OTP</li>
+              </ol>
+            </div>
+            <div className="rounded-lg bg-green-50 dark:bg-green-950 p-4 border border-green-200 dark:border-green-800">
+              <p className="text-sm text-green-900 dark:text-green-100 flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                <span className="font-medium">Your bookings and data will be preserved</span>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>New Phone Number</Label>
+              <Input value={newPhone} disabled className="bg-muted" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setIsPhoneChangeDialogOpen(false);
+              setProfileData(p => ({ ...p, phone: originalPhone }));
+            }}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button onClick={handlePhoneChangeConfirm}>
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Verification Dialog */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>🔒 Verify Your Password</DialogTitle>
+            <DialogDescription>
+              Please enter your account password to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input 
+                id="password" 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handlePasswordVerify()}
+                placeholder="Enter your password"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setIsPasswordDialogOpen(false);
+              setPassword('');
+              setProfileData(p => ({ ...p, phone: originalPhone }));
+            }}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button onClick={handlePasswordVerify} disabled={isVerifying}>
+              {isVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Verify
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OTP Verification Dialog */}
+      <Dialog open={isOtpDialogOpen} onOpenChange={setIsOtpDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>📱 Enter Verification Code</DialogTitle>
+            <DialogDescription>
+              We've sent a 6-digit code to {newPhone}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="otp">Verification Code</Label>
+              <Input 
+                id="otp" 
+                type="text" 
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onKeyDown={(e) => e.key === 'Enter' && handleOtpVerify()}
+                placeholder="Enter 6-digit code"
+                maxLength={6}
+                className="text-center text-2xl tracking-widest font-mono"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                For testing, enter any 6-digit code
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setIsOtpDialogOpen(false);
+              setOtp('');
+              setProfileData(p => ({ ...p, phone: originalPhone }));
+            }}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button onClick={handleOtpVerify} disabled={isVerifying || otp.length !== 6}>
+              {isVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Verify & Update
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Face Capture Dialog */}
+      <FaceCaptureDialog
+        open={isFaceCaptureOpen}
+        onOpenChange={setIsFaceCaptureOpen}
+        onCapture={handleFaceCapture}
+        title="📸 Verify Your Identity"
+        description="Take a selfie to verify it's really you changing the phone number"
+      />
+
+      {/* Security Alarm */}
+      <SecurityAlarm
+        open={isSecurityAlarmOpen}
+        onClose={() => setIsSecurityAlarmOpen(false)}
+      />
     </header>
   );
 }
