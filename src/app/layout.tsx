@@ -34,13 +34,16 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(() => {
   try {
-    const stored = window.localStorage.getItem('hostelhq-theme');
-    const mode = stored || 'system';
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldUseDark = mode === 'dark' || (mode === 'system' && prefersDark);
-    const doc = document.documentElement;
-    doc.classList.remove('light', 'dark');
-    doc.classList.add(shouldUseDark ? 'dark' : 'light');
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      const stored = window.localStorage.getItem('hostelhq-theme');
+      const mode = stored || 'system';
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const shouldUseDark = mode === 'dark' || (mode === 'system' && prefersDark);
+      const doc = document.documentElement;
+      doc.classList.remove('light', 'dark');
+      doc.classList.add(shouldUseDark ? 'dark' : 'light');
+    }
   } catch (_) {
     // fail silently; Header will handle theme on client
   }

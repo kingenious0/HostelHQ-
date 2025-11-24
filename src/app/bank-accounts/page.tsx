@@ -30,7 +30,8 @@ import {
     Menu,
     PlusCircle,
     Upload,
-    Receipt
+    Receipt,
+    Eye
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -508,7 +509,11 @@ export default function BankAccountsPage() {
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-sm font-medium">
-                                                                    Submitted {proof.submittedAt?.toDate()?.toLocaleDateString() || 'Recently'}
+                                                                    Submitted {proof.submittedAt?.toDate()?.toLocaleDateString('en-US', {
+                                                                        year: 'numeric',
+                                                                        month: 'short',
+                                                                        day: 'numeric'
+                                                                    }) || 'Recently'}
                                                                 </p>
                                                                 {proof.status === 'rejected' && proof.rejectionReason && (
                                                                     <p className="text-sm text-red-600 mt-1">

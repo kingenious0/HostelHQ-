@@ -850,7 +850,11 @@ function formatPaymentStatusSMS(
                                                         {proof.accountType === 'bank' ? 'Bank Transfer' : proof.momoNetwork}
                                                     </Badge>
                                                     <span className="text-sm text-muted-foreground">
-                                                        Submitted {proof.submittedAt?.toDate()?.toLocaleDateString() || 'Recently'}
+                                                        Submitted {proof.submittedAt?.toDate()?.toLocaleDateString('en-US', {
+                                                            year: 'numeric',
+                                                            month: 'short',
+                                                            day: 'numeric'
+                                                        }) || 'Recently'}
                                                     </span>
                                                 </div>
                                                 <p className="font-medium">{proof.studentName}</p>
@@ -1551,7 +1555,13 @@ function formatPaymentStatusSMS(
                                     <div>
                                         <p className="text-sm font-medium">Submitted</p>
                                         <p className="text-sm">
-                                            {selectedProof.submittedAt?.toDate()?.toLocaleString() || 'Recently'}
+                                            {selectedProof.submittedAt?.toDate()?.toLocaleString('en-US', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) || 'Recently'}
                                         </p>
                                     </div>
                                 </div>
