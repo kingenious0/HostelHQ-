@@ -130,3 +130,39 @@ body {
     }
   }
 }
+
+/* Print-only styles for invoice */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only show the invoice area */
+  #invoice-print,
+  #invoice-print * {
+    visibility: visible;
+  }
+
+  /* Place invoice at top-left for printing */
+  #invoice-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Compact A4 layout */
+  @page {
+    margin: 8mm;
+    size: A4;
+  }
+
+  /* Ensure colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

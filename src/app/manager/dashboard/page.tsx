@@ -662,31 +662,69 @@ function formatPaymentStatusSMS(
 
             // Send SMS notification to student
             try {
+                console.log('🔍 Starting SMS notification process...');
+                
                 // Get student's phone number
                 const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
-                const studentPhone = studentDoc.data()?.phone;
+                const studentData = studentDoc.data();
+                const studentPhone = studentData?.phone;
+                
+                console.log('🔍 Student data:', {
+                    studentId: selectedProof.studentId,
+                    hasPhone: !!studentPhone,
+                    phone: studentPhone ? studentPhone.substring(0, 4) + '***' : 'none',
+                    studentName: studentData?.fullName || studentData?.email
+                });
                 
                 if (studentPhone) {
                     const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
                     const smsMessage = formatPaymentStatusSMS('approved', selectedProof.studentName, hostelName);
                     
+                    console.log('🔍 SMS details:', {
+                        hostelName,
+                        messageLength: smsMessage.length,
+                        messagePreview: smsMessage.substring(0, 50) + '...'
+                    });
+                    
                     const smsResult = await sendSMS(studentPhone, smsMessage);
                     
+                    console.log('🔍 SMS result:', smsResult);
+                    
                     if (smsResult.success) {
-                        console.log('SMS sent successfully to student:', studentPhone);
+                        console.log('✅ SMS sent successfully to student:', studentPhone);
+                        toast({
+                            title: 'Payment Approved',
+                            description: `Payment proof approved, booking confirmed, and SMS sent to ${selectedProof.studentName}.`,
+                        });
                     } else {
-                        console.error('SMS sending failed:', smsResult.error);
+                        console.error('❌ SMS sending failed:', smsResult.error);
+                        toast({
+                            title: 'Payment Approved',
+                            description: `Payment proof approved and booking confirmed, but SMS failed to send.`,
+                            variant: 'default',
+                        });
                     }
+                } else {
+                    console.log('⚠️ No phone number found for student:', selectedProof.studentId);
+                    toast({
+                        title: 'Payment Approved',
+                        description: `Payment proof approved and booking confirmed, but no phone number for SMS.`,
+                        variant: 'default',
+                    });
                 }
             } catch (smsError) {
-                console.error('SMS sending failed:', smsError);
+                console.error('❌ SMS sending error:', smsError);
+                console.error('❌ Error details:', {
+                    message: smsError.message,
+                    stack: smsError.stack
+                });
                 // Don't fail the approval if SMS fails
+                toast({
+                    title: 'Payment Approved',
+                    description: `Payment proof approved and booking confirmed, but SMS notification failed.`,
+                    variant: 'default',
+                });
             }
-
-            toast({
-                title: 'Payment Approved',
-                description: `Payment proof from ${selectedProof.studentName} has been approved and booking confirmed. SMS notification sent.`,
-            });
             
             setProofDialogOpen(false);
             setSelectedProof(null);
@@ -719,31 +757,70 @@ function formatPaymentStatusSMS(
 
             // Send SMS notification to student
             try {
+                console.log('🔍 Starting SMS notification process for rejection...');
+                
                 // Get student's phone number
                 const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
-                const studentPhone = studentDoc.data()?.phone;
+                const studentData = studentDoc.data();
+                const studentPhone = studentData?.phone;
+                
+                console.log('🔍 Student data:', {
+                    studentId: selectedProof.studentId,
+                    hasPhone: !!studentPhone,
+                    phone: studentPhone ? studentPhone.substring(0, 4) + '***' : 'none',
+                    studentName: studentData?.fullName || studentData?.email
+                });
                 
                 if (studentPhone) {
                     const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
                     const smsMessage = formatPaymentStatusSMS('rejected', selectedProof.studentName, hostelName, reason);
                     
+                    console.log('🔍 SMS details:', {
+                        hostelName,
+                        reason,
+                        messageLength: smsMessage.length,
+                        messagePreview: smsMessage.substring(0, 50) + '...'
+                    });
+                    
                     const smsResult = await sendSMS(studentPhone, smsMessage);
                     
+                    console.log('🔍 SMS result:', smsResult);
+                    
                     if (smsResult.success) {
-                        console.log('SMS sent successfully to student:', studentPhone);
+                        console.log('✅ SMS sent successfully to student:', studentPhone);
+                        toast({
+                            title: 'Payment Rejected',
+                            description: `Payment proof rejected and SMS sent to ${selectedProof.studentName}.`,
+                        });
                     } else {
-                        console.error('SMS sending failed:', smsResult.error);
+                        console.error('❌ SMS sending failed:', smsResult.error);
+                        toast({
+                            title: 'Payment Rejected',
+                            description: `Payment proof rejected, but SMS failed to send.`,
+                            variant: 'default',
+                        });
                     }
+                } else {
+                    console.log('⚠️ No phone number found for student:', selectedProof.studentId);
+                    toast({
+                        title: 'Payment Rejected',
+                        description: `Payment proof rejected, but no phone number for SMS.`,
+                        variant: 'default',
+                    });
                 }
             } catch (smsError) {
-                console.error('SMS sending failed:', smsError);
+                console.error('❌ SMS sending error:', smsError);
+                console.error('❌ Error details:', {
+                    message: smsError.message,
+                    stack: smsError.stack
+                });
                 // Don't fail the rejection if SMS fails
+                toast({
+                    title: 'Payment Rejected',
+                    description: `Payment proof rejected, but SMS notification failed.`,
+                    variant: 'default',
+                });
             }
-
-            toast({
-                title: 'Payment Rejected',
-                description: `Payment proof has been rejected. Student will be notified via SMS.`,
-            });
             
             setProofDialogOpen(false);
             setSelectedProof(null);

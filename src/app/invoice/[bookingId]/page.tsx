@@ -141,7 +141,7 @@ export default function InvoicePage() {
                     where('bookingId', '==', bookingId as string)
                 );
                 const paymentsSnapshot = await getDocs(paymentsQuery);
-                const fetchedPayments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
+                const fetchedPayments = paymentsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })) as Payment[];
                 setPayments(fetchedPayments);
 
             } catch (error: any) {
@@ -156,51 +156,17 @@ export default function InvoicePage() {
         fetchData();
     }, [bookingId, router, toast]);
 
-    const handleDownload = async () => {
-        if (!printRef.current) return;
+    // Simple print function - browser handles PDF generation
+    const handleDownload = () => {
         setIsDownloading(true);
-        toast({ title: "Generating PDF..."});
+        toast({ title: "Opening print dialog..." });
 
         try {
-            const canvas = await html2canvas(printRef.current, {
-                scale: 2, // Higher scale for better quality
-                useCORS: true,
-            });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'pt',
-                format: 'a4'
-            });
-            
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const ratio = canvasWidth / pdfWidth;
-            const finalHeight = canvasHeight / ratio;
-            
-            let position = 0;
-            let heightLeft = finalHeight;
-
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft > 0) {
-                position = heightLeft - pdfHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-                heightLeft -= pdfHeight;
-            }
-
-            pdf.save(`invoice-${bookingId}.pdf`);
-            toast({ title: "Download started", description: "Your PDF is being downloaded."});
-
-        } catch (error) {
-            console.error(error);
-            toast({ title: "Download Failed", description: "Could not generate the PDF.", variant: "destructive"});
+            // Use browser's native print dialog
+            window.print();
         } finally {
-            setIsDownloading(false);
+            // Small delay so spinner doesn't get stuck if print dialog stays open
+            setTimeout(() => setIsDownloading(false), 1000);
         }
     };
 
@@ -286,198 +252,234 @@ export default function InvoicePage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-1 bg-gray-50/50 py-12 px-4">
+            <main className="flex-1 bg-gray-50/50 py-6 sm:py-12 px-3 sm:px-4">
                 <div className="container mx-auto max-w-4xl">
                     <Card>
-                        <CardHeader>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <CardTitle className="text-2xl font-headline">
+                        <CardHeader className="pb-4 sm:pb-6">
+                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+                                <div className="flex-1">
+                                    <CardTitle className="text-xl sm:text-2xl font-headline leading-tight">
                                         {isSecureBooking ? 'Hostel Securing Invoice' : 'Visit Booking Invoice'} #{customInvoiceId}
                                     </CardTitle>
-                                    <CardDescription>
+                                    <CardDescription className="text-sm sm:text-base mt-1">
                                         {isSecureBooking ? 'Invoice for secured hostel room' : 'Invoice for hostel visit booking'} • Generated on {new Date().toLocaleDateString('en-GH', { year: 'numeric', month: 'long', day: 'numeric' })}.
                                     </CardDescription>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
                                     <BackButton fallbackHref="/my-bookings" />
-                                    <Button onClick={handleDownload} disabled={isDownloading}>
+                                    <Button onClick={handleDownload} disabled={isDownloading} size="sm" className="w-full sm:w-auto">
                                         {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4"/>}
-                                        Download PDF
+                                        Print/Save PDF
                                     </Button>
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent>
-                            <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800 relative overflow-hidden">
-                                {/* Watermark - Only show for secured bookings */}
-                                {isSecureBooking && (
-                                    <div
-                                      className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center"
-                                      style={{
-                                        fontSize: '8rem',
-                                        fontWeight: 'bold',
-                                        color: '#000',
-                                        transform: 'rotate(-45deg)',
-                                        userSelect: 'none',
-                                      }}
-                                    >
-                                      HostelHQ
-                                    </div>
-                                )}
-                                <div className="relative z-10">
-                                    <div className="text-center mb-6 pb-4 border-b-2">
-                                        <h1 className="text-2xl font-bold mb-2">INVOICE</h1>
-                                        <p className="text-sm text-gray-600">Invoice #{customInvoiceId}</p>
-                                        <p className="text-sm text-gray-600">Date: {formatBookingDate()}</p>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4 mb-8">
+                        <CardContent className="p-3 sm:p-6">
+                            <div 
+                            ref={printRef} 
+                            id="invoice-print" 
+                            className="bg-white shadow-xl rounded-lg overflow-hidden" 
+                            style={{ 
+                                minHeight: '842px',
+                                width: '100%',
+                                maxWidth: '210mm',
+                                margin: '0 auto'
+                            }}
+                        >
+                                {/* Header Section */}
+                                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 sm:p-8">
+                                    <div className="flex justify-between items-start">
                                         <div>
-                                            <p className="font-semibold text-base mb-2">Invoice To:</p>
-                                            <p className="font-medium">{booking.studentDetails.fullName}</p>
-                                            <p className="text-sm">{booking.studentDetails.email}</p>
-                                            {booking.studentDetails.phoneNumber && <p className="text-sm">{booking.studentDetails.phoneNumber}</p>}
-                                            {booking.studentDetails.indexNumber && <p className="text-xs text-gray-600 mt-2">Index: {booking.studentDetails.indexNumber}</p>}
-                                            {booking.studentDetails.ghanaCardNumber && <p className="text-xs text-gray-600">Ghana Card: {booking.studentDetails.ghanaCardNumber}</p>}
+                                            <h1 className="text-2xl sm:text-3xl font-bold mb-2">INVOICE</h1>
+                                            <p className="text-blue-100 text-sm sm:text-base">#{customInvoiceId}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-semibold text-base mb-2">From:</p>
-                                            <p className="font-medium">HostelHQ</p>
-                                            <p className="text-sm">Your Accommodation Solution</p>
-                                            <p className="text-sm">Ghana</p>
-                                            <p className="text-xs text-gray-600 mt-2">Email: support@hostelhq.com</p>
+                                            <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2">
+                                                <p className="text-xs sm:text-sm text-blue-100">Date</p>
+                                                <p className="font-semibold">{formatBookingDate()}</p>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
 
+                                {/* Company & Customer Info */}
+                                <div className="p-6 sm:p-8 border-b">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                        {/* From */}
+                                        <div>
+                                            <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">From</h2>
+                                            <div className="space-y-1">
+                                                <p className="font-bold text-lg sm:text-xl text-gray-900">HostelHQ</p>
+                                                <p className="text-sm sm:text-base text-gray-600">Your Accommodation Solution</p>
+                                                <p className="text-sm sm:text-base text-gray-600">Ghana</p>
+                                                <p className="text-sm text-gray-500">hostelhqghana@gmail.com</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Bill To */}
+                                        <div>
+                                            <h2 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Bill To</h2>
+                                            <div className="space-y-1">
+                                                <p className="font-bold text-lg sm:text-xl text-gray-900">{booking.studentDetails.fullName}</p>
+                                                <p className="text-sm sm:text-base text-gray-600">{booking.studentDetails.email}</p>
+                                                {booking.studentDetails.phoneNumber && <p className="text-sm sm:text-base text-gray-600">{booking.studentDetails.phoneNumber}</p>}
+                                                {booking.studentDetails.indexNumber && <p className="text-sm text-gray-500">Index: {booking.studentDetails.indexNumber}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Student & Booking Details */}
+                                <div className="p-6 sm:p-8 space-y-6">
+                                    {/* Student Details */}
                                     {isSecureBooking && (
-                                        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                                            <h3 className="font-bold text-base mb-3">Student Details</h3>
-                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                        <div className="bg-gray-50 rounded-xl p-6">
+                                            <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center">
+                                                <div className="w-2 h-2 bg-blue-600 rounded-full mr-3"></div>
+                                                Student Information
+                                            </h3>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                                 <div>
-                                                    <span className="text-gray-600">Full Name:</span>
-                                                    <span className="ml-2 font-semibold">{booking.studentDetails.fullName}</span>
+                                                    <p className="text-xs sm:text-sm text-gray-500 mb-1">Full Name</p>
+                                                    <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.fullName}</p>
                                                 </div>
                                                 {booking.studentDetails.indexNumber && (
                                                     <div>
-                                                        <span className="text-gray-600">Index Number:</span>
-                                                        <span className="ml-2 font-semibold">{booking.studentDetails.indexNumber}</span>
+                                                        <p className="text-xs sm:text-sm text-gray-500 mb-1">Index Number</p>
+                                                        <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.indexNumber}</p>
                                                     </div>
                                                 )}
                                                 {booking.studentDetails.program && (
                                                     <div>
-                                                        <span className="text-gray-600">Department:</span>
-                                                        <span className="ml-2 font-semibold">{booking.studentDetails.program}</span>
+                                                        <p className="text-xs sm:text-sm text-gray-500 mb-1">Department</p>
+                                                        <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.program}</p>
                                                     </div>
                                                 )}
                                                 {booking.studentDetails.level && (
                                                     <div>
-                                                        <span className="text-gray-600">Level:</span>
-                                                        <span className="ml-2 font-semibold">{booking.studentDetails.level}</span>
+                                                        <p className="text-xs sm:text-sm text-gray-500 mb-1">Level</p>
+                                                        <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.level}</p>
                                                     </div>
                                                 )}
                                                 <div>
-                                                    <span className="text-gray-600">Email:</span>
-                                                    <span className="ml-2 font-semibold">{booking.studentDetails.email}</span>
+                                                    <p className="text-xs sm:text-sm text-gray-500 mb-1">Email</p>
+                                                    <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.email}</p>
                                                 </div>
                                                 {booking.studentDetails.phoneNumber && (
                                                     <div>
-                                                        <span className="text-gray-600">Phone:</span>
-                                                        <span className="ml-2 font-semibold">{booking.studentDetails.phoneNumber}</span>
+                                                        <p className="text-xs sm:text-sm text-gray-500 mb-1">Phone</p>
+                                                        <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.phoneNumber}</p>
                                                     </div>
                                                 )}
                                                 {booking.studentDetails.ghanaCardNumber && (
-                                                    <div className="col-span-2">
-                                                        <span className="text-gray-600">Ghana Card:</span>
-                                                        <span className="ml-2 font-semibold">{booking.studentDetails.ghanaCardNumber}</span>
+                                                    <div className="sm:col-span-2 lg:col-span-3">
+                                                        <p className="text-xs sm:text-sm text-gray-500 mb-1">Ghana Card</p>
+                                                        <p className="font-semibold text-sm sm:text-base">{booking.studentDetails.ghanaCardNumber}</p>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                                        <h3 className="font-bold text-base mb-3">Booking Details</h3>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                    {/* Booking Details */}
+                                    <div className="bg-gray-50 rounded-xl p-6">
+                                        <h3 className="font-bold text-lg text-gray-900 mb-4 flex items-center">
+                                            <div className="w-2 h-2 bg-blue-600 rounded-full mr-3"></div>
+                                            Booking Information
+                                        </h3>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                             <div>
-                                                <span className="text-gray-600">Hostel:</span>
-                                                <span className="ml-2 font-semibold">{hostel.name}</span>
+                                                <p className="text-xs sm:text-sm text-gray-500 mb-1">Hostel</p>
+                                                <p className="font-semibold text-sm sm:text-base">{hostel.name}</p>
                                             </div>
                                             <div>
-                                                <span className="text-gray-600">Location:</span>
-                                                <span className="ml-2 font-semibold">{hostel.location}</span>
+                                                <p className="text-xs sm:text-sm text-gray-500 mb-1">Location</p>
+                                                <p className="font-semibold text-sm sm:text-base">{hostel.location}</p>
                                             </div>
                                             {isSecureBooking && bookedRoom && (
                                                 <div>
-                                                    <span className="text-gray-600">Room Type:</span>
-                                                    <span className="ml-2 font-semibold">{bookedRoom.name}</span>
+                                                    <p className="text-xs sm:text-sm text-gray-500 mb-1">Room Type</p>
+                                                    <p className="font-semibold text-sm sm:text-base">{bookedRoom.name}</p>
                                                 </div>
                                             )}
                                             <div>
-                                                <span className="text-gray-600">Booking Date:</span>
-                                                <span className="ml-2 font-semibold">{formatBookingDate()}</span>
+                                                <p className="text-xs sm:text-sm text-gray-500 mb-1">Booking Date</p>
+                                                <p className="font-semibold text-sm sm:text-base">{formatBookingDate()}</p>
                                             </div>
                                             {booking.paymentReference && (
-                                                <div className="col-span-2">
-                                                    <span className="text-gray-600">Payment Reference:</span>
-                                                    <span className="ml-2 font-semibold font-mono text-xs">{booking.paymentReference}</span>
+                                                <div className="sm:col-span-2 lg:col-span-3">
+                                                    <p className="text-xs sm:text-sm text-gray-500 mb-1">Payment Reference</p>
+                                                    <p className="font-semibold text-sm sm:text-base font-mono bg-white px-3 py-1 rounded border">{booking.paymentReference}</p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div className="mb-6">
-                                        <h3 className="font-bold text-base mb-3">Payment Summary</h3>
-                                        <table className="w-full border-collapse">
-                                            <thead>
-                                                <tr className="bg-gray-100">
-                                                    <th className="border border-gray-300 py-3 px-4 text-left font-bold">Description</th>
-                                                    <th className="border border-gray-300 py-3 px-4 text-right font-bold">Amount (GH₵)</th>
+                                {/* Payment Summary */}
+                                <div className="p-6 sm:p-8">
+                                    <h3 className="font-bold text-lg text-gray-900 mb-6 flex items-center">
+                                        <div className="w-2 h-2 bg-blue-600 rounded-full mr-3"></div>
+                                        Payment Summary
+                                    </h3>
+                                    
+                                    <div className="bg-white border rounded-xl overflow-hidden">
+                                        <table className="w-full">
+                                            <thead className="bg-gray-50 border-b">
+                                                <tr>
+                                                    <th className="text-left py-4 px-6 font-semibold text-sm sm:text-base text-gray-900">Description</th>
+                                                    <th className="text-right py-4 px-6 font-semibold text-sm sm:text-base text-gray-900">Amount</th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="divide-y">
                                                 {isSecureBooking ? (
                                                     <>
                                                         <tr>
-                                                            <td className="border border-gray-300 py-3 px-4">
+                                                            <td className="py-4 px-6">
                                                                 <div>
-                                                                    <p className="font-semibold">Room Rent - {bookedRoom?.name || 'Standard Room'}</p>
-                                                                    <p className="text-xs text-gray-600">Academic Year {new Date().getFullYear()}/{new Date().getFullYear() + 1}</p>
+                                                                    <p className="font-semibold text-sm sm:text-base">Room Rent - {bookedRoom?.name || 'Standard Room'}</p>
+                                                                    <p className="text-xs text-gray-500 mt-1">Academic Year {new Date().getFullYear()}/{new Date().getFullYear() + 1}</p>
                                                                 </div>
                                                             </td>
-                                                            <td className="border border-gray-300 py-3 px-4 text-right font-semibold">
-                                                                GH₵ {roomPrice.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <td className="py-4 px-6 text-right">
+                                                                <p className="font-semibold text-sm sm:text-base">GH₵ {roomPrice.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                             </td>
                                                         </tr>
                                                         {payments.map(payment => {
-                                                            // Payment amount might be in pesewas (cents) or cedis, normalize to cedis
                                                             const paymentAmount = payment.amount > 1000 ? payment.amount / 100 : payment.amount;
                                                             return (
-                                                                <tr key={payment.id}>
-                                                                    <td className="border border-gray-300 py-2 px-4 text-sm">
-                                                                        Payment ({payment.type}) - {payment.paymentDate?.seconds 
-                                                                            ? new Date(payment.paymentDate.seconds * 1000).toLocaleDateString('en-GH')
-                                                                            : payment.paymentDate instanceof Timestamp
-                                                                            ? payment.paymentDate.toDate().toLocaleDateString('en-GH')
-                                                                            : 'N/A'}
+                                                                <tr key={payment.id} className="bg-green-50">
+                                                                    <td className="py-3 px-6">
+                                                                        <div>
+                                                                            <p className="font-medium text-sm sm:text-base text-green-800">Payment Received</p>
+                                                                            <p className="text-xs text-green-600">{payment.type} • {payment.paymentDate?.seconds 
+                                                                                ? new Date(payment.paymentDate.seconds * 1000).toLocaleDateString('en-GH')
+                                                                                : (payment.paymentDate as any)?.toDate?.()
+                                                                                ? (payment.paymentDate as any).toDate().toLocaleDateString('en-GH')
+                                                                                : 'N/A'}</p>
+                                                                        </div>
                                                                     </td>
-                                                                    <td className="border border-gray-300 py-2 px-4 text-right text-sm text-green-600">
-                                                                        -GH₵ {paymentAmount.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                    <td className="py-3 px-6 text-right">
+                                                                        <p className="font-semibold text-sm sm:text-base text-green-700">-GH₵ {paymentAmount.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                     </td>
                                                                 </tr>
                                                             );
                                                         })}
                                                         <tr className="bg-gray-50">
-                                                            <td className="border border-gray-300 py-3 px-4 font-bold">Total Amount Paid</td>
-                                                            <td className="border border-gray-300 py-3 px-4 text-right font-bold text-lg">
-                                                                GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <td className="py-4 px-6">
+                                                                <p className="font-bold text-sm sm:text-base">Total Amount Paid</p>
+                                                            </td>
+                                                            <td className="py-4 px-6 text-right">
+                                                                <p className="font-bold text-lg sm:text-xl text-green-600">GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                             </td>
                                                         </tr>
                                                         {balanceDue > 0 && (
-                                                            <tr>
-                                                                <td className="border border-gray-300 py-2 px-4 font-semibold">Balance Due</td>
-                                                                <td className="border border-gray-300 py-2 px-4 text-right font-semibold text-red-600">
-                                                                    GH₵ {balanceDue.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <tr className="bg-red-50">
+                                                                <td className="py-3 px-6">
+                                                                    <p className="font-semibold text-sm sm:text-base text-red-800">Balance Due</p>
+                                                                </td>
+                                                                <td className="py-3 px-6 text-right">
+                                                                    <p className="font-bold text-sm sm:text-base text-red-600">GH₵ {balanceDue.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                 </td>
                                                             </tr>
                                                         )}
@@ -485,17 +487,19 @@ export default function InvoicePage() {
                                                 ) : (
                                                     <>
                                                         <tr>
-                                                            <td className="border border-gray-300 py-3 px-4">
-                                                                <p className="font-semibold">Hostel Visit Booking Fee</p>
+                                                            <td className="py-4 px-6">
+                                                                <p className="font-semibold text-sm sm:text-base">Hostel Visit Booking Fee</p>
                                                             </td>
-                                                            <td className="border border-gray-300 py-3 px-4 text-right font-semibold">
-                                                                GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <td className="py-4 px-6 text-right">
+                                                                <p className="font-semibold text-sm sm:text-base">GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                             </td>
                                                         </tr>
                                                         <tr className="bg-gray-50">
-                                                            <td className="border border-gray-300 py-3 px-4 font-bold">Total Paid</td>
-                                                            <td className="border border-gray-300 py-3 px-4 text-right font-bold text-lg">
-                                                                GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            <td className="py-4 px-6">
+                                                                <p className="font-bold text-sm sm:text-base">Total Paid</p>
+                                                            </td>
+                                                            <td className="py-4 px-6 text-right">
+                                                                <p className="font-bold text-lg sm:text-xl text-green-600">GH₵ {totalAmountPaid.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                             </td>
                                                         </tr>
                                                     </>
@@ -503,27 +507,34 @@ export default function InvoicePage() {
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
 
+                                {/* Status & Footer */}
+                                <div className="p-6 sm:p-8 space-y-6">
                                     {isSecureBooking && (
-                                        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                                            <div className="flex items-center gap-2">
-                                                <svg className="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                </svg>
-                                                <p className="font-semibold text-green-900">Payment Status: Paid</p>
+                                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-green-100 rounded-full p-2">
+                                                    <svg className="h-6 w-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-green-900 text-lg">Payment Status: Paid</p>
+                                                    <p className="text-green-700">Your payment has been successfully processed and booking confirmed.</p>
+                                                </div>
                                             </div>
-                                            <p className="text-sm text-green-700 mt-1">Your payment has been successfully processed.</p>
                                         </div>
                                     )}
 
-                                    <div className="text-center mt-12">
-                                        <p className="text-xs text-gray-600">Thank you for choosing HostelHQ!</p>
-                                        <p className="text-xs text-gray-600">For any queries, please contact us.</p>
+                                    <div className="text-center border-t pt-6">
+                                        <p className="text-gray-600 font-medium mb-2">Thank you for choosing HostelHQ!</p>
+                                        <p className="text-sm text-gray-500">For any queries, contact us at hostelhqghana@gmail.com</p>
                                     </div>
                                 </div>
                             </div>
                         </CardContent>
-                        <CardFooter className="flex flex-col gap-4">
+                        <CardFooter className="flex flex-col gap-4 p-4 sm:p-6">
                             {isSecureBooking && (
                                 <Button 
                                     onClick={() => router.push(`/agreement/${booking.id}`)} 

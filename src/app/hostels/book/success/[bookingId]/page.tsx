@@ -256,7 +256,7 @@ export default function PaymentSuccessPage() {
                                             <p className="font-semibold">HostelHQ</p>
                                             <p className="text-sm">Your Accommodation Solution</p>
                                             <p className="text-sm">Ghana</p>
-                                            <p className="text-xs text-gray-600 mt-2">Email: support@hostelhq.com</p>
+                                            <p className="text-xs text-gray-600 mt-2">Email: hostelhqghana@gmail.com</p>
                                         </div>
                                     </div>
 
