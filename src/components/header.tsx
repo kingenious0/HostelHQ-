@@ -641,15 +641,29 @@ export function Header() {
                             Brand Partners
                           </Link>
                         </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/bank-accounts">
+                            <Banknote className="mr-2 h-4 w-4" />
+                            Payment Accounts
+                          </Link>
+                        </DropdownMenuItem>
                       </>
                     )}
                     {isManager && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/manager/dashboard">
-                          <Building className="mr-2 h-4 w-4" />
-                          Manager Dashboard
-                        </Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href="/manager/dashboard">
+                            <Building className="mr-2 h-4 w-4" />
+                            Manager Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/manager/bank-accounts">
+                            <Banknote className="mr-2 h-4 w-4" />
+                            Payment Accounts
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>

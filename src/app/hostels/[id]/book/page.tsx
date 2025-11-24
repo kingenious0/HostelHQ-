@@ -296,7 +296,7 @@ export default function BookingPage() {
                             </div>
                             <div className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">
                                 <p className="font-semibold text-foreground">Need help before booking?</p>
-                                <p className="mt-1">Call our student success line on <span className="font-semibold text-primary">+233 20 123 4567</span>.</p>
+                                <p className="mt-1">Call our student success line on <span className="font-semibold text-primary">+233597626090</span>.</p>
                             </div>
                         </CardContent>
                     </Card>

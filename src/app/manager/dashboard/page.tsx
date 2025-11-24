@@ -12,16 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { Hostel, RoomType, Room } from '@/lib/data';
 import { BookingsChart } from '@/components/bookings-chart';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { uploadImage } from '@/lib/cloudinary';
+import { sendSMS } from '@/lib/wigal';
 import Image from 'next/image';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
@@ -87,6 +88,13 @@ export default function ManagerDashboard() {
     const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
     const [editRoomNumber, setEditRoomNumber] = useState('');
     const [savingRoomEdit, setSavingRoomEdit] = useState(false);
+
+    // Payment Proofs state
+    const [paymentProofs, setPaymentProofs] = useState<any[]>([]);
+    const [loadingPaymentProofs, setLoadingPaymentProofs] = useState(false);
+    const [proofDialogOpen, setProofDialogOpen] = useState(false);
+    const [selectedProof, setSelectedProof] = useState<any>(null);
+    const [processingProof, setProcessingProof] = useState(false);
     const router = useRouter();
     const { toast } = useToast();
 
@@ -153,6 +161,22 @@ export default function ManagerDashboard() {
                     const fetchedBookings = bookingSnapshot.docs.map(bDoc => bDoc.data() as Booking);
                     setBookings(fetchedBookings);
                     
+                    // Fetch payment proofs for this manager's hostels
+                    const paymentProofsQuery = query(
+                        collection(db, 'paymentProofs'),
+                        where('managerId', '==', currentUser.uid),
+                        where('status', '==', 'pending')
+                    );
+                    
+                    const unsubscribePaymentProofs = onSnapshot(paymentProofsQuery, (proofSnapshot) => {
+                        const fetchedProofs = proofSnapshot.docs.map(pDoc => ({
+                            id: pDoc.id,
+                            ...pDoc.data()
+                        }));
+                        console.log('Fetched payment proofs:', fetchedProofs);
+                        setPaymentProofs(fetchedProofs);
+                    });
+                    
                     // Process data for the chart
                     const monthlyBookings = new Array(12).fill(0);
                     fetchedBookings.forEach(booking => {
@@ -170,6 +194,7 @@ export default function ManagerDashboard() {
                     })));
 
                     setLoadingData(false);
+                    return () => unsubscribePaymentProofs();
                 });
                  return () => unsubscribeBookings();
             } else {
@@ -422,6 +447,23 @@ export default function ManagerDashboard() {
         }
     };
 
+    const handleDeleteRoom = async (room: Room) => {
+        if (!roomsHostelId || !room.id) return;
+        
+        if (!confirm(`Are you sure you want to delete room "${room.roomNumber}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            await deleteDoc(doc(db, 'hostels', roomsHostelId, 'rooms', room.id));
+            setRooms((prev) => prev.filter((r) => r.id !== room.id));
+            toast({ title: 'Room deleted', description: `Room "${room.roomNumber}" has been deleted.` });
+        } catch (error) {
+            console.error('Error deleting room:', error);
+            toast({ title: 'Could not delete room', description: 'Please try again later.', variant: 'destructive' });
+        }
+    };
+
     const handleCreateRoom = async () => {
         if (!roomsHostelId) return;
         if (!newRoomTypeId || !newRoomCapacity) {
@@ -569,6 +611,154 @@ export default function ManagerDashboard() {
         }
     };
 
+    // Helper function to format payment status SMS messages
+function formatPaymentStatusSMS(
+    status: 'approved' | 'rejected',
+    studentName: string,
+    hostelName: string,
+    rejectionReason?: string
+): string {
+    if (status === 'approved') {
+        return `Hi ${studentName}, your payment proof for ${hostelName} has been APPROVED! Your booking is now confirmed. Welcome to HostelHQ! 🎉`;
+    } else {
+        return `Hi ${studentName}, your payment proof for ${hostelName} was NOT approved. Reason: ${rejectionReason || 'Please contact your hostel manager for details'}. Please submit a new payment proof if needed.`;
+    }
+}
+
+    const openProofDialog = (proof: any) => {
+        setSelectedProof(proof);
+        setProofDialogOpen(true);
+    };
+
+    const handleApprovePayment = async () => {
+        if (!selectedProof || !currentUser) return;
+        
+        setProcessingProof(true);
+        try {
+            // Update payment proof status
+            await updateDoc(doc(db, 'paymentProofs', selectedProof.id), {
+                status: 'approved',
+                reviewedAt: new Date(),
+                reviewedBy: currentUser.uid
+            });
+
+            // Find and update the corresponding booking
+            const bookingsQuery = query(
+                collection(db, 'bookings'),
+                where('studentId', '==', selectedProof.studentId),
+                where('hostelId', '==', selectedProof.hostelId),
+                where('status', '==', 'pending')
+            );
+            
+            const bookingSnapshot = await getDocs(bookingsQuery);
+            if (!bookingSnapshot.empty) {
+                const bookingDoc = bookingSnapshot.docs[0];
+                await updateDoc(doc(db, 'bookings', bookingDoc.id), {
+                    status: 'confirmed',
+                    paymentConfirmedAt: new Date(),
+                    paymentMethod: selectedProof.accountType === 'bank' ? 'bank_transfer' : 'mobile_money'
+                });
+            }
+
+            // Send SMS notification to student
+            try {
+                // Get student's phone number
+                const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
+                const studentPhone = studentDoc.data()?.phone;
+                
+                if (studentPhone) {
+                    const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
+                    const smsMessage = formatPaymentStatusSMS('approved', selectedProof.studentName, hostelName);
+                    
+                    const smsResult = await sendSMS(studentPhone, smsMessage);
+                    
+                    if (smsResult.success) {
+                        console.log('SMS sent successfully to student:', studentPhone);
+                    } else {
+                        console.error('SMS sending failed:', smsResult.error);
+                    }
+                }
+            } catch (smsError) {
+                console.error('SMS sending failed:', smsError);
+                // Don't fail the approval if SMS fails
+            }
+
+            toast({
+                title: 'Payment Approved',
+                description: `Payment proof from ${selectedProof.studentName} has been approved and booking confirmed. SMS notification sent.`,
+            });
+            
+            setProofDialogOpen(false);
+            setSelectedProof(null);
+        } catch (error) {
+            console.error('Error approving payment:', error);
+            toast({
+                title: 'Approval Failed',
+                description: 'Failed to approve payment. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setProcessingProof(false);
+        }
+    };
+
+    const handleRejectPayment = async () => {
+        if (!selectedProof || !currentUser) return;
+        
+        const reason = prompt('Please provide a reason for rejection:');
+        if (!reason) return;
+        
+        setProcessingProof(true);
+        try {
+            await updateDoc(doc(db, 'paymentProofs', selectedProof.id), {
+                status: 'rejected',
+                reviewedAt: new Date(),
+                reviewedBy: currentUser.uid,
+                rejectionReason: reason
+            });
+
+            // Send SMS notification to student
+            try {
+                // Get student's phone number
+                const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
+                const studentPhone = studentDoc.data()?.phone;
+                
+                if (studentPhone) {
+                    const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
+                    const smsMessage = formatPaymentStatusSMS('rejected', selectedProof.studentName, hostelName, reason);
+                    
+                    const smsResult = await sendSMS(studentPhone, smsMessage);
+                    
+                    if (smsResult.success) {
+                        console.log('SMS sent successfully to student:', studentPhone);
+                    } else {
+                        console.error('SMS sending failed:', smsResult.error);
+                    }
+                }
+            } catch (smsError) {
+                console.error('SMS sending failed:', smsError);
+                // Don't fail the rejection if SMS fails
+            }
+
+            toast({
+                title: 'Payment Rejected',
+                description: `Payment proof has been rejected. Student will be notified via SMS.`,
+            });
+            
+            setProofDialogOpen(false);
+            setSelectedProof(null);
+        } catch (error) {
+            console.error('Error rejecting payment:', error);
+            toast({
+                title: 'Rejection Failed',
+                description: 'Failed to reject payment. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setProcessingProof(false);
+        }
+    };
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -635,6 +825,64 @@ export default function ManagerDashboard() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* Payment Proofs Section */}
+                    <Card className="mb-8">
+                        <CardHeader>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FileText className="h-5 w-5" />
+                                        Payment Proofs {paymentProofs.length > 0 && `(${paymentProofs.length})`}
+                                    </CardTitle>
+                                    <CardDescription>Review and confirm student payment submissions</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {paymentProofs.length > 0 ? (
+                                <div className="space-y-4">
+                                    {paymentProofs.map((proof) => (
+                                        <div key={proof.id} className="flex items-center justify-between p-4 border rounded-lg">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <Badge variant="outline">
+                                                        {proof.accountType === 'bank' ? 'Bank Transfer' : proof.momoNetwork}
+                                                    </Badge>
+                                                    <span className="text-sm text-muted-foreground">
+                                                        Submitted {proof.submittedAt?.toDate()?.toLocaleDateString() || 'Recently'}
+                                                    </span>
+                                                </div>
+                                                <p className="font-medium">{proof.studentName}</p>
+                                                <p className="text-sm text-muted-foreground">{proof.studentEmail}</p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Hostel: {hostels.find(h => h.id === proof.hostelId)?.name || 'Unknown'}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => openProofDialog(proof)}
+                                                >
+                                                    <Eye className="h-4 w-4 mr-1" />
+                                                    Review
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                                    <p className="text-lg text-muted-foreground">No pending payment proofs</p>
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Students will upload payment proofs here after making manual bank transfers
+                                    </p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7 mb-8">
                          <Card className="lg:col-span-4">
@@ -1103,7 +1351,7 @@ export default function ManagerDashboard() {
 
                 {/* Manage Rooms dialog for managers */}
                 <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
-                    <DialogContent className="max-w-xl">
+                    <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>Manage Rooms</DialogTitle>
                             <DialogDescription>
@@ -1160,14 +1408,25 @@ export default function ManagerDashboard() {
                                                         </TableCell>
                                                         <TableCell>
                                                             {editingRoomId !== room.id && (
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="xs"
-                                                                    onClick={() => startEditRoom(room)}
-                                                                >
-                                                                    Edit
-                                                                </Button>
+                                                                <div className="flex gap-1">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="xs"
+                                                                        onClick={() => startEditRoom(room)}
+                                                                    >
+                                                                        Edit
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="xs"
+                                                                        onClick={() => handleDeleteRoom(room)}
+                                                                        className="text-red-600 hover:text-red-700 hover:border-red-300"
+                                                                    >
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-right text-sm text-muted-foreground">
@@ -1260,6 +1519,87 @@ export default function ManagerDashboard() {
                                 </div>
                             </div>
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Payment Proof Review Dialog */}
+                <Dialog open={proofDialogOpen} onOpenChange={setProofDialogOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Review Payment Proof</DialogTitle>
+                            <DialogDescription>
+                                Review the submitted payment proof and approve or reject it
+                            </DialogDescription>
+                        </DialogHeader>
+                        {selectedProof && (
+                            <div className="space-y-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm font-medium">Student Name</p>
+                                        <p className="text-sm">{selectedProof.studentName}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Student Email</p>
+                                        <p className="text-sm">{selectedProof.studentEmail}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Payment Type</p>
+                                        <p className="text-sm">
+                                            {selectedProof.accountType === 'bank' ? 'Bank Transfer' : selectedProof.momoNetwork}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Submitted</p>
+                                        <p className="text-sm">
+                                            {selectedProof.submittedAt?.toDate()?.toLocaleString() || 'Recently'}
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <p className="text-sm font-medium mb-2">Payment Proof Image</p>
+                                    <div className="border rounded-lg overflow-hidden">
+                                        <img 
+                                            src={selectedProof.proofImageUrl} 
+                                            alt="Payment Proof" 
+                                            className="w-full h-auto max-h-96 object-contain"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <DialogFooter className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setProofDialogOpen(false)}
+                                disabled={processingProof}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleRejectPayment}
+                                disabled={processingProof}
+                            >
+                                {processingProof ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                )}
+                                Reject
+                            </Button>
+                            <Button
+                                onClick={handleApprovePayment}
+                                disabled={processingProof}
+                            >
+                                {processingProof ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                )}
+                                Approve & Confirm Booking
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </main>

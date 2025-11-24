@@ -214,12 +214,12 @@ export default function AdminListingsPage() {
     }
     try {
       setSavingRoomEdit(true);
-      const ref = doc(db, "hostels", roomsHostelId, "rooms", editingRoomId);
+      const ref = doc(db, 'hostels', roomsHostelId, 'rooms', editingRoomId);
       const roomNumber = trimmed.toLowerCase().startsWith("room ") ? trimmed : `Room ${trimmed}`;
       await updateDoc(ref, { roomNumber });
       setRooms((prev) => prev.map((r) => (r.id === editingRoomId ? { ...r, roomNumber } : r)));
       setEditingRoomId(null);
-      setEditRoomNumber("");
+      setEditRoomNumber('');
       toast({ title: "Room updated", description: `Room number updated to ${roomNumber}.` });
     } catch (error) {
       console.error("Error updating room:", error);
@@ -229,13 +229,17 @@ export default function AdminListingsPage() {
     }
   };
 
-  const handleDeleteRoom = async (roomId: string) => {
-    if (!roomsHostelId) return;
-    if (!window.confirm("Delete this room permanently?")) return;
+  const handleDeleteRoom = async (room: Room) => {
+    if (!roomsHostelId || !room.id) return;
+    
+    if (!confirm(`Are you sure you want to delete room "${room.roomNumber}"? This action cannot be undone.`)) {
+      return;
+    }
+
     try {
-      await deleteDoc(doc(db, "hostels", roomsHostelId, "rooms", roomId));
-      setRooms((prev) => prev.filter((r) => r.id !== roomId));
-      toast({ title: "Room deleted" });
+      await deleteDoc(doc(db, 'hostels', roomsHostelId, 'rooms', room.id));
+      setRooms((prev) => prev.filter((r) => r.id !== room.id));
+      toast({ title: 'Room deleted', description: `Room "${room.roomNumber}" has been deleted.` });
     } catch (error) {
       console.error("Error deleting room:", error);
       toast({ title: "Could not delete room", description: "Please try again later.", variant: "destructive" });
@@ -480,7 +484,7 @@ export default function AdminListingsPage() {
 
       {/* Manage Rooms dialog for admins */}
       <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Manage Rooms</DialogTitle>
             <DialogDescription>
@@ -563,11 +567,12 @@ export default function AdminListingsPage() {
                                   </Button>
                                   <Button
                                     type="button"
-                                    variant="destructive"
+                                    variant="outline"
                                     size="xs"
-                                    onClick={() => handleDeleteRoom(room.id!)}
+                                    onClick={() => handleDeleteRoom(room)}
+                                    className="text-red-600 hover:text-red-700 hover:border-red-300"
                                   >
-                                    Delete
+                                    <Trash2 className="h-3 w-3" />
                                   </Button>
                                 </div>
                               )}
