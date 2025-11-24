@@ -16,9 +16,8 @@ export async function POST(req: NextRequest) {
 
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
-    // 🔧 DEVELOPMENT MODE: Check for dev OTP
-    const isDevelopment = process.env.NODE_ENV === 'development' || 
-                         process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+    // 🔧 DEVELOPMENT MODE: Check for dev OTP ONLY in localhost (NODE_ENV === 'development')
+    const isDevelopment = process.env.NODE_ENV === 'development';
     
     const otpCollection = collection(db, 'otpVerifications');
     const otpQuery = query(
