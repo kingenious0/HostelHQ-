@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -21,7 +21,8 @@ import { tenancyAgreementText } from '@/lib/legal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { FaceCaptureDialog } from '@/components/FaceCaptureDialog';
-import { getFaceDescriptorFromBase64, descriptorToArray } from '@/lib/faceDetection';
+import { BiometricCaptureDialog } from '@/components/BiometricCaptureDialog';
+import { detectFaceDescriptor, descriptorToArray } from '@/lib/faceDetection';
 
 type UserRole = 'student' | 'agent' | 'hostel_manager' | null;
 
@@ -83,9 +84,12 @@ export default function SignupPage() {
     const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP, 4: Face capture, 5: Manager hostel selection
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isFaceCaptureOpen, setIsFaceCaptureOpen] = useState(false);
+    const [isBiometricCaptureOpen, setIsBiometricCaptureOpen] = useState(false);
     const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
+    const [biometricCredential, setBiometricCredential] = useState<any>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [tempUserId] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
     // Validate email format
     const isValidEmail = (email: string): boolean => {
@@ -98,8 +102,8 @@ export default function SignupPage() {
         setLoadingManagerHostels(true);
         try {
             const snap = await getDocs(collection(db, 'hostels'));
-            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-            const filtered = list.filter((h) => !h.managerId);
+            const list = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+            const filtered = list.filter((h: any) => !h.managerId);
             setManagerHostels(filtered);
         } catch (error) {
             console.error('Error loading hostels for manager signup:', error);
@@ -280,9 +284,9 @@ export default function SignupPage() {
                 setOtpVerified(true);
                 toast({ title: "OTP Verified", description: "Phone number verified successfully!" });
 
-                // MANDATORY: Go to face capture step for ALL users
+                // MANDATORY: Go to biometric capture step for ALL users
                 setStep(4);
-                setIsFaceCaptureOpen(true);
+                setIsBiometricCaptureOpen(true);
             } else {
                 toast({ title: "Invalid OTP", description: data.error || "Please check your OTP and try again.", variant: "destructive" });
             }
@@ -294,13 +298,55 @@ export default function SignupPage() {
         }
     };
 
-    // Handle face capture (MANDATORY)
+    // Handle biometric capture (MANDATORY - Primary method)
+    const handleBiometricCapture = async (credential: any) => {
+        setIsProcessingFace(true);
+        
+        try {
+            setBiometricCredential(credential);
+            setIsBiometricCaptureOpen(false);
+            
+            toast({
+                title: '✅ Biometric Setup Complete!',
+                description: 'Your biometric authentication has been registered successfully.',
+            });
+
+            setIsProcessingFace(false);
+
+            // For managers, proceed to hostel selection
+            if (selectedRole === 'hostel_manager') {
+                setStep(5);
+                loadManagerHostels();
+            }
+            // For students/agents, they can now complete signup
+        } catch (error: any) {
+            console.error('Biometric processing error:', error);
+            toast({
+                title: '❌ Biometric Setup Failed',
+                description: error.message || 'Please try again.',
+                variant: 'destructive'
+            });
+            setIsProcessingFace(false);
+            setIsBiometricCaptureOpen(true); // Reopen to try again
+        }
+    };
+
+    // Handle face capture (MANDATORY - Fallback method)
     const handleFaceCapture = async (capturedImageBase64: string) => {
         setIsProcessingFace(true);
         
         try {
+            // Create image element from base64 for face detection
+            const img = document.createElement('img');
+            img.src = capturedImageBase64;
+            
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error('Failed to load image'));
+            });
+            
             // Extract face descriptor from captured image
-            const descriptor = await getFaceDescriptorFromBase64(capturedImageBase64);
+            const descriptor = await detectFaceDescriptor(img);
             
             if (!descriptor) {
                 toast({
@@ -355,11 +401,11 @@ export default function SignupPage() {
             return;
         }
 
-        // MANDATORY: Face verification must be completed
-        if (!faceDescriptor) {
-            toast({ title: "Face Verification Required", description: "Please complete face verification to continue.", variant: "destructive" });
+        // MANDATORY: Biometric or face verification must be completed
+        if (!biometricCredential && !faceDescriptor) {
+            toast({ title: "Security Verification Required", description: "Please complete biometric or face verification to continue.", variant: "destructive" });
             setStep(4);
-            setIsFaceCaptureOpen(true);
+            setIsBiometricCaptureOpen(true);
             return;
         }
 
@@ -420,8 +466,16 @@ export default function SignupPage() {
                 email: authEmail,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
-                faceDescriptor: faceDescriptor, // MANDATORY: Store face data
-                faceSetupDate: new Date().toISOString(),
+                // Store biometric data (preferred) or face data (fallback)
+                ...(biometricCredential && {
+                    biometricCredential: biometricCredential,
+                    biometricSetupDate: new Date().toISOString(),
+                    hasBiometric: true,
+                }),
+                ...(faceDescriptor && {
+                    faceDescriptor: faceDescriptor,
+                    faceSetupDate: new Date().toISOString(),
+                }),
             };
 
             if (localFullName) {
@@ -592,7 +646,7 @@ export default function SignupPage() {
                                 {step === 1 && 'Choose your account type to get started'}
                                 {step === 2 && 'Enter your account information'}
                                 {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && 'Verify your phone number'}
-                                {step === 4 && '🔒 Secure your account with face verification'}
+                                {step === 4 && '🔒 Secure your account with biometric verification'}
                                 {step === 5 && selectedRole === 'hostel_manager' && 'Select the hostel you manage'}
                             </CardDescription>
                             
@@ -635,27 +689,27 @@ export default function SignupPage() {
                                 </div>
                             )}
 
-                            {/* Step 4: Face Capture (MANDATORY) */}
+                            {/* Step 4: Biometric Verification (MANDATORY) */}
                             {step === 4 && (
                                 <div className="space-y-4">
                                     <Alert className="bg-blue-50/10 border-blue-500/50">
                                         <Info className="h-4 w-4" />
-                                        <AlertTitle>🔒 Face Verification Required</AlertTitle>
+                                        <AlertTitle>🔒 Biometric Verification Required</AlertTitle>
                                         <AlertDescription className="text-slate-100/80">
-                                            For your security, we require face verification during signup. This helps protect your account from unauthorized access.
+                                            For maximum security, we require biometric verification during signup. Use your fingerprint, Face ID, or camera as fallback.
                                         </AlertDescription>
                                     </Alert>
                                     
                                     <div className="text-center space-y-4 py-6">
-                                        {!faceDescriptor ? (
+                                        {!biometricCredential && !faceDescriptor ? (
                                             <>
-                                                <div className="text-6xl mb-4">📸</div>
-                                                <h3 className="text-xl font-semibold">Capture Your Face</h3>
+                                                <div className="text-6xl mb-4">🔐</div>
+                                                <h3 className="text-xl font-semibold">Secure Your Account</h3>
                                                 <p className="text-slate-100/80 max-w-md mx-auto">
-                                                    Click the button below to open your camera and take a selfie. Make sure your face is clearly visible.
+                                                    Use your device's biometric sensor (fingerprint, Face ID) or camera to verify your identity.
                                                 </p>
                                                 <Button
-                                                    onClick={() => setIsFaceCaptureOpen(true)}
+                                                    onClick={() => setIsBiometricCaptureOpen(true)}
                                                     size="lg"
                                                     className="mt-4"
                                                     disabled={isProcessingFace}
@@ -667,8 +721,8 @@ export default function SignupPage() {
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <User className="h-5 w-5 mr-2" />
-                                                            Open Camera
+                                                            <Fingerprint className="h-5 w-5 mr-2" />
+                                                            Set Up Biometric Security
                                                         </>
                                                     )}
                                                 </Button>
@@ -676,9 +730,11 @@ export default function SignupPage() {
                                         ) : (
                                             <>
                                                 <div className="text-6xl mb-4">✅</div>
-                                                <h3 className="text-xl font-semibold text-green-400">Face Captured Successfully!</h3>
+                                                <h3 className="text-xl font-semibold text-green-400">
+                                                    {biometricCredential ? 'Biometric Setup Complete!' : 'Face Captured Successfully!'}
+                                                </h3>
                                                 <p className="text-slate-100/80">
-                                                    Your face has been registered. Proceeding to complete signup...
+                                                    Your identity verification has been completed. Proceeding to complete signup...
                                                 </p>
                                                 <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
                                             </>
@@ -1112,7 +1168,19 @@ export default function SignupPage() {
             </div>
         </main>
 
-        {/* Face Capture Dialog (MANDATORY) */}
+        {/* Biometric Capture Dialog (MANDATORY - Primary) */}
+        <BiometricCaptureDialog
+            open={isBiometricCaptureOpen}
+            onOpenChange={setIsBiometricCaptureOpen}
+            onCapture={handleBiometricCapture}
+            mode="register"
+            userId={tempUserId}
+            userName={fullName || firstName || email}
+            title="🔐 Set Up Biometric Security"
+            description="Use your fingerprint, Face ID, or camera to secure your account."
+        />
+
+        {/* Face Capture Dialog (Fallback) */}
         <FaceCaptureDialog
             open={isFaceCaptureOpen}
             onOpenChange={setIsFaceCaptureOpen}

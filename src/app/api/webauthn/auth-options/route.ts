@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from 'next/server';
+import {
+  generateAuthenticationOptions,
+  GenerateAuthenticationOptionsOpts,
+} from '@simplewebauthn/server';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+
+const rpID = process.env.NODE_ENV === 'development' ? 'localhost' : 'hostelhq.vercel.app';
+
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = await req.json();
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get user's registered credentials
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    const userData = userDoc.data();
+    const biometricCredential = userData.biometricCredential;
+
+    if (!biometricCredential) {
+      return NextResponse.json(
+        { success: false, error: 'No biometric credentials found for user' },
+        { status: 404 }
+      );
+    }
+
+    const allowCredentials = [{
+      id: biometricCredential.id,
+      type: 'public-key' as const,
+      transports: biometricCredential.transports || ['internal'],
+    }];
+
+    const opts: GenerateAuthenticationOptionsOpts = {
+      timeout: 60000,
+      allowCredentials,
+      userVerification: 'required',
+      rpID,
+    };
+
+    const options = await generateAuthenticationOptions(opts);
+
+    return NextResponse.json({
+      success: true,
+      options,
+    });
+  } catch (error: any) {
+    console.error('WebAuthn authentication options error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate authentication options' },
+      { status: 500 }
+    );
+  }
+}

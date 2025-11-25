@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 8080",
+    "dev": "next dev -p 8080",
+    "dev:turbo": "next dev --turbopack -p 8080",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "cross-env NODE_ENV=production next build",
@@ -38,6 +39,8 @@
     "@radix-ui/react-toast": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@react-pdf/renderer": "^3.4.4",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2",
     "ably": "^2.0.10",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.5.0",
