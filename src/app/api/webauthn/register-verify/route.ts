@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+ import { NextRequest, NextResponse } from 'next/server';
 import {
   verifyRegistrationResponse,
   VerifyRegistrationResponseOpts,
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     if (verification.verified && verification.registrationInfo) {
       const registrationInfo = verification.registrationInfo;
       
-      // Store the credential in Firestore
+      // Store the credential in Firestore if user doc already exists (e.g., re-register)
       const biometricCredential = {
         id: Buffer.from(registrationInfo.credential.id).toString('base64url'),
         publicKey: Buffer.from(registrationInfo.credential.publicKey).toString('base64url'),
@@ -89,17 +89,21 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(),
       };
 
-      // Try to update user document, create if it doesn't exist
+      // Only update if doc exists to avoid NOT_FOUND errors during initial signup
       try {
-        await updateDoc(doc(db, 'users', userId), {
-          biometricCredential,
-          biometricSetupDate: new Date().toISOString(),
-          hasBiometric: true,
-        });
-      } catch (updateError) {
-        // If user doesn't exist, we'll store the credential temporarily
-        // It will be added to the user document during actual signup
-        console.log('User document not found, credential will be stored during signup:', userId);
+        const userRef = doc(db, 'users', userId);
+        const existing = await getDoc(userRef);
+        if (existing.exists()) {
+          await updateDoc(userRef, {
+            biometricCredential,
+            biometricSetupDate: new Date().toISOString(),
+            hasBiometric: true,
+          });
+        } else {
+          console.log('User doc does not exist yet; client will attach credential during signup:', userId);
+        }
+      } catch (checkError) {
+        console.warn('Skipping immediate user update; will attach during signup. Reason:', checkError);
       }
 
       return NextResponse.json({

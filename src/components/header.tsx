@@ -28,6 +28,7 @@ import {
   MonitorCog,
   FileText,
   ChevronDown,
+  MessageSquare,
   CreditCard,
   Users,
   Banknote,

@@ -3,11 +3,12 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -441,6 +442,26 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{totalPending}</div>
                  <p className="text-xs text-muted-foreground">Hostels, Agents & Reviews</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Security & OTP management */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">OTP Management</CardTitle>
+                <Shield className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  View, audit, and bulk delete OTP verification records stored in Firestore.
+                </p>
+                <Button asChild size="sm">
+                  <Link href="/admin/otp-management">
+                    Manage OTPs
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           </div>

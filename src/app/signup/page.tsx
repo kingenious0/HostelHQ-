@@ -89,8 +89,59 @@ export default function SignupPage() {
     const [biometricCredential, setBiometricCredential] = useState<any>(null);
     const [isProcessingBiometric, setIsProcessingBiometric] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    // Use email as user ID for biometric registration (will be the actual user ID)
-    const getUserId = () => email || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Build the exact role-based auth email that will be used at account creation
+    // This ensures WebAuthn uses a stable identifier (no temp IDs)
+    const getUserId = () => {
+        try {
+            if (selectedRole === 'student') {
+                // Students: STU-XXXNNN from firstName + phone last 3
+                if (firstName && phoneNumber && countryCode) {
+                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                    const cc = countryCode.replace(/\D/g, '');
+                    const combined = cc + cleanedNumber;
+                    const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                    const lastThree = combined.slice(-3);
+                    const studentId = `STU-${firstThree}${lastThree}`;
+                    return `${studentId.toLowerCase()}@hostelhq.com`;
+                }
+                // fallback to typed email if present during early steps
+                if (email) return email;
+            } else if (selectedRole === 'agent') {
+                // Agents: AGNT-XXXNNN from first word of name + phone last 3
+                if (fullName && phoneNumber && countryCode) {
+                    const namePart = (fullName || '').trim().split(/\s+/)[0] || 'AGENT';
+                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                    const cc = countryCode.replace(/\D/g, '');
+                    const combined = cc + cleanedNumber;
+                    const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                    const lastThree = combined.slice(-3);
+                    const agentId = `AGNT-${firstThree}${lastThree}`;
+                    return `${agentId.toLowerCase()}@hostelhq.com`;
+                }
+            } else if (selectedRole === 'hostel_manager') {
+                // Managers: MNG-XXXNNN from first word of name + phone last 3 (deterministic)
+                if (fullName && phoneNumber && countryCode) {
+                    const namePart = (fullName || '').trim().split(/\s+/)[0] || 'MGR';
+                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                    const cc = countryCode.replace(/\D/g, '');
+                    const combined = cc + cleanedNumber;
+                    const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+                    const lastThree = combined.slice(-3);
+                    const managerId = `MNG-${firstThree}${lastThree}`;
+                    return `${managerId.toLowerCase()}@hostelhq.com`;
+                }
+            }
+            // Generic fallbacks (no temp IDs)
+            if (email) return email;
+            if (phoneNumber && countryCode) {
+                const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                const cc = countryCode.replace(/\D/g, '');
+                return `${cc}${cleanedNumber}`;
+            }
+        } catch (_) {}
+        // As a last resort, return empty string (will be rejected upstream rather than using temp)
+        return '';
+    };
 
     // Validate email format
     const isValidEmail = (email: string): boolean => {
@@ -321,7 +372,7 @@ export default function SignupPage() {
                 // For students/agents, biometric setup is the final step - proceed to complete signup
                 console.log('Biometric setup complete for', selectedRole, '- proceeding to signup');
                 // Don't set isProcessingBiometric(false) here - let handleSignup manage the loading state
-                handleSignup();
+                await handleSignup(credential);
             }
         } catch (error: any) {
             console.error('Biometric processing error:', error);
@@ -379,7 +430,7 @@ export default function SignupPage() {
                 setStep(5);
                 await loadManagerHostels();
             } else {
-                handleSignup();
+                await handleSignup(undefined, descriptorArray);
             }
         } catch (error: any) {
             console.error('Face capture error:', error);
@@ -394,20 +445,28 @@ export default function SignupPage() {
     };
 
     // Handle final signup
-    const handleSignup = async () => {
+    const handleSignup = async (passedBiometricCredential?: any, passedFaceDescriptor?: number[]) => {
         console.log('🚀 handleSignup called for role:', selectedRole);
+        
+        // Use passed credentials or state credentials
+        const currentBiometricCredential = passedBiometricCredential || biometricCredential;
+        const currentFaceDescriptor = passedFaceDescriptor || faceDescriptor;
+        
+        console.log('🔍 Debug state - otpVerified:', otpVerified, 'biometricCredential:', !!currentBiometricCredential, 'faceDescriptor:', !!currentFaceDescriptor);
+        
         if (!selectedRole) {
             toast({ title: "Error", description: "Please select a role.", variant: "destructive" });
             return;
         }
 
         if ((selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && !otpVerified) {
+            console.log('❌ OTP verification failed - otpVerified is:', otpVerified);
             toast({ title: "OTP Required", description: "Please verify your phone number first.", variant: "destructive" });
             return;
         }
 
         // MANDATORY: Biometric or face verification must be completed
-        if (!biometricCredential && !faceDescriptor) {
+        if (!currentBiometricCredential && !currentFaceDescriptor) {
             toast({ title: "Security Verification Required", description: "Please complete biometric or face verification to continue.", variant: "destructive" });
             setStep(4);
             setIsBiometricCaptureOpen(true);
@@ -427,36 +486,39 @@ export default function SignupPage() {
             console.log('📧 Building auth email for role:', selectedRole);
             let authEmail = email;
 
-            // Build synthetic auth emails so users can log in with role-based IDs
+            // Build synthetic auth emails so users can log in with role-based IDs (deterministic)
             if (selectedRole === 'student') {
-                // Students: STD-XXXNNN based on firstName + phone
+                // Students: STU-XXXNNN based on firstName + phone
                 const cleanedNumber = phoneNumber.replace(/\D/g, '');
                 const countryCodeDigits = countryCode.replace(/\D/g, '');
                 const combinedPhone = countryCodeDigits + cleanedNumber;
 
                 const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
                 const lastThree = combinedPhone.slice(-3);
-                const studentId = `STD-${firstThree}${lastThree}`;
+                const studentId = `STU-${firstThree}${lastThree}`;
 
                 // Students will log in using this unique ID email, e.g. std-ell205@hostelhq.com
                 authEmail = `${studentId.toLowerCase()}@hostelhq.com`;
             } else if (selectedRole === 'agent') {
-                // Agents: AGT-XXXNNN based on first word of fullName + phone
+                // Agents: AGNT-XXXNNN based on first word of fullName + phone
                 const namePart = (fullName || '').trim().split(/\s+/)[0] || 'AGENT';
                 const cleanedNumber = phoneNumber.replace(/\D/g, '');
                 const countryCodeDigits = countryCode.replace(/\D/g, '');
                 const combinedPhone = countryCodeDigits + cleanedNumber;
                 const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
                 const lastThree = combinedPhone.slice(-3);
-                const agentId = `AGT-${firstThree}${lastThree}`;
+                const agentId = `AGNT-${firstThree}${lastThree}`;
 
                 authEmail = `${agentId.toLowerCase()}@hostelhq.com`;
             } else if (selectedRole === 'hostel_manager') {
-                // Managers: MNG-XXXNNN based on first word of fullName + random digits
+                // Managers: MNG-XXXNNN based on first word of fullName + phone last 3 (deterministic)
                 const namePart = (fullName || '').trim().split(/\s+/)[0] || 'MGR';
+                const cleanedNumber = phoneNumber.replace(/\D/g, '');
+                const countryCodeDigits = countryCode.replace(/\D/g, '');
+                const combinedPhone = countryCodeDigits + cleanedNumber;
                 const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                const randomDigits = Math.floor(100 + Math.random() * 900).toString();
-                const managerId = `MNG-${firstThree}${randomDigits}`;
+                const lastThree = combinedPhone.slice(-3);
+                const managerId = `MNG-${firstThree}${lastThree}`;
 
                 authEmail = `${managerId.toLowerCase()}@hostelhq.com`;
             }
@@ -476,13 +538,13 @@ export default function SignupPage() {
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
                 // Store biometric data (preferred) or face data (fallback)
-                ...(biometricCredential && {
-                    biometricCredential: biometricCredential,
+                ...(currentBiometricCredential && {
+                    biometricCredential: currentBiometricCredential,
                     biometricSetupDate: new Date().toISOString(),
                     hasBiometric: true,
                 }),
-                ...(faceDescriptor && {
-                    faceDescriptor: faceDescriptor,
+                ...(currentFaceDescriptor && {
+                    faceDescriptor: currentFaceDescriptor,
                     faceSetupDate: new Date().toISOString(),
                 }),
             };
@@ -516,7 +578,7 @@ export default function SignupPage() {
                 if (selectedRole === 'student') {
                     const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
                     const lastThree = combined.slice(-3);
-                    const studentId = `STD-${firstThree}${lastThree}`;
+                    const studentId = `STU-${firstThree}${lastThree}`;
                     userData.studentId = studentId;
                     userData.faculty = faculty;
                     userData.department = department;
@@ -529,7 +591,7 @@ export default function SignupPage() {
                 userData.authEmail = authEmail;
                 // Extract agent ID prefix from authEmail if possible (before @)
                 const emailLocal = authEmail.split('@')[0];
-                if (emailLocal.toUpperCase().startsWith('AGT-')) {
+                if (emailLocal.toUpperCase().startsWith('AGNT-')) {
                     userData.agentId = emailLocal.toUpperCase();
                 }
             } else if (selectedRole === 'hostel_manager') {
