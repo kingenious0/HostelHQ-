@@ -594,7 +594,7 @@ export default function MyBookingsPage() {
                             Maybe Later
                         </Button>
                         <Button asChild onClick={() => setShowWelcomeDialog(false)}>
-                            <Link href="/hostels">
+                            <Link href="/#all-hostels">
                                 Browse Hostels 🏠
                             </Link>
                         </Button>

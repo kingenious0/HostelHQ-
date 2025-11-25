@@ -120,12 +120,91 @@ export const staticHostels: Hostel[] = [
     lng: -1.66,
     availability: 'Available',
     roomTypes: [
-        { id: 'rt1', name: 'Four In A Room', price: 3700, availability: 'Available', capacity: 4, occupancy: 1 },
-        { id: 'rt2', name: 'Two In A Room', price: 4500, availability: 'Limited', capacity: 2, occupancy: 1 },
+        { 
+          id: 'rt1', 
+          name: 'Four In A Room', 
+          price: 3700, 
+          availability: 'Available', 
+          capacity: 4, 
+          occupancy: 1,
+          roomAmenities: ['Balconies', 'Shared Bathroom', 'Electricity', 'Water', 'Fan', 'Study Room', 'Security', 'Furnished']
+        },
+        { 
+          id: 'rt2', 
+          name: 'Two In A Room', 
+          price: 4500, 
+          availability: 'Limited', 
+          capacity: 2, 
+          occupancy: 1,
+          roomAmenities: ['Private Balcony', 'Private Bathroom', 'Electricity', 'Water', 'AC', 'TV', 'Security', 'Furnished', 'Hot Water']
+        },
     ],
     roomTypeTags: ['Four In A Room', 'Two In A Room'],
     priceRange: { min: 3700, max: 4500 },
     reviews: [],
+    // Add individual physical rooms for demonstration
+    rooms: [
+      {
+        id: 'room-1',
+        roomNumber: '1',
+        roomTypeId: 'rt1',
+        capacity: 4,
+        currentOccupancy: 0,
+        status: 'active',
+        roomType: 'Four In A Room',
+        price: 3700,
+        gender: 'Male',
+        image: 'https://picsum.photos/seed/hostel-room-1/800/600'
+      },
+      {
+        id: 'room-2',
+        roomNumber: '2',
+        roomTypeId: 'rt1',
+        capacity: 4,
+        currentOccupancy: 0,
+        status: 'active',
+        roomType: 'Four In A Room',
+        price: 3700,
+        gender: 'Male',
+        image: 'https://picsum.photos/seed/hostel-room-2/800/600'
+      },
+      {
+        id: 'room-3',
+        roomNumber: '3',
+        roomTypeId: 'rt1',
+        capacity: 4,
+        currentOccupancy: 0,
+        status: 'active',
+        roomType: 'Four In A Room',
+        price: 3700,
+        gender: 'Male',
+        image: 'https://picsum.photos/seed/hostel-room-3/800/600'
+      },
+      {
+        id: 'room-4',
+        roomNumber: '4',
+        roomTypeId: 'rt1',
+        capacity: 4,
+        currentOccupancy: 0,
+        status: 'active',
+        roomType: 'Four In A Room',
+        price: 3700,
+        gender: 'Male',
+        image: 'https://picsum.photos/seed/hostel-room-4/800/600'
+      },
+      {
+        id: 'room-15',
+        roomNumber: '15',
+        roomTypeId: 'rt2',
+        capacity: 2,
+        currentOccupancy: 0,
+        status: 'active',
+        roomType: 'Two In A Room',
+        price: 4500,
+        gender: 'Male',
+        image: 'https://picsum.photos/seed/hostel-room-15/800/600'
+      }
+    ]
   },
 ];
 

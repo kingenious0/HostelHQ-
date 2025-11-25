@@ -194,18 +194,24 @@ export default function RoomsPage() {
           matchingType?.capacity ??
           parseCapacityFromName(room.roomType ?? room.type ?? matchingType?.name);
 
-        const occupancyFromBookings =
-          roomOccupancy[id] ?? roomOccupancy[String(matchingType?.id ?? typeName)] ?? 0;
+        // Get occupancy for this specific room (not room type)
+        const roomNumber = room.roomNumber ?? room.number;
+        const occupancyFromBookings = 
+          roomOccupancy[id] ?? // Try specific room ID first
+          (roomNumber ? roomOccupancy[`room-${roomNumber}`] : 0) ?? // Then try room number
+          room.currentOccupancy ?? // Then try stored occupancy
+          0; // Default to 0
+          
         return {
           id,
-          label: formatLabel(room.roomNumber ?? room.number ?? room.name, index),
+          label: formatLabel(roomNumber ?? room.name, index),
           type: typeName,
           price: room.price ?? matchingType?.price ?? hostel.priceRange?.min ?? 0,
-          occupancy: room.occupancy ?? room.occupants ?? occupancyFromBookings,
+          occupancy: occupancyFromBookings,
           capacity: capacity ?? null,
           gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
           image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
-          roomNumber: room.roomNumber ?? room.number,
+          roomNumber: roomNumber,
         };
       });
     }
@@ -236,7 +242,7 @@ export default function RoomsPage() {
     });
   }, [hostel, primaryImages, roomOccupancy]);
 
-  // Load current occupancy per room/roomType based on confirmed bookings
+  // Load current occupancy per individual room based on confirmed bookings
   useEffect(() => {
     const loadOccupancy = async () => {
       if (!id) return;
@@ -248,17 +254,27 @@ export default function RoomsPage() {
         );
         const snapshot = await getDocs(bookingsQuery);
         const counts: Record<string, number> = {};
+        
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as any;
+          
+          // Priority: specific roomId > roomNumber > fallback to roomTypeId
+          const specificRoomId = data.roomId || null;
+          const roomNumber = data.roomNumber || null;
           const roomTypeId = data.roomTypeId || null;
-          const roomTypeName = data.roomTypeName || data.roomType || null;
-          if (roomTypeId) {
+          
+          if (specificRoomId) {
+            // Count by specific room ID
+            counts[String(specificRoomId)] = (counts[String(specificRoomId)] || 0) + 1;
+          } else if (roomNumber) {
+            // Count by room number if no specific room ID
+            counts[`room-${roomNumber}`] = (counts[`room-${roomNumber}`] || 0) + 1;
+          } else if (roomTypeId) {
+            // Fallback to room type for backwards compatibility
             counts[String(roomTypeId)] = (counts[String(roomTypeId)] || 0) + 1;
           }
-          if (roomTypeName) {
-            counts[String(roomTypeName)] = (counts[String(roomTypeName)] || 0) + 1;
-          }
         });
+        
         setRoomOccupancy(counts);
       } catch (error) {
         console.error('Error loading room occupancy for hostel rooms page:', error);
