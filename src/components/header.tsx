@@ -1230,7 +1230,7 @@ export function Header() {
                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
                                 id="phone" 
-                                className="pl-9 bg-gray-50" 
+                                className="pl-9 bg-muted/50 text-foreground placeholder:text-muted-foreground" 
                                 value={profileData.phone} 
                                 readOnly 
                                 placeholder="Phone number (contact admin to change)"
