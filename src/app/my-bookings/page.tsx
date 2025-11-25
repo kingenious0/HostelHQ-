@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
 import { 
     Loader2, 
@@ -85,6 +86,7 @@ export default function MyBookingsPage() {
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [appUser, setAppUser] = useState<AppUser | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
+    const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
     const pathname = usePathname();
@@ -111,7 +113,7 @@ export default function MyBookingsPage() {
                 const userData = docSnap.data() as AppUser;
                 setAppUser({
                     uid: currentUser.uid,
-                    email: currentUser.email!,
+                    email: userData.email || currentUser.email!,
                     fullName: userData.fullName || currentUser.displayName || '',
                     role: userData.role || 'student',
                     profileImage: userData.profileImage || currentUser.photoURL || '',
@@ -219,6 +221,21 @@ export default function MyBookingsPage() {
         };
     }, [currentUser]);
 
+    // Show welcome dialog for new students with no bookings
+    useEffect(() => {
+        if (!loading && appUser && bookings.length === 0 && visits.length === 0) {
+            // Check if this is a fresh signup (user was just created)
+            const urlParams = new URLSearchParams(window.location.search);
+            const isNewSignup = urlParams.get('welcome') === 'true';
+            
+            if (isNewSignup) {
+                setShowWelcomeDialog(true);
+                // Clean up URL
+                window.history.replaceState({}, '', '/my-bookings');
+            }
+        }
+    }, [loading, appUser, bookings.length, visits.length]);
+
     const filteredBookings = (status: string) => {
         return bookings.filter(booking => booking.status === status);
     };
@@ -256,30 +273,34 @@ export default function MyBookingsPage() {
     }
 
     return (
-        <SidebarProvider>
-            <div className="flex min-h-screen w-full">
-                <Sidebar collapsible="icon" className="bg-white border-r border-gray-200">
-                    <SidebarHeader className="p-3 md:p-4">
-                        <div className="flex items-center space-x-2 md:space-x-3">
-                            <Avatar className="h-8 w-8 md:h-10 md:w-10">
-                                {appUser?.profileImage ? (
-                                  <AvatarImage src={appUser.profileImage} alt="Profile" />
-                                ) : (
-                                  <AvatarFallback className="text-xs md:text-sm">
-                                      {appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
-                                  </AvatarFallback>
-                                )}
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 md:h-8 md:w-8 p-0"
-                                    onClick={() => router.push('/profile')}
+        <>
+            <SidebarProvider>
+                <div className="flex min-h-screen w-full">
+                    <Sidebar collapsible="icon" className="bg-white border-r border-gray-200">
+                        <SidebarHeader className="p-3 md:p-4">
+                            <div className="flex items-center space-x-2 md:space-x-3">
+                                <Avatar className="h-8 w-8 md:h-10 md:w-10">
+                                    {appUser?.profileImage ? (
+                                      <AvatarImage src={appUser.profileImage} alt="Profile" />
+                                    ) : (
+                                      <AvatarFallback className="text-xs md:text-sm">
+                                          {appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
+                                      </AvatarFallback>
+                                    )}
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 md:h-8 md:w-8 p-0"
+                                        onClick={() => {
+                                            // Dispatch a custom event to trigger profile dialog
+                                            window.dispatchEvent(new CustomEvent('openProfileDialog'));
+                                        }}
                                 >
                                     <Edit className="h-3 w-3 md:h-4 md:w-4" />
                                 </Button>
@@ -293,14 +314,6 @@ export default function MyBookingsPage() {
                             <SidebarGroupLabel>Menu</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild isActive={false}>
-                                            <Link href="/profile">
-                                                <User />
-                                                <span>My Profile</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
                                     <SidebarMenuItem>
                                         <SidebarMenuButton asChild isActive>
                                             <Link href="/my-bookings">
@@ -556,6 +569,39 @@ export default function MyBookingsPage() {
                 </SidebarInset>
             </div>
         </SidebarProvider>
+
+            {/* Welcome Dialog for New Students */}
+            <Dialog open={showWelcomeDialog} onOpenChange={setShowWelcomeDialog}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-center">🎉 Welcome to HostelHQ!</DialogTitle>
+                        <DialogDescription className="text-center">
+                            Hello {appUser?.fullName || 'there'}! 👋
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="text-center space-y-4 py-4">
+                        <p className="text-muted-foreground">
+                            You don't have any bookings yet. Start by exploring our available hostels and secure your perfect accommodation!
+                        </p>
+                        <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
+                                💡 <strong>Pro tip:</strong> Browse hostels, schedule visits, and book your ideal room all in one place.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter className="flex-col sm:flex-row gap-2">
+                        <Button variant="outline" onClick={() => setShowWelcomeDialog(false)}>
+                            Maybe Later
+                        </Button>
+                        <Button asChild onClick={() => setShowWelcomeDialog(false)}>
+                            <Link href="/hostels">
+                                Browse Hostels 🏠
+                            </Link>
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 

@@ -57,9 +57,6 @@ import { ably } from '@/lib/ably';
 import { cn } from '@/lib/utils';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { FaceCaptureDialog } from '@/components/FaceCaptureDialog';
-import { SecurityAlarm } from '@/components/SecurityAlarm';
-import { getFaceDescriptorFromBase64, verifyFace, descriptorToArray } from '@/lib/faceDetection';
 
 type AppUser = {
   uid: string;
@@ -70,6 +67,7 @@ type AppUser = {
   phone?: string;
   address?: string;
   bio?: string;
+  authEmail?: string; // Original Firebase Auth email for password verification
 }
 
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -93,15 +91,13 @@ export function Header() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [originalPhone, setOriginalPhone] = useState('');
   const [originalName, setOriginalName] = useState('');
-  const [isPhoneChangeDialogOpen, setIsPhoneChangeDialogOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const [isFaceCaptureOpen, setIsFaceCaptureOpen] = useState(false);
-  const [isSecurityAlarmOpen, setIsSecurityAlarmOpen] = useState(false);
+  const [passwordDialogType, setPasswordDialogType] = useState<'phone' | 'profile'>('profile');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'system';
     const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
@@ -151,6 +147,16 @@ export function Header() {
     applyFontScale(fontScale);
   }, [fontScale, applyFontScale]);
 
+  // Listen for custom event to open profile dialog
+  useEffect(() => {
+    const handleOpenProfileDialog = () => {
+      setIsProfileOpen(true);
+    };
+
+    window.addEventListener('openProfileDialog', handleOpenProfileDialog);
+    return () => window.removeEventListener('openProfileDialog', handleOpenProfileDialog);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (themeMode !== 'system') return;
@@ -175,13 +181,14 @@ export function Header() {
             const userData = docSnap.data() as AppUser;
             const currentUser: AppUser = {
                 uid: user.uid,
-                email: user.email!,
+                email: userData.email || user.email!,
                 fullName: userData.fullName || user.displayName || '',
                 role: userData.role || 'student',
                 profileImage: userData.profileImage || user.photoURL || '',
-                phone: userData.phone || '',
+                phone: userData.phoneNumber || userData.phone || '',
                 address: userData.address || '',
                 bio: userData.bio || '',
+                authEmail: userData.authEmail || user.email!, // Store original auth email
             };
             setAppUser(currentUser);
             setProfileData(currentUser);
@@ -212,8 +219,8 @@ export function Header() {
   }, []);
 
   const handleEditProfile = async () => {
-    setIsProfileOpen(true);
     if (!appUser) return;
+    setIsProfileOpen(true);
     
     try {
         const userDocRef = doc(db, "users", appUser.uid);
@@ -222,13 +229,22 @@ export function Header() {
         if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
             
-            // Check all possible phone field names (phoneNumber is the primary field)
+            // Check all possible phone field names (phoneNumber is the primary field from signup)
             const phone = userData.phoneNumber || userData.phone || appUser.phone || '';
             const fullName = userData.fullName || appUser.fullName || '';
             const email = userData.email || appUser.email || '';
             
+            console.log('🔍 Profile Loading Debug:', {
+                userData: userData,
+                phone: phone,
+                fullName: fullName,
+                email: email,
+                appUserPhone: appUser.phone,
+                appUserFullName: appUser.fullName
+            });
+            
             // If we have phone but no email, generate it
-            const displayEmail = email || (phone && fullName ? generateEmail(fullName, phone) : '');
+            const displayEmail = email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
             
             setProfileData({
                 fullName: fullName,
@@ -242,11 +258,12 @@ export function Header() {
             // Store original values for comparison
             setOriginalPhone(phone);
             setOriginalName(fullName);
+            console.log('📋 Profile loaded - setting originalName to:', fullName, 'phone:', phone);
         } else {
             // Fallback to appUser data
             const phone = appUser.phone || '';
             const fullName = appUser.fullName || '';
-            const email = appUser.email || (phone && fullName ? generateEmail(fullName, phone) : '');
+            const email = appUser.email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
             
             setProfileData({
                 fullName: fullName,
@@ -296,9 +313,9 @@ export function Header() {
     }
   };
 
-  // Generate email from name and phone
-  const generateEmail = (fullName: string, phone: string) => {
-    if (!fullName || !phone) return '';
+  // Generate email from name, phone, and role
+  const generateEmail = (fullName: string, phone: string, role: string) => {
+    if (!fullName || !phone || !role) return '';
     
     // Extract first 3 letters of name
     const nameNoSpaces = fullName.replace(/\s+/g, '');
@@ -312,20 +329,71 @@ export function Header() {
       ? digitsOnly.slice(-3)
       : digitsOnly.padStart(3, '0');
     
-    return `std-${namePart}${phonePart}@hostelhq.com`;
+    // Get role prefix
+    let rolePrefix = 'stu'; // default
+    if (role === 'agent' || role === 'pending_agent') {
+      rolePrefix = 'agnt';
+    } else if (role === 'hostel_manager') {
+      rolePrefix = 'mng';
+    } else if (role === 'admin') {
+      rolePrefix = 'adm';
+    }
+    
+    return `${rolePrefix}-${namePart}${phonePart}@hostelhq.com`;
   };
 
   const handleSaveProfile = async () => {
     if (!appUser) return;
     
-    // Check if phone number changed
-    const phoneChanged = profileData.phone !== originalPhone;
-    const nameChanged = profileData.fullName !== originalName;
+    // Check what fields changed (normalize phone numbers for comparison)
+    const normalizePhone = (phone: string) => phone?.replace(/\D/g, '') || '';
     
+    // Handle case where originalPhone might be empty/undefined
+    const currentPhoneNormalized = normalizePhone(profileData.phone || '');
+    const originalPhoneNormalized = normalizePhone(originalPhone || '');
+    
+    // Phone field is read-only, so never detect phone changes
+    const phoneChanged = false;
+    const nameChanged = profileData.fullName !== originalName;
+    const addressChanged = profileData.address !== (appUser.address || '');
+    const bioChanged = profileData.bio !== (appUser.bio || '');
+    
+    console.log('🔍 Save Profile Debug:', {
+      phoneChanged,
+      nameChanged,
+      addressChanged,
+      bioChanged,
+      currentPhone: profileData.phone,
+      originalPhone: originalPhone,
+      currentName: profileData.fullName,
+      originalName: originalName,
+      phoneComparison: {
+        current: `"${profileData.phone}"`,
+        original: `"${originalPhone}"`,
+        areEqual: profileData.phone === originalPhone,
+        currentType: typeof profileData.phone,
+        originalType: typeof originalPhone,
+        normalizedCurrent: normalizePhone(profileData.phone),
+        normalizedOriginal: normalizePhone(originalPhone),
+        normalizedEqual: normalizePhone(profileData.phone) === normalizePhone(originalPhone)
+      }
+    });
+    
+    // If phone changed, require password + OTP verification
     if (phoneChanged) {
-      // Show warning dialog for phone change
+      console.log('🔄 Phone changed - using phone flow - needs (password + OTP)');
       setNewPhone(profileData.phone || '');
-      setIsPhoneChangeDialogOpen(true);
+      setPasswordDialogType('phone');
+      setIsPasswordDialogOpen(true);
+      return;
+    }
+    
+    // If only name, address, or bio changed, require password verification only
+    if (nameChanged || addressChanged || bioChanged) {
+      console.log('👤 Profile changed - using profile flow (password only)', { nameChanged, addressChanged, bioChanged });
+      setPasswordDialogType('profile');
+      console.log('🔧 Set passwordDialogType to: profile');
+      setIsPasswordDialogOpen(true);
       return;
     }
     
@@ -344,7 +412,7 @@ export function Header() {
         
         // If name changed, update email
         if (nameChanged && profileData.phone) {
-            const newEmail = generateEmail(profileData.fullName || '', profileData.phone);
+            const newEmail = generateEmail(profileData.fullName || '', profileData.phone, appUser.role);
             updateData.email = newEmail;
             
             toast({ 
@@ -369,10 +437,6 @@ export function Header() {
     }
   };
 
-  const handlePhoneChangeConfirm = () => {
-    setIsPhoneChangeDialogOpen(false);
-    setIsPasswordDialogOpen(true);
-  };
 
   const handlePasswordVerify = async () => {
     if (!password || !appUser) {
@@ -382,9 +446,20 @@ export function Header() {
     
     setIsVerifying(true);
     try {
+      console.log('🔐 Phone Password verification debug:', {
+        firebaseAuthEmail: auth.currentUser?.email,
+        firestoreEmail: appUser?.email,
+        authEmail: appUser?.authEmail,
+        passwordLength: password.length
+      });
+      
+      // Use the original authEmail for authentication if available
+      const emailForAuth = appUser?.authEmail || auth.currentUser?.email || appUser.email;
+      console.log('🔑 Using email for phone auth:', emailForAuth);
+      
       // Import reauthenticateWithCredential and EmailAuthProvider
       const { reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth');
-      const credential = EmailAuthProvider.credential(appUser.email, password);
+      const credential = EmailAuthProvider.credential(emailForAuth, password);
       
       await reauthenticateWithCredential(auth.currentUser!, credential);
       
@@ -412,99 +487,155 @@ export function Header() {
     }
   };
 
+  const handlePasswordVerifyForProfile = async () => {
+    if (!password) {
+      toast({ title: 'Please enter your password', variant: 'destructive' });
+      return;
+    }
+    
+    setIsVerifying(true);
+    try {
+      // Verify password with Firebase Auth using reauthentication
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        throw new Error('User not authenticated');
+      }
+      
+      console.log('🔐 Password verification debug:', {
+        firebaseAuthEmail: user.email,
+        firestoreEmail: appUser?.email,
+        authEmail: appUser?.authEmail,
+        passwordLength: password.length
+      });
+      
+      // Use the original authEmail for authentication if available
+      const emailForAuth = appUser?.authEmail || user.email;
+      console.log('🔑 Using email for auth:', emailForAuth);
+      
+      const { reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth');
+      const credential = EmailAuthProvider.credential(emailForAuth, password);
+      await reauthenticateWithCredential(user, credential);
+      
+      // Password verified, complete profile update
+      setIsPasswordDialogOpen(false);
+      setPassword('');
+      await completeProfileUpdate();
+    } catch (error: any) {
+      console.error('Password verification error:', error);
+      toast({ 
+        title: 'Incorrect Password', 
+        description: 'Please check your password and try again', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const handleOtpVerify = async () => {
     if (!otp || otp.length !== 6) {
       toast({ title: 'Please enter the 6-digit code', variant: 'destructive' });
       return;
     }
     
-    // OTP verified, now trigger face capture
+    // OTP verified, complete phone number change directly
     setIsOtpDialogOpen(false);
     setOtp('');
-    setIsFaceCaptureOpen(true);
+    await completePhoneChange();
   };
 
-  const handleFaceCapture = async (capturedImageBase64: string) => {
-    setIsVerifying(true);
-    
+
+  const completeProfileUpdate = async () => {
+    setIsSavingProfile(true);
     try {
-      // Get user's stored face descriptor
       const userDocRef = doc(db, "users", appUser!.uid);
-      const userDoc = await getDoc(userDocRef);
+      const nameChanged = profileData.fullName !== originalName;
       
-      if (!userDoc.exists()) {
-        throw new Error('User document not found');
-      }
-      
-      const userData = userDoc.data();
-      const storedFaceDescriptor = userData.faceDescriptor;
-      
-      if (!storedFaceDescriptor || !Array.isArray(storedFaceDescriptor)) {
-        // No face descriptor stored, allow change but warn
-        toast({
-          title: 'No Face Data Found',
-          description: 'Proceeding without face verification. Please set up face verification in settings.',
-          variant: 'default'
-        });
-        await completePhoneChange();
-        return;
-      }
-      
-      // Verify face
-      const verificationResult = await verifyFace(
-        capturedImageBase64,
-        storedFaceDescriptor,
-        0.6 // Threshold
-      );
-      
-      if (!verificationResult.success) {
-        toast({
-          title: 'Face Detection Failed',
-          description: verificationResult.error || 'Could not detect face in image',
-          variant: 'destructive'
-        });
-        setIsVerifying(false);
-        return;
-      }
-      
-      if (verificationResult.isMatch) {
-        // Face matches! Complete phone change
-        toast({
-          title: '✅ Face Verified!',
-          description: `Match confidence: ${verificationResult.similarity}%`,
-        });
-        await completePhoneChange();
-      } else {
-        // Face doesn't match! Trigger alarm
-        toast({
-          title: '❌ Face Verification Failed',
-          description: `Match confidence: ${verificationResult.similarity}% (Required: 60%)`,
-          variant: 'destructive'
-        });
-        
-        // Trigger security alarm
-        setIsSecurityAlarmOpen(true);
-        
-        // Reset states
-        setProfileData(p => ({ ...p, phone: originalPhone }));
-        setNewPhone('');
-        setIsVerifying(false);
-      }
-    } catch (error: any) {
-      console.error('Face verification error:', error);
-      toast({
-        title: 'Verification Error',
-        description: error.message || 'Face verification failed',
-        variant: 'destructive'
+      console.log('🔍 Profile Update Debug:', {
+        currentName: profileData.fullName,
+        originalName: originalName,
+        nameChanged: nameChanged,
+        phone: appUser!.phone,
+        role: appUser!.role
       });
-      setIsVerifying(false);
+      
+      const updateData: any = {
+        fullName: profileData.fullName,
+        address: profileData.address,
+        bio: profileData.bio,
+        profileImage: profileData.profileImage,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // If name changed, update email (use current phone from appUser or profileData)
+      if (nameChanged) {
+        const currentPhone = appUser!.phone || profileData.phone || '';
+        
+        if (currentPhone) {
+          const newEmail = generateEmail(profileData.fullName || '', currentPhone, appUser!.role);
+          updateData.email = newEmail;
+          console.log('📧 Updating email from name change:', newEmail, 'using phone:', currentPhone);
+          
+          // Note: We skip Firebase Auth email update to avoid verification requirements
+          // The app uses Firestore data primarily, so this is sufficient
+          console.log('ℹSkipping Firebase Auth email update to avoid verification requirement');
+          
+          toast({ 
+            title: 'Email Updated', 
+            description: `Your email has been updated to ${newEmail}` 
+          });
+        } else {
+          console.log('⚠️ Cannot update email - no phone number available');
+          console.log('🔍 Debug - appUser.phone:', appUser!.phone, 'profileData.phone:', profileData.phone);
+        }
+      }
+      
+      await updateDoc(userDocRef, updateData);
+      
+      // Update appUser state
+      setAppUser(prev => {
+        if (!prev) return null;
+        const updatedEmail = updateData.email || prev.email || '';
+        console.log('🔄 Updated appUser with new email:', updatedEmail);
+        return { 
+          ...prev, 
+          fullName: profileData.fullName || prev.fullName,
+          address: profileData.address || prev.address || '',
+          bio: profileData.bio || prev.bio || '',
+          profileImage: profileData.profileImage || prev.profileImage || '',
+          email: updatedEmail
+        };
+      });
+      
+      // Update original values
+      setOriginalName(profileData.fullName || '');
+      
+      toast({ 
+        title: 'Profile Updated', 
+        description: 'Your profile has been updated successfully' 
+      });
+      
+      setIsProfileOpen(false);
+    } catch (error: any) {
+      console.error('Profile update error:', error);
+      toast({ 
+        title: 'Update Failed', 
+        description: 'Failed to update profile. Please try again.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
   const completePhoneChange = async () => {
     try {
       const userDocRef = doc(db, "users", appUser!.uid);
-      const newEmail = generateEmail(profileData.fullName || '', newPhone);
+      const newEmail = generateEmail(profileData.fullName || '', newPhone, appUser!.role);
+      
+      // Note: Skip Firebase Auth email update to avoid verification requirements
+      // The app uses Firestore data primarily, so updating Firestore is sufficient
+      console.log('ℹ️ Skipping Firebase Auth email update for phone change to avoid verification requirement');
       
       await updateDoc(userDocRef, {
         phone: newPhone,
@@ -525,12 +656,13 @@ export function Header() {
         email: newEmail 
       } as AppUser : null);
       
-      // Update profileData
+      // Update profileData and original values
       setProfileData(prev => ({ ...prev, phone: newPhone, email: newEmail }));
       setOriginalPhone(newPhone);
+      setOriginalName(profileData.fullName);
       
       toast({ 
-        title: 'Phone Number Updated Successfully!', 
+        title: 'Profile Updated Successfully!', 
         description: `Your email has been updated to ${newEmail}. All your bookings and data have been preserved.` 
       });
       
@@ -748,14 +880,6 @@ export function Header() {
                       <DropdownMenuContent align="start" className="w-56">
                         <SheetClose asChild>
                           <DropdownMenuItem asChild>
-                            <Link href="/profile">
-                              <User className="mr-2 h-4 w-4" />
-                              <span>My Profile</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
                             <Link href="/my-bookings">
                               <Briefcase className="mr-2 h-4 w-4" />
                               <span>My Bookings</span>
@@ -786,14 +910,16 @@ export function Header() {
                             </Link>
                           </DropdownMenuItem>
                         </SheetClose>
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
-                            <Link href="/settings">
-                              <Settings className="mr-2 h-4 w-4" />
-                              <span>Settings</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
+                        {isStudent && (
+                          <SheetClose asChild>
+                            <DropdownMenuItem asChild>
+                              <Link href="/settings">
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Settings</span>
+                              </Link>
+                            </DropdownMenuItem>
+                          </SheetClose>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -874,17 +1000,25 @@ export function Header() {
                       {isPending && <Badge variant="secondary" className="mt-1">Pending Approval</Badge>}
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
+                    <DropdownMenuItem onClick={() => setIsProfileOpen(true)} data-profile-trigger>
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </DropdownMenuItem>
                     {isStudent && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/my-bookings">
-                          <Briefcase className="mr-2 h-4 w-4" />
-                          My Bookings
-                        </Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href="/my-bookings">
+                            <Briefcase className="mr-2 h-4 w-4" />
+                            My Bookings
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/settings">
+                            <Settings className="mr-2 h-4 w-4" />
+                            Settings
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     <DropdownMenuItem asChild>
                       <Link href="/help-center">
@@ -1094,8 +1228,17 @@ export function Header() {
                         <Label htmlFor="phone">Phone</Label>
                         <div className="relative">
                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input id="phone" className="pl-9" value={profileData.phone} onChange={(e) => setProfileData(p => ({...p, phone: e.target.value}))} />
+                            <Input 
+                                id="phone" 
+                                className="pl-9 bg-gray-50" 
+                                value={profileData.phone} 
+                                readOnly 
+                                placeholder="Phone number (contact admin to change)"
+                            />
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            📞 To change your phone number, please contact support for security verification.
+                        </p>
                     </div>
                     <div className="grid gap-2">
                         <Label htmlFor="address">Address</Label>
@@ -1120,50 +1263,6 @@ export function Header() {
         </DialogContent>
       </Dialog>
 
-      {/* Phone Change Warning Dialog */}
-      <Dialog open={isPhoneChangeDialogOpen} onOpenChange={setIsPhoneChangeDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>⚠️ Change Phone Number</DialogTitle>
-            <DialogDescription>
-              Changing your phone number requires verification for security purposes.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-4 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm text-amber-900 dark:text-amber-100 font-medium mb-2">
-                You will need to:
-              </p>
-              <ol className="text-sm text-amber-800 dark:text-amber-200 space-y-1 list-decimal list-inside">
-                <li>Enter your account password</li>
-                <li>Verify the new number via SMS OTP</li>
-              </ol>
-            </div>
-            <div className="rounded-lg bg-green-50 dark:bg-green-950 p-4 border border-green-200 dark:border-green-800">
-              <p className="text-sm text-green-900 dark:text-green-100 flex items-center gap-2">
-                <Check className="h-4 w-4" />
-                <span className="font-medium">Your bookings and data will be preserved</span>
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>New Phone Number</Label>
-              <Input value={newPhone} disabled className="bg-muted" />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => {
-              setIsPhoneChangeDialogOpen(false);
-              setProfileData(p => ({ ...p, phone: originalPhone }));
-            }}>
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button onClick={handlePhoneChangeConfirm}>
-              Continue
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Password Verification Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
@@ -1171,7 +1270,12 @@ export function Header() {
           <DialogHeader>
             <DialogTitle>🔒 Verify Your Password</DialogTitle>
             <DialogDescription>
-              Please enter your account password to continue.
+              Please enter your original account password to save your profile changes.
+              {passwordDialogType === 'profile' && (
+                <span className="block text-sm text-blue-600 mt-1">
+                  💡 Use your original password, even if your email ID is changing.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1182,7 +1286,7 @@ export function Header() {
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handlePasswordVerify()}
+                onKeyDown={(e) => e.key === 'Enter' && (passwordDialogType === 'phone' ? handlePasswordVerify() : handlePasswordVerifyForProfile())}
                 placeholder="Enter your password"
                 autoFocus
               />
@@ -1192,12 +1296,11 @@ export function Header() {
             <Button variant="outline" onClick={() => {
               setIsPasswordDialogOpen(false);
               setPassword('');
-              setProfileData(p => ({ ...p, phone: originalPhone }));
             }}>
               <X className="h-4 w-4 mr-2" />
               Cancel
             </Button>
-            <Button onClick={handlePasswordVerify} disabled={isVerifying}>
+            <Button onClick={passwordDialogType === 'phone' ? handlePasswordVerify : handlePasswordVerifyForProfile} disabled={isVerifying}>
               {isVerifying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               Verify
             </Button>
@@ -1250,20 +1353,6 @@ export function Header() {
         </DialogContent>
       </Dialog>
 
-      {/* Face Capture Dialog */}
-      <FaceCaptureDialog
-        open={isFaceCaptureOpen}
-        onOpenChange={setIsFaceCaptureOpen}
-        onCapture={handleFaceCapture}
-        title="📸 Verify Your Identity"
-        description="Take a selfie to verify it's really you changing the phone number"
-      />
-
-      {/* Security Alarm */}
-      <SecurityAlarm
-        open={isSecurityAlarmOpen}
-        onClose={() => setIsSecurityAlarmOpen(false)}
-      />
     </header>
   );
 }

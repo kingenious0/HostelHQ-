@@ -6,6 +6,7 @@
 import {
   startRegistration,
   startAuthentication,
+  browserSupportsWebAuthn,
 } from '@simplewebauthn/browser';
 
 export interface BiometricCredential {
@@ -118,10 +119,15 @@ export async function registerBiometric(
 /**
  * Verify biometric authentication
  * @param userId - User's unique ID
- * @returns True if verification successful
+ * @returns Object with success status and error message if any
  */
-export async function verifyBiometric(userId: string): Promise<boolean> {
+export async function verifyBiometric(userId: string): Promise<{ success: boolean; error?: string }> {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  
+  // Check WebAuthn support
+  if (!browserSupportsWebAuthn()) {
+    return { success: false, error: 'WebAuthn is not supported in this browser' };
+  }
   
   try {
     // Request authentication options from server
@@ -135,10 +141,14 @@ export async function verifyBiometric(userId: string): Promise<boolean> {
       throw new Error('Failed to get authentication options');
     }
 
-    const options = await optionsResponse.json();
+    const optionsData = await optionsResponse.json();
+    
+    if (!optionsData.success) {
+      throw new Error(optionsData.error || 'Failed to get authentication options');
+    }
 
     // Start authentication with browser/OS
-    const credential = await startAuthentication(options);
+    const credential = await startAuthentication(optionsData.options);
 
     // Verify authentication with server
     const verifyResponse = await fetch(`${baseUrl}/api/webauthn/auth-verify`, {
@@ -148,19 +158,19 @@ export async function verifyBiometric(userId: string): Promise<boolean> {
     });
 
     if (!verifyResponse.ok) {
-      return false;
+      return { success: false, error: 'Authentication verification failed' };
     }
 
     const result = await verifyResponse.json();
-    return result.verified === true;
+    return { success: result.verified === true };
   } catch (error: any) {
     console.error('Biometric verification error:', error);
     
     // User-friendly error messages
     if (error.name === 'NotAllowedError') {
-      throw new Error('Biometric verification was cancelled');
+      return { success: false, error: 'Biometric verification was cancelled' };
     } else {
-      throw new Error(error.message || 'Failed to verify biometric');
+      return { success: false, error: error.message || 'Failed to verify biometric' };
     }
   }
 }

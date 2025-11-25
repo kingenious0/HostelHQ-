@@ -652,7 +652,7 @@ export default function SignupPage() {
                 router.push('/agent/dashboard');
             } else if (selectedRole === 'student') {
                 console.log('➡️ Redirecting to /my-bookings');
-                router.push('/my-bookings');
+                router.push('/my-bookings?welcome=true');
             } else {
                 console.log('➡️ Redirecting to /');
                 router.push('/');

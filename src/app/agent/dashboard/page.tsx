@@ -270,11 +270,6 @@ export default function AgentDashboard() {
                                     <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <Link href="/settings">
-                                        <Button variant="outline" size="sm">
-                                            Settings
-                                        </Button>
-                                    </Link>
                                     {pendingVisitsCount > 0 && (
                                         <Alert className="border-blue-500 bg-blue-50">
                                             <AlertTriangle className="h-4 w-4 text-blue-600" />
