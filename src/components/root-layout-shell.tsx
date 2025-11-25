@@ -11,6 +11,7 @@ const FOOTER_HIDDEN_PATHS = [
   "/bank-accounts",
   "/settings",
   "/profile",
+  "/signup",
 ];
 
 const FOOTER_HIDDEN_PREFIXES = [

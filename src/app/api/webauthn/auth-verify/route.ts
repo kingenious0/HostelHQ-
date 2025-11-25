@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
     
     // Handle different environments
     let rpID: string;
-    if (host.includes('localhost')) {
-      rpID = 'localhost';
+    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
+      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
     } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
       rpID = 'hostelhq.vercel.app'; // Production domain
     } else if (host.includes('vercel.app')) {

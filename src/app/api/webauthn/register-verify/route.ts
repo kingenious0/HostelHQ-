@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
     
     // Handle different environments
     let rpID: string;
-    if (host.includes('localhost')) {
-      rpID = 'localhost';
+    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
+      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
     } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
       rpID = 'hostelhq.vercel.app'; // Production domain
     } else if (host.includes('vercel.app')) {
@@ -39,15 +39,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get user document to retrieve the challenge
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
+    // Extract challenge from the credential response
+    // During signup, user might not exist in Firestore yet, so we get challenge from the credential
     const expectedChallenge = credential.response.clientDataJSON 
       ? JSON.parse(atob(credential.response.clientDataJSON)).challenge
       : null;
@@ -59,6 +52,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.log('WebAuthn verification attempt:', { 
+      userId, 
+      hasCredential: !!credential, 
+      hasChallenge: !!expectedChallenge,
+      rpID,
+      origin 
+    });
+
     const opts: VerifyRegistrationResponseOpts = {
       response: credential,
       expectedChallenge,
@@ -68,6 +69,11 @@ export async function POST(req: NextRequest) {
     };
 
     const verification = await verifyRegistrationResponse(opts);
+
+    console.log('WebAuthn verification result:', { 
+      verified: verification.verified, 
+      hasRegistrationInfo: !!verification.registrationInfo 
+    });
 
     if (verification.verified && verification.registrationInfo) {
       const registrationInfo = verification.registrationInfo;
@@ -83,11 +89,18 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(),
       };
 
-      await updateDoc(doc(db, 'users', userId), {
-        biometricCredential,
-        biometricSetupDate: new Date().toISOString(),
-        hasBiometric: true,
-      });
+      // Try to update user document, create if it doesn't exist
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          biometricCredential,
+          biometricSetupDate: new Date().toISOString(),
+          hasBiometric: true,
+        });
+      } catch (updateError) {
+        // If user doesn't exist, we'll store the credential temporarily
+        // It will be added to the user document during actual signup
+        console.log('User document not found, credential will be stored during signup:', userId);
+      }
 
       return NextResponse.json({
         success: true,
@@ -95,15 +108,24 @@ export async function POST(req: NextRequest) {
         credential: biometricCredential,
       });
     } else {
+      console.error('WebAuthn verification failed:', {
+        verified: verification.verified,
+        registrationInfo: verification.registrationInfo,
+        error: verification
+      });
       return NextResponse.json(
-        { success: false, error: 'Failed to verify registration' },
+        { success: false, error: 'Failed to verify registration', details: verification },
         { status: 400 }
       );
     }
   } catch (error: any) {
     console.error('WebAuthn registration verification error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to verify registration' },
+      { 
+        success: false, 
+        error: 'Failed to verify registration',
+        details: error.message || 'Unknown error'
+      },
       { status: 500 }
     );
   }

@@ -87,9 +87,10 @@ export default function SignupPage() {
     const [isBiometricCaptureOpen, setIsBiometricCaptureOpen] = useState(false);
     const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
     const [biometricCredential, setBiometricCredential] = useState<any>(null);
-    const [isProcessingFace, setIsProcessingFace] = useState(false);
+    const [isProcessingBiometric, setIsProcessingBiometric] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [tempUserId] = useState(() => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    // Use email as user ID for biometric registration (will be the actual user ID)
+    const getUserId = () => email || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Validate email format
     const isValidEmail = (email: string): boolean => {
@@ -300,7 +301,7 @@ export default function SignupPage() {
 
     // Handle biometric capture (MANDATORY - Primary method)
     const handleBiometricCapture = async (credential: any) => {
-        setIsProcessingFace(true);
+        setIsProcessingBiometric(true);
         
         try {
             setBiometricCredential(credential);
@@ -311,14 +312,17 @@ export default function SignupPage() {
                 description: 'Your biometric authentication has been registered successfully.',
             });
 
-            setIsProcessingFace(false);
-
             // For managers, proceed to hostel selection
             if (selectedRole === 'hostel_manager') {
+                setIsProcessingBiometric(false);
                 setStep(5);
                 loadManagerHostels();
+            } else {
+                // For students/agents, biometric setup is the final step - proceed to complete signup
+                console.log('Biometric setup complete for', selectedRole, '- proceeding to signup');
+                // Don't set isProcessingBiometric(false) here - let handleSignup manage the loading state
+                handleSignup();
             }
-            // For students/agents, they can now complete signup
         } catch (error: any) {
             console.error('Biometric processing error:', error);
             toast({
@@ -326,14 +330,14 @@ export default function SignupPage() {
                 description: error.message || 'Please try again.',
                 variant: 'destructive'
             });
-            setIsProcessingFace(false);
+            setIsProcessingBiometric(false);
             setIsBiometricCaptureOpen(true); // Reopen to try again
         }
     };
 
     // Handle face capture (MANDATORY - Fallback method)
     const handleFaceCapture = async (capturedImageBase64: string) => {
-        setIsProcessingFace(true);
+        setIsProcessingBiometric(true);
         
         try {
             // Create image element from base64 for face detection
@@ -354,7 +358,7 @@ export default function SignupPage() {
                     description: 'Please ensure your face is clearly visible and try again.',
                     variant: 'destructive'
                 });
-                setIsProcessingFace(false);
+                setIsProcessingBiometric(false);
                 setIsFaceCaptureOpen(true); // Reopen to try again
                 return;
             }
@@ -368,7 +372,7 @@ export default function SignupPage() {
                 description: 'Your face has been registered successfully.',
             });
 
-            setIsProcessingFace(false);
+            setIsProcessingBiometric(false);
 
             // For managers, go to hostel selection; others complete signup
             if (selectedRole === 'hostel_manager') {
@@ -384,13 +388,14 @@ export default function SignupPage() {
                 description: error.message || 'Could not capture face. Please try again.',
                 variant: 'destructive'
             });
-            setIsProcessingFace(false);
+            setIsProcessingBiometric(false);
             setIsFaceCaptureOpen(true); // Reopen to try again
         }
     };
 
     // Handle final signup
     const handleSignup = async () => {
+        console.log('🚀 handleSignup called for role:', selectedRole);
         if (!selectedRole) {
             toast({ title: "Error", description: "Please select a role.", variant: "destructive" });
             return;
@@ -416,8 +421,10 @@ export default function SignupPage() {
             return;
         }
         
+        console.log('✅ All validations passed, starting signup process...');
         setIsSubmitting(true);
         try {
+            console.log('📧 Building auth email for role:', selectedRole);
             let authEmail = email;
 
             // Build synthetic auth emails so users can log in with role-based IDs
@@ -458,8 +465,10 @@ export default function SignupPage() {
             const derivedStudentFullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
             const localFullName = selectedRole === 'student' ? derivedStudentFullName : fullName;
 
+            console.log('🔐 Creating user with email:', authEmail);
             const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
             const user = userCredential.user;
+            console.log('✅ User created successfully:', user.uid);
 
             let userData: any = {
                 uid: user.uid,
@@ -534,7 +543,9 @@ export default function SignupPage() {
             // (Optional) additional metadata for managers could be added here later
 
             // Create user document (no more pendingUsers for agents)
+            console.log('💾 Saving user document to Firestore...');
             await setDoc(doc(db, "users", user.uid), userData);
+            console.log('✅ User document saved successfully');
 
             // If this is a manager and they selected a hostel, assign that hostel to the new manager
             if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
@@ -570,16 +581,25 @@ export default function SignupPage() {
             toast({ title: 'Account Created Successfully!', description: 'Welcome to HostelHQ!' });
 
             // Redirect based on role
+            console.log('🔄 Redirecting user based on role:', selectedRole);
             if (selectedRole === 'hostel_manager') {
+                console.log('➡️ Redirecting to /manager/dashboard');
                 router.push('/manager/dashboard');
             } else if (selectedRole === 'agent') {
+                console.log('➡️ Redirecting to /agent/dashboard');
                 router.push('/agent/dashboard');
+            } else if (selectedRole === 'student') {
+                console.log('➡️ Redirecting to /my-bookings');
+                router.push('/my-bookings');
             } else {
+                console.log('➡️ Redirecting to /');
                 router.push('/');
             }
 
         } catch (error: any) {
-            console.error("Signup error:", error);
+            console.error("❌ Signup error:", error);
+            console.error("Error code:", error.code);
+            console.error("Error message:", error.message);
             let errorMessage = "An unknown error occurred.";
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = "This email is already registered. Please log in.";
@@ -595,7 +615,9 @@ export default function SignupPage() {
                 variant: 'destructive',
             });
         } finally {
+            console.log('🏁 Signup process completed, resetting loading states');
             setIsSubmitting(false);
+            setIsProcessingBiometric(false);
         }
     };
 
@@ -712,9 +734,9 @@ export default function SignupPage() {
                                                     onClick={() => setIsBiometricCaptureOpen(true)}
                                                     size="lg"
                                                     className="mt-4"
-                                                    disabled={isProcessingFace}
+                                                    disabled={isProcessingBiometric}
                                                 >
-                                                    {isProcessingFace ? (
+                                                    {isProcessingBiometric ? (
                                                         <>
                                                             <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                                                             Processing...
@@ -734,9 +756,13 @@ export default function SignupPage() {
                                                     {biometricCredential ? 'Biometric Setup Complete!' : 'Face Captured Successfully!'}
                                                 </h3>
                                                 <p className="text-slate-100/80">
-                                                    Your identity verification has been completed. Proceeding to complete signup...
+                                                    {isSubmitting || isProcessingBiometric
+                                                        ? 'Your identity verification has been completed. Proceeding to complete signup...'
+                                                        : 'Your identity verification is complete.'}
                                                 </p>
-                                                <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
+                                                {(isSubmitting || isProcessingBiometric) && (
+                                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
+                                                )}
                                             </>
                                         )}
                                     </div>
@@ -1120,7 +1146,7 @@ export default function SignupPage() {
                                         setIsFaceCaptureOpen(false);
                                     }} 
                                     className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
-                                    disabled={isProcessingFace}
+                                    disabled={isProcessingBiometric}
                                 >
                                     <ArrowLeft className="mr-2 h-4 w-4" />
                                     Back
@@ -1157,12 +1183,14 @@ export default function SignupPage() {
                             </div>
                         )}
                         {/* Managers no longer have a separate Step 3; they complete signup directly after basic info. */}
-                        <p className="text-sm text-slate-100/80 text-center">
-                            Already have an account?{' '}
-                            <Link href="/login" className="text-accent font-semibold hover:underline">
-                                Log In
-                            </Link>
-                        </p>
+                        {step !== 3 && (
+                            <p className="text-sm text-slate-100/80 text-center">
+                                Already have an account?{' '}
+                                <Link href="/login" className="text-accent font-semibold hover:underline">
+                                    Log In
+                                </Link>
+                            </p>
+                        )}
                     </CardFooter>
                 </Card>
             </div>
@@ -1171,10 +1199,16 @@ export default function SignupPage() {
         {/* Biometric Capture Dialog (MANDATORY - Primary) */}
         <BiometricCaptureDialog
             open={isBiometricCaptureOpen}
-            onOpenChange={setIsBiometricCaptureOpen}
+            onOpenChange={(open) => {
+                setIsBiometricCaptureOpen(open);
+                // Reset loading state if dialog is closed without completing
+                if (!open && !biometricCredential && !faceDescriptor) {
+                    setIsProcessingBiometric(false);
+                }
+            }}
             onCapture={handleBiometricCapture}
             mode="register"
-            userId={tempUserId}
+            userId={getUserId()}
             userName={fullName || firstName || email}
             title="🔐 Set Up Biometric Security"
             description="Use your fingerprint, Face ID, or camera to secure your account."
@@ -1183,7 +1217,13 @@ export default function SignupPage() {
         {/* Face Capture Dialog (Fallback) */}
         <FaceCaptureDialog
             open={isFaceCaptureOpen}
-            onOpenChange={setIsFaceCaptureOpen}
+            onOpenChange={(open) => {
+                setIsFaceCaptureOpen(open);
+                // Reset loading state if dialog is closed without completing
+                if (!open && !biometricCredential && !faceDescriptor) {
+                    setIsProcessingBiometric(false);
+                }
+            }}
             onCapture={handleFaceCapture}
             title="📸 Capture Your Face"
             description="Position your face in the center and ensure good lighting. This is required for account security."
