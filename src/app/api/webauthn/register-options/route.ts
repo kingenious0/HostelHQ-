@@ -5,14 +5,30 @@ import {
 } from '@simplewebauthn/server';
 
 const rpName = 'HostelHQ';
-const rpID = process.env.NODE_ENV === 'development' ? 'localhost' : 'hostelhq.vercel.app';
-const origin = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3000' 
-  : 'https://hostelhq.vercel.app';
 
 export async function POST(req: NextRequest) {
   try {
     const { userId, userName } = await req.json();
+
+    // Get the actual domain from the request
+    const host = req.headers.get('host') || 'localhost:8080';
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    
+    // Handle different environments
+    let rpID: string;
+    if (host.includes('localhost')) {
+      rpID = 'localhost';
+    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
+      rpID = 'hostelhq.vercel.app'; // Production domain
+    } else if (host.includes('vercel.app')) {
+      rpID = host; // Preview/staging domains (use full domain)
+    } else {
+      rpID = host; // Fallback to full domain
+    }
+    
+    const origin = `${protocol}://${host}`;
+    
+    console.log('WebAuthn Config:', { rpID, origin, host, environment: process.env.NODE_ENV });
 
     if (!userId || !userName) {
       return NextResponse.json(

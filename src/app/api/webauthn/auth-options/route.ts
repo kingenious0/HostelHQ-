@@ -6,11 +6,26 @@ import {
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
-const rpID = process.env.NODE_ENV === 'development' ? 'localhost' : 'hostelhq.vercel.app';
-
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await req.json();
+
+    // Get the actual domain from the request
+    const host = req.headers.get('host') || 'localhost:8080';
+    
+    // Handle different environments
+    let rpID: string;
+    if (host.includes('localhost')) {
+      rpID = 'localhost';
+    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
+      rpID = 'hostelhq.vercel.app'; // Production domain
+    } else if (host.includes('vercel.app')) {
+      rpID = host; // Preview/staging domains (use full domain)
+    } else {
+      rpID = host; // Fallback to full domain
+    }
+    
+    console.log('WebAuthn Auth Options Config:', { rpID, host, environment: process.env.NODE_ENV });
 
     if (!userId) {
       return NextResponse.json(
