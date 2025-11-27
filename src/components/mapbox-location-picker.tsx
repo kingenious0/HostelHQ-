@@ -178,7 +178,7 @@ class CombinedRoutingService {
     return {
       distance: route.distance,
       duration: route.duration,
-      instructions: leg.steps?.map((step: any) => step.maneuver?.instruction || 'Continue') || [],
+      instructions: leg.steps?.map((step: any) => this.formatOsrmInstruction(step)) || [],
       geometry: route.geometry.coordinates,
       provider: `OSRM (${server.split('//')[1]})`
     };
