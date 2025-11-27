@@ -999,9 +999,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     variant="outline"
                                                     size="sm"
                                                     className="w-full justify-center mb-1"
-                                                    onClick={() => router.push(`/hostels/${hostel.id}/rooms/${room.id}`)}
+                                                    onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                                                 >
-                                                    View details
+                                                    View Rooms
                                                 </Button>
                                                 {getVisitButton(room)}
                                             </TableCell>
