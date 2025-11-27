@@ -43,10 +43,10 @@ class CombinedRoutingService {
   private graphHopperApiKey = process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY;
   
   // Public OSRM Instances (Tertiary Fallback)
+  // Note: Most public OSRM servers have CORS issues when called from browser
+  // Only router.project-osrm.org sometimes works
   private publicOsrmServers = [
     'https://router.project-osrm.org',
-    'https://routing.openstreetmap.de',
-    'https://osrm.map.bf', // Closer to Ghana!
   ];
 
   async getDirections(start: RoutePoint, end: RoutePoint, profile: 'driving' | 'walking' = 'driving'): Promise<RouteResult> {
@@ -110,14 +110,27 @@ class CombinedRoutingService {
     }
 
     const data = await response.json();
+    
+    // Validate response structure
+    if (!data.features || !data.features[0] || !data.features[0].properties) {
+      console.warn('ORS returned invalid response structure:', data);
+      return null;
+    }
+    
     const route = data.features[0];
     const props = route.properties;
+    const segment = props.segments?.[0];
+    
+    if (!segment) {
+      console.warn('ORS response missing segments');
+      return null;
+    }
 
     return {
-      distance: props.segments[0].distance,
-      duration: props.segments[0].duration,
-      instructions: props.segments[0].steps?.map((step: any) => step.instruction) || [],
-      geometry: route.geometry.coordinates,
+      distance: segment.distance || 0,
+      duration: segment.duration || 0,
+      instructions: segment.steps?.map((step: any) => step.instruction) || [],
+      geometry: route.geometry?.coordinates || [],
       provider: 'OpenRouteService'
     };
   }
@@ -143,13 +156,20 @@ class CombinedRoutingService {
     }
 
     const data = await response.json();
+    
+    // Validate response structure
+    if (!data.paths || !data.paths[0]) {
+      console.warn('GraphHopper returned invalid response:', data);
+      return null;
+    }
+    
     const path = data.paths[0];
 
     return {
-      distance: path.distance,
-      duration: path.time / 1000, // Convert ms to seconds
+      distance: path.distance || 0,
+      duration: (path.time || 0) / 1000, // Convert ms to seconds
       instructions: path.instructions?.map((inst: any) => inst.text) || [],
-      geometry: path.points.coordinates,
+      geometry: path.points?.coordinates || [],
       provider: 'GraphHopper'
     };
   }
@@ -239,6 +259,56 @@ class CombinedRoutingService {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     return `${hours}h ${remainingMinutes}m`;
+  }
+
+  // Turn OSRM maneuvers into human-readable instructions
+  private formatOsrmInstruction(step: any): string {
+    const maneuver = step?.maneuver || {};
+    const type: string = maneuver.type || '';
+    const modifier: string = maneuver.modifier || '';
+    const name: string = step?.name || '';
+
+    const road = name && name !== '-' ? name : 'the road';
+    const prettyModifier = modifier ? modifier.replace(/_/g, ' ') : '';
+
+    switch (type) {
+      case 'depart':
+        return road !== 'the road' 
+          ? `Head ${prettyModifier || 'along'} ${road}`.trim()
+          : `Start and head ${prettyModifier || 'straight'}`.trim();
+
+      case 'arrive':
+        return 'You have arrived at your destination';
+
+      case 'roundabout':
+      case 'rotary': {
+        const exit = maneuver.exit && Number.isFinite(maneuver.exit) ? `exit ${maneuver.exit}` : 'the exit';
+        return `At the roundabout, take ${exit}${road !== 'the road' ? ` onto ${road}` : ''}`.trim();
+      }
+
+      case 'fork':
+        if (modifier === 'left') return `Keep left to stay on ${road}`;
+        if (modifier === 'right') return `Keep right to stay on ${road}`;
+        return `Keep ${prettyModifier || 'straight'} on ${road}`.trim();
+
+      case 'merge':
+        return `Merge ${prettyModifier || ''} onto ${road}`.trim();
+
+      case 'on ramp':
+      case 'off ramp':
+        return `Take the ramp ${prettyModifier || ''} onto ${road}`.trim();
+
+      case 'turn':
+      case 'continue':
+      case 'new name':
+        if (prettyModifier) {
+          return `Turn ${prettyModifier} onto ${road}`.trim();
+        }
+        return `Continue on ${road}`;
+
+      default:
+        return road !== 'the road' ? `Continue on ${road}` : 'Continue towards your destination';
+    }
   }
 }
 

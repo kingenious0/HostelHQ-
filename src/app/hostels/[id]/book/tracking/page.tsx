@@ -337,6 +337,7 @@ export default function TrackingPage() {
     const [loadingDirections, setLoadingDirections] = useState(false);
     const [showDirections, setShowDirections] = useState(false);
     const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+    const [travelMode, setTravelMode] = useState<'walking' | 'driving'>('driving');
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -512,7 +513,7 @@ export default function TrackingPage() {
                         const routeResult = await combinedRoutingService.getDirections(
                             userLoc,
                             hostelLocation,
-                            'walking' // Default to walking for students
+                            travelMode
                         );
 
                         setRoute(routeResult);
@@ -647,13 +648,40 @@ export default function TrackingPage() {
                                     </Badge>
                                 </div>
                             </div>
-                            <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setShowDirections(false)}
-                            >
-                                Close
-                            </Button>
+                            {/* Travel mode toggle + Close */}
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center rounded-full border bg-muted/40 p-0.5 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTravelMode('driving'); getDirections(); }}
+                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
+                                            travelMode === 'driving'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'text-muted-foreground hover:bg-white'
+                                        }`}
+                                    >
+                                        🚗 Drive
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTravelMode('walking'); getDirections(); }}
+                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
+                                            travelMode === 'walking'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'text-muted-foreground hover:bg-white'
+                                        }`}
+                                    >
+                                        🚶 Walk
+                                    </button>
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => setShowDirections(false)}
+                                >
+                                    Close
+                                </Button>
+                            </div>
                         </div>
                         
                         {/* Main Content - Map takes most space */}
