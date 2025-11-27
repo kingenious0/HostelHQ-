@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Clock, User, CheckCheck, Loader2, Calendar, Phone, MessageCircle, Navigation, Route, Home } from "lucide-react";
+import { MapPin, Clock, User, CheckCheck, Loader2, Calendar, Phone, MessageCircle, Navigation, Route, Home, UserCheck, XCircle } from "lucide-react";
 import { combinedRoutingService, RouteResult } from "@/components/mapbox-location-picker";
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { db, auth } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 import { MapboxMap } from '@/components/map';
 import { ably } from '@/lib/ably';
-import { Types } from 'ably';
+import type * as Ably from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -34,6 +36,275 @@ type Visit = {
     visitTime: string;
     visitType?: 'agent' | 'self';
 };
+
+// Set Mapbox access token
+if (process.env.NEXT_PUBLIC_MAPBOX_API_KEY) {
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
+}
+
+// DirectionsMap Component - Visual map with route line and LIVE TRACKING
+interface DirectionsMapProps {
+    userLocation: { lat: number; lng: number };
+    hostelLocation: { lat: number; lng: number };
+    routeGeometry: number[][]; // [lng, lat] coordinates
+    hostelName: string;
+    onUserLocationUpdate?: (location: { lat: number; lng: number }) => void;
+}
+
+function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName, onUserLocationUpdate }: DirectionsMapProps) {
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const watchIdRef = useRef<number | null>(null);
+    const [isTracking, setIsTracking] = useState(true);
+    const [currentUserLocation, setCurrentUserLocation] = useState(userLocation);
+
+    // Live GPS tracking
+    useEffect(() => {
+        if (!isTracking) return;
+
+        if (navigator.geolocation) {
+            watchIdRef.current = navigator.geolocation.watchPosition(
+                (position) => {
+                    const newLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    setCurrentUserLocation(newLocation);
+                    
+                    // Update marker position on map
+                    if (userMarkerRef.current) {
+                        userMarkerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
+                    }
+                    
+                    // Notify parent component
+                    if (onUserLocationUpdate) {
+                        onUserLocationUpdate(newLocation);
+                    }
+                },
+                (error) => {
+                    console.error('GPS tracking error:', error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 1000 // Update every second
+                }
+            );
+        }
+
+        return () => {
+            if (watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+        };
+    }, [isTracking, onUserLocationUpdate]);
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+        // Initialize map
+        const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [
+                (userLocation.lng + hostelLocation.lng) / 2,
+                (userLocation.lat + hostelLocation.lat) / 2
+            ],
+            zoom: 13,
+        });
+
+        mapInstanceRef.current = map;
+
+        map.on('load', () => {
+            // Add route line source
+            map.addSource('route', {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: routeGeometry
+                    }
+                }
+            });
+
+            // Add route line layer (background - wider, for outline effect)
+            map.addLayer({
+                id: 'route-outline',
+                type: 'line',
+                source: 'route',
+                layout: {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                paint: {
+                    'line-color': '#1e40af',
+                    'line-width': 8,
+                    'line-opacity': 0.4
+                }
+            });
+
+            // Add route line layer (main line)
+            map.addLayer({
+                id: 'route-line',
+                type: 'line',
+                source: 'route',
+                layout: {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                paint: {
+                    'line-color': '#3b82f6',
+                    'line-width': 5
+                }
+            });
+
+            // Add user location marker (blue pulsing dot)
+            const userEl = document.createElement('div');
+            userEl.innerHTML = `
+                <div style="position: relative;">
+                    <div style="
+                        width: 24px;
+                        height: 24px;
+                        background: #3b82f6;
+                        border: 4px solid white;
+                        border-radius: 50%;
+                        box-shadow: 0 2px 8px rgba(59,130,246,0.5);
+                        position: relative;
+                        z-index: 2;
+                    "></div>
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 40px;
+                        height: 40px;
+                        background: rgba(59,130,246,0.3);
+                        border-radius: 50%;
+                        animation: pulse 2s infinite;
+                        z-index: 1;
+                    "></div>
+                </div>
+                <style>
+                    @keyframes pulse {
+                        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+                        100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+                    }
+                </style>
+            `;
+            const userMarker = new mapboxgl.Marker({ element: userEl })
+                .setLngLat([userLocation.lng, userLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
+                .addTo(map);
+            
+            userMarkerRef.current = userMarker;
+
+            // Add hostel location marker (red pin)
+            const hostelEl = document.createElement('div');
+            hostelEl.innerHTML = `
+                <div style="
+                    width: 36px;
+                    height: 36px;
+                    background: #ef4444;
+                    border: 4px solid white;
+                    border-radius: 50% 50% 50% 0;
+                    transform: rotate(-45deg);
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">
+                    <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
+                </div>
+            `;
+            new mapboxgl.Marker({ element: hostelEl })
+                .setLngLat([hostelLocation.lng, hostelLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
+                .addTo(map);
+
+            // Fit map to show entire route
+            const bounds = new mapboxgl.LngLatBounds();
+            bounds.extend([userLocation.lng, userLocation.lat]);
+            bounds.extend([hostelLocation.lng, hostelLocation.lat]);
+            routeGeometry.forEach(coord => bounds.extend(coord as [number, number]));
+            
+            map.fitBounds(bounds, {
+                padding: 60,
+                maxZoom: 16
+            });
+        });
+
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        
+        // Add geolocate control for "center on me" button
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: true
+            },
+            trackUserLocation: true,
+            showUserHeading: true
+        });
+        map.addControl(geolocate, 'top-right');
+
+        return () => {
+            map.remove();
+            mapInstanceRef.current = null;
+            userMarkerRef.current = null;
+        };
+    }, [hostelLocation, routeGeometry, hostelName]);
+
+    // Center map on user when tracking
+    const centerOnUser = () => {
+        if (mapInstanceRef.current && currentUserLocation) {
+            mapInstanceRef.current.flyTo({
+                center: [currentUserLocation.lng, currentUserLocation.lat],
+                zoom: 16,
+                duration: 1000
+            });
+        }
+    };
+
+    return (
+        <div className="relative h-full w-full">
+            {/* Map container - fills parent */}
+            <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" />
+            
+            {/* Legend and controls overlay */}
+            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
+                {/* Legend */}
+                <div className="bg-white/95 backdrop-blur-sm rounded-lg px-4 py-2 text-sm flex items-center gap-4 shadow-md">
+                    <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
+                        <span className="font-medium">You</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-sm"></span>
+                        <span className="font-medium">Hostel</span>
+                    </span>
+                </div>
+                
+                {/* Center on me button */}
+                <button
+                    onClick={centerOnUser}
+                    className="bg-white/95 backdrop-blur-sm rounded-lg px-4 py-2 text-sm font-medium shadow-md hover:bg-blue-50 transition-colors flex items-center gap-2"
+                >
+                    <Navigation className="h-4 w-4 text-blue-600" />
+                    Center on me
+                </button>
+            </div>
+            
+            {/* Live tracking indicator */}
+            <div className="absolute top-3 left-3 bg-green-500 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2 shadow-md">
+                <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                Live Tracking
+            </div>
+        </div>
+    );
+}
 
 type OnlineAgent = {
     clientId: string;
@@ -223,20 +494,23 @@ export default function TrackingPage() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(async (position) => {
                     try {
-                        const userLocation = {
+                        const userLoc = {
                             lat: position.coords.latitude,
                             lng: position.coords.longitude
                         };
 
                         const hostelLocation = {
-                            lat: hostel.lat,
-                            lng: hostel.lng
+                            lat: hostel.lat!,
+                            lng: hostel.lng!
                         };
 
-                        console.log('🎯 Getting directions from', userLocation, 'to', hostelLocation);
+                        console.log('🎯 Getting directions from', userLoc, 'to', hostelLocation);
+                        
+                        // Save user location for map display
+                        setUserLocation(userLoc);
                         
                         const routeResult = await combinedRoutingService.getDirections(
-                            userLocation,
+                            userLoc,
                             hostelLocation,
                             'walking' // Default to walking for students
                         );
@@ -349,49 +623,84 @@ export default function TrackingPage() {
                     Mark Visit as Complete
                 </Button>
                 
-                {/* Live Directions Display */}
-                {showDirections && route && (
-                    <Card className="mt-4">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="flex items-center gap-2 text-lg">
-                                <Route className="h-5 w-5 text-green-600" />
-                                Live Directions
-                                <Badge variant="secondary" className="ml-auto">
-                                    {route.provider}
-                                </Badge>
-                            </CardTitle>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                    <Clock className="h-4 w-4" />
-                                    {combinedRoutingService.formatDuration(route.duration)}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <MapPin className="h-4 w-4" />
-                                    {combinedRoutingService.formatDistance(route.distance)}
-                                </span>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {route.instructions.map((instruction, index) => (
-                                    <div key={index} className="flex gap-3 p-2 rounded-lg bg-muted/50">
-                                        <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-medium">
-                                            {index + 1}
-                                        </span>
-                                        <span className="text-sm">{instruction}</span>
-                                    </div>
-                                ))}
+                {/* Live Directions Display - Full Screen Overlay Style */}
+                {showDirections && route && userLocation && hostel && (
+                    <div className="fixed inset-0 z-50 bg-background">
+                        {/* Header */}
+                        <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
+                            <div>
+                                <h2 className="font-semibold text-lg flex items-center gap-2">
+                                    <Route className="h-5 w-5 text-green-600" />
+                                    Live Navigation
+                                </h2>
+                                <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                                    <span className="flex items-center gap-1">
+                                        <Clock className="h-4 w-4" />
+                                        {combinedRoutingService.formatDuration(route.duration)}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <MapPin className="h-4 w-4" />
+                                        {combinedRoutingService.formatDistance(route.distance)}
+                                    </span>
+                                    <Badge variant="secondary">
+                                        {route.provider}
+                                    </Badge>
+                                </div>
                             </div>
                             <Button 
                                 variant="outline" 
-                                size="sm" 
-                                className="w-full mt-3"
+                                size="sm"
                                 onClick={() => setShowDirections(false)}
                             >
-                                Hide Directions
+                                Close
                             </Button>
-                        </CardContent>
-                    </Card>
+                        </div>
+                        
+                        {/* Main Content - Map takes most space */}
+                        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
+                            {/* Map - Full width on mobile, 70% on desktop */}
+                            <div className="flex-1 lg:w-[70%] h-[50vh] lg:h-full">
+                                <DirectionsMap 
+                                    userLocation={userLocation}
+                                    hostelLocation={{ lat: hostel.lat!, lng: hostel.lng! }}
+                                    routeGeometry={route.geometry}
+                                    hostelName={hostel.name}
+                                />
+                            </div>
+                            
+                            {/* Instructions Panel - Below on mobile, Right side on desktop */}
+                            <div className="lg:w-[30%] h-[50vh] lg:h-full bg-white border-t lg:border-t-0 lg:border-l overflow-hidden flex flex-col">
+                                <div className="p-4 border-b bg-muted/30">
+                                    <h3 className="font-semibold flex items-center gap-2">
+                                        <Navigation className="h-4 w-4 text-blue-600" />
+                                        Turn-by-Turn Directions
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {route.instructions.length} steps to {hostel.name}
+                                    </p>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                    {route.instructions.map((instruction, index) => (
+                                        <div key={index} className="flex gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                                            <span className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white text-sm rounded-full flex items-center justify-center font-semibold">
+                                                {index + 1}
+                                            </span>
+                                            <span className="text-sm leading-relaxed pt-1">{instruction}</span>
+                                        </div>
+                                    ))}
+                                    {/* Destination */}
+                                    <div className="flex gap-3 p-3 rounded-lg bg-green-100 border border-green-200">
+                                        <span className="flex-shrink-0 w-8 h-8 bg-green-600 text-white text-sm rounded-full flex items-center justify-center">
+                                            🏠
+                                        </span>
+                                        <span className="text-sm font-medium text-green-800 pt-1">
+                                            Arrive at {hostel.name}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         )
