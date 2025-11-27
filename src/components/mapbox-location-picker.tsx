@@ -40,6 +40,7 @@ export interface RouteResult {
 class CombinedRoutingService {
   // API Keys for managed services
   private orsApiKey = process.env.NEXT_PUBLIC_OPENROUTE_API_KEY;
+  private tomtomApiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   private graphHopperApiKey = process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY;
   
   // Public OSRM Instances (Tertiary Fallback)
@@ -61,16 +62,25 @@ class CombinedRoutingService {
       console.warn(`❌ ORS failed/rate-limited: ${e.message}`);
     }
 
-    // 2. SECONDARY: GraphHopper (500 requests/day FREE)
+    // 2. SECONDARY: TomTom (2500 requests/day FREE)
     try {
-      console.log("🎯 Attempting GraphHopper (Secondary)...");
+      console.log("🎯 Attempting TomTom (Secondary)...");
+      result = await this.callTomTomService(start, end, profile);
+      if (result) return result;
+    } catch (e: any) {
+      console.warn(`❌ TomTom failed/rate-limited: ${e.message}`);
+    }
+
+    // 3. TERTIARY: GraphHopper (500 requests/day FREE)
+    try {
+      console.log("🎯 Attempting GraphHopper (Tertiary)...");
       result = await this.callGraphHopperService(start, end, profile);
       if (result) return result;
     } catch (e: any) {
       console.warn(`❌ GraphHopper failed/rate-limited: ${e.message}`);
     }
 
-    // 3. TERTIARY: Public OSRM Cascade (Unlimited but unreliable)
+    // 4. QUATERNARY: Public OSRM Cascade (Unlimited but unreliable)
     console.log("🎯 Attempting public OSRM servers (Tertiary)...");
     for (const server of this.publicOsrmServers) {
       try {
@@ -132,6 +142,97 @@ class CombinedRoutingService {
       instructions: segment.steps?.map((step: any) => step.instruction) || [],
       geometry: route.geometry?.coordinates || [],
       provider: 'OpenRouteService'
+    };
+  }
+
+  private async callTomTomService(start: RoutePoint, end: RoutePoint, profile: string): Promise<RouteResult | null> {
+    if (!this.tomtomApiKey || this.tomtomApiKey === 'your_tomtom_api_key_here') return null;
+
+    const travelMode = profile === 'walking' ? 'pedestrian' : 'car';
+    const locations = `${start.lat},${start.lng}:${end.lat},${end.lng}`;
+    
+    const url = `https://api.tomtom.com/routing/1/calculateRoute/${locations}/json?` +
+      `key=${this.tomtomApiKey}&` +
+      `travelMode=${travelMode}&` +
+      `instructionsType=text&` +
+      `language=en-US&` +
+      `routeType=fastest&` +
+      `guidance=instructionType`;
+
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      if (response.status === 429) throw new Error('Rate limit exceeded');
+      if (response.status === 403) throw new Error('Invalid API key');
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Validate response structure
+    if (!data.routes || !data.routes[0]) {
+      console.warn('TomTom returned invalid response:', data);
+      return null;
+    }
+    
+    const route = data.routes[0];
+    const summary = route.summary;
+    const legs = route.legs || [];
+    const guidance = route.guidance;
+    
+    // Extract instructions from guidance object (TomTom's detailed turn-by-turn)
+    const instructions: string[] = [];
+    
+    if (guidance?.instructions && guidance.instructions.length > 0) {
+      guidance.instructions.forEach((inst: any) => {
+        // Build human-readable instruction from TomTom's data
+        const message = inst.message || '';
+        const street = inst.street || '';
+        const maneuver = inst.maneuver || '';
+        
+        if (message) {
+          instructions.push(message);
+        } else if (maneuver && street) {
+          instructions.push(`${this.formatTomTomManeuver(maneuver)} onto ${street}`);
+        } else if (maneuver) {
+          instructions.push(this.formatTomTomManeuver(maneuver));
+        }
+      });
+    }
+    
+    // Fallback: try to extract from legs if guidance is empty
+    if (instructions.length === 0) {
+      legs.forEach((leg: any) => {
+        leg.points?.forEach((point: any) => {
+          if (point.instruction) {
+            instructions.push(point.instruction);
+          }
+        });
+      });
+    }
+    
+    // Final fallback
+    if (instructions.length === 0) {
+      instructions.push('Head towards your destination');
+      instructions.push('You have arrived at your destination');
+    }
+    
+    // Extract geometry from legs
+    const geometry: number[][] = [];
+    legs.forEach((leg: any) => {
+      leg.points?.forEach((point: any) => {
+        if (point.latitude && point.longitude) {
+          geometry.push([point.longitude, point.latitude]);
+        }
+      });
+    });
+
+    return {
+      distance: summary?.lengthInMeters || 0,
+      duration: summary?.travelTimeInSeconds || 0,
+      instructions,
+      geometry,
+      provider: 'TomTom'
     };
   }
 
@@ -259,6 +360,47 @@ class CombinedRoutingService {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     return `${hours}h ${remainingMinutes}m`;
+  }
+
+  // Convert TomTom maneuver codes to human-readable text
+  private formatTomTomManeuver(maneuver: string): string {
+    const maneuverMap: Record<string, string> = {
+      'ARRIVE': 'Arrive at your destination',
+      'ARRIVE_LEFT': 'Arrive at your destination on the left',
+      'ARRIVE_RIGHT': 'Arrive at your destination on the right',
+      'DEPART': 'Depart',
+      'STRAIGHT': 'Continue straight',
+      'KEEP_RIGHT': 'Keep right',
+      'BEAR_RIGHT': 'Bear right',
+      'TURN_RIGHT': 'Turn right',
+      'SHARP_RIGHT': 'Take a sharp right',
+      'KEEP_LEFT': 'Keep left',
+      'BEAR_LEFT': 'Bear left',
+      'TURN_LEFT': 'Turn left',
+      'SHARP_LEFT': 'Take a sharp left',
+      'MAKE_UTURN': 'Make a U-turn',
+      'ENTER_MOTORWAY': 'Enter the motorway',
+      'ENTER_FREEWAY': 'Enter the freeway',
+      'ENTER_HIGHWAY': 'Enter the highway',
+      'TAKE_EXIT': 'Take the exit',
+      'MOTORWAY_EXIT_LEFT': 'Take the exit on the left',
+      'MOTORWAY_EXIT_RIGHT': 'Take the exit on the right',
+      'TAKE_FERRY': 'Take the ferry',
+      'ROUNDABOUT_CROSS': 'Cross the roundabout',
+      'ROUNDABOUT_RIGHT': 'At the roundabout, turn right',
+      'ROUNDABOUT_LEFT': 'At the roundabout, turn left',
+      'ROUNDABOUT_BACK': 'At the roundabout, go back',
+      'TRY_MAKE_UTURN': 'Try to make a U-turn',
+      'FOLLOW': 'Follow the road',
+      'SWITCH_PARALLEL_ROAD': 'Switch to the parallel road',
+      'SWITCH_MAIN_ROAD': 'Switch to the main road',
+      'ENTRANCE_RAMP': 'Take the entrance ramp',
+      'WAYPOINT_LEFT': 'Waypoint on the left',
+      'WAYPOINT_RIGHT': 'Waypoint on the right',
+      'WAYPOINT_REACHED': 'Waypoint reached',
+    };
+    
+    return maneuverMap[maneuver] || maneuver.replace(/_/g, ' ').toLowerCase();
   }
 
   // Turn OSRM maneuvers into human-readable instructions
