@@ -278,8 +278,16 @@ export default function AgentUploadPage() {
             const batch = writeBatch(db);
             const hostelRef = doc(collection(db, 'pendingHostels'));
 
+            // Create a readable slug for easy identification in Firebase console
+            const slug = hostelName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                .substring(0, 50);
+
             batch.set(hostelRef, {
                 name: hostelName,
+                slug, // Readable identifier for developers
                 location: fullAddress || gpsLocation,
                 coordinates: latitude && longitude ? { lat: latitude, lng: longitude } : null,
                 nearbyLandmarks,
@@ -290,6 +298,7 @@ export default function AgentUploadPage() {
                 description: finalDescription,
                 status: 'pending',
                 agentId: currentUser.uid,
+                agentDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable agent ID
                 dateSubmitted: new Date().toISOString(),
                 availability: roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full',
                 distanceToUniversity: distanceToUni,

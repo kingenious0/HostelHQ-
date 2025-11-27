@@ -273,8 +273,16 @@ export default function AdminUploadPage() {
             const batch = writeBatch(db);
             const hostelRef = doc(collection(db, 'hostels'));
 
+            // Create a readable slug for easy identification in Firebase console
+            const slug = hostelName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                .substring(0, 50);
+
             batch.set(hostelRef, {
                 name: hostelName,
+                slug, // Readable identifier for developers
                 location: fullAddress || gpsLocation,
                 coordinates: latitude && longitude ? { lat: latitude, lng: longitude } : null,
                 nearbyLandmarks,
@@ -286,6 +294,7 @@ export default function AdminUploadPage() {
                 status: 'approved',
                 agentId: currentUser.uid, // Keep agentId for compatibility, but it's actually adminId
                 adminId: currentUser.uid, // Add adminId field
+                adminDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable admin ID
                 createdBy: 'admin', // Add createdBy field
                 approvedAt: new Date().toISOString(),
                 dateSubmitted: new Date().toISOString(),
