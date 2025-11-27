@@ -320,7 +320,7 @@ export default function AdminUploadPage() {
                 const capacityPerRoom = room.capacity ?? 0;
                 const roomTypeId = roomTypeRefs[index];
                 const explicitNumbers = room.roomNumbers || [];
-                const numberOfRooms = room.numberOfRooms ?? 0;
+                const numberOfRooms = room.numberOfRooms ?? 1; // Default to 1 room if not specified
 
                 if (!roomTypeId) return;
 
@@ -336,14 +336,15 @@ export default function AdminUploadPage() {
                             status: 'active',
                         });
                     });
-                } else if (numberOfRooms > 0) {
-                    // Fallback: auto-generate simple sequential numbers per type
+                } else {
+                    // Auto-generate rooms based on numberOfRooms (defaults to 1)
                     for (let i = 0; i < numberOfRooms; i++) {
                         const physicalRoomRef = doc(collection(hostelRef, 'rooms'));
-                        const rawNumber = `T${index + 1}-${i + 1}`;
-
+                        // Use simple sequential numbering: Room 1, Room 2, etc.
+                        // If multiple room types, prefix with type index to avoid duplicates
+                        const roomNum = roomTypes.length > 1 ? `${index + 1}-${i + 1}` : `${i + 1}`;
                         batch.set(physicalRoomRef, {
-                            roomNumber: `Room ${rawNumber}`,
+                            roomNumber: `Room ${roomNum}`,
                             roomTypeId,
                             capacity: capacityPerRoom,
                             currentOccupancy: 0,
