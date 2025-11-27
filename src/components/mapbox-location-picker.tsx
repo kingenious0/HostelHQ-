@@ -155,9 +155,8 @@ class CombinedRoutingService {
       `key=${this.tomtomApiKey}&` +
       `travelMode=${travelMode}&` +
       `instructionsType=text&` +
-      `language=en-US&` +
-      `routeType=fastest&` +
-      `guidance=instructionType`;
+      `language=en-GB&` +
+      `routeType=fastest`;
 
     const response = await fetch(url);
     
