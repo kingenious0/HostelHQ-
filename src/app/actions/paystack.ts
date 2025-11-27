@@ -35,7 +35,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
-    const headersList = headers();
+    const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
@@ -62,7 +62,9 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
             ? digitsOnly.slice(-3)
             : digitsOnly.padStart(3, '0');
         
-        return `VISIT-${namePart}${phonePart}`;
+        // Add timestamp to ensure uniqueness
+        const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
+        return `VISIT-${namePart}${phonePart}-${timestamp}`;
     };
     
     const paymentReference = generatePaymentReference();
@@ -109,9 +111,14 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
             reference: result.data.reference,
         };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error initializing Paystack transaction:", error);
-        return { status: false, message: "Could not connect to payment service." };
+        console.error("Error details:", {
+            name: error?.name,
+            message: error?.message,
+            cause: error?.cause,
+        });
+        return { status: false, message: `Could not connect to payment service. ${error?.message || ''}` };
     }
 }
 
@@ -126,7 +133,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
-    const headersList = headers();
+    const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     

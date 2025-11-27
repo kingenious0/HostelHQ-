@@ -5,10 +5,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Header } from '@/components/header';
 import { Agent, Hostel, getAgent, AppUser, getHostel } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Loader2, Home, UserCheck, Calendar, Clock, MapPin, CheckCheck, XCircle } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { MapPin, Clock, User, CheckCheck, Loader2, Calendar, Phone, MessageCircle, Navigation, Route, Home } from "lucide-react";
+import { combinedRoutingService, RouteResult } from "@/components/mapbox-location-picker";
 import { db, auth } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 import { MapboxMap } from '@/components/map';
@@ -58,6 +60,14 @@ export default function TrackingPage() {
     const [isCompleting, setIsCompleting] = useState(false);
     const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
     const previousAgentCompletedRef = useRef<boolean | null>(null);
+
+    // Directions state
+    const [route, setRoute] = useState<RouteResult | null>(null);
+    const [loadingDirections, setLoadingDirections] = useState(false);
+    const [showDirections, setShowDirections] = useState(false);
+    const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement | null>(null);
+    const mapRef = useRef<mapboxgl.Map | null>(null);
 
     const isSelfVisit = visit?.visitType === 'self';
 
@@ -195,6 +205,81 @@ export default function TrackingPage() {
         }
     }
 
+    // Get directions to hostel
+    const getDirections = async () => {
+        if (!hostel?.lat || !hostel?.lng) {
+            toast({
+                title: 'Location Error',
+                description: 'Hostel location not available.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setLoadingDirections(true);
+        
+        try {
+            // Get user's current location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    try {
+                        const userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+
+                        const hostelLocation = {
+                            lat: hostel.lat,
+                            lng: hostel.lng
+                        };
+
+                        console.log('🎯 Getting directions from', userLocation, 'to', hostelLocation);
+                        
+                        const routeResult = await combinedRoutingService.getDirections(
+                            userLocation,
+                            hostelLocation,
+                            'walking' // Default to walking for students
+                        );
+
+                        setRoute(routeResult);
+                        setShowDirections(true);
+                        
+                        toast({
+                            title: `Directions via ${routeResult.provider}`,
+                            description: `${combinedRoutingService.formatDistance(routeResult.distance)} • ${combinedRoutingService.formatDuration(routeResult.duration)}`,
+                        });
+                    } catch (error) {
+                        console.error('Failed to get directions:', error);
+                        toast({
+                            title: 'Directions Failed',
+                            description: 'Could not calculate route. Please try again.',
+                            variant: 'destructive',
+                        });
+                    } finally {
+                        setLoadingDirections(false);
+                    }
+                }, (error) => {
+                    setLoadingDirections(false);
+                    toast({
+                        title: 'Location Access Denied',
+                        description: 'Please enable location access to get directions.',
+                        variant: 'destructive',
+                    });
+                });
+            } else {
+                setLoadingDirections(false);
+                toast({
+                    title: 'Location Not Supported',
+                    description: 'Your browser does not support location services.',
+                    variant: 'destructive',
+                });
+            }
+        } catch (error) {
+            setLoadingDirections(false);
+            console.error('Directions error:', error);
+        }
+    };
+
     if (loading || !hostel || !visit) {
         return (
             <div className="flex flex-col min-h-screen">
@@ -246,13 +331,68 @@ export default function TrackingPage() {
                         </div>
                     </div>
                 </div>
-                <Button className="w-full" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${hostel.lat},${hostel.lng}`, '_blank')}>
-                    Open in Google Maps
+                <Button className="w-full" onClick={getDirections} disabled={loadingDirections}>
+                    {loadingDirections ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Getting Directions...
+                        </>
+                    ) : (
+                        <>
+                            <Navigation className="mr-2 h-4 w-4" />
+                            Get Live Directions
+                        </>
+                    )}
                 </Button>
                 <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
                     {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" /> }
                     Mark Visit as Complete
                 </Button>
+                
+                {/* Live Directions Display */}
+                {showDirections && route && (
+                    <Card className="mt-4">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                                <Route className="h-5 w-5 text-green-600" />
+                                Live Directions
+                                <Badge variant="secondary" className="ml-auto">
+                                    {route.provider}
+                                </Badge>
+                            </CardTitle>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                    <Clock className="h-4 w-4" />
+                                    {combinedRoutingService.formatDuration(route.duration)}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <MapPin className="h-4 w-4" />
+                                    {combinedRoutingService.formatDistance(route.distance)}
+                                </span>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {route.instructions.map((instruction, index) => (
+                                    <div key={index} className="flex gap-3 p-2 rounded-lg bg-muted/50">
+                                        <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                                            {index + 1}
+                                        </span>
+                                        <span className="text-sm">{instruction}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="w-full mt-3"
+                                onClick={() => setShowDirections(false)}
+                            >
+                                Hide Directions
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         )
     }

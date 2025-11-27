@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, PlusCircle, Trash2, BedDouble, ShieldCheck, FileText, Lightbulb } from 'lucide-react';
+import { MapPin, Upload, Trash2, Plus, PlusCircle, Loader2, Lightbulb, Sparkles, FileText, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { enhanceHostelDescription } from '@/ai/flows/enhance-hostel-description';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
@@ -21,6 +21,7 @@ import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import MapboxLocationPicker from '@/components/mapbox-location-picker';
 
 const hostelAmenitiesList = [
     'WiFi',
@@ -72,6 +73,9 @@ export default function AgentUploadPage() {
     const [photos, setPhotos] = useState<File[]>([]);
     const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
     const [gpsLocation, setGpsLocation] = useState('');
+    const [latitude, setLatitude] = useState<number | null>(null);
+    const [longitude, setLongitude] = useState<number | null>(null);
+    const [fullAddress, setFullAddress] = useState('');
     const [description, setDescription] = useState('');
     const [gender, setGender] = useState<string>('Mixed');
     const [roomTypes, setRoomTypes] = useState<Partial<RoomType>[]>([
@@ -276,7 +280,8 @@ export default function AgentUploadPage() {
 
             batch.set(hostelRef, {
                 name: hostelName,
-                location: gpsLocation,
+                location: fullAddress || gpsLocation,
+                coordinates: latitude && longitude ? { lat: latitude, lng: longitude } : null,
                 nearbyLandmarks,
                 rating: 0,
                 reviews: 0,
@@ -364,7 +369,70 @@ export default function AgentUploadPage() {
     };
 
 
+    const validateCurrentStep = () => {
+        if (step === 1) {
+            // Validate basic hostel info
+            if (!hostelName.trim()) {
+                toast({ title: 'Missing Information', description: 'Please enter a hostel name.', variant: 'destructive' });
+                return false;
+            }
+            if (!gender) {
+                toast({ title: 'Missing Information', description: 'Please select gender preference.', variant: 'destructive' });
+                return false;
+            }
+        }
+        
+        if (step === 2) {
+            // Validate room types
+            if (roomTypes.length === 0) {
+                toast({ title: 'Missing Information', description: 'Please add at least one room type.', variant: 'destructive' });
+                return false;
+            }
+            
+            for (const [index, room] of roomTypes.entries()) {
+                if (!room.name) {
+                    toast({ title: 'Missing Information', description: `Please select a room type name for Room Type ${index + 1}.`, variant: 'destructive' });
+                    return false;
+                }
+                if (!room.price || room.price <= 0) {
+                    toast({ title: 'Missing Information', description: `Please enter a valid price for Room Type ${index + 1}.`, variant: 'destructive' });
+                    return false;
+                }
+                if (!room.numberOfRooms || room.numberOfRooms <= 0) {
+                    toast({ title: 'Missing Information', description: `Please select the number of rooms for Room Type ${index + 1}.`, variant: 'destructive' });
+                    return false;
+                }
+                
+                // Check if room numbers are selected when numberOfRooms is set
+                const targetCount = room.numberOfRooms ?? 0;
+                const selectedCount = room.roomNumbers?.length ?? 0;
+                if (targetCount > 0 && selectedCount > 0 && selectedCount !== targetCount) {
+                    toast({
+                        title: 'Room Numbers Mismatch',
+                        description: `Room Type ${index + 1} must have exactly ${targetCount} room numbers selected (currently ${selectedCount}).`,
+                        variant: 'destructive',
+                    });
+                    return false;
+                }
+            }
+        }
+        
+        if (step === 4) {
+            // Validate location (photos and location step)
+            if (!latitude || !longitude) {
+                toast({ title: 'Missing Information', description: 'Please select the hostel location on the map.', variant: 'destructive' });
+                return false;
+            }
+        }
+        
+        return true;
+    };
+
     const nextStep = () => {
+        if (!validateCurrentStep()) {
+            return;
+        }
+        
         if (step < totalSteps) {
             setStep(s => s + 1);
         }
@@ -463,22 +531,42 @@ export default function AgentUploadPage() {
                                         <div key={index} className="flex flex-col gap-3 p-4 border rounded-lg relative">
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                                 <div className="space-y-2">
-                                                    <Label htmlFor={`room-name-${index}`}>Room Type Name</Label>
-                                                    <Input 
-                                                        id={`room-name-${index}`} 
-                                                        placeholder="e.g., 4 in a room, Annex"
-                                                        value={room.name}
-                                                        onChange={(e) => handleRoomTypeChange(index, 'name', e.target.value)}
-                                                    />
+                                                    <Label htmlFor={`room-name-${index}`}>Room Type Name *</Label>
+                                                    <Select 
+                                                        value={room.name} 
+                                                        onValueChange={(value) => handleRoomTypeChange(index, 'name', value)}
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select room type" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="1 IN A ROOM">1 IN A ROOM</SelectItem>
+                                                            <SelectItem value="2 IN A ROOM">2 IN A ROOM</SelectItem>
+                                                            <SelectItem value="3 IN A ROOM">3 IN A ROOM</SelectItem>
+                                                            <SelectItem value="4 IN A ROOM">4 IN A ROOM</SelectItem>
+                                                            <SelectItem value="5 IN A ROOM">5 IN A ROOM</SelectItem>
+                                                            <SelectItem value="6 IN A ROOM">6 IN A ROOM</SelectItem>
+                                                            <SelectItem value="7 IN A ROOM">7 IN A ROOM</SelectItem>
+                                                            <SelectItem value="8 IN A ROOM">8 IN A ROOM</SelectItem>
+                                                            <SelectItem value="9 IN A ROOM">9 IN A ROOM</SelectItem>
+                                                            <SelectItem value="10 IN A ROOM">10 IN A ROOM</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵)</Label>
+                                                    <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵) *</Label>
                                                     <Input
                                                         id={`room-price-${index}`}
                                                         type="number"
                                                         placeholder="3500"
-                                                        value={room.price}
-                                                        onChange={(e) => handleRoomTypeChange(index, 'price', Number(e.target.value))}
+                                                        value={room.price || ''}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value;
+                                                            // Allow empty string or valid numbers
+                                                            if (value === '' || !isNaN(Number(value))) {
+                                                                handleRoomTypeChange(index, 'price', value === '' ? 0 : Number(value));
+                                                            }
+                                                        }}
                                                     />
                                                 </div>
                                                 
@@ -490,7 +578,12 @@ export default function AgentUploadPage() {
                                                         min="1"
                                                         placeholder="e.g., 4"
                                                         value={room.capacity || ''}
-                                                        onChange={(e) => handleRoomTypeChange(index, 'capacity', Number(e.target.value) || 0)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value;
+                                                            if (value === '' || !isNaN(Number(value))) {
+                                                                handleRoomTypeChange(index, 'capacity', value === '' ? 0 : Number(value));
+                                                            }
+                                                        }}
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
@@ -501,7 +594,12 @@ export default function AgentUploadPage() {
                                                         min="0"
                                                         placeholder="e.g., 2"
                                                         value={room.occupancy || ''}
-                                                        onChange={(e) => handleRoomTypeChange(index, 'occupancy', Number(e.target.value) || 0)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value;
+                                                            if (value === '' || !isNaN(Number(value))) {
+                                                                handleRoomTypeChange(index, 'occupancy', value === '' ? 0 : Number(value));
+                                                            }
+                                                        }}
                                                         className={hasError ? 'border-red-500' : ''}
                                                     />
                                                     {hasError && (
@@ -509,15 +607,22 @@ export default function AgentUploadPage() {
                                                     )}
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor={`room-number-${index}`}>Number of Rooms (optional)</Label>
-                                                    <Input
-                                                        id={`room-number-${index}`}
-                                                        type="number"
-                                                        min="1"
-                                                        placeholder="e.g., 10"
-                                                        value={room.numberOfRooms || ''}
-                                                        onChange={(e) => handleRoomTypeChange(index, 'numberOfRooms', Number(e.target.value) || undefined)}
-                                                    />
+                                                    <Label htmlFor={`room-number-${index}`}>Number of Rooms *</Label>
+                                                    <Select 
+                                                        value={room.numberOfRooms ? String(room.numberOfRooms) : ''} 
+                                                        onValueChange={(value) => handleRoomTypeChange(index, 'numberOfRooms', Number(value))}
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select number of rooms" />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="max-h-60">
+                                                            {Array.from({ length: 200 }, (_, i) => i + 1).map((num) => (
+                                                                <SelectItem key={num} value={String(num)}>
+                                                                    {num} {num === 1 ? 'room' : 'rooms'}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
                                             </div>
                                             <div className="mt-4 space-y-2">
@@ -558,6 +663,40 @@ export default function AgentUploadPage() {
                                                         );
                                                     })}
                                                 </div>
+                                            </div>
+                                            <div className="mt-3 space-y-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <Label>Room Numbers (optional)</Label>
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        Pick real room numbers, or leave empty and we will auto-generate.
+                                                    </p>
+                                                </div>
+                                                <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
+                                                    <div className="grid grid-cols-6 gap-1 text-xs">
+                                                        {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
+                                                            const selected = (room.roomNumbers || []).includes(num);
+                                                            return (
+                                                                <button
+                                                                    key={num}
+                                                                    type="button"
+                                                                    onClick={() => toggleRoomNumberForType(index, num, !selected)}
+                                                                    className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
+                                                                        selected
+                                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                                            : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                                    }`}
+                                                                >
+                                                                    {num}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                {room.numberOfRooms && room.numberOfRooms > 0 && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        💡 You set {room.numberOfRooms} rooms. Select exactly {room.numberOfRooms} room numbers above, or leave empty for auto-generation.
+                                                    </p>
+                                                )}
                                             </div>
                                             <Button 
                                                 variant="ghost" 
@@ -656,11 +795,17 @@ export default function AgentUploadPage() {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="gps">GPS Location</Label>
-                                        <div className="relative">
-                                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input id="gps" placeholder="e.g., 5.6037, -0.1870" className="pl-10" value={gpsLocation} onChange={e => setGpsLocation(e.target.value)} />
-                                        </div>
+                                        <Label>Hostel Location</Label>
+                                        <MapboxLocationPicker
+                                            onLocationSelect={(location) => {
+                                                setLatitude(location.lat);
+                                                setLongitude(location.lng);
+                                                setFullAddress(location.address);
+                                                setGpsLocation(`${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`);
+                                            }}
+                                            initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : undefined}
+                                            initialAddress={fullAddress}
+                                        />
                                     </div>
                                      <div className="space-y-2">
                                         <Label htmlFor="description">Main Hostel Description</Label>
