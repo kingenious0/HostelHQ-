@@ -42,6 +42,154 @@ if (process.env.NEXT_PUBLIC_MAPBOX_API_KEY) {
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
 }
 
+// PreviewMap Component - Shows hostel location and user's "You are here" marker
+interface PreviewMapProps {
+    hostelLocation: { lat: number; lng: number };
+    userLocation?: { lat: number; lng: number } | null;
+    hostelName: string;
+}
+
+function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProps) {
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
+    const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+        // Calculate center - if user location exists, center between both points
+        const center: [number, number] = userLocation 
+            ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
+            : [hostelLocation.lng, hostelLocation.lat];
+
+        const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center,
+            zoom: userLocation ? 10 : 14,
+        });
+
+        mapInstanceRef.current = map;
+
+        map.on('load', () => {
+            // Add hostel marker
+            const hostelEl = document.createElement('div');
+            hostelEl.innerHTML = `
+                <div style="
+                    width: 40px;
+                    height: 40px;
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    border-radius: 50% 50% 50% 0;
+                    transform: rotate(-45deg);
+                    border: 3px solid white;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                ">
+                    <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
+                </div>
+            `;
+            new mapboxgl.Marker({ element: hostelEl })
+                .setLngLat([hostelLocation.lng, hostelLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
+                .addTo(map);
+
+            // Add user marker if location is available
+            if (userLocation) {
+                const userEl = document.createElement('div');
+                userEl.innerHTML = `
+                    <div style="
+                        width: 24px;
+                        height: 24px;
+                        background: #3b82f6;
+                        border-radius: 50%;
+                        border: 4px solid white;
+                        box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3);
+                        animation: pulse 2s infinite;
+                    "></div>
+                    <style>
+                        @keyframes pulse {
+                            0% { box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); }
+                            50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0,0,0,0.3); }
+                            100% { box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); }
+                        }
+                    </style>
+                `;
+                const marker = new mapboxgl.Marker({ element: userEl })
+                    .setLngLat([userLocation.lng, userLocation.lat])
+                    .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
+                    .addTo(map);
+                userMarkerRef.current = marker;
+
+                // Fit bounds to show both markers
+                const bounds = new mapboxgl.LngLatBounds();
+                bounds.extend([userLocation.lng, userLocation.lat]);
+                bounds.extend([hostelLocation.lng, hostelLocation.lat]);
+                map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+            }
+
+            // Add navigation controls
+            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            
+            // Add geolocate control for "find my location" button
+            const geolocate = new mapboxgl.GeolocateControl({
+                positionOptions: {
+                    enableHighAccuracy: true
+                },
+                trackUserLocation: false,
+                showUserHeading: false
+            });
+            map.addControl(geolocate, 'top-right');
+        });
+
+        return () => {
+            map.remove();
+            mapInstanceRef.current = null;
+        };
+    }, [hostelLocation, hostelName]); // Don't re-init on userLocation change
+
+    // Update user marker when location changes (without re-initializing map)
+    useEffect(() => {
+        if (!mapInstanceRef.current || !userLocation) return;
+        
+        const map = mapInstanceRef.current;
+        
+        if (userMarkerRef.current) {
+            userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+        } else {
+            // Create new marker if it doesn't exist
+            const userEl = document.createElement('div');
+            userEl.innerHTML = `
+                <div style="
+                    width: 24px;
+                    height: 24px;
+                    background: #3b82f6;
+                    border-radius: 50%;
+                    border: 4px solid white;
+                    box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3);
+                    animation: pulse 2s infinite;
+                "></div>
+            `;
+            const marker = new mapboxgl.Marker({ element: userEl })
+                .setLngLat([userLocation.lng, userLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
+                .addTo(map);
+            userMarkerRef.current = marker;
+
+            // Fit bounds to show both markers
+            const bounds = new mapboxgl.LngLatBounds();
+            bounds.extend([userLocation.lng, userLocation.lat]);
+            bounds.extend([hostelLocation.lng, hostelLocation.lat]);
+            map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+        }
+    }, [userLocation, hostelLocation]);
+
+    return (
+        <div ref={mapContainerRef} className="w-full h-full" />
+    );
+}
+
 // DirectionsMap Component - Visual map with route line and LIVE TRACKING
 interface DirectionsMapProps {
     userLocation: { lat: number; lng: number };
@@ -428,7 +576,27 @@ export default function TrackingPage() {
             unsubscribes.forEach(unsub => unsub());
         };
     }, [visitId, hostelId, router, toast, agent]);
-    
+
+    // Fetch user location on page load for self-visits (to show "You are here" marker)
+    useEffect(() => {
+        if (!isSelfVisit || userLocation) return;
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setUserLocation({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    });
+                },
+                (error) => {
+                    console.log('Could not get initial location:', error.message);
+                    // Silent fail - user can still use "Get Directions" button
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+    }, [isSelfVisit, userLocation]);
 
     const handleStudentComplete = async () => {
         if (!visitId) return;
@@ -965,7 +1133,15 @@ export default function TrackingPage() {
                     </Card>
                 </div>
                 <div className="relative bg-muted h-96 md:h-full">
-                   <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
+                   {isSelfVisit && hostel?.lat && hostel?.lng ? (
+                       <PreviewMap 
+                           hostelLocation={{ lat: hostel.lat, lng: hostel.lng }}
+                           userLocation={userLocation}
+                           hostelName={hostel.name}
+                       />
+                   ) : (
+                       <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
+                   )}
                 </div>
             </main>
         </div>
