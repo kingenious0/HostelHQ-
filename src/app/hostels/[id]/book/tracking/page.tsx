@@ -477,6 +477,33 @@ export default function TrackingPage() {
         }
     }
 
+    // Fast recalculation when switching travel modes (reuses existing location)
+    const recalculateRoute = async (mode: 'driving' | 'walking') => {
+        if (!userLocation || !hostel?.lat || !hostel?.lng) return;
+        
+        setLoadingDirections(true);
+        try {
+            const hostelLocation = { lat: hostel.lat!, lng: hostel.lng! };
+            console.log(`🔄 Recalculating route for ${mode}...`);
+            
+            const routeResult = await combinedRoutingService.getDirections(
+                userLocation,
+                hostelLocation,
+                mode
+            );
+            
+            setRoute(routeResult);
+            toast({
+                title: `${mode === 'driving' ? '🚗' : '🚶'} ${mode.charAt(0).toUpperCase() + mode.slice(1)} directions`,
+                description: `${combinedRoutingService.formatDistance(routeResult.distance)} • ${combinedRoutingService.formatDuration(routeResult.duration)}`,
+            });
+        } catch (error) {
+            console.error('Recalculation failed:', error);
+        } finally {
+            setLoadingDirections(false);
+        }
+    };
+
     // Get directions to hostel
     const getDirections = async () => {
         if (!hostel?.lat || !hostel?.lng) {
@@ -653,23 +680,25 @@ export default function TrackingPage() {
                                 <div className="flex items-center rounded-full border bg-muted/40 p-0.5 text-xs">
                                     <button
                                         type="button"
-                                        onClick={() => { setTravelMode('driving'); getDirections(); }}
+                                        disabled={loadingDirections}
+                                        onClick={() => { setTravelMode('driving'); recalculateRoute('driving'); }}
                                         className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
                                             travelMode === 'driving'
                                                 ? 'bg-blue-600 text-white'
                                                 : 'text-muted-foreground hover:bg-white'
-                                        }`}
+                                        } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
                                     >
                                         🚗 Drive
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => { setTravelMode('walking'); getDirections(); }}
+                                        disabled={loadingDirections}
+                                        onClick={() => { setTravelMode('walking'); recalculateRoute('walking'); }}
                                         className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
                                             travelMode === 'walking'
                                                 ? 'bg-blue-600 text-white'
                                                 : 'text-muted-foreground hover:bg-white'
-                                        }`}
+                                        } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
                                     >
                                         🚶 Walk
                                     </button>
