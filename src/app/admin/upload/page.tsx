@@ -316,26 +316,35 @@ export default function AdminUploadPage() {
             });
 
             // For each room type, create physical rooms under hostels/{hostelId}/rooms
-            roomTypes.forEach((room, index) => {
+            let totalRoomsCreated = 0;
+            
+            for (let index = 0; index < roomTypes.length; index++) {
+                const room = roomTypes[index];
                 const capacityPerRoom = room.capacity ?? 0;
                 const roomTypeId = roomTypeRefs[index];
                 const explicitNumbers = room.roomNumbers || [];
                 const numberOfRooms = room.numberOfRooms ?? 1; // Default to 1 room if not specified
 
-                if (!roomTypeId) return;
+                if (!roomTypeId) {
+                    console.warn(`[Room Creation] Skipping room type ${index} - no roomTypeId`);
+                    continue;
+                }
 
                 if (explicitNumbers.length > 0) {
                     // Use explicitly selected room numbers
-                    explicitNumbers.forEach((num) => {
+                    for (const num of explicitNumbers) {
                         const physicalRoomRef = doc(collection(hostelRef, 'rooms'));
-                        batch.set(physicalRoomRef, {
+                        const roomData = {
                             roomNumber: `Room ${num}`,
                             roomTypeId,
                             capacity: capacityPerRoom,
                             currentOccupancy: 0,
                             status: 'active',
-                        });
-                    });
+                        };
+                        batch.set(physicalRoomRef, roomData);
+                        totalRoomsCreated++;
+                        console.log(`[Room Creation] Created room:`, roomData);
+                    }
                 } else {
                     // Auto-generate rooms based on numberOfRooms (defaults to 1)
                     for (let i = 0; i < numberOfRooms; i++) {
@@ -343,16 +352,21 @@ export default function AdminUploadPage() {
                         // Use simple sequential numbering: Room 1, Room 2, etc.
                         // If multiple room types, prefix with type index to avoid duplicates
                         const roomNum = roomTypes.length > 1 ? `${index + 1}-${i + 1}` : `${i + 1}`;
-                        batch.set(physicalRoomRef, {
+                        const roomData = {
                             roomNumber: `Room ${roomNum}`,
                             roomTypeId,
                             capacity: capacityPerRoom,
                             currentOccupancy: 0,
                             status: 'active',
-                        });
+                        };
+                        batch.set(physicalRoomRef, roomData);
+                        totalRoomsCreated++;
+                        console.log(`[Room Creation] Created room:`, roomData);
                     }
                 }
-            });
+            }
+            
+            console.log(`[Room Creation] Total rooms to be created: ${totalRoomsCreated}`);
 
             await batch.commit();
 

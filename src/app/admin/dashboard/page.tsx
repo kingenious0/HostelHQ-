@@ -191,7 +191,18 @@ export default function AdminDashboard() {
             }
         }
 
-        // Delete the original pending document
+        // Copy all physical rooms from subcollection (pendingHostels/{id}/rooms -> hostels/{id}/rooms)
+        const pendingRoomsSnapshot = await getDocs(collection(pendingDocRef, 'rooms'));
+        if (!pendingRoomsSnapshot.empty) {
+            for (const roomDoc of pendingRoomsSnapshot.docs) {
+                const roomData = roomDoc.data();
+                const newRoomRef = doc(collection(approvedDocRef, 'rooms'));
+                batch.set(newRoomRef, roomData);
+            }
+            console.log(`[Approval] Copied ${pendingRoomsSnapshot.size} physical rooms to approved hostel`);
+        }
+
+        // Delete the original pending document (subcollections are NOT automatically deleted)
         batch.delete(pendingDocRef);
         
         // Commit the batch
