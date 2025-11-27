@@ -252,50 +252,54 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     const roomInventory = useMemo<RoomInventoryItem[]>(() => {
         const rooms = (hostel as any)?.rooms;
+        
+        // If we have physical rooms, show them
         if (Array.isArray(rooms) && rooms.length > 0) {
             return rooms.map((room: any, index: number) => {
-                const capacity = room.capacity ?? parseCapacityFromName(room.roomType ?? room.type);
+                // Find the matching room type to get price and other details
+                const matchingType = hostel.roomTypes?.find(
+                    (rt) => String(rt.id ?? '') === String(room.roomTypeId ?? '')
+                );
+                
+                const capacity = room.capacity ?? matchingType?.capacity ?? parseCapacityFromName(matchingType?.name ?? room.roomType ?? room.type);
                 const fallbackId = room.id ?? `room-${index}`;
-                const typeName = room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
-                const occupancyFromBookings = roomOccupancy[fallbackId] ?? roomOccupancy[typeName] ?? 0;
+                const typeName = matchingType?.name ?? room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
+                const occupancyFromBookings = roomOccupancy[fallbackId] ?? room.currentOccupancy ?? 0;
+                
                 return {
                     id: fallbackId,
                     label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
                     type: typeName,
-                    price: room.price ?? hostel.priceRange?.min ?? 0,
-                    occupancy: room.occupancy ?? room.occupants ?? occupancyFromBookings,
+                    price: matchingType?.price ?? room.price ?? hostel.priceRange?.min ?? 0,
+                    occupancy: occupancyFromBookings,
                     capacity: capacity ?? null,
-                    gender: room.gender ?? room.genderTag ?? 'Mixed',
+                    gender: room.gender ?? hostel.gender ?? 'Mixed',
                     image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
                 };
             });
         }
 
+        // Fallback: show room types as cards (for hostels without physical rooms)
         const types = hostel.roomTypes ?? [];
         if (types.length === 0) {
             return [];
         }
 
-        return types.flatMap((roomType, typeIndex) => {
-            const capacity = parseCapacityFromName(roomType.name);
+        return types.map((roomType, typeIndex) => {
+            const capacity = roomType.capacity ?? parseCapacityFromName(roomType.name);
             const roomTypeId = roomType.id ?? `roomType-${typeIndex}`;
-            const confirmedOccupants =
-                roomOccupancy[roomTypeId] ?? roomOccupancy[roomType.name] ?? 0;
-            const baseOccupancy = typeof (roomType as any).occupancy === 'number'
-                ? (roomType as any).occupancy
-                : confirmedOccupants;
-            const sampleSize = Math.max(2, Math.min(4, capacity ?? 3));
-
-            return Array.from({ length: sampleSize }, (_, idx) => ({
-                id: `${roomTypeId}-sample-${idx}`,
-                label: `Room #${typeIndex + 1}${String.fromCharCode(65 + idx)}`,
+            const confirmedOccupants = roomOccupancy[roomTypeId] ?? roomOccupancy[roomType.name] ?? 0;
+            
+            return {
+                id: roomTypeId,
+                label: roomType.name,
                 type: roomType.name,
                 price: roomType.price,
-                occupancy: baseOccupancy,
+                occupancy: confirmedOccupants,
                 capacity,
-                gender: idx % 2 === 0 ? 'Female' : 'Male',
-                image: primaryImages[(idx + typeIndex) % primaryImages.length],
-            }));
+                gender: hostel.gender ?? 'Mixed',
+                image: primaryImages[typeIndex % primaryImages.length],
+            };
         });
     }, [hostel, primaryImages, roomOccupancy]);
 

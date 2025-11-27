@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, Sparkles, MapPin, Loader2, AlertTriangle, DollarSign, Trash2, PlusCircle, ShieldCheck, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc as deleteRoomDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, getDocs, addDoc, deleteDoc as deleteRoomDoc, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { uploadImage } from '@/lib/cloudinary';
 import Image from 'next/image';
@@ -26,6 +26,19 @@ const amenitiesList = ['WiFi', 'Kitchen', 'Laundry', 'AC', 'Gym', 'Parking', 'St
 const billsIncludedList = ['Water', 'Refuse'];
 const billsExcludedList = ['Gas', 'Electricity'];
 const securitySafetyList = ['Security Alarm', 'Maintenance Team (24-hour on call)', 'Entire Building Fenced', 'Controlled Access Gate (24-hour)', 'Tanoso Police Station (close)'];
+const roomAmenitiesList = [
+    'Private Washroom',
+    'Shared Washroom',
+    'Mattress',
+    'Wardrobe',
+    'Furniture (Table, Chair)',
+    'TV',
+    'Ceiling Fan',
+    'Balcony',
+    'Private Kitchen',
+    'Shared Kitchen',
+    'AC',
+];
 
 
 type HostelData = Partial<Hostel>;
@@ -126,15 +139,35 @@ export default function EditListingPage() {
         setFormData(prev => ({ ...prev, [id]: value }));
     };
 
-    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number) => {
+    const handleRoomTypeChange = (index: number, field: keyof RoomType, value: string | number | undefined) => {
         const newRoomTypes = [...roomTypes];
         (newRoomTypes[index] as any)[field] = value;
         setRoomTypes(newRoomTypes);
     };
 
+    const toggleRoomNumberForType = (index: number, value: string, checked: boolean) => {
+        const newRoomTypes = [...roomTypes];
+        const current = newRoomTypes[index].roomNumbers || [];
+        const targetCount = newRoomTypes[index].numberOfRooms ?? 0;
+
+        if (checked && targetCount > 0 && current.length >= targetCount) {
+            toast({
+                title: 'Room number limit reached',
+                description: `You set Number of Rooms to ${targetCount}. You cannot select more than ${targetCount} room numbers.`,
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        newRoomTypes[index].roomNumbers = checked
+            ? Array.from(new Set([...current, value]))
+            : current.filter((v) => v !== value);
+        setRoomTypes(newRoomTypes);
+    };
+
     const addRoomType = () => {
         const newId = `new-${Date.now()}`;
-        setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0 }]);
+        setRoomTypes([...roomTypes, { id: newId, name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0, roomAmenities: [] }]);
     };
 
     const removeRoomType = (index: number) => {
@@ -233,13 +266,89 @@ export default function EditListingPage() {
                 await Promise.all(deletions);
             }
 
+            // Track room type IDs for creating physical rooms
+            const roomTypeRefs: { id: string; room: RoomType }[] = [];
+            
             for (const room of roomTypes) {
                 const { id: roomId, ...roomData } = room;
                 if (roomId && !roomId.startsWith('new-')) {
                     await updateDoc(doc(roomTypesCollection, roomId), roomData);
+                    roomTypeRefs.push({ id: roomId, room });
                 } else {
-                    await addDoc(roomTypesCollection, roomData);
+                    const newRef = await addDoc(roomTypesCollection, roomData);
+                    roomTypeRefs.push({ id: newRef.id, room });
                 }
+            }
+
+            // Now sync physical rooms based on numberOfRooms for each room type
+            const roomsCollection = collection(hostelRef, 'rooms');
+            const existingRoomsSnap = await getDocs(roomsCollection);
+            const existingRooms = existingRoomsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            
+            const batch = writeBatch(db);
+            let batchHasOperations = false;
+            
+            for (const { id: roomTypeId, room } of roomTypeRefs) {
+                const explicitNumbers = room.roomNumbers || [];
+                const numberOfRooms = room.numberOfRooms ?? 1;
+                const capacityPerRoom = room.capacity ?? 0;
+                const typeIndex = roomTypeRefs.findIndex(r => r.id === roomTypeId);
+                
+                // Get existing rooms for this room type
+                const existingForType = existingRooms.filter(r => r.roomTypeId === roomTypeId);
+                const currentCount = existingForType.length;
+                
+                // Determine target room count
+                const targetCount = explicitNumbers.length > 0 ? explicitNumbers.length : numberOfRooms;
+                
+                if (currentCount < targetCount) {
+                    // Need to create more rooms
+                    for (let i = currentCount; i < targetCount; i++) {
+                        const physicalRoomRef = doc(collection(hostelRef, 'rooms'));
+                        let roomNum: string;
+                        
+                        if (explicitNumbers.length > 0 && explicitNumbers[i]) {
+                            // Use explicit room number
+                            roomNum = explicitNumbers[i];
+                        } else {
+                            // Auto-generate room number
+                            roomNum = roomTypes.length > 1 
+                                ? `${typeIndex + 1}-${i + 1}` 
+                                : `${i + 1}`;
+                        }
+                        
+                        batch.set(physicalRoomRef, {
+                            roomNumber: `Room ${roomNum}`,
+                            roomTypeId,
+                            capacity: capacityPerRoom,
+                            currentOccupancy: 0,
+                            status: 'active',
+                        });
+                        batchHasOperations = true;
+                    }
+                } else if (currentCount > targetCount) {
+                    // Need to delete excess rooms (only delete rooms with 0 occupancy)
+                    const roomsToDelete = existingForType
+                        .filter(r => (r.currentOccupancy ?? 0) === 0)
+                        .slice(0, currentCount - targetCount);
+                    
+                    for (const roomToDelete of roomsToDelete) {
+                        batch.delete(doc(roomsCollection, roomToDelete.id));
+                        batchHasOperations = true;
+                    }
+                }
+                
+                // Update capacity for existing rooms of this type
+                for (const existingRoom of existingForType) {
+                    if (existingRoom.capacity !== capacityPerRoom) {
+                        batch.update(doc(roomsCollection, existingRoom.id), { capacity: capacityPerRoom });
+                        batchHasOperations = true;
+                    }
+                }
+            }
+            
+            if (batchHasOperations) {
+                await batch.commit();
             }
 
             const successMessage = isApprovedListing 
@@ -405,17 +514,99 @@ export default function EditListingPage() {
                                             )}
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor={`room-number-${index}`}>Number of Rooms (optional)</Label>
-                                            <Input
-                                                id={`room-number-${index}`}
-                                                type="number"
-                                                min="1"
-                                                placeholder="e.g., 10"
-                                                value={room.numberOfRooms || ''}
-                                                onChange={(e) => handleRoomTypeChange(index, 'numberOfRooms', Number(e.target.value) || undefined)}
-                                            />
+                                            <Label htmlFor={`room-number-${index}`}>Number of Rooms *</Label>
+                                            <Select 
+                                                value={room.numberOfRooms ? String(room.numberOfRooms) : ''} 
+                                                onValueChange={(value) => handleRoomTypeChange(index, 'numberOfRooms', Number(value))}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select number of rooms" />
+                                                </SelectTrigger>
+                                                <SelectContent className="max-h-60">
+                                                    {Array.from({ length: 200 }, (_, i) => i + 1).map((num) => (
+                                                        <SelectItem key={num} value={String(num)}>
+                                                            {num} {num === 1 ? 'room' : 'rooms'}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
+                                    
+                                    {/* Room Amenities */}
+                                    <div className="mt-4 space-y-2">
+                                        <Label>Room Amenities</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {roomAmenitiesList.map((amenity) => {
+                                                const currentAmenities = room.roomAmenities || [];
+                                                const checked = currentAmenities.includes(amenity);
+                                                return (
+                                                    <div key={amenity} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={`room-${index}-amenity-${amenity}`}
+                                                            checked={checked}
+                                                            onCheckedChange={(isChecked) => {
+                                                                const newRoomTypes = [...roomTypes];
+                                                                const rt = { ...(newRoomTypes[index] as RoomType) };
+                                                                const next = new Set(rt.roomAmenities || []);
+                                                                if (isChecked) {
+                                                                    next.add(amenity);
+                                                                } else {
+                                                                    next.delete(amenity);
+                                                                }
+                                                                rt.roomAmenities = Array.from(next);
+                                                                newRoomTypes[index] = rt;
+                                                                setRoomTypes(newRoomTypes);
+                                                            }}
+                                                        />
+                                                        <label
+                                                            htmlFor={`room-${index}-amenity-${amenity}`}
+                                                            className="text-xs sm:text-sm"
+                                                        >
+                                                            {amenity}
+                                                        </label>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Room Numbers Selection */}
+                                    <div className="mt-3 space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <Label>Room Numbers (optional)</Label>
+                                            <p className="text-[11px] text-muted-foreground">
+                                                Pick real room numbers, or leave empty for auto-generation.
+                                            </p>
+                                        </div>
+                                        <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
+                                            <div className="grid grid-cols-6 gap-1 text-xs">
+                                                {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
+                                                    const selected = (room.roomNumbers || []).includes(num);
+                                                    return (
+                                                        <button
+                                                            key={num}
+                                                            type="button"
+                                                            onClick={() => toggleRoomNumberForType(index, num, !selected)}
+                                                            className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
+                                                                selected
+                                                                    ? 'border-primary bg-primary text-primary-foreground'
+                                                                    : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                            }`}
+                                                        >
+                                                            {num}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        {room.numberOfRooms && room.numberOfRooms > 0 && (
+                                            <p className="text-xs text-muted-foreground">
+                                                💡 You set {room.numberOfRooms} rooms. Select exactly {room.numberOfRooms} room numbers above, or leave empty for auto-generation.
+                                            </p>
+                                        )}
+                                    </div>
+                                    
                                     <Button 
                                         variant="ghost" 
                                         size="icon" 

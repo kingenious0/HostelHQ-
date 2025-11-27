@@ -361,17 +361,25 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             const totalRating = reviewsWithUserData.reduce((acc, review) => acc + review.rating, 0);
             const averageRating = reviewsWithUserData.length > 0 ? totalRating / reviewsWithUserData.length : 0;
 
+            // Get lat/lng from either top-level fields or nested coordinates object
+            const hostelLat = typeof data.lat === 'number' 
+                ? data.lat 
+                : (typeof data.coordinates?.lat === 'number' ? data.coordinates.lat : null);
+            const hostelLng = typeof data.lng === 'number' 
+                ? data.lng 
+                : (typeof data.coordinates?.lng === 'number' ? data.coordinates.lng : null);
+            
             return convertTimestamps({ 
                 id: hostelDoc.id, 
                 ...data, 
                 roomTypes,
                 rooms,
                 priceRange, 
-                lat: typeof data.lat === 'number' ? data.lat : staticHostels[0].lat, 
-                lng: typeof data.lng === 'number' ? data.lng : staticHostels[0].lng, 
+                lat: hostelLat ?? staticHostels[0].lat, 
+                lng: hostelLng ?? staticHostels[0].lng, 
                 reviews: reviewsWithUserData, 
                 rating: averageRating,
-                numberOfReviews: reviewsWithUserData.length // Add this line
+                numberOfReviews: reviewsWithUserData.length
             }) as Hostel;
         }
     } catch(e) {

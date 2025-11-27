@@ -9,14 +9,11 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/c
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {AlertTriangle, Edit, Loader2, PlusCircle, Repeat, Trash2, Users} from "lucide-react";
 import {db, auth} from "@/lib/firebase";
-import {collection, doc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, addDoc} from "firebase/firestore";
+import {collection, doc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc} from "firebase/firestore";
 import {onAuthStateChanged, type User} from "firebase/auth";
-import type {Hostel, RoomType, Room} from "@/lib/data";
+import type {Hostel, RoomType} from "@/lib/data";
 import {useToast} from "@/hooks/use-toast";
 
 type ListingRow = {
@@ -62,16 +59,6 @@ export default function AdminListingsPage() {
   const [approvedHostels, setApprovedHostels] = useState<ListingRow[]>([]);
   const [pendingHostels, setPendingHostels] = useState<ListingRow[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [roomsDialogOpen, setRoomsDialogOpen] = useState(false);
-  const [roomsHostelId, setRoomsHostelId] = useState<string | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [loadingRooms, setLoadingRooms] = useState(false);
-  const [newRoomNumber, setNewRoomNumber] = useState("");
-  const [newRoomTypeId, setNewRoomTypeId] = useState<string>("");
-  const [newRoomCapacity, setNewRoomCapacity] = useState("");
-  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
-  const [editRoomNumber, setEditRoomNumber] = useState("");
-  const [savingRoomEdit, setSavingRoomEdit] = useState(false);
   const {toast} = useToast();
   const router = useRouter();
 
@@ -140,109 +127,6 @@ export default function AdminListingsPage() {
       toast({title: "Failed to delete hostel", variant: "destructive"});
     } finally {
       setProcessingId(null);
-    }
-  };
-
-  const openRoomsDialogForHostel = async (hostelId: string) => {
-    setRoomsHostelId(hostelId);
-    setRoomsDialogOpen(true);
-    setLoadingRooms(true);
-    setNewRoomNumber("");
-    setNewRoomTypeId("");
-    setNewRoomCapacity("");
-    setEditingRoomId(null);
-    setEditRoomNumber("");
-
-    try {
-      const roomsCol = collection(db, "hostels", hostelId, "rooms");
-      const snap = await getDocs(roomsCol);
-      const list: Room[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Room) }));
-      setRooms(list);
-    } catch (error) {
-      console.error("Error loading rooms for hostel", hostelId, error);
-      toast({ title: "Could not load rooms", variant: "destructive" });
-    } finally {
-      setLoadingRooms(false);
-    }
-  };
-
-  const handleCreateRoom = async () => {
-    if (!roomsHostelId) return;
-    if (!newRoomNumber.trim() || !newRoomTypeId || !newRoomCapacity) {
-      toast({ title: "Missing room details", description: "Please enter room number, type and capacity.", variant: "destructive" });
-      return;
-    }
-    const capacity = Number(newRoomCapacity);
-    if (Number.isNaN(capacity) || capacity <= 0) {
-      toast({ title: "Invalid capacity", description: "Capacity must be a positive number.", variant: "destructive" });
-      return;
-    }
-
-    try {
-      const roomsCol = collection(db, "hostels", roomsHostelId, "rooms");
-      const newRoom: Omit<Room, "id"> = {
-        roomNumber: newRoomNumber.trim(),
-        roomTypeId: newRoomTypeId,
-        capacity,
-        currentOccupancy: 0,
-        status: "active",
-      };
-      const ref = await addDoc(roomsCol, newRoom);
-      setRooms((prev) => [...prev, { ...newRoom, id: ref.id }]);
-      setNewRoomNumber("");
-      setNewRoomTypeId("");
-      setNewRoomCapacity("");
-      toast({ title: "Room created", description: `Room ${newRoom.roomNumber} has been added.` });
-    } catch (error) {
-      console.error("Error creating room:", error);
-      toast({ title: "Could not create room", description: "Please try again later.", variant: "destructive" });
-    }
-  };
-
-  const startEditRoom = (room: Room) => {
-    setEditingRoomId(room.id ?? null);
-    const raw = room.roomNumber || "";
-    setEditRoomNumber(raw.toLowerCase().startsWith("room ") ? raw.slice(5) : raw);
-  };
-
-  const saveRoomEdit = async () => {
-    if (!roomsHostelId || !editingRoomId) return;
-    const trimmed = editRoomNumber.trim();
-    if (!trimmed) {
-      toast({ title: "Missing room number", description: "Please enter a room number.", variant: "destructive" });
-      return;
-    }
-    try {
-      setSavingRoomEdit(true);
-      const ref = doc(db, 'hostels', roomsHostelId, 'rooms', editingRoomId);
-      const roomNumber = trimmed.toLowerCase().startsWith("room ") ? trimmed : `Room ${trimmed}`;
-      await updateDoc(ref, { roomNumber });
-      setRooms((prev) => prev.map((r) => (r.id === editingRoomId ? { ...r, roomNumber } : r)));
-      setEditingRoomId(null);
-      setEditRoomNumber('');
-      toast({ title: "Room updated", description: `Room number updated to ${roomNumber}.` });
-    } catch (error) {
-      console.error("Error updating room:", error);
-      toast({ title: "Could not update room", description: "Please try again later.", variant: "destructive" });
-    } finally {
-      setSavingRoomEdit(false);
-    }
-  };
-
-  const handleDeleteRoom = async (room: Room) => {
-    if (!roomsHostelId || !room.id) return;
-    
-    if (!confirm(`Are you sure you want to delete room "${room.roomNumber}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, 'hostels', roomsHostelId, 'rooms', room.id));
-      setRooms((prev) => prev.filter((r) => r.id !== room.id));
-      toast({ title: 'Room deleted', description: `Room "${room.roomNumber}" has been deleted.` });
-    } catch (error) {
-      console.error("Error deleting room:", error);
-      toast({ title: "Could not delete room", description: "Please try again later.", variant: "destructive" });
     }
   };
 
@@ -376,13 +260,6 @@ export default function AdminListingsPage() {
                             Edit
                           </Button>
                           <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openRoomsDialogForHostel(hostel.id)}
-                          >
-                            Manage Rooms
-                          </Button>
-                          <Button
                             variant="ghost"
                             size="icon"
                             className="h-9 w-9"
@@ -482,154 +359,6 @@ export default function AdminListingsPage() {
         </div>
       </main>
 
-      {/* Manage Rooms dialog for admins */}
-      <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Manage Rooms</DialogTitle>
-            <DialogDescription>
-              Create and view numbered rooms for this hostel. Students will be able to pick from these rooms when securing a bed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Existing rooms</h3>
-              {loadingRooms ? (
-                <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : rooms.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No rooms added yet for this hostel.</p>
-              ) : (
-                <div className="max-h-60 overflow-y-auto rounded-md border border-muted/40">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Room</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="w-32">Actions</TableHead>
-                        <TableHead className="text-right">Occupancy</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rooms.map((room) => {
-                        const hostel =
-                          approvedHostels.find((h) => h.id === roomsHostelId) ||
-                          pendingHostels.find((h) => h.id === roomsHostelId);
-                        const matchingType = hostel?.roomTypes?.find(
-                          (rt) => String(rt.id ?? "") === String(room.roomTypeId ?? "")
-                        );
-                        const typeName =
-                          (matchingType && matchingType.name) ||
-                          room.roomTypeId ||
-                          "Unknown type";
-                        return (
-                          <TableRow key={room.id}>
-                            <TableCell className="font-medium">
-                              {editingRoomId === room.id ? (
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    value={editRoomNumber}
-                                    onChange={(e) => setEditRoomNumber(e.target.value)}
-                                    className="h-8 max-w-[140px]"
-                                  />
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={saveRoomEdit}
-                                    disabled={savingRoomEdit}
-                                  >
-                                    {savingRoomEdit ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      "✓"
-                                    )}
-                                  </Button>
-                                </div>
-                              ) : (
-                                room.roomNumber || "—"
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {typeName}
-                            </TableCell>
-                            <TableCell>
-                              {editingRoomId !== room.id && (
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="xs"
-                                    onClick={() => startEditRoom(room)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="xs"
-                                    onClick={() => handleDeleteRoom(room)}
-                                    className="text-red-600 hover:text-red-700 hover:border-red-300"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-sm text-muted-foreground">
-                              {room.currentOccupancy} / {room.capacity}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3 border-t border-muted/40 pt-4">
-              <h3 className="text-sm font-medium">Add a new room</h3>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1">
-                  <Label htmlFor="roomNumber">Room number</Label>
-                  <Input
-                    id="roomNumber"
-                    placeholder="101, B12..."
-                    value={newRoomNumber}
-                    onChange={(e) => setNewRoomNumber(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="roomType">Room type ID</Label>
-                  <Input
-                    id="roomType"
-                    placeholder="roomTypeId"
-                    value={newRoomTypeId}
-                    onChange={(e) => setNewRoomTypeId(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="capacity">Capacity</Label>
-                  <Input
-                    id="capacity"
-                    type="number"
-                    min={1}
-                    value={newRoomCapacity}
-                    onChange={(e) => setNewRoomCapacity(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <Button type="button" size="sm" onClick={handleCreateRoom}>
-                  Add room
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
