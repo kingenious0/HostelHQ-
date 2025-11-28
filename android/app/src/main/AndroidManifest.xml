@@ -9,9 +9,9 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <!-- Video Splash Screen Activity -->
+        <!-- Image Splash Screen Activity -->
         <activity
-            android:name=".VideoSplashActivity"
+            android:name=".ImageSplashActivity"
             android:label="@string/app_name"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:screenOrientation="portrait"
