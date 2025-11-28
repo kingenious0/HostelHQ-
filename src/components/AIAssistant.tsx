@@ -186,10 +186,10 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-[9999]"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-[9999]"
         size="icon"
       >
-        <MessageCircle className="h-6 w-6" />
+        <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />
         <span className="sr-only">Open AI Assistant</span>
       </Button>
     );
@@ -198,8 +198,8 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
   return (
     <Card 
       className={cn(
-        "fixed bottom-6 right-6 w-96 shadow-2xl border-0 z-[9999] transition-all duration-200",
-        isMinimized ? "h-16" : "h-[600px]"
+        "fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-96 max-w-md shadow-2xl border-0 z-[9999] transition-all duration-200",
+        isMinimized ? "h-16" : "h-[70vh] sm:h-[600px]"
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 bg-primary text-primary-foreground rounded-t-lg">
@@ -231,7 +231,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
       </CardHeader>
 
       {!isMinimized && (
-        <CardContent className="flex flex-col h-[calc(600px-80px)] p-0">
+        <CardContent className="flex flex-col h-[calc(70vh-4rem)] sm:h-[calc(600px-4rem)] p-0">
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
               {messages.map((message) => (
@@ -249,7 +249,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                   )}
                   
                   <div className={cn(
-                    "max-w-[80%] rounded-lg px-3 py-2 text-sm",
+                    "max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 text-sm break-words",
                     message.role === 'user' 
                       ? "bg-primary text-primary-foreground ml-auto" 
                       : "bg-muted"
@@ -259,13 +259,13 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                     {message.suggestedActions && message.suggestedActions.length > 0 && (
                       <div className="mt-3 space-y-2">
                         <p className="text-xs opacity-70">Suggested actions:</p>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1 sm:gap-2">
                           {message.suggestedActions.map((action, index) => (
                             <Button
                               key={index}
                               variant="outline"
                               size="sm"
-                              className="h-7 text-xs"
+                              className="h-7 text-xs px-2 sm:px-3"
                               onClick={() => handleSuggestedAction(action)}
                             >
                               {action.label}
@@ -321,7 +321,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
 
           {/* Quick Questions */}
           {messages.length === 1 && (
-            <div className="px-4 py-2 border-t bg-muted/30">
+            <div className="px-3 sm:px-4 py-2 border-t bg-muted/30">
               <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                 <HelpCircle className="h-3 w-3" />
                 Quick questions:
@@ -332,7 +332,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                     key={index}
                     variant="ghost"
                     size="sm"
-                    className="h-6 text-xs px-2 text-muted-foreground hover:text-foreground"
+                    className="h-6 text-xs px-1 sm:px-2 text-muted-foreground hover:text-foreground text-left"
                     onClick={() => handleQuickQuestion(question)}
                   >
                     {question}
@@ -343,20 +343,21 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
           )}
 
           {/* Input Area */}
-          <div className="p-4 border-t">
+          <div className="p-3 sm:p-4 border-t">
             <div className="flex gap-2">
               <Input
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Ask me anything about hostels..."
-                className="flex-1"
+                className="flex-1 text-sm"
                 disabled={isLoading}
               />
               <Button
                 onClick={handleSendMessage}
                 disabled={!inputMessage.trim() || isLoading}
                 size="icon"
+                className="shrink-0"
               >
                 <Send className="h-4 w-4" />
               </Button>
