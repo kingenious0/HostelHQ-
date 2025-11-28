@@ -121,10 +121,23 @@ export async function generateAndSendOTP(
     let responseData;
     try {
       const responseText = await response.text();
+      
+      // Check if response is HTML (error page) instead of JSON
+      if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
+        console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
+        return {
+          success: false,
+          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+        };
+      }
+      
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
-      responseData = { message: 'Invalid response from SMS service' };
+      return {
+        success: false,
+        error: 'Invalid response from SMS service. Please try again later.',
+      };
     }
 
     console.log('Wigal OTP Generate Response:', {
@@ -229,10 +242,23 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
     let responseData;
     try {
       const responseText = await response.text();
+      
+      // Check if response is HTML (error page) instead of JSON
+      if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
+        console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
+        return {
+          success: false,
+          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+        };
+      }
+      
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
-      responseData = { message: 'Invalid response from SMS service' };
+      return {
+        success: false,
+        error: 'Invalid response from SMS service. Please try again later.',
+      };
     }
 
     console.log('Wigal OTP Verify Response:', {
@@ -337,10 +363,23 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
     let responseData;
     try {
       const responseText = await response.text();
+      
+      // Check if response is HTML (error page) instead of JSON
+      if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
+        console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
+        return {
+          success: false,
+          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+        };
+      }
+      
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
-      responseData = { message: 'Invalid response from SMS service' };
+      return {
+        success: false,
+        error: 'Invalid response from SMS service. Please try again later.',
+      };
     }
 
     console.log('Wigal SMS Send Response:', {
