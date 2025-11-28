@@ -9,6 +9,22 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- Video Splash Screen Activity -->
+        <activity
+            android:name=".VideoSplashActivity"
+            android:label="@string/app_name"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:screenOrientation="portrait"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- Main Activity (now not launcher) -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"
@@ -17,9 +33,13 @@
             android:launchMode="singleTask"
             android:exported="true">
 
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+            <!-- App Links for hostel-hq.vercel.app -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="hostel-hq.vercel.app" />
             </intent-filter>
 
         </activity>

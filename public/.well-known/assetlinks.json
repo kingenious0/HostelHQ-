@@ -1,0 +1,9 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.hostelhq.app",
+    "sha256_cert_fingerprints":
+    ["71:A3:6F:C3:82:1E:DD:B8:EA:4A:E0:67:79:AB:8A:EC:9C:A9:31:B5:A4:46:CC:80:9D:BA:C7:A4:A6:8C:D2:47"]
+  }
+}]

@@ -173,7 +173,7 @@ function SchedulingContent() {
                         const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
                         const dashboardUrl = `${baseUrl}/agent/dashboard`;
 
-                        const message = `🔔 NEW VISIT REQUEST!\n\n${studentName} wants to visit ${hostelName} on ${visitDateFormatted}${existingVisitTime ? ` at ${existingVisitTime}` : ''}.\n\n👉 Open your dashboard: ${dashboardUrl}\n\nLog in to accept or decline this request.`;
+                        const message = `A NEW VISIT REQUEST!\n\n${studentName} wants to visit ${hostelName} on ${visitDateFormatted}${existingVisitTime ? ` at ${existingVisitTime}` : ''}.\n\n Open your dashboard: ${dashboardUrl}\n\nLog in to accept or decline this request.`;
 
                         const smsResponse = await fetch('/api/sms/send-notification', {
                             method: 'POST',

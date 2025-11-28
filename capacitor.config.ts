@@ -6,18 +6,18 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     // This points to your deployed web app. Update if you change domains.
-    url: 'https://hostelhq.vercel.app',
+    url: 'https://hostel-hq.vercel.app',
     cleartext: true,
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
-      launchAutoHide: true,
+      launchShowDuration: 0, // We'll control this manually for video
+      launchAutoHide: false, // Don't auto-hide, video will control it
       backgroundColor: '#0F172A', // Dark background matching your app theme
-      showSpinner: true,
-      spinnerColor: '#3B82F6', // Blue spinner
+      showSpinner: false, // Hide spinner for video
       splashFullScreen: true,
       splashImmersive: true,
+      launchFadeOutDuration: 300,
     },
     StatusBar: {
       style: 'DARK', // Light text on dark background
