@@ -104,19 +104,41 @@ Action required: Please review and approve/reject in admin dashboard.
 
 Login: https://hostel-hq.vercel.app/admin/dashboard`;
 
-  const admins = await getAdminUsers();
-  const adminPhones = admins.map(admin => admin.phone).filter(Boolean);
+  try {
+    // Get all admin users with phone numbers
+    const adminUsers = await getAdminUsers();
+    
+    if (adminUsers.length === 0) {
+      console.log('No admin users with phone numbers found');
+      return { success: false, message: 'No admin phone numbers configured' };
+    }
 
-  if (adminPhones.length === 0) {
-    console.warn('No admin phone numbers found for SMS notifications');
-    return { success: false, message: 'No admin phone numbers available' };
+    const phoneNumbers = adminUsers.map(admin => admin.phone);
+    
+    // Send SMS via API route (server-side)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sms/send-admin-notification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: phoneNumbers,
+        message: message,
+        type: 'hostel_submission'
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      console.log(`✅ Admin SMS notification sent for hostel: ${hostelName}`);
+    } else {
+      console.error(`❌ Failed to send admin SMS for hostel: ${hostelName}`, result.error);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error notifying admins of new hostel submission:', error);
+    return { success: false, error: error.message };
   }
-
-  return await sendAdminSMSNotification({
-    to: adminPhones,
-    message,
-    type: 'hostel_submission'
-  });
 }
 
 /**
@@ -145,9 +167,22 @@ Your hostel ${actionText}`;
     message += `\n\nStudents can now book visits and secure rooms at your hostel!`;
   }
 
-  return await sendAdminSMSNotification({
-    to: [creatorPhone],
-    message,
-    type: status === 'approved' ? 'hostel_approval' : 'hostel_rejection'
-  });
+  try {
+    // Send SMS via API route (server-side)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sms/send-admin-notification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: [creatorPhone],
+        message,
+        type: status === 'approved' ? 'hostel_approval' : 'hostel_rejection'
+      })
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error notifying creator of hostel status:', error);
+    return { success: false, error: error.message };
+  }
 }

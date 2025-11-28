@@ -86,13 +86,21 @@ export default function AdminSettingsPage() {
         }
 
         try {
-            // Import and use the Wigal SMS service directly
-            const { sendSMS } = await import('@/lib/wigal');
             const message = `🧪 HOSTELHQ: Test SMS notification\n\nThis is a test message from HostelHQ admin panel. Your SMS notifications are working correctly!\n\nAdmin: ${fullName}`;
             
-            const result = await sendSMS(phone, message, `TEST${Date.now()}`);
+            const response = await fetch('/api/sms/send-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone: phone,
+                    message: message,
+                    adminName: fullName
+                })
+            });
+
+            const data = await response.json();
             
-            if (result.success) {
+            if (data.success) {
                 toast({ 
                     title: "Test SMS Sent via Wigal", 
                     description: "Check your phone for the test message from HostelHQ." 
@@ -100,7 +108,7 @@ export default function AdminSettingsPage() {
             } else {
                 toast({ 
                     title: "SMS Failed", 
-                    description: result.error || "Failed to send test SMS via Wigal.", 
+                    description: data.error || "Failed to send test SMS via Wigal.", 
                     variant: 'destructive' 
                 });
             }
