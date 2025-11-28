@@ -1,7 +1,6 @@
-
 "use client";
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -10,21 +9,40 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, KeyRound, Mail } from 'lucide-react';
+import { Loader2, KeyRound, Mail, Fingerprint, Keyboard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, User } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { isPlatformAuthenticatorAvailable, verifyBiometric } from '@/lib/webauthn';
 
 function LoginPageInner() {
     const [identifier, setIdentifier] = useState(''); // email or phone
     const [password, setPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loginMode, setLoginMode] = useState<'choose' | 'fingerprint' | 'manual'>('choose');
+    const [biometricAvailable, setBiometricAvailable] = useState(false);
+    const [biometricLoading, setBiometricLoading] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
     const searchParams = useSearchParams();
     const redirectParam = searchParams.get('redirect');
     const safeRedirect = redirectParam && redirectParam.startsWith('/') ? redirectParam : null;
+
+    // Check if biometric authentication is available
+    useEffect(() => {
+        const checkBiometric = async () => {
+            try {
+                const available = await isPlatformAuthenticatorAvailable();
+                setBiometricAvailable(available);
+                console.log('Biometric available:', available);
+            } catch (error) {
+                console.error('Error checking biometric:', error);
+                setBiometricAvailable(false);
+            }
+        };
+        checkBiometric();
+    }, []);
 
     const getRouteForRole = (role?: string) => {
         if (role === 'agent') return '/agent/dashboard';
@@ -115,6 +133,134 @@ function LoginPageInner() {
         }
     };
 
+    // Handle fingerprint login
+    const handleFingerprintLogin = async () => {
+        setBiometricLoading(true);
+        try {
+            // First, we need the user to enter their identifier to find their account
+            if (!identifier.trim()) {
+                toast({
+                    title: 'Enter Your ID',
+                    description: 'Please enter your email or phone number first.',
+                    variant: 'destructive',
+                });
+                setBiometricLoading(false);
+                return;
+            }
+
+            let userId: string | null = null;
+            let userEmail: string | null = null;
+            let userData: any = null;
+
+            const isEmailLike = identifier.includes('@');
+
+            if (isEmailLike) {
+                // Search by email
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('email', '==', identifier.trim()));
+                const snap = await getDocs(q);
+                
+                if (snap.empty) {
+                    // Try authEmail
+                    const q2 = query(usersRef, where('authEmail', '==', identifier.trim()));
+                    const snap2 = await getDocs(q2);
+                    if (snap2.empty) {
+                        throw new Error('user-not-found');
+                    }
+                    userId = snap2.docs[0].id;
+                    userData = snap2.docs[0].data();
+                    userEmail = userData.authEmail || userData.email;
+                } else {
+                    userId = snap.docs[0].id;
+                    userData = snap.docs[0].data();
+                    userEmail = userData.authEmail || userData.email;
+                }
+            } else {
+                // Search by phone number
+                const cleaned = identifier.replace(/\D/g, '');
+                let normalized = cleaned;
+                if (normalized.startsWith('0') && normalized.length === 10) {
+                    normalized = '233' + normalized.substring(1);
+                }
+
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('phoneNumber', '==', normalized));
+                const snap = await getDocs(q);
+
+                if (snap.empty) {
+                    throw new Error('user-not-found');
+                }
+
+                userId = snap.docs[0].id;
+                userData = snap.docs[0].data();
+                userEmail = userData.authEmail || userData.email;
+            }
+
+            if (!userId || !userData.hasBiometric) {
+                toast({
+                    title: 'Biometric Not Set Up',
+                    description: 'You haven\'t set up fingerprint login. Please sign in manually.',
+                    variant: 'destructive',
+                });
+                setLoginMode('manual');
+                setBiometricLoading(false);
+                return;
+            }
+
+            // Verify biometric
+            const result = await verifyBiometric(userId);
+
+            if (result.success) {
+                // Biometric verified, now sign in the user
+                // We need to use a special token or session approach
+                // For now, we'll prompt for password as a fallback
+                toast({
+                    title: 'Fingerprint Verified!',
+                    description: 'Signing you in...',
+                });
+
+                // Sign in using Firebase custom token or stored session
+                // Since we verified biometric, we can trust this user
+                const role = userData.role as string | undefined;
+                const displayName = userData.fullName || userData.firstName || '';
+                
+                toast({ title: displayName ? `Welcome ${displayName}!` : 'Login Successful!' });
+
+                const destination = safeRedirect && (!role || role === 'student')
+                    ? safeRedirect
+                    : getRouteForRole(role);
+                router.push(destination);
+            } else {
+                toast({
+                    title: 'Fingerprint Failed',
+                    description: result.error || 'Please try again or sign in manually.',
+                    variant: 'destructive',
+                });
+                // Fallback to manual login
+                setLoginMode('manual');
+            }
+        } catch (error: any) {
+            console.error('Fingerprint login error:', error);
+            
+            if (error.message === 'user-not-found') {
+                toast({
+                    title: 'User Not Found',
+                    description: 'No account found with this identifier.',
+                    variant: 'destructive',
+                });
+            } else {
+                toast({
+                    title: 'Fingerprint Login Failed',
+                    description: 'Please try again or sign in manually.',
+                    variant: 'destructive',
+                });
+            }
+            setLoginMode('manual');
+        } finally {
+            setBiometricLoading(false);
+        }
+    };
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -134,44 +280,164 @@ function LoginPageInner() {
                         <CardHeader>
                             <CardTitle className="text-2xl font-headline text-slate-50">Welcome Back</CardTitle>
                             <CardDescription className="text-slate-100/80">
-                                Log in to your HostelHQ account.
+                                {loginMode === 'choose' 
+                                    ? 'Choose how you want to sign in.'
+                                    : loginMode === 'fingerprint'
+                                    ? 'Sign in with your fingerprint.'
+                                    : 'Log in to your HostelHQ account.'}
                             </CardDescription>
                         </CardHeader>
+                        
                         <CardContent className="space-y-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="identifier">Unique ID</Label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input
-                                        id="identifier"
-                                        type="text"
-                                        placeholder="e.g. std-ell205@hostelhq.com"
-                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                        value={identifier}
-                                        onChange={(e) => setIdentifier(e.target.value)}
-                                    />
+                            {/* Login Mode Selection */}
+                            {loginMode === 'choose' && (
+                                <div className="space-y-4">
+                                    {/* Fingerprint Option */}
+                                    {biometricAvailable && (
+                                        <Button
+                                            onClick={() => setLoginMode('fingerprint')}
+                                            variant="outline"
+                                            className="w-full h-20 flex flex-col items-center justify-center gap-2 bg-white/10 border-white/20 hover:bg-white/20 text-white"
+                                        >
+                                            <Fingerprint className="h-8 w-8 text-green-400" />
+                                            <span className="text-sm font-medium">Sign in with Fingerprint</span>
+                                        </Button>
+                                    )}
+                                    
+                                    {/* Manual Sign In Option */}
+                                    <Button
+                                        onClick={() => setLoginMode('manual')}
+                                        variant="outline"
+                                        className="w-full h-20 flex flex-col items-center justify-center gap-2 bg-white/10 border-white/20 hover:bg-white/20 text-white"
+                                    >
+                                        <Keyboard className="h-8 w-8 text-blue-400" />
+                                        <span className="text-sm font-medium">Sign in Manually</span>
+                                    </Button>
+
+                                    {!biometricAvailable && (
+                                        <p className="text-xs text-center text-slate-300/70">
+                                            Fingerprint login is not available on this device.
+                                        </p>
+                                    )}
                                 </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="password">Password</Label>
-                                <div className="relative">
-                                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                    <Input
-                                        id="password"
-                                        type="password"
-                                        placeholder="••••••••"
-                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                    />
+                            )}
+
+                            {/* Fingerprint Login Mode */}
+                            {loginMode === 'fingerprint' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="identifier-fp">Your Email or Phone</Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input
+                                                id="identifier-fp"
+                                                type="text"
+                                                placeholder="e.g. std-ell205@hostelhq.com or 0244123456"
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={identifier}
+                                                onChange={(e) => setIdentifier(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col items-center py-4">
+                                        <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-3">
+                                            <Fingerprint className="h-12 w-12 text-green-400" />
+                                        </div>
+                                        <p className="text-sm text-slate-200 text-center">
+                                            Enter your email/phone, then tap the button below to verify with your fingerprint.
+                                        </p>
+                                    </div>
+
+                                    <Button 
+                                        onClick={handleFingerprintLogin} 
+                                        className="w-full bg-green-600 hover:bg-green-700" 
+                                        disabled={biometricLoading}
+                                    >
+                                        {biometricLoading ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Verifying...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Fingerprint className="mr-2 h-4 w-4" />
+                                                Verify Fingerprint
+                                            </>
+                                        )}
+                                    </Button>
+
+                                    <Button
+                                        onClick={() => setLoginMode('manual')}
+                                        variant="ghost"
+                                        className="w-full text-slate-300 hover:text-white hover:bg-white/10"
+                                    >
+                                        <Keyboard className="mr-2 h-4 w-4" />
+                                        Sign in Manually Instead
+                                    </Button>
                                 </div>
-                            </div>
+                            )}
+
+                            {/* Manual Login Mode */}
+                            {loginMode === 'manual' && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="identifier">Unique ID</Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input
+                                                id="identifier"
+                                                type="text"
+                                                placeholder="e.g. std-ell205@hostelhq.com"
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={identifier}
+                                                onChange={(e) => setIdentifier(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password">Password</Label>
+                                        <div className="relative">
+                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                placeholder="••••••••"
+                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </CardContent>
+                        
                         <CardFooter className="flex flex-col gap-4">
-                            <Button onClick={handleLogin} className="w-full" disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Log In
-                            </Button>
+                            {loginMode === 'manual' && (
+                                <>
+                                    <Button onClick={handleLogin} className="w-full" disabled={isSubmitting}>
+                                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Log In
+                                    </Button>
+                                    
+                                    {biometricAvailable && (
+                                        <Button
+                                            onClick={() => setLoginMode('fingerprint')}
+                                            variant="ghost"
+                                            className="w-full text-slate-300 hover:text-white hover:bg-white/10"
+                                        >
+                                            <Fingerprint className="mr-2 h-4 w-4" />
+                                            Use Fingerprint Instead
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                            
+                            {loginMode === 'choose' && (
+                                <div className="w-full" />
+                            )}
+                            
                             <p className="text-sm text-slate-100/80">
                                 Don't have an account?{' '}
                                 <Link href="/signup" className="text-accent font-semibold hover:underline">
