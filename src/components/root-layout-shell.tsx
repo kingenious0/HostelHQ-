@@ -15,6 +15,12 @@ const FOOTER_HIDDEN_PATHS = [
   "/settings",
   "/profile",
   "/signup",
+  "/login",
+];
+
+const CHATBOT_HIDDEN_PATHS = [
+  "/signup",
+  "/login",
 ];
 
 const FOOTER_HIDDEN_PREFIXES = [
@@ -38,6 +44,8 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     FOOTER_HIDDEN_PATHS.includes(pathname) ||
     FOOTER_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
     isRoomDetailsPage;
+
+  const hideChatbot = CHATBOT_HIDDEN_PATHS.includes(pathname);
 
   // Track user authentication status for AI context
   useEffect(() => {
@@ -63,7 +71,7 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     <div className="flex min-h-full flex-col">
       {children}
       {!hideFooter && <Footer />}
-      <AIAssistant userContext={userContext} />
+      {!hideChatbot && <AIAssistant userContext={userContext} />}
     </div>
   );
 }
