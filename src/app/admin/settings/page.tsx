@@ -98,7 +98,33 @@ export default function AdminSettingsPage() {
                 })
             });
 
-            const data = await response.json();
+            // Check if response is HTML (error page) instead of JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Received HTML instead of JSON:', text.substring(0, 200));
+                toast({ 
+                    title: "API Error", 
+                    description: "Server returned HTML instead of JSON. Please refresh and try again.", 
+                    variant: 'destructive' 
+                });
+                return;
+            }
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                console.error('JSON parsing error:', jsonError);
+                const text = await response.text();
+                console.error('Response text:', text.substring(0, 200));
+                toast({ 
+                    title: "API Response Error", 
+                    description: "Invalid response from server. Please refresh and try again.", 
+                    variant: 'destructive' 
+                });
+                return;
+            }
             
             if (data.success) {
                 if (data.devMode) {
