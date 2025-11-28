@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       authenticatorSelection: {
         residentKey: 'discouraged',
         userVerification: 'required',
-        authenticatorAttachment: 'platform', // Prefer platform authenticators (fingerprint, Face ID)
+        // authenticatorAttachment: 'platform', // Removed for Android compatibility - allow any authenticator
       },
       supportedAlgorithmIDs: [-7, -257], // ES256 and RS256
     };

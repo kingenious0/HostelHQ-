@@ -68,8 +68,19 @@ export async function registerBiometric(
 ): Promise<BiometricCredential | null> {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   console.log('WebAuthn baseUrl:', baseUrl);
+  console.log('WebAuthn User Agent:', navigator.userAgent);
+  console.log('WebAuthn Platform:', navigator.platform);
   
   try {
+    // Check WebAuthn support first
+    if (!isBiometricSupported()) {
+      throw new Error('WebAuthn is not supported on this device/browser');
+    }
+
+    // Check platform authenticator availability
+    const platformAvailable = await isPlatformAuthenticatorAvailable();
+    console.log('Platform authenticator available:', platformAvailable);
+
     // Request registration options from server
     const optionsResponse = await fetch(`${baseUrl}/api/webauthn/register-options`, {
       method: 'POST',
@@ -85,9 +96,12 @@ export async function registerBiometric(
 
     const optionsResult = await optionsResponse.json();
     const options = optionsResult.options;
+    console.log('WebAuthn registration options:', options);
 
     // Start registration with browser/OS
+    console.log('Starting WebAuthn registration...');
     const credential = await startRegistration(options);
+    console.log('WebAuthn registration successful:', credential.id);
 
     // Verify registration with server
     const verifyResponse = await fetch(`${baseUrl}/api/webauthn/register-verify`, {
@@ -103,15 +117,19 @@ export async function registerBiometric(
     const verifyResult = await verifyResponse.json();
     return verifyResult.credential;
   } catch (error: any) {
-    console.error('Biometric registration error:', error);
+    console.error('Biometric registration failed:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
     
-    // User-friendly error messages
+    // Handle specific WebAuthn errors for better debugging
     if (error.name === 'NotAllowedError') {
-      throw new Error('Biometric registration was cancelled or not allowed');
+      console.error('User cancelled biometric prompt or no authenticator available');
+    } else if (error.name === 'NotSupportedError') {
+      console.error('WebAuthn not supported on this device/browser');
+    } else if (error.name === 'SecurityError') {
+      console.error('Security error - check HTTPS and domain configuration');
     } else if (error.name === 'InvalidStateError') {
-      throw new Error('This device is already registered');
-    } else {
-      throw new Error(error.message || 'Failed to register biometric');
+      console.error('Authenticator already registered');
     }
   }
 }
