@@ -1,5 +1,6 @@
 import { db } from './firebase';
 import { doc, getDoc, collection, getDocs, setDoc, query, where } from 'firebase/firestore';
+import { sendSMS } from './wigal';
 
 // Admin phone numbers (you can make this configurable)
 const ADMIN_PHONE_NUMBERS = [
@@ -18,32 +19,23 @@ interface SMSNotificationData {
  */
 export async function sendAdminSMSNotification(data: SMSNotificationData) {
   try {
-    // In production, you would integrate with an SMS service like:
-    // - Twilio
-    // - Africa's Talking
-    // - Infobip
-    // - Firebase Cloud Messaging (for push notifications)
-    
-    console.log('📱 Sending SMS Notification:', {
+    console.log('📱 Sending SMS Notification via Wigal FROG:', {
       recipients: data.to,
       message: data.message,
       type: data.type,
       timestamp: new Date().toISOString()
     });
 
-    // For now, we'll log the notification. In production, replace with actual SMS API call
-    // Example with Twilio:
-    /*
-    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    
+    // Send SMS using existing Wigal FROG system
+    const results = [];
     for (const phoneNumber of data.to) {
-      await twilio.messages.create({
-        body: data.message,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: phoneNumber
+      const result = await sendSMS(phoneNumber, data.message, `ADMIN${Date.now()}`);
+      results.push({
+        phone: phoneNumber,
+        success: result.success,
+        error: result.error
       });
     }
-    */
 
     // Store notification in database for tracking
     const notificationRef = doc(collection(db, 'sms_notifications'));
@@ -51,10 +43,20 @@ export async function sendAdminSMSNotification(data: SMSNotificationData) {
       ...data,
       sentAt: new Date().toISOString(),
       status: 'sent',
-      recipients: data.to
+      recipients: data.to,
+      results: results
     });
 
-    return { success: true, message: 'SMS notification logged successfully' };
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.length - successCount;
+
+    if (failureCount === 0) {
+      return { success: true, message: `SMS sent successfully to ${successCount} admin(s)` };
+    } else if (successCount > 0) {
+      return { success: true, message: `SMS sent to ${successCount} admin(s), failed to send to ${failureCount} admin(s)` };
+    } else {
+      return { success: false, error: 'Failed to send SMS to any admin' };
+    }
   } catch (error) {
     console.error('Error sending SMS notification:', error);
     return { success: false, error: error.message };

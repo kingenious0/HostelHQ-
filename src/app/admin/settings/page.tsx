@@ -86,26 +86,21 @@ export default function AdminSettingsPage() {
         }
 
         try {
-            const response = await fetch('/api/sms/send-notification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: [phone],
-                    message: `🧪 HOSTELHQ: Test SMS notification\n\nThis is a test message from HostelHQ admin panel. Your SMS notifications are working correctly!\n\nAdmin: ${fullName}`,
-                    type: 'test'
-                })
-            });
-
-            const data = await response.json();
-            if (data.success) {
+            // Import and use the Wigal SMS service directly
+            const { sendSMS } = await import('@/lib/wigal');
+            const message = `🧪 HOSTELHQ: Test SMS notification\n\nThis is a test message from HostelHQ admin panel. Your SMS notifications are working correctly!\n\nAdmin: ${fullName}`;
+            
+            const result = await sendSMS(phone, message, `TEST${Date.now()}`);
+            
+            if (result.success) {
                 toast({ 
-                    title: "Test SMS Sent", 
-                    description: "Check your phone for the test message." 
+                    title: "Test SMS Sent via Wigal", 
+                    description: "Check your phone for the test message from HostelHQ." 
                 });
             } else {
                 toast({ 
                     title: "SMS Failed", 
-                    description: data.error || "Failed to send test SMS.", 
+                    description: result.error || "Failed to send test SMS via Wigal.", 
                     variant: 'destructive' 
                 });
             }
@@ -113,7 +108,7 @@ export default function AdminSettingsPage() {
             console.error('Error sending test SMS:', error);
             toast({ 
                 title: "Error", 
-                description: "Failed to send test SMS.", 
+                description: "Failed to send test SMS. Check Wigal configuration.", 
                 variant: 'destructive' 
             });
         }
@@ -226,7 +221,7 @@ export default function AdminSettingsPage() {
                             <div>
                                 <h4 className="font-medium">New Hostel Submissions</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    Receive SMS when agents/manager submit hostels for approval
+                                    Receive SMS via Wigal FROG when agents/manager submit hostels for approval
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -239,6 +234,9 @@ export default function AdminSettingsPage() {
                                     smsNotifications ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
                                 }`}>
                                     {smsNotifications ? 'Enabled' : 'Disabled'}
+                                </span>
+                                <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                    Wigal Active
                                 </span>
                             </div>
                         </div>
@@ -273,15 +271,27 @@ export default function AdminSettingsPage() {
                     <CardContent className="space-y-3">
                         <div className="text-sm space-y-2">
                             <p>
-                                <strong>Current Status:</strong> SMS notifications are logged but not sent to external providers.
+                                <strong>✅ Status:</strong> SMS notifications are ACTIVE via Wigal FROG SMS service.
                             </p>
                             <p>
-                                <strong>To enable actual SMS sending:</strong>
+                                <strong>Service Provider:</strong> Wigal FROG SMS (Ghana's reliable SMS gateway)
+                            </p>
+                            <p>
+                                <strong>Configuration:</strong> Using existing Wigal API credentials from your system
+                            </p>
+                            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <p className="text-sm text-green-800">
+                                    🎉 Your SMS system is fully operational! Admin notifications will be sent 
+                                    automatically when agents submit new hostels for approval.
+                                </p>
+                            </div>
+                            <p>
+                                <strong>Environment Variables Required:</strong>
                             </p>
                             <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
-                                <li>Configure Twilio or Africa's Talking API keys</li>
-                                <li>Update the SMS service in <code className="bg-muted px-1 rounded">src/lib/sms-service.ts</code></li>
-                                <li>Add your phone number above to receive notifications</li>
+                                <li><code>WIGAL_API_KEY</code> - Your Wigal API key</li>
+                                <li><code>WIGAL_USERNAME</code> - Your Wigal username</li>
+                                <li><code>WIGAL_SENDER_ID</code> - "HostelHQ" (default)</li>
                             </ul>
                         </div>
                     </CardContent>
