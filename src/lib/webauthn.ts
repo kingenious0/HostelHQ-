@@ -131,6 +131,8 @@ export async function registerBiometric(
     } else if (error.name === 'InvalidStateError') {
       console.error('Authenticator already registered');
     }
+    
+    return null;
   }
 }
 
