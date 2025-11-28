@@ -604,9 +604,13 @@ export default function SignupPage() {
 
             // (Optional) additional metadata for managers could be added here later
 
+            // Filter out non-serializable biometricCredential before saving to Firestore
+            const firestoreUserData = { ...userData };
+            delete firestoreUserData.biometricCredential; // Remove WebAuthn object that can't be serialized
+            
             // Create user document (no more pendingUsers for agents)
             console.log('💾 Saving user document to Firestore...');
-            await setDoc(doc(db, "users", user.uid), userData);
+            await setDoc(doc(db, "users", user.uid), firestoreUserData);
             console.log('✅ User document saved successfully');
 
             // If this is a manager and they selected a hostel, assign that hostel to the new manager
