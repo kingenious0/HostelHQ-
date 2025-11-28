@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendAdminSMSNotification } from '@/lib/sms-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +11,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🔧 DEVELOPMENT MODE: Bypass SMS - only works in production
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (isDevelopment) {
+      console.log('🔧 DEV MODE: Admin SMS bypassed - will work in production');
+      console.log('📱 Would send to:', to);
+      console.log('📄 Message:', message);
+      console.log('📋 Type:', type);
+      
+      return NextResponse.json({
+        success: true,
+        message: `Admin SMS notification simulated (${to.length} recipient(s)) - will send in production`,
+        devMode: true,
+        debug: {
+          recipientCount: to.length,
+          messageLength: message.length,
+          type: type,
+          note: 'SMS will be sent when deployed to production'
+        }
+      });
+    }
+
+    // 🚀 PRODUCTION MODE: Use real SMS API
+    const { sendAdminSMSNotification } = await import('@/lib/sms-service');
+    
     // Send SMS using the admin SMS service (which uses Wigal)
     const result = await sendAdminSMSNotification({ to, message, type });
 

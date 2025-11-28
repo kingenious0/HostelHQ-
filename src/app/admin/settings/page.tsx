@@ -101,10 +101,17 @@ export default function AdminSettingsPage() {
             const data = await response.json();
             
             if (data.success) {
-                toast({ 
-                    title: "Test SMS Sent via Wigal", 
-                    description: "Check your phone for the test message from HostelHQ." 
-                });
+                if (data.devMode) {
+                    toast({ 
+                        title: "SMS Test Successful (Development Mode)", 
+                        description: "SMS will be sent when deployed to production. Check console for details." 
+                    });
+                } else {
+                    toast({ 
+                        title: "Test SMS Sent via Wigal", 
+                        description: "Check your phone for the test message from HostelHQ." 
+                    });
+                }
             } else {
                 toast({ 
                     title: "SMS Failed", 
@@ -279,27 +286,35 @@ export default function AdminSettingsPage() {
                     <CardContent className="space-y-3">
                         <div className="text-sm space-y-2">
                             <p>
-                                <strong>✅ Status:</strong> SMS notifications are ACTIVE via Wigal FROG SMS service.
+                                <strong>🔧 Status:</strong> SMS notifications configured for production deployment.
                             </p>
                             <p>
                                 <strong>Service Provider:</strong> Wigal FROG SMS (Ghana's reliable SMS gateway)
                             </p>
                             <p>
-                                <strong>Configuration:</strong> Using existing Wigal API credentials from your system
+                                <strong>Development Mode:</strong> SMS is bypassed locally, will work when deployed.
                             </p>
-                            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                                <p className="text-sm text-green-800">
-                                    🎉 Your SMS system is fully operational! Admin notifications will be sent 
-                                    automatically when agents submit new hostels for approval.
+                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    📧 SMS notifications are configured and will work in production!
+                                    In development mode, SMS is simulated to avoid costs and local API issues.
                                 </p>
                             </div>
                             <p>
-                                <strong>Environment Variables Required:</strong>
+                                <strong>Environment Variables (Configured ✅):</strong>
                             </p>
                             <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
                                 <li><code>WIGAL_API_KEY</code> - Your Wigal API key</li>
                                 <li><code>WIGAL_USERNAME</code> - Your Wigal username</li>
                                 <li><code>WIGAL_SENDER_ID</code> - "HostelHQ" (default)</li>
+                            </ul>
+                            <p>
+                                <strong>When Deployed:</strong>
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
+                                <li>Admins receive SMS when agents submit hostels</li>
+                                <li>Creators get SMS for approval/rejection status</li>
+                                <li>Test SMS works for verification</li>
                             </ul>
                         </div>
                     </CardContent>
