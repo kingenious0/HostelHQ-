@@ -291,12 +291,20 @@ export default function AdminUploadPage() {
                 amenities: selectedAmenities,
                 images: imageUrls,
                 description: finalDescription,
-                status: 'approved',
+                status: 'live', // Admin hostels go live immediately
                 agentId: currentUser.uid, // Keep agentId for compatibility, but it's actually adminId
                 adminId: currentUser.uid, // Add adminId field
                 adminDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable admin ID
-                createdBy: 'admin', // Add createdBy field
+                // Creator tracking for admin visibility
+                createdBy: {
+                    userId: currentUser.uid,
+                    fullName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Admin',
+                    email: currentUser.email || 'admin@hostelhq.com',
+                    role: 'admin',
+                    createdAt: new Date().toISOString()
+                },
                 approvedAt: new Date().toISOString(),
+                submittedAt: new Date().toISOString(),
                 dateSubmitted: new Date().toISOString(),
                 availability: roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full',
                 distanceToUniversity: distanceToUni,

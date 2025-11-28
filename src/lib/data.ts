@@ -63,6 +63,18 @@ export type Hostel = {
   billsExcluded?: string[];
   securityAndSafety?: string[];
   reviews: Review[]; // Add this back for full hostel details page
+  // Creator tracking fields
+  createdBy?: {
+    userId: string;
+    fullName: string;
+    email: string;
+    role: 'agent' | 'manager' | 'admin';
+    createdAt: string;
+  };
+  status?: 'pending' | 'approved' | 'rejected' | 'live';
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
   [key: string]: any;
 };
 

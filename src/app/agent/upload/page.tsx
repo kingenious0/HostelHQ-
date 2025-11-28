@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MapboxLocationPicker from '@/components/mapbox-location-picker';
+import { notifyAdminsOfNewHostelSubmission } from '@/lib/sms-service';
 
 const hostelAmenitiesList = [
     'WiFi',
@@ -299,6 +300,15 @@ export default function AgentUploadPage() {
                 status: 'pending',
                 agentId: currentUser.uid,
                 agentDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable agent ID
+                // Creator tracking for admin visibility
+                createdBy: {
+                    userId: currentUser.uid,
+                    fullName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Agent',
+                    email: currentUser.email || 'agent@hostelhq.com',
+                    role: 'agent',
+                    createdAt: new Date().toISOString()
+                },
+                submittedAt: new Date().toISOString(),
                 dateSubmitted: new Date().toISOString(),
                 availability: roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full',
                 distanceToUniversity: distanceToUni,
@@ -380,6 +390,12 @@ export default function AgentUploadPage() {
             console.log(`[Room Creation] Total rooms to be created: ${totalRoomsCreated}`);
 
             await batch.commit();
+
+            // Send SMS notification to admins about new hostel submission
+            await notifyAdminsOfNewHostelSubmission(
+                hostelName,
+                currentUser.displayName || currentUser.email?.split('@')[0] || 'Agent'
+            );
 
             toast({ title: 'Submission Successful!', description: 'The hostel has been sent for admin approval.' });
             router.push('/agent/listings'); 

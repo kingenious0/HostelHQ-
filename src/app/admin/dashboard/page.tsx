@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { RoomType, Review } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/lib/sms-service';
 
 type Hostel = {
   id: string;
@@ -43,6 +44,13 @@ type Hostel = {
 type PendingHostel = Omit<Hostel, 'availability'> & {
   dateSubmitted: string;
   roomTypes: RoomType[];
+  createdBy?: {
+    userId: string;
+    fullName: string;
+    email: string;
+    role: 'agent' | 'manager' | 'admin';
+    createdAt: string;
+  };
 };
 
 type User = {
@@ -167,46 +175,66 @@ export default function AdminDashboard() {
         const pendingDocRef = doc(db, 'pendingHostels', hostelId);
         const batch = writeBatch(db);
 
-        // Fetch the main hostel document
         const pendingDocSnap = await getDoc(pendingDocRef);
+        
         if (!pendingDocSnap.exists()) {
-            throw new Error("Hostel not found in pending list.");
-        }
-        
-        const { id, roomTypes, ...hostelData } = selectedHostel as PendingHostel;
-        
-        // Define the new approved hostel document
-        const approvedDocRef = doc(db, 'hostels', hostelId);
-        batch.set(approvedDocRef, {
-            ...hostelData,
-            status: 'approved',
-            approvedAt: new Date().toISOString(),
-        });
-        
-        // Copy all room types from subcollection
-        if (roomTypes && roomTypes.length > 0) {
-            for (const room of roomTypes) {
-                const newRoomRef = doc(collection(approvedDocRef, 'roomTypes'));
-                batch.set(newRoomRef, room);
-            }
+            toast({ title: "Error", description: "Hostel not found.", variant: "destructive" });
+            return;
         }
 
-        // Copy all physical rooms from subcollection (pendingHostels/{id}/rooms -> hostels/{id}/rooms)
-        const pendingRoomsSnapshot = await getDocs(collection(pendingDocRef, 'rooms'));
+        const hostelData = pendingDocSnap.data() as PendingHostel;
+        const newHostelRef = doc(db, 'hostels', hostelId);
+        
+        // Create the approved hostel with creator tracking and status
+        const approvedHostel = {
+            ...hostelData,
+            availability: 'Available' as const,
+            status: 'live' as const,
+            approvedAt: new Date().toISOString(),
+            approvedBy: auth.currentUser?.uid || 'unknown',
+        };
+        await setDoc(newHostelRef, approvedHostel);
+
+        // Copy roomTypes subcollection if it exists
+        const pendingRoomsRef = collection(pendingDocRef, 'roomTypes');
+        const pendingRoomsSnapshot = await getDocs(pendingRoomsRef);
+        
         if (!pendingRoomsSnapshot.empty) {
+            const batch = writeBatch(db);
+            
             for (const roomDoc of pendingRoomsSnapshot.docs) {
                 const roomData = roomDoc.data();
-                const newRoomRef = doc(collection(approvedDocRef, 'rooms'));
+                const newRoomRef = doc(collection(newHostelRef, 'roomTypes'), roomDoc.id);
                 batch.set(newRoomRef, roomData);
             }
+            
+            // Delete the original pending document (subcollections are NOT automatically deleted)
+            batch.delete(pendingDocRef);
+            
+            // Commit the batch
+            await batch.commit();
             console.log(`[Approval] Copied ${pendingRoomsSnapshot.size} physical rooms to approved hostel`);
+        } else {
+            // Delete the original pending document if no room types
+            await deleteDoc(pendingDocRef);
         }
 
-        // Delete the original pending document (subcollections are NOT automatically deleted)
-        batch.delete(pendingDocRef);
-        
-        // Commit the batch
-        await batch.commit();
+        // Send SMS notification to creator
+        if (hostelData.createdBy) {
+            const creatorUserRef = doc(db, 'users', hostelData.createdBy.userId);
+            const creatorUserSnap = await getDoc(creatorUserRef);
+            
+            if (creatorUserSnap.exists()) {
+                const creatorData = creatorUserSnap.data();
+                if (creatorData.phone) {
+                    await notifyCreatorOfHostelStatus(
+                        hostelData.name,
+                        creatorData.phone,
+                        'approved'
+                    );
+                }
+            }
+        }
 
         toast({ title: "Hostel Approved", description: `${hostelData.name} is now live.` });
         setIsHostelDialogOpen(false);
@@ -225,7 +253,32 @@ export default function AdminDashboard() {
     setProcessingId(hostelId);
     toast({ title: "Rejecting Hostel..." });
     try {
-      await deleteDoc(doc(db, 'pendingHostels', hostelId));
+      const pendingDocRef = doc(db, 'pendingHostels', hostelId);
+      const pendingDocSnap = await getDoc(pendingDocRef);
+      
+      if (pendingDocSnap.exists()) {
+        const hostelData = pendingDocSnap.data() as PendingHostel;
+        
+        // Send SMS notification to creator before deletion
+        if (hostelData.createdBy) {
+          const creatorUserRef = doc(db, 'users', hostelData.createdBy.userId);
+          const creatorUserSnap = await getDoc(creatorUserRef);
+          
+          if (creatorUserSnap.exists()) {
+            const creatorData = creatorUserSnap.data();
+            if (creatorData.phone) {
+              await notifyCreatorOfHostelStatus(
+                hostelData.name,
+                creatorData.phone,
+                'rejected',
+                'Your hostel submission did not meet our quality standards. Please review our guidelines and submit again.'
+              );
+            }
+          }
+        }
+      }
+      
+      await deleteDoc(pendingDocRef);
       toast({ title: "Hostel Rejected", description: "The submission has been removed." });
       setIsHostelDialogOpen(false);
       setSelectedHostel(null);
@@ -494,6 +547,7 @@ export default function AdminDashboard() {
                             <TableHeader>
                             <TableRow>
                                 <TableHead>Hostel Name</TableHead>
+                                <TableHead>Submitted By</TableHead>
                                 <TableHead>Date</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -503,6 +557,21 @@ export default function AdminDashboard() {
                                 pendingHostels.map(hostel => (
                                 <TableRow key={hostel.id}>
                                     <TableCell className="font-medium">{hostel.name}</TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Avatar className="h-6 w-6">
+                                                <AvatarFallback className="text-xs">
+                                                    {hostel.createdBy?.fullName?.charAt(0) || '?'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div>
+                                                <p className="text-sm font-medium">{hostel.createdBy?.fullName || 'Unknown'}</p>
+                                                <p className="text-xs text-muted-foreground capitalize">
+                                                    {hostel.createdBy?.role || 'unknown'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">{hostel.dateSubmitted}</TableCell>
                                     <TableCell className="text-right">
                                     <Button variant="outline" size="sm" onClick={() => openHostelReviewDialog(hostel)}>Review</Button>
@@ -511,7 +580,7 @@ export default function AdminDashboard() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center h-24">
+                                    <TableCell colSpan={4} className="text-center h-24">
                                         No pending hostels.
                                     </TableCell>
                                 </TableRow>
@@ -535,6 +604,7 @@ export default function AdminDashboard() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Hostel Name</TableHead>
+                                <TableHead>Created By</TableHead>
                                 <TableHead>Availability</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
@@ -544,6 +614,21 @@ export default function AdminDashboard() {
                                 approvedHostels.map(hostel => (
                                     <TableRow key={hostel.id}>
                                         <TableCell className="font-medium">{hostel.name}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-6 w-6">
+                                                    <AvatarFallback className="text-xs">
+                                                        {hostel.createdBy?.fullName?.charAt(0) || '?'}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <p className="text-sm font-medium">{hostel.createdBy?.fullName || 'Unknown'}</p>
+                                                    <p className="text-xs text-muted-foreground capitalize">
+                                                        {hostel.createdBy?.role || 'unknown'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
                                         <TableCell>
                                             <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
                                                 {hostel.availability || 'N/A'}
@@ -587,7 +672,7 @@ export default function AdminDashboard() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center h-24">
+                                    <TableCell colSpan={4} className="text-center h-24">
                                         No approved hostels.
                                     </TableCell>
                                 </TableRow>
