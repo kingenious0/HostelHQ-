@@ -25,8 +25,8 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
     const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
     
     const [mapLoaded, setMapLoaded] = useState(false);
-    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('streets');
-    const [styleUrl, setStyleUrl] = useState(mapStyles.streets);
+    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
+    const [styleUrl, setStyleUrl] = useState(mapStyles.satellite);
 
     const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
 

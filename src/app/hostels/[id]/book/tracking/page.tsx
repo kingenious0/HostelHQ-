@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Clock, User, CheckCheck, Loader2, Calendar, Phone, MessageCircle, Navigation, Route, Home, UserCheck, XCircle } from "lucide-react";
+import { MapPin, Clock, User, CheckCheck, Loader2, Calendar, Phone, MessageCircle, Navigation, Route, Home, UserCheck, XCircle, Map, Layers } from "lucide-react";
 import { combinedRoutingService, RouteResult } from "@/components/mapbox-location-picker";
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -53,6 +53,7 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
     const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
 
     useEffect(() => {
         if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -62,9 +63,14 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
             ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
             : [hostelLocation.lng, hostelLocation.lat];
 
+        const mapStyles = {
+            streets: 'mapbox://styles/mapbox/streets-v12',
+            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+        };
+
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/streets-v12',
+            style: mapStyles[activeStyle],
             center,
             zoom: userLocation ? 10 : 14,
         });
@@ -185,8 +191,35 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
         }
     }, [userLocation, hostelLocation]);
 
+    // Switch map style
+    const switchStyle = (newStyle: 'streets' | 'satellite') => {
+        if (!mapInstanceRef.current) return;
+        setActiveStyle(newStyle);
+        mapInstanceRef.current.setStyle(newStyle === 'streets' ? mapStyles.streets : mapStyles.satellite);
+    };
+
     return (
-        <div ref={mapContainerRef} className="w-full h-full" />
+        <div className="relative h-full w-full">
+            <div ref={mapContainerRef} className="w-full h-full" />
+            
+            {/* Map style switcher */}
+            <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
+                <button 
+                    onClick={() => switchStyle('streets')}
+                    className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    title="Street View"
+                >
+                    <Map className="h-4 w-4" />
+                </button>
+                <button 
+                    onClick={() => switchStyle('satellite')}
+                    className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    title="Satellite View"
+                >
+                    <Layers className="h-4 w-4" />
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -206,6 +239,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
     const watchIdRef = useRef<number | null>(null);
     const [isTracking, setIsTracking] = useState(true);
     const [currentUserLocation, setCurrentUserLocation] = useState(userLocation);
+    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
 
     // Live GPS tracking
     useEffect(() => {
@@ -252,9 +286,14 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
         if (!mapContainerRef.current || mapInstanceRef.current) return;
 
         // Initialize map
+        const mapStyles = {
+            streets: 'mapbox://styles/mapbox/streets-v12',
+            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+        };
+
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/streets-v12',
+            style: mapStyles[activeStyle],
             center: [
                 (userLocation.lng + hostelLocation.lng) / 2,
                 (userLocation.lat + hostelLocation.lat) / 2
@@ -416,10 +455,39 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
         }
     };
 
+    // Switch map style
+    const switchStyle = (newStyle: 'streets' | 'satellite') => {
+        if (!mapInstanceRef.current) return;
+        setActiveStyle(newStyle);
+        const mapStyles = {
+            streets: 'mapbox://styles/mapbox/streets-v12',
+            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+        };
+        mapInstanceRef.current.setStyle(mapStyles[newStyle]);
+    };
+
     return (
         <div className="relative h-full w-full">
             {/* Map container - fills parent */}
             <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" />
+            
+            {/* Map style switcher */}
+            <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
+                <button 
+                    onClick={() => switchStyle('streets')}
+                    className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    title="Street View"
+                >
+                    <Map className="h-4 w-4" />
+                </button>
+                <button 
+                    onClick={() => switchStyle('satellite')}
+                    className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    title="Satellite View"
+                >
+                    <Layers className="h-4 w-4" />
+                </button>
+            </div>
             
             {/* Legend and controls overlay */}
             <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">

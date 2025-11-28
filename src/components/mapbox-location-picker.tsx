@@ -466,7 +466,7 @@ export default function MapboxLocationPicker({
   
   const [searchAddress, setSearchAddress] = useState(initialAddress);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('streets');
+  const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(initialLocation || null);
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
