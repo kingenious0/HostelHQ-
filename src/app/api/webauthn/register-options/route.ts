@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
     
     // Handle different environments
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
-      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
-    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
-      rpID = 'hostelhq.vercel.app'; // Production domain
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      rpID = 'localhost';
+    } else if (host.includes('hostel-hq.vercel.app') || host === 'hostel-hq.vercel.app') {
+      rpID = 'hostel-hq.vercel.app'; // Production domain
     } else if (host.includes('vercel.app')) {
-      rpID = host; // Preview/staging domains (use full domain)
+      rpID = host; // Preview/staging domains
     } else {
       rpID = host; // Fallback to full domain
     }
@@ -48,19 +48,16 @@ export async function POST(req: NextRequest) {
       userDisplayName: userName,
       timeout: 60000,
       attestationType: 'none',
-      excludeCredentials: [], // TODO: Add existing credentials to prevent duplicates
+      excludeCredentials: [],
       authenticatorSelection: {
         residentKey: 'discouraged',
         userVerification: 'required',
-        // authenticatorAttachment: 'platform', // Removed for Android compatibility - allow any authenticator
+        // No authenticatorAttachment restriction - allows any authenticator (Android compatible)
       },
       supportedAlgorithmIDs: [-7, -257], // ES256 and RS256
     };
 
     const options = await generateRegistrationOptions(opts);
-
-    // Store challenge temporarily (in production, use Redis or database)
-    // For now, we'll return it and verify it in the next step
     
     return NextResponse.json({
       success: true,
