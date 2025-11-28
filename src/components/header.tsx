@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 import { uploadImage } from '@/lib/cloudinary';
 import { auth, db } from '@/lib/firebase';
@@ -104,6 +105,7 @@ export function Header() {
     return stored ?? 'system';
   });
   const [fontScale, setFontScale] = useState<FontScale>('normal');
+  const [uiScale, setUiScale] = useState<number>(100); // 70-130 range (percentage)
   const { toast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -127,6 +129,14 @@ export function Header() {
     document.documentElement.style.setProperty('--font-scale', String(scale));
   }, []);
 
+  const applyUiScale = useCallback((value: number) => {
+    if (typeof document === 'undefined') return;
+    const scale = value / 100; // Convert percentage to decimal (e.g., 80 -> 0.8)
+    document.documentElement.style.setProperty('--ui-scale', String(scale));
+    // Also set font-size on html element for global scaling
+    document.documentElement.style.fontSize = `${scale * 16}px`;
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem('hostelhq-font-scale') as FontScale | null;
@@ -134,6 +144,14 @@ export function Header() {
     setFontScale(initial);
     applyFontScale(initial);
   }, [applyFontScale]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem('hostelhq-ui-scale');
+    const initial = stored ? parseInt(stored, 10) : 100;
+    setUiScale(initial);
+    applyUiScale(initial);
+  }, [applyUiScale]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -146,6 +164,12 @@ export function Header() {
     window.localStorage.setItem('hostelhq-font-scale', fontScale);
     applyFontScale(fontScale);
   }, [fontScale, applyFontScale]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('hostelhq-ui-scale', String(uiScale));
+    applyUiScale(uiScale);
+  }, [uiScale, applyUiScale]);
 
   // Listen for custom event to open profile dialog
   useEffect(() => {
@@ -925,7 +949,34 @@ export function Header() {
                   </div>
                 )}
 
-                <div className="mt-6 space-y-3">
+                {/* UI Scale Slider in Mobile Sidebar */}
+                <div className="mt-6 border-t pt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">UI Scale ({uiScale}%)</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">A</span>
+                    <Slider
+                      value={[uiScale]}
+                      onValueChange={(values) => setUiScale(values[0])}
+                      min={70}
+                      max={130}
+                      step={5}
+                      className="flex-1"
+                    />
+                    <span className="text-sm font-medium text-muted-foreground">A</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-muted-foreground">Smaller</span>
+                    <button 
+                      onClick={() => setUiScale(100)} 
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      Reset
+                    </button>
+                    <span className="text-[10px] text-muted-foreground">Larger</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
                   <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="h-4 w-4 text-primary" />
                     233 (0) 597626090 / 233 (0) 536 282 694
@@ -1132,6 +1183,31 @@ export function Header() {
                         </button>
                       ))}
                     </div>
+                    <DropdownMenuLabel className="mt-1 text-xs text-muted-foreground">UI Scale ({uiScale}%)</DropdownMenuLabel>
+                    <div className="px-3 pb-3 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">A</span>
+                        <Slider
+                          value={[uiScale]}
+                          onValueChange={(values) => setUiScale(values[0])}
+                          min={70}
+                          max={130}
+                          step={5}
+                          className="flex-1"
+                        />
+                        <span className="text-sm font-medium text-muted-foreground">A</span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">Smaller</span>
+                        <button 
+                          onClick={() => setUiScale(100)} 
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Reset
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">Larger</span>
+                      </div>
+                    </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} disabled={authAction}>
                       <LogOut className="mr-2 h-4 w-4" />
@@ -1176,6 +1252,31 @@ export function Header() {
                           {themeMode === option.value && <Check className="h-4 w-4 text-primary" />}
                         </button>
                       ))}
+                    </div>
+                    <DropdownMenuLabel className="mt-1 text-xs text-muted-foreground">UI Scale ({uiScale}%)</DropdownMenuLabel>
+                    <div className="px-3 pb-3 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">A</span>
+                        <Slider
+                          value={[uiScale]}
+                          onValueChange={(values) => setUiScale(values[0])}
+                          min={70}
+                          max={130}
+                          step={5}
+                          className="flex-1"
+                        />
+                        <span className="text-sm font-medium text-muted-foreground">A</span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">Smaller</span>
+                        <button 
+                          onClick={() => setUiScale(100)} 
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Reset
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">Larger</span>
+                      </div>
                     </div>
                   </>
                 )}
