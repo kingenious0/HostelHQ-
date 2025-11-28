@@ -594,7 +594,7 @@ export default function TrackingPage() {
             });
         };
         
-        const unsubVisit = onSnapshot(visitDocRef, (docSnap) => {
+        const unsubVisit = onSnapshot(visitDocRef, (docSnap: any) => {
             if (!docSnap.exists()) {
                 toast({ title: "Visit Not Found", description: "The visit you are looking for does not exist.", variant: "destructive" });
                 router.push('/');

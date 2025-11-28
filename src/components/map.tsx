@@ -3,9 +3,10 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { Hostel } from '@/lib/data';
+import { Hostel, Agent } from '@/lib/data';
 import { Map, Layers } from 'lucide-react';
 import { ably } from '@/lib/ably';
+import { getAgent } from '@/lib/data';
 
 interface MapboxMapProps {
     agentId?: string | null;
@@ -27,8 +28,29 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
     const [styleUrl, setStyleUrl] = useState(mapStyles.satellite);
+    const [agent, setAgent] = useState<Agent | null>(null);
+    const [agentLocation, setAgentLocation] = useState<{lat: number, lng: number} | null>(null);
 
     const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
+
+    // Fetch agent data to get their last known location
+    useEffect(() => {
+        if (!agentId) return;
+        
+        const fetchAgent = async () => {
+            try {
+                const agentData = await getAgent(agentId);
+                if (agentData) {
+                    setAgent(agentData);
+                    setAgentLocation(agentData.location);
+                }
+            } catch (error) {
+                console.error('Error fetching agent:', error);
+            }
+        };
+        
+        fetchAgent();
+    }, [agentId]);
 
     useEffect(() => {
         if (!mapboxToken || mapboxToken === 'YOUR_MAPBOX_API_KEY_HERE') {
@@ -37,11 +59,18 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
         }
         if (mapRef.current || !mapContainerRef.current) return; 
 
+        // Center on agent location first, then fallback to hostel location
+        const center = agentLocation 
+            ? [agentLocation.lng, agentLocation.lat]
+            : hostelLocation 
+                ? [hostelLocation.lng, hostelLocation.lat]
+                : [-0.1870, 5.6037]; // Last resort fallback
+
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: styleUrl,
-            center: [hostelLocation?.lng || -0.1870, hostelLocation?.lat || 5.6037],
-            zoom: 14
+            center: center as [number, number],
+            zoom: agentLocation ? 16 : 14 // Zoom in closer if we have agent location
         });
 
         mapRef.current = map;
@@ -49,13 +78,13 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
         map.on('load', () => {
              setMapLoaded(true);
 
-             // Add empty source for agent location
+             // Add agent location source with initial location
              if (!map.getSource('agent')) {
                 map.addSource('agent', {
                     type: 'geojson',
                     data: {
                         type: 'Point',
-                        coordinates: [0, 0] // Start with an empty point
+                        coordinates: agentLocation ? [agentLocation.lng, agentLocation.lat] : [0, 0]
                     }
                 });
              }
@@ -80,7 +109,7 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
             map.remove();
             mapRef.current = null;
         };
-    }, [styleUrl, hostelLocation, mapboxToken]);
+    }, [styleUrl, hostelLocation, mapboxToken, agentLocation]);
 
     useEffect(() => {
         if (!mapLoaded || !mapRef.current) return;
@@ -111,6 +140,10 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
             const { lat, lng } = message.data;
             const map = mapRef.current;
             if (map) {
+                // Update agent location state
+                setAgentLocation({ lat, lng });
+                
+                // Update map marker
                 const agentSource = map.getSource('agent') as mapboxgl.GeoJSONSource;
                 if (agentSource) {
                      agentSource.setData({
