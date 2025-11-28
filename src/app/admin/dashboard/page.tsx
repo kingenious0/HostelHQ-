@@ -8,7 +8,7 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield } from 'lucide-react';
+import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield, Settings } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -455,7 +455,15 @@ export default function AdminDashboard() {
       <Header />
       <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
         <div className="container mx-auto">
-          <h1 className="text-3xl font-bold font-headline mb-6">Admin Dashboard</h1>
+          <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold font-headline">Admin Dashboard</h1>
+          <Link href="/admin/settings">
+            <Button variant="outline" size="sm">
+              <Settings className="h-4 w-4 mr-2" />
+              Admin Settings
+            </Button>
+          </Link>
+        </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
             <Card>
