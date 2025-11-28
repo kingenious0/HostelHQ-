@@ -393,18 +393,22 @@ export default function MyBookingsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Tabs defaultValue="pending" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-4 gap-1">
-                                            <TabsTrigger value="pending" className="text-xs">
-                                                Pending ({filteredVisits('pending').length})
+                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2">
+                                            <TabsTrigger value="pending" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Pending</span>
+                                                <span className="sm:hidden">Pend</span> ({filteredVisits('pending').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="accepted" className="text-xs">
-                                                Confirmed ({filteredVisits('accepted').length})
+                                            <TabsTrigger value="accepted" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Confirmed</span>
+                                                <span className="sm:hidden">Conf</span> ({filteredVisits('accepted').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="completed" className="text-xs">
-                                                Completed ({filteredVisits('completed').length})
+                                            <TabsTrigger value="completed" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Completed</span>
+                                                <span className="sm:hidden">Comp</span> ({filteredVisits('completed').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="cancelled" className="text-xs">
-                                                Cancelled ({filteredVisits('cancelled').length})
+                                            <TabsTrigger value="cancelled" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Cancelled</span>
+                                                <span className="sm:hidden">Canc</span> ({filteredVisits('cancelled').length})
                                             </TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="pending" className="mt-4">
@@ -483,18 +487,22 @@ export default function MyBookingsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Tabs defaultValue="confirmed" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-4 gap-1">
-                                            <TabsTrigger value="pending" className="text-xs">
-                                                Pending ({filteredBookings('pending').length})
+                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2">
+                                            <TabsTrigger value="pending" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Pending</span>
+                                                <span className="sm:hidden">Pend</span> ({filteredBookings('pending').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="confirmed" className="text-xs">
-                                                Secured ({filteredBookings('confirmed').length})
+                                            <TabsTrigger value="confirmed" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Secured</span>
+                                                <span className="sm:hidden">Sec</span> ({filteredBookings('confirmed').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="cancelled" className="text-xs">
-                                                Cancelled ({filteredBookings('cancelled').length})
+                                            <TabsTrigger value="cancelled" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Cancelled</span>
+                                                <span className="sm:hidden">Canc</span> ({filteredBookings('cancelled').length})
                                             </TabsTrigger>
-                                            <TabsTrigger value="completed" className="text-xs">
-                                                Completed ({filteredBookings('completed').length})
+                                            <TabsTrigger value="completed" className="text-xs sm:text-xs px-2 py-2">
+                                                <span className="hidden sm:inline">Completed</span>
+                                                <span className="sm:hidden">Comp</span> ({filteredBookings('completed').length})
                                             </TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="pending" className="mt-4">
