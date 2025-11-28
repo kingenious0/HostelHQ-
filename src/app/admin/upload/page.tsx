@@ -227,6 +227,11 @@ export default function AdminUploadPage() {
         toast({ title: 'Creating hostel...', description: 'Uploading images and enhancing description.' });
 
         try {
+            // Get current user data from Firestore for accurate creator information
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            const userData = userDoc.exists() ? userDoc.data() : {};
+            const actualFullName = userData.fullName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Admin';
+            const actualEmail = userData.email || currentUser.email || 'admin@hostelhq.com';
             // 1. Upload images to Cloudinary
             const imageUrls = await Promise.all(photos.map(uploadImage));
             toast({ title: 'Images Uploaded!', description: 'Your photos have been compressed and saved.' });
@@ -261,9 +266,10 @@ export default function AdminUploadPage() {
                     });
                 } catch (error) {
                     console.error("AI Enhancement failed, using original description.", error);
+                    console.error("Error details:", JSON.stringify(error, null, 2));
                     toast({
                         title: "AI Enhancement Failed",
-                        description: "Could not enhance description, using original text.",
+                        description: "Could not enhance description. Check if GEMINI_API_KEY is configured. Using original text.",
                         variant: 'destructive',
                     });
                 }
@@ -295,11 +301,11 @@ export default function AdminUploadPage() {
                 agentId: currentUser.uid, // Keep agentId for compatibility, but it's actually adminId
                 adminId: currentUser.uid, // Add adminId field
                 adminDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable admin ID
-                // Creator tracking for admin visibility
+                // Creator tracking for admin visibility with actual user data
                 createdBy: {
                     userId: currentUser.uid,
-                    fullName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Admin',
-                    email: currentUser.email || 'admin@hostelhq.com',
+                    fullName: actualFullName,
+                    email: actualEmail,
                     role: 'admin',
                     createdAt: new Date().toISOString()
                 },

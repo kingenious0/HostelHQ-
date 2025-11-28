@@ -230,9 +230,14 @@ export default function AgentUploadPage() {
         }
 
         setIsSubmitting(true);
-        toast({ title: 'Submitting hostel...', description: 'Uploading images and enhancing description.' });
+        toast({ title: 'Submitting...', description: 'Uploading images and enhancing description.' });
 
         try {
+            // Get current user data from Firestore for accurate creator information
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            const userData = userDoc.exists() ? userDoc.data() : {};
+            const actualFullName = userData.fullName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Agent';
+            const actualEmail = userData.email || currentUser.email || 'agent@hostelhq.com';
             // 1. Upload images to Cloudinary
             const imageUrls = await Promise.all(photos.map(uploadImage));
             toast({ title: 'Images Uploaded!', description: 'Your photos have been compressed and saved.' });
@@ -267,9 +272,10 @@ export default function AgentUploadPage() {
                     });
                 } catch (error) {
                     console.error("AI Enhancement failed, using original description.", error);
+                    console.error("Error details:", JSON.stringify(error, null, 2));
                     toast({
                         title: "AI Enhancement Failed",
-                        description: "Could not enhance description, using original text.",
+                        description: "Could not enhance description. Check if GEMINI_API_KEY is configured. Using original text.",
                         variant: 'destructive',
                     });
                 }
@@ -300,11 +306,11 @@ export default function AgentUploadPage() {
                 status: 'pending',
                 agentId: currentUser.uid,
                 agentDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid, // Readable agent ID
-                // Creator tracking for admin visibility
+                // Creator tracking for admin visibility with actual user data
                 createdBy: {
                     userId: currentUser.uid,
-                    fullName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Agent',
-                    email: currentUser.email || 'agent@hostelhq.com',
+                    fullName: actualFullName,
+                    email: actualEmail,
                     role: 'agent',
                     createdAt: new Date().toISOString()
                 },

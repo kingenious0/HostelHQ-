@@ -186,7 +186,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-50"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-[9999]"
         size="icon"
       >
         <MessageCircle className="h-6 w-6" />
@@ -198,7 +198,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
   return (
     <Card 
       className={cn(
-        "fixed bottom-6 right-6 w-96 shadow-2xl border-0 z-50 transition-all duration-200",
+        "fixed bottom-6 right-6 w-96 shadow-2xl border-0 z-[9999] transition-all duration-200",
         isMinimized ? "h-16" : "h-[600px]"
       )}
     >
