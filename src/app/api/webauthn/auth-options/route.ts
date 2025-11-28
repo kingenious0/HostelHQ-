@@ -44,9 +44,11 @@ export async function POST(req: NextRequest) {
     }
 
     const userData = userDoc.data();
-    const biometricCredential = userData.biometricCredential;
+    // Check for biometric credential data (new format) or legacy format
+    const biometricCredential = userData.biometricCredentialData || userData.biometricCredential;
+    const credentialId = userData.biometricCredentialId || biometricCredential?.id;
 
-    if (!biometricCredential) {
+    if (!credentialId && !biometricCredential) {
       return NextResponse.json(
         { success: false, error: 'No biometric credentials found for user' },
         { status: 404 }
@@ -54,9 +56,9 @@ export async function POST(req: NextRequest) {
     }
 
     const allowCredentials = [{
-      id: biometricCredential.id,
+      id: credentialId || biometricCredential.id,
       type: 'public-key' as const,
-      transports: biometricCredential.transports || ['internal'],
+      transports: biometricCredential?.transports || ['internal'],
     }];
 
     const opts: GenerateAuthenticationOptionsOpts = {

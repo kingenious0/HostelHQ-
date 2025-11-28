@@ -1298,10 +1298,10 @@ function formatPaymentStatusSMS(
 
                 {/* Request New Hostel Dialog */}
                 <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-					<DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+					<DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto mx-auto">
                         <DialogHeader>
-                            <DialogTitle>Request a new hostel</DialogTitle>
-                            <DialogDescription>
+                            <DialogTitle className="text-lg sm:text-xl">Request a new hostel</DialogTitle>
+                            <DialogDescription className="text-sm">
                                 Tell us about a hostel you manage that isn&apos;t on HostelHQ yet. Our team will review and add it.
                             </DialogDescription>
                         </DialogHeader>
@@ -1324,18 +1324,19 @@ function formatPaymentStatusSMS(
                                     onChange={(e) => setRequestLocation(e.target.value)}
                                 />
                             </div>
-                            <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-4 sm:space-y-0 sm:grid sm:gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
-                                    <Label htmlFor="request-campus">Campus / Area</Label>
+                                    <Label htmlFor="request-campus" className="text-sm">Campus / Area</Label>
                                     <Input
                                         id="request-campus"
-                                        placeholder="e.g., AAMUSTED Main Campus"
+                                        placeholder="e.g., 4500"
                                         value={requestCampus}
                                         onChange={(e) => setRequestCampus(e.target.value)}
+                                        className="text-sm"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="request-capacity">Approximate capacity</Label>
+                                    <Label htmlFor="request-capacity" className="text-sm">Approximate capacity</Label>
                                     <Input
                                         id="request-capacity"
                                         type="number"
@@ -1343,33 +1344,34 @@ function formatPaymentStatusSMS(
                                         placeholder="e.g., 120 students"
                                         value={requestCapacity}
                                         onChange={(e) => setRequestCapacity(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="request-base-price">Typical yearly fee (GHS)</Label>
-                                    <Input
-                                        id="request-base-price"
-                                        type="number"
-                                        min={0}
-                                        placeholder="e.g., 4500"
-                                        value={requestBasePrice}
-                                        onChange={(e) => setRequestBasePrice(e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="request-description">Short description</Label>
-                                    <Input
-                                        id="request-description"
-                                        placeholder="e.g., 4-in-a-room hostel close to campus gate"
-                                        value={requestDescription}
-                                        onChange={(e) => setRequestDescription(e.target.value)}
+                                        className="text-sm"
                                     />
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="request-notes">Additional details (optional)</Label>
+                                <Label htmlFor="request-base-price" className="text-sm">Typical yearly fee (GHS)</Label>
+                                <Input
+                                    id="request-base-price"
+                                    type="number"
+                                    min={0}
+                                    placeholder="e.g., 4500"
+                                    value={requestBasePrice}
+                                    onChange={(e) => setRequestBasePrice(e.target.value)}
+                                    className="text-sm"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="request-description" className="text-sm">Short description</Label>
+                                <Input
+                                    id="request-description"
+                                    placeholder="e.g., 4-in-a-room hostel close to campus gate"
+                                    value={requestDescription}
+                                    onChange={(e) => setRequestDescription(e.target.value)}
+                                    className="text-sm"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="request-notes" className="text-sm">Additional details (optional)</Label>
                                 <Input
                                     id="request-notes"
                                     placeholder="Capacity, nearby landmarks, anything helpful for our team"

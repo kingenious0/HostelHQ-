@@ -604,9 +604,20 @@ export default function SignupPage() {
 
             // (Optional) additional metadata for managers could be added here later
 
-            // Filter out non-serializable biometricCredential before saving to Firestore
+            // Convert biometricCredential to a serializable format for Firestore
             const firestoreUserData = { ...userData };
-            delete firestoreUserData.biometricCredential; // Remove WebAuthn object that can't be serialized
+            if (firestoreUserData.biometricCredential) {
+                // Store only the serializable parts of the credential
+                firestoreUserData.biometricCredentialId = firestoreUserData.biometricCredential.id;
+                firestoreUserData.biometricCredentialData = {
+                    id: firestoreUserData.biometricCredential.id,
+                    publicKey: firestoreUserData.biometricCredential.publicKey || '',
+                    counter: firestoreUserData.biometricCredential.counter || 0,
+                    deviceType: firestoreUserData.biometricCredential.deviceType || 'platform',
+                    transports: firestoreUserData.biometricCredential.transports || ['internal'],
+                };
+                delete firestoreUserData.biometricCredential; // Remove the raw WebAuthn object
+            }
             
             // Create user document (no more pendingUsers for agents)
             console.log('💾 Saving user document to Firestore...');
