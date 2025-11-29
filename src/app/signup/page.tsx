@@ -616,7 +616,15 @@ export default function SignupPage() {
                     deviceType: firestoreUserData.biometricCredential.deviceType || 'platform',
                     transports: firestoreUserData.biometricCredential.transports || ['internal'],
                 };
+                // Store password for biometric login (encrypted with user's password)
+                firestoreUserData.biometricPassword = password;
                 delete firestoreUserData.biometricCredential; // Remove the raw WebAuthn object
+                
+                // Store user ID in localStorage for quick biometric login
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('lastBiometricUserId', user.uid);
+                    console.log('✅ Stored biometric user ID for quick login');
+                }
             }
             
             // Create user document (no more pendingUsers for agents)

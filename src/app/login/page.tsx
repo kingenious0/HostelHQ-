@@ -133,130 +133,76 @@ function LoginPageInner() {
         }
     };
 
-    // Handle fingerprint login
+    // Handle fingerprint login - NO EMAIL/PHONE REQUIRED!
     const handleFingerprintLogin = async () => {
         setBiometricLoading(true);
         try {
-            // First, we need the user to enter their identifier to find their account
-            if (!identifier.trim()) {
-                toast({
-                    title: 'Enter Your ID',
-                    description: 'Please enter your email or phone number first.',
-                    variant: 'destructive',
-                });
-                setBiometricLoading(false);
-                return;
-            }
+            toast({
+                title: 'Scan Your Fingerprint',
+                description: 'Place your finger on the sensor...',
+            });
 
-            let userId: string | null = null;
-            let userEmail: string | null = null;
+            // Get stored user ID from last successful biometric login (if any)
+            const lastUserId = localStorage.getItem('lastBiometricUserId');
+            
+            // Try to verify with stored user ID first
+            let userId = lastUserId;
             let userData: any = null;
+            let userEmail: string | null = null;
 
-            const isEmailLike = identifier.includes('@');
-
-            if (isEmailLike) {
-                // Search by email
-                const usersRef = collection(db, 'users');
-                const q = query(usersRef, where('email', '==', identifier.trim()));
-                const snap = await getDocs(q);
+            if (userId) {
+                console.log('Attempting biometric login with stored user ID:', userId);
+                const result = await verifyBiometric(userId);
                 
-                if (snap.empty) {
-                    // Try authEmail
-                    const q2 = query(usersRef, where('authEmail', '==', identifier.trim()));
-                    const snap2 = await getDocs(q2);
-                    if (snap2.empty) {
-                        throw new Error('user-not-found');
+                if (result.success) {
+                    // Get user data
+                    const userDocRef = doc(db, 'users', userId);
+                    const userDocSnap = await getDoc(userDocRef);
+                    
+                    if (userDocSnap.exists()) {
+                        userData = userDocSnap.data();
+                        userEmail = userData.authEmail || userData.email;
+                        
+                        // Successfully verified! Now sign in to Firebase
+                        if (userEmail && userData.biometricPassword) {
+                            await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+                            
+                            const role = userData.role as string | undefined;
+                            const displayName = userData.fullName || userData.firstName || '';
+                            
+                            toast({ 
+                                title: `Welcome back, ${displayName}!`,
+                                description: 'Fingerprint verified successfully.',
+                            });
+
+                            const destination = safeRedirect && (!role || role === 'student')
+                                ? safeRedirect
+                                : getRouteForRole(role);
+                            router.push(destination);
+                            setBiometricLoading(false);
+                            return;
+                        }
                     }
-                    userId = snap2.docs[0].id;
-                    userData = snap2.docs[0].data();
-                    userEmail = userData.authEmail || userData.email;
-                } else {
-                    userId = snap.docs[0].id;
-                    userData = snap.docs[0].data();
-                    userEmail = userData.authEmail || userData.email;
                 }
-            } else {
-                // Search by phone number
-                const cleaned = identifier.replace(/\D/g, '');
-                let normalized = cleaned;
-                if (normalized.startsWith('0') && normalized.length === 10) {
-                    normalized = '233' + normalized.substring(1);
-                }
-
-                const usersRef = collection(db, 'users');
-                const q = query(usersRef, where('phoneNumber', '==', normalized));
-                const snap = await getDocs(q);
-
-                if (snap.empty) {
-                    throw new Error('user-not-found');
-                }
-
-                userId = snap.docs[0].id;
-                userData = snap.docs[0].data();
-                userEmail = userData.authEmail || userData.email;
             }
 
-            if (!userId || !userData.hasBiometric) {
-                toast({
-                    title: 'Biometric Not Set Up',
-                    description: 'You haven\'t set up fingerprint login. Please sign in manually.',
-                    variant: 'destructive',
-                });
-                setLoginMode('manual');
-                setBiometricLoading(false);
-                return;
-            }
-
-            // Verify biometric
-            const result = await verifyBiometric(userId);
-
-            if (result.success) {
-                // Biometric verified, now sign in the user
-                // We need to use a special token or session approach
-                // For now, we'll prompt for password as a fallback
-                toast({
-                    title: 'Fingerprint Verified!',
-                    description: 'Signing you in...',
-                });
-
-                // Sign in using Firebase custom token or stored session
-                // Since we verified biometric, we can trust this user
-                const role = userData.role as string | undefined;
-                const displayName = userData.fullName || userData.firstName || '';
-                
-                toast({ title: displayName ? `Welcome ${displayName}!` : 'Login Successful!' });
-
-                const destination = safeRedirect && (!role || role === 'student')
-                    ? safeRedirect
-                    : getRouteForRole(role);
-                router.push(destination);
-            } else {
-                toast({
-                    title: 'Fingerprint Failed',
-                    description: result.error || 'Please try again or sign in manually.',
-                    variant: 'destructive',
-                });
-                // Fallback to manual login
-                setLoginMode('manual');
-            }
+            // If we get here, either no stored user or verification failed
+            // Fall back to manual login
+            toast({
+                title: 'Fingerprint Not Recognized',
+                description: 'Please sign in manually or ensure you\'ve set up fingerprint during signup.',
+                variant: 'destructive',
+            });
+            setLoginMode('manual');
+            setBiometricLoading(false);
         } catch (error: any) {
             console.error('Fingerprint login error:', error);
-            
-            if (error.message === 'user-not-found') {
-                toast({
-                    title: 'User Not Found',
-                    description: 'No account found with this identifier.',
-                    variant: 'destructive',
-                });
-            } else {
-                toast({
-                    title: 'Fingerprint Login Failed',
-                    description: 'Please try again or sign in manually.',
-                    variant: 'destructive',
-                });
-            }
+            toast({
+                title: 'Fingerprint Login Failed',
+                description: error.message || 'Please try again or sign in manually.',
+                variant: 'destructive',
+            });
             setLoginMode('manual');
-        } finally {
             setBiometricLoading(false);
         }
     };
