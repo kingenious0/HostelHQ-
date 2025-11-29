@@ -1,4 +1,4 @@
- import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   verifyRegistrationResponse,
   VerifyRegistrationResponseOpts,
@@ -10,16 +10,20 @@ const rpName = 'HostelHQ';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, credential } = await req.json();
+    const { userId, credential, clientOrigin } = await req.json();
 
     // Get the actual domain from the request
     const host = req.headers.get('host') || 'localhost:8080';
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const userAgent = req.headers.get('user-agent') || '';
+    
+    // Detect if request is from Android WebView (Capacitor app)
+    const isAndroidWebView = userAgent.includes('wv') || userAgent.includes('Android');
     
     // Handle different environments
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
-      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      rpID = 'localhost';
     } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
       rpID = 'hostelhq.vercel.app'; // Production domain
     } else if (host.includes('vercel.app')) {
@@ -28,9 +32,28 @@ export async function POST(req: NextRequest) {
       rpID = host; // Fallback to full domain
     }
     
-    const origin = `${protocol}://${host}`;
+    // Determine the expected origin
+    // For Android WebView, we need to accept both the web origin and android:apk-key-hash origin
+    let origin = `${protocol}://${host}`;
     
-    console.log('WebAuthn Verify Config:', { rpID, origin, host, environment: process.env.NODE_ENV });
+    // Build list of expected origins (for Android WebView compatibility)
+    const expectedOrigins: string[] = [origin];
+    
+    // For Android, also accept the client-reported origin if it's an android: scheme
+    if (isAndroidWebView && clientOrigin && clientOrigin.startsWith('android:')) {
+      expectedOrigins.push(clientOrigin);
+    }
+    
+    console.log('WebAuthn Verify Config:', { 
+      rpID, 
+      origin, 
+      expectedOrigins,
+      host, 
+      environment: process.env.NODE_ENV,
+      isAndroidWebView,
+      userAgent: userAgent.substring(0, 100),
+      clientOrigin
+    });
 
     if (!userId || !credential) {
       return NextResponse.json(
@@ -57,13 +80,13 @@ export async function POST(req: NextRequest) {
       hasCredential: !!credential, 
       hasChallenge: !!expectedChallenge,
       rpID,
-      origin 
+      expectedOrigins 
     });
 
     const opts: VerifyRegistrationResponseOpts = {
       response: credential,
       expectedChallenge,
-      expectedOrigin: origin,
+      expectedOrigin: expectedOrigins, // Accept multiple origins for Android WebView
       expectedRPID: rpID,
       requireUserVerification: true,
     };

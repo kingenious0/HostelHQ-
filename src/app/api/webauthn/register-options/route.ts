@@ -8,18 +8,22 @@ const rpName = 'HostelHQ';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, userName } = await req.json();
+    const { userId, userName, clientOrigin } = await req.json();
 
     // Get the actual domain from the request
     const host = req.headers.get('host') || 'localhost:8080';
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const userAgent = req.headers.get('user-agent') || '';
+    
+    // Detect if request is from Android WebView (Capacitor app)
+    const isAndroidWebView = userAgent.includes('wv') || userAgent.includes('Android');
     
     // Handle different environments
     let rpID: string;
     if (host.includes('localhost') || host.includes('127.0.0.1')) {
       rpID = 'localhost';
-    } else if (host.includes('hostel-hq.vercel.app') || host === 'hostel-hq.vercel.app') {
-      rpID = 'hostel-hq.vercel.app'; // Production domain
+    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
+      rpID = 'hostelhq.vercel.app'; // Production domain
     } else if (host.includes('vercel.app')) {
       rpID = host; // Preview/staging domains
     } else {
@@ -28,7 +32,15 @@ export async function POST(req: NextRequest) {
     
     const origin = `${protocol}://${host}`;
     
-    console.log('WebAuthn Config:', { rpID, origin, host, environment: process.env.NODE_ENV });
+    console.log('WebAuthn Config:', { 
+      rpID, 
+      origin, 
+      host, 
+      environment: process.env.NODE_ENV,
+      isAndroidWebView,
+      userAgent: userAgent.substring(0, 100),
+      clientOrigin
+    });
 
     if (!userId || !userName) {
       return NextResponse.json(

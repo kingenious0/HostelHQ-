@@ -80,36 +80,51 @@ export function BiometricCaptureDialog({
 
     try {
       if (mode === 'register') {
+        console.log('Starting biometric registration for user:', userId);
         const credential = await registerBiometric(userId, userName);
-        if (credential && onCapture) {
-          onCapture(credential);
+        console.log('Registration result:', credential);
+        
+        if (credential) {
+          if (onCapture) {
+            onCapture(credential);
+          }
           toast({
             title: '✅ Biometric Setup Complete',
             description: `${deviceType} has been registered successfully!`,
           });
           onOpenChange(false);
+        } else {
+          // Registration returned null - this means it failed silently
+          console.error('Registration returned null credential');
+          setError('Fingerprint registration failed. Please try again or use camera instead.');
+          toast({
+            title: 'Registration Failed',
+            description: 'Could not register fingerprint. Please try again or use camera.',
+            variant: 'destructive',
+          });
         }
       } else if (mode === 'verify') {
-        const verified = await verifyBiometric(userId);
+        const result = await verifyBiometric(userId);
         if (onVerify) {
-          onVerify(verified);
-          if (verified) {
+          onVerify(result.success);
+          if (result.success) {
             toast({
               title: '✅ Identity Verified',
               description: 'Biometric verification successful!',
             });
             onOpenChange(false);
           } else {
-            setError('Biometric verification failed. Please try again.');
+            setError(result.error || 'Biometric verification failed. Please try again.');
           }
         }
       }
     } catch (err: any) {
       console.error('Biometric action error:', err);
-      setError(err.message || 'Biometric operation failed');
+      const errorMessage = err.message || 'Biometric operation failed';
+      setError(errorMessage);
       toast({
         title: 'Biometric Error',
-        description: err.message || 'Please try again or use an alternative method.',
+        description: errorMessage + '. Please try again or use camera instead.',
         variant: 'destructive',
       });
     } finally {

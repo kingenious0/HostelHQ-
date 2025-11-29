@@ -61,15 +61,23 @@ export async function isPlatformAuthenticatorAvailable(): Promise<boolean> {
  * @param userId - User's unique ID
  * @param userName - User's name or email
  * @returns Credential data to store on server
+ * @throws Error if registration fails
  */
 export async function registerBiometric(
   userId: string,
   userName: string
-): Promise<BiometricCredential | null> {
+): Promise<BiometricCredential> {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const clientOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+  const isWebView = typeof navigator !== 'undefined' && /wv|WebView/i.test(navigator.userAgent);
+  
   console.log('WebAuthn baseUrl:', baseUrl);
+  console.log('WebAuthn clientOrigin:', clientOrigin);
   console.log('WebAuthn User Agent:', navigator.userAgent);
   console.log('WebAuthn Platform:', navigator.platform);
+  console.log('WebAuthn isAndroid:', isAndroid);
+  console.log('WebAuthn isWebView:', isWebView);
   
   try {
     // Check WebAuthn support first
@@ -85,7 +93,7 @@ export async function registerBiometric(
     const optionsResponse = await fetch(`${baseUrl}/api/webauthn/register-options`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, userName }),
+      body: JSON.stringify({ userId, userName, clientOrigin }),
     });
 
     if (!optionsResponse.ok) {
@@ -100,21 +108,49 @@ export async function registerBiometric(
 
     // Start registration with browser/OS
     console.log('Starting WebAuthn registration...');
-    const credential = await startRegistration(options);
-    console.log('WebAuthn registration successful:', credential.id);
+    let credential;
+    try {
+      credential = await startRegistration(options);
+      console.log('WebAuthn registration successful:', credential.id);
+    } catch (regError: any) {
+      console.error('WebAuthn startRegistration error:', regError);
+      console.error('Error name:', regError.name);
+      console.error('Error message:', regError.message);
+      
+      // On Android, if WebAuthn fails, throw with specific message
+      if (isAndroid) {
+        if (regError.name === 'NotAllowedError') {
+          throw new Error('Fingerprint registration was cancelled. Please try again.');
+        } else if (regError.name === 'NotSupportedError') {
+          throw new Error('Your device does not support fingerprint authentication.');
+        } else if (regError.name === 'SecurityError') {
+          throw new Error('Security error. Please ensure you are using a secure connection.');
+        }
+      }
+      throw regError;
+    }
 
     // Verify registration with server
+    console.log('Verifying registration with server...');
     const verifyResponse = await fetch(`${baseUrl}/api/webauthn/register-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, credential }),
+      body: JSON.stringify({ userId, credential, clientOrigin }),
     });
 
     if (!verifyResponse.ok) {
-      throw new Error('Failed to verify registration');
+      const errorData = await verifyResponse.json().catch(() => ({}));
+      console.error('Registration verification failed:', errorData);
+      throw new Error(errorData.error || 'Failed to verify registration');
     }
 
     const verifyResult = await verifyResponse.json();
+    console.log('WebAuthn verification result:', verifyResult);
+    
+    if (!verifyResult.success || !verifyResult.credential) {
+      throw new Error(verifyResult.error || 'Registration verification failed');
+    }
+    
     return verifyResult.credential;
   } catch (error: any) {
     console.error('Biometric registration failed:', error);
@@ -132,7 +168,8 @@ export async function registerBiometric(
       console.error('Authenticator already registered');
     }
     
-    return null;
+    // Re-throw with user-friendly message
+    throw error;
   }
 }
 
