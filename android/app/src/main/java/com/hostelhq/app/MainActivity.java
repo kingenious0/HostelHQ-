@@ -22,11 +22,11 @@ public class MainActivity extends BridgeActivity {
             WebView webView = getBridge().getWebView();
             
             if (webView != null) {
-                // Check if WebAuthentication is supported in this WebView version
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+                // Check if WebAuthn is supported in this WebView version
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHN)) {
                     WebSettingsCompat.setWebAuthenticationSupport(
                         webView.getSettings(),
-                        WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP
+                        WebSettingsCompat.WEB_AUTHN_SUPPORT_FOR_APP
                     );
                     android.util.Log.d("HostelHQ", "WebAuthn support enabled in WebView");
                 } else {

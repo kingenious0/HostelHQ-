@@ -28,6 +28,12 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
+        {/* PWA: manifest & basic meta tags for installability */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0f172a" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="apple-touch-icon" href="/hostelhq-icon-new.png" />
       </head>
       <body className="font-body antialiased min-h-full bg-background" suppressHydrationWarning>
         <script

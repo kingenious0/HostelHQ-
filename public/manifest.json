@@ -1,0 +1,22 @@
+{
+  "name": "HostelHQ",
+  "short_name": "HostelHQ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/hostelhq-icon-new.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
