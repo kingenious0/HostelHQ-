@@ -11,9 +11,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { doc, updateDoc, increment, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, increment, addDoc, collection, serverTimestamp, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { BackButton } from '@/components/ui/back-button';
+
+// Profanity filter - bad words that trigger admin review
+const BAD_WORDS = [
+    'fuck', 'shit', 'damn', 'bitch', 'ass', 'bastard', 'crap', 'piss',
+    'dick', 'cock', 'pussy', 'whore', 'slut', 'fag', 'nigger', 'retard',
+    'disgusting', 'terrible', 'horrible', 'worst', 'scam', 'fraud', 'cheat',
+    'dirty', 'filthy', 'nasty', 'trash', 'garbage', 'sucks', 'awful'
+];
+
+const containsProfanity = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return BAD_WORDS.some(word => {
+        // Check for exact word match with word boundaries
+        const regex = new RegExp(`\\b${word}\\b`, 'i');
+        return regex.test(lowerText);
+    });
+};
 
 export default function RatingPage() {
     const router = useRouter();
@@ -55,22 +72,54 @@ export default function RatingPage() {
         toast({ title: "Submitting your review..." });
         
         try {
-            // Save the review to a 'reviews' subcollection for moderation
+            // Check for profanity in the comment
+            const hasBadWords = containsProfanity(comment);
+            const reviewStatus = hasBadWords ? 'pending' : 'approved';
+
+            // Get student details for flagged reviews
+            let studentEmail = currentUser.email || 'unknown';
+            let studentPhone = 'unknown';
+            if (hasBadWords) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        studentEmail = userData.email || studentEmail;
+                        studentPhone = userData.phone || studentPhone;
+                    }
+                } catch (err) {
+                    console.error('Error fetching user details:', err);
+                }
+            }
+
+            // Save the review with status
             const reviewsRef = collection(db, 'reviews');
             await addDoc(reviewsRef, {
                 hostelId: hostelId,
                 studentId: currentUser.uid,
-                studentName: currentUser.displayName || 'Anonymous Student', // Fallback
+                studentName: currentUser.displayName || 'Anonymous Student',
+                studentEmail: studentEmail,
+                studentPhone: studentPhone,
                 rating: rating,
                 comment: comment,
+                status: reviewStatus,
+                flaggedForProfanity: hasBadWords,
                 createdAt: serverTimestamp(),
                 visitId: visitId || null,
             });
 
-            toast({
-                title: "Review Submitted!",
-                description: "Thank you for your feedback. Your review is now live.",
-            });
+            if (hasBadWords) {
+                toast({
+                    title: "Review Submitted for Review",
+                    description: "Your review contains content that requires admin approval. You'll be notified once it's reviewed.",
+                    variant: "default",
+                });
+            } else {
+                toast({
+                    title: "Review Submitted!",
+                    description: "Thank you for your feedback. Your review is now live.",
+                });
+            }
 
             router.push(`/hostels/${hostelId}`);
 

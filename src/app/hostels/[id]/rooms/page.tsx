@@ -578,7 +578,8 @@ export default function RoomsPage() {
                             const used = Math.max(0, Math.min(totalSlots, room.occupancy));
                             const remainingSlots = Math.max(0, totalSlots - used);
                             const remainingRooms = Math.round(remainingSlots / room.capacity!);
-                            return `${remainingRooms} of ${room.totalRooms} rooms available`;
+                            const totalRooms = room.totalRooms!;
+                            return `${remainingRooms} of ${totalRooms} ${totalRooms === 1 ? 'room' : 'rooms'} available`;
                           })()}
                         </p>
                       )}

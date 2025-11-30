@@ -57,6 +57,7 @@ body {
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 350 70% 32%;
     --font-scale: 1;
+    --ui-scale: 1;
   }
   .dark {
     --background: 222.2 84% 4.9%;
@@ -112,7 +113,7 @@ body {
   
   /* Mobile viewport improvements */
   html {
-    font-size: calc(16px * var(--font-scale));
+    font-size: calc(16px * var(--font-scale) * var(--ui-scale));
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }

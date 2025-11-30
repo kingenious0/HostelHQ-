@@ -1,13 +1,13 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, MapPin, University, DoorOpen, Users } from 'lucide-react';
+import { Search, MapPin, University, DoorOpen, Users, RotateCcw } from 'lucide-react';
 
 export function SearchForm() {
     const [searchQuery, setSearchQuery] = useState('');
@@ -17,8 +17,8 @@ export function SearchForm() {
     const [gender, setGender] = useState('');
     const router = useRouter();
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
+    // Auto-search with debouncing
+    const performSearch = useCallback(() => {
         const params = new URLSearchParams();
         if (searchQuery) {
             params.set('search', searchQuery);
@@ -36,12 +36,34 @@ export function SearchForm() {
             params.set('gender', gender);
         }
         router.push(`/?${params.toString()}`);
+    }, [searchQuery, locationQuery, institution, roomType, gender, router]);
+
+    // Debounce auto-search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            performSearch();
+        }, 500); // 500ms delay for typing
+
+        return () => clearTimeout(timer);
+    }, [performSearch]);
+
+    // Clear all filters
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        setLocationQuery('');
+        setInstitution('');
+        setRoomType('');
+        setGender('');
+        router.push('/');
     };
+
+    // Check if any filter is active
+    const hasActiveFilters = searchQuery || locationQuery || institution || roomType || gender;
 
     return (
         <Card className="bg-card/90 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow-2xl mx-2 sm:mx-0 border border-border/60">
             <CardContent className="p-2 sm:p-3">
-                <form onSubmit={handleSearch} className="flex flex-col gap-5 sm:gap-6">
+                <div className="flex flex-col gap-5 sm:gap-6">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div className="relative">
                             <University className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
@@ -65,12 +87,12 @@ export function SearchForm() {
                                     <SelectValue placeholder="Select Room Type" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="One In A Room">One In A Room</SelectItem>
-                                    <SelectItem value="Two In A Room">Two In A Room</SelectItem>
-                                    <SelectItem value="Three In A Room">Three In A Room</SelectItem>
-                                    <SelectItem value="Four In A Room">Four In A Room</SelectItem>
-                                    <SelectItem value="Five In A Room">Five In A Room</SelectItem>
-                                    <SelectItem value="Six In A Room">Six In A Room</SelectItem>
+                                    <SelectItem value="1 IN A ROOM">1 IN A ROOM</SelectItem>
+                                    <SelectItem value="2 IN A ROOM">2 IN A ROOM</SelectItem>
+                                    <SelectItem value="3 IN A ROOM">3 IN A ROOM</SelectItem>
+                                    <SelectItem value="4 IN A ROOM">4 IN A ROOM</SelectItem>
+                                    <SelectItem value="5 IN A ROOM">5 IN A ROOM</SelectItem>
+                                    <SelectItem value="6 IN A ROOM">6 IN A ROOM</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -110,14 +132,19 @@ export function SearchForm() {
                         </div>
                     </div>
                     
-                    <Button
-                        type="submit"
-                        size="lg"
-                        className="w-full h-12 sm:h-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 text-base sm:text-lg font-semibold tracking-wide"
-                    >
-                        Search hostels
-                    </Button>
-                </form>
+                    {hasActiveFilters && (
+                        <Button
+                            type="button"
+                            onClick={handleClearSearch}
+                            size="lg"
+                            variant="outline"
+                            className="w-full h-12 sm:h-14 rounded-full border-2 border-primary/30 text-primary hover:bg-primary/10 hover:border-primary text-base sm:text-lg font-semibold tracking-wide flex items-center justify-center gap-2"
+                        >
+                            <RotateCcw className="h-5 w-5" />
+                            Clear Search
+                        </Button>
+                    )}
+                </div>
             </CardContent>
         </Card>
     );

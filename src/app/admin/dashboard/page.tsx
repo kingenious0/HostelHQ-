@@ -518,7 +518,7 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          {/* Security & OTP management */}
+          {/* Security & Management */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -532,6 +532,43 @@ export default function AdminDashboard() {
                 <Button asChild size="sm">
                   <Link href="/admin/otp-management">
                     Manage OTPs
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Flagged Reviews</CardTitle>
+                <MessageSquare className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Review and moderate flagged reviews containing inappropriate content.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/admin/reviews">
+                      Manage Reviews
+                    </Link>
+                  </Button>
+                  {pendingReviews.length > 0 && (
+                    <Badge variant="destructive">{pendingReviews.length}</Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Hostel Requests</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Review hostel submission requests from managers and agents.
+                </p>
+                <Button asChild size="sm">
+                  <Link href="/admin/hostel-requests">
+                    View Requests
                   </Link>
                 </Button>
               </CardContent>

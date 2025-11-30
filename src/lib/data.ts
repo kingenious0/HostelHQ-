@@ -134,7 +134,7 @@ export const staticHostels: Hostel[] = [
     roomTypes: [
         { 
           id: 'rt1', 
-          name: 'Four In A Room', 
+          name: '4 IN A ROOM', 
           price: 3700, 
           availability: 'Available', 
           capacity: 4, 
@@ -143,7 +143,7 @@ export const staticHostels: Hostel[] = [
         },
         { 
           id: 'rt2', 
-          name: 'Two In A Room', 
+          name: '2 IN A ROOM', 
           price: 4500, 
           availability: 'Limited', 
           capacity: 2, 
@@ -151,7 +151,7 @@ export const staticHostels: Hostel[] = [
           roomAmenities: ['Private Balcony', 'Private Bathroom', 'Electricity', 'Water', 'AC', 'TV', 'Security', 'Furnished', 'Hot Water']
         },
     ],
-    roomTypeTags: ['Four In A Room', 'Two In A Room'],
+    roomTypeTags: ['4 IN A ROOM', '2 IN A ROOM'],
     priceRange: { min: 3700, max: 4500 },
     reviews: [],
     // Add individual physical rooms for demonstration
@@ -238,6 +238,17 @@ const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
   const derivedRoomTypeTags =
     (hostel.roomTypes ?? []).map((rt) => normalizeRoomTypeTag(rt.name)).filter(Boolean);
   const allRoomTypeTags = hostelRoomTypeTags.length ? hostelRoomTypeTags : derivedRoomTypeTags;
+
+  // Debug logging for room type filtering
+  if (options.roomType) {
+    console.log('[HostelHQ Room Type Filter]', {
+      hostelName: hostel.name,
+      filterRoomType: options.roomType,
+      normalizedFilter: normalizedRoomType,
+      hostelRoomTypeTags: allRoomTypeTags,
+      matches: allRoomTypeTags.includes(normalizedRoomType)
+    });
+  }
 
   const matchesInstitution = !options.institution || hostelInstitution === normalizedInstitution;
   // Use substring match for gender to be more forgiving (e.g., 'mixed hostel' should match 'Mixed' filter)

@@ -159,13 +159,15 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />
                         {hostel.rating.toFixed(1)}
                         {typeof hostel.numberOfReviews === "number" && (
-                            <span className="text-xs font-normal text-muted-foreground">({hostel.numberOfReviews} reviews)</span>
+                            <span className="text-xs font-normal text-muted-foreground">
+                                ({hostel.numberOfReviews} {hostel.numberOfReviews === 1 ? 'review' : 'reviews'})
+                            </span>
                         )}
                     </div>
                     {isStudent && totalRoomsAvailable > 0 && (
                         <Badge variant="secondary" className="flex items-center gap-1 text-xs font-semibold uppercase tracking-widest">
                             <DoorOpen className="h-3.5 w-3.5" />
-                            {totalRoomsAvailable} rooms available
+                            {totalRoomsAvailable} {totalRoomsAvailable === 1 ? 'room' : 'rooms'} available
                         </Badge>
                     )}
                 </div>

@@ -2,6 +2,7 @@
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -125,16 +126,17 @@ export function Header() {
 
   const applyFontScale = useCallback((value: FontScale) => {
     if (typeof document === 'undefined') return;
-    const scale = value === 'large' ? 1.1 : value === 'xlarge' ? 1.25 : 1;
+    // Make text size changes clearly visible
+    const scale = value === 'large' ? 1.25 : value === 'xlarge' ? 1.5 : 1;
+    console.log('[HostelHQ] applyFontScale', { value, scale });
     document.documentElement.style.setProperty('--font-scale', String(scale));
   }, []);
 
   const applyUiScale = useCallback((value: number) => {
     if (typeof document === 'undefined') return;
     const scale = value / 100; // Convert percentage to decimal (e.g., 80 -> 0.8)
+    console.log('[HostelHQ] applyUiScale', { value, scale });
     document.documentElement.style.setProperty('--ui-scale', String(scale));
-    // Also set font-size on html element for global scaling
-    document.documentElement.style.fontSize = `${scale * 16}px`;
   }, []);
 
   useEffect(() => {
@@ -795,6 +797,7 @@ export function Header() {
     }
   };
   
+  // Role helpers
   const isAgent = appUser?.role === 'agent';
   const isAdmin = appUser?.role === 'admin';
   const isStudent = appUser?.role === 'student';
@@ -857,7 +860,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50">
       <div className="border-b border-border/60 bg-background/80 backdrop-blur">
-        <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:h-20 sm:px-6">
+        <div className="container mx-auto flex h-20 items-center justify-between gap-4 px-3 sm:h-24 sm:px-6">
           <div className="flex flex-1 items-center gap-3">
             <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
               <SheetTrigger asChild>
@@ -868,8 +871,16 @@ export function Header() {
               <SheetContent side="left" className="w-[280px] sm:w-[320px]">
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2 text-lg">
-                    <Hotel className="h-5 w-5 text-primary" />
-                    HostelHQ
+                    <div className="relative h-12 w-[200px]">
+                      <Image
+                        src="/HostelHQ Web App Logo.png"
+                        alt="HostelHQ"
+                        fill
+                        sizes="200px"
+                        className="object-contain object-left"
+                        priority
+                      />
+                    </div>
                   </SheetTitle>
                   <SheetDescription>Curated hostels, transparent pricing, and trusted support for students.</SheetDescription>
                 </SheetHeader>
@@ -1002,9 +1013,17 @@ export function Header() {
                 </div>
               </SheetContent>
             </Sheet>
-            <Link href="/" className="flex items-center gap-2">
-              <Hotel className="h-6 w-6 text-primary sm:h-8 sm:w-8" />
-              <span className="text-xl font-bold text-foreground font-headline sm:text-2xl">HostelHQ</span>
+            <Link href="/" className="flex items-center gap-2" aria-label="HostelHQ home">
+              <div className="relative h-14 w-[200px] sm:h-16 sm:w-[280px] md:h-[72px] md:w-[320px]">
+                <Image
+                  src="/HostelHQ Web App Logo.png"
+                  alt="HostelHQ"
+                  fill
+                  sizes="(max-width: 640px) 200px, (max-width: 768px) 280px, 320px"
+                  className="object-contain object-left"
+                  priority
+                />
+              </div>
             </Link>
           </div>
           <nav className="hidden flex-1 items-center justify-center gap-2 md:flex">

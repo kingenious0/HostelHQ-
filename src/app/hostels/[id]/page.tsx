@@ -892,7 +892,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             <Star key={i} className={`h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
                         ))}
                     </div>
-                    <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({totalReviews} reviews)</span>
+                    <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({totalReviews} {totalReviews === 1 ? 'review' : 'reviews'})</span>
                 </div>
                 
                  <div className="mt-6 sm:mt-8 flex items-baseline gap-2">
@@ -1086,7 +1086,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                         <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                         ))}
                     </div>
-                    <span className="ml-3 text-lg text-muted-foreground">({hostel.numberOfReviews} reviews)</span>
+                    <span className="ml-3 text-lg text-muted-foreground">({hostel.numberOfReviews} {hostel.numberOfReviews === 1 ? 'review' : 'reviews'})</span>
                 </div>
 
                 <div className="mt-8">
