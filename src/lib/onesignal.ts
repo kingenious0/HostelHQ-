@@ -6,6 +6,7 @@
 declare global {
   interface Window {
     OneSignal?: any;
+    OneSignalDeferred?: any[];
   }
 }
 
@@ -30,34 +31,18 @@ function waitForOneSignal(): Promise<any> {
 }
 
 /**
- * Initialize OneSignal
+ * Initialize OneSignal (already done in layout.tsx, this just waits for it)
  */
 export async function initOneSignal() {
   if (typeof window === 'undefined') return;
-  if (isInitialized) {
-    console.log('[OneSignal] Already initialized');
-    return;
-  }
-
-  const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
   
-  if (!appId) {
-    console.error('[OneSignal] Missing NEXT_PUBLIC_ONESIGNAL_APP_ID');
-    return;
-  }
-
   try {
-    const OneSignal = await waitForOneSignal();
-    
-    await OneSignal.init({
-      appId,
-      allowLocalhostAsSecureOrigin: true,
-    });
-
+    // Just wait for OneSignal to be ready
+    await waitForOneSignal();
     isInitialized = true;
-    console.log('[OneSignal] Initialized successfully');
+    console.log('[OneSignal] Ready');
   } catch (error) {
-    console.error('[OneSignal] Initialization error:', error);
+    console.error('[OneSignal] Error waiting for initialization:', error);
   }
 }
 
@@ -68,19 +53,19 @@ export async function subscribeToNotifications(): Promise<string | null> {
   try {
     const OneSignal = await waitForOneSignal();
     
-    // Show permission prompt
-    await OneSignal.showSlidedownPrompt();
+    // Show native browser permission prompt
+    await OneSignal.Slidedown.promptPush();
     
     // Wait a bit for user to accept
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Get subscription status
-    const subscription = await OneSignal.User.PushSubscription.optedIn;
+    const isPushEnabled = await OneSignal.User.PushSubscription.optedIn;
     
-    if (subscription) {
-      const playerId = await OneSignal.User.PushSubscription.id;
+    if (isPushEnabled) {
+      const playerId = OneSignal.User.PushSubscription.id;
       console.log('[OneSignal] Subscribed with ID:', playerId);
-      return playerId;
+      return playerId || null;
     } else {
       console.log('[OneSignal] User denied permission');
       return null;

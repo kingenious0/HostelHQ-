@@ -36,6 +36,19 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/hostelhq-icon-new.png" />
         {/* OneSignal Web Push SDK */}
         <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.OneSignalDeferred = window.OneSignalDeferred || [];
+              OneSignalDeferred.push(async function(OneSignal) {
+                await OneSignal.init({
+                  appId: "${process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''}",
+                  allowLocalhostAsSecureOrigin: true,
+                });
+              });
+            `,
+          }}
+        />
       </head>
       <body className="font-body antialiased min-h-full bg-background" suppressHydrationWarning>
         <script
