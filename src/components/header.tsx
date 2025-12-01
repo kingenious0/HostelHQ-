@@ -38,6 +38,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { NotificationToggle } from '@/components/NotificationToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -987,6 +989,13 @@ export function Header() {
                   </div>
                 </div>
 
+                {/* Notification Toggle in Mobile Sidebar */}
+                {appUser && (
+                  <div className="mt-4">
+                    <NotificationToggle />
+                  </div>
+                )}
+
                 <div className="mt-4 space-y-3">
                   <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone className="h-4 w-4 text-primary" />
@@ -1034,6 +1043,9 @@ export function Header() {
             ))}
           </nav>
           <div className="flex flex-1 items-center justify-end gap-3">
+            {!loading && appUser && (
+              <NotificationBell />
+            )}
             {!loading && !appUser && (
               <>
                 <Button asChild variant="ghost" className="hidden md:inline-flex">
@@ -1073,6 +1085,9 @@ export function Header() {
                     <DropdownMenuItem onClick={() => setIsProfileOpen(true)} data-profile-trigger>
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <NotificationToggle />
                     </DropdownMenuItem>
                     {isStudent && (
                       <>

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertTriangle, CheckCircle2, XCircle, Star } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { notifyReviewApproved, notifyReviewRejected } from '@/lib/notification-service';
 
 interface Review {
   id: string;
@@ -133,11 +134,21 @@ export default function AdminReviewsPage() {
         approvedBy: currentUser.uid,
       });
 
+      // Get hostel name for notification
+      const hostelDoc = await getDoc(doc(db, "hostels", review.hostelId));
+      const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'the hostel';
+
+      // Send notification to student
+      notifyReviewApproved(
+        review.studentId,
+        hostelName
+      ).catch(err => console.error('Failed to send review approval notification:', err));
+
       toast({
         title: "Review Approved",
         description: "The review is now live on the hostel page.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving review:", error);
       toast({
         title: "Approval failed",
@@ -156,13 +167,23 @@ export default function AdminReviewsPage() {
     setProcessingId(review.id);
 
     try {
+      // Get hostel name for notification before deleting
+      const hostelDoc = await getDoc(doc(db, "hostels", review.hostelId));
+      const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'the hostel';
+
       await deleteDoc(doc(db, "reviews", review.id));
+
+      // Send notification to student
+      notifyReviewRejected(
+        review.studentId,
+        hostelName
+      ).catch(err => console.error('Failed to send review rejection notification:', err));
 
       toast({
         title: "Review Rejected",
         description: "The review has been deleted.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting review:", error);
       toast({
         title: "Rejection failed",

@@ -3,6 +3,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, enableIndexedDbPersistence, clearIndexedDbPersistence } from 'firebase/firestore';
+import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
 // Lazy read of client setting for persistence; safe on server as it checks window
 function shouldEnablePersistence(): boolean {
   if (typeof window === 'undefined') return true; // default on SSR
@@ -35,6 +36,29 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Initialize Firebase Cloud Messaging (only on client-side and if supported)
+let messagingInstance: ReturnType<typeof getMessaging> | null = null;
+
+export const getMessagingInstance = async () => {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const supported = await isMessagingSupported();
+    if (!supported) {
+      console.warn('Firebase Messaging is not supported in this browser');
+      return null;
+    }
+    
+    if (!messagingInstance) {
+      messagingInstance = getMessaging(app);
+    }
+    return messagingInstance;
+  } catch (error) {
+    console.error('Error initializing Firebase Messaging:', error);
+    return null;
+  }
+};
 
 // Enable persistence based on client setting
 if (typeof window !== 'undefined' && firebaseConfig.apiKey && shouldEnablePersistence()) {

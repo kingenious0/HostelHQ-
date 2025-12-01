@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { notifyAdminFlaggedReview } from '@/lib/notification-service';
 import { db, auth } from '@/lib/firebase';
-import { doc, updateDoc, increment, addDoc, collection, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment, addDoc, collection, serverTimestamp, getDoc, query, where, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { BackButton } from '@/components/ui/back-button';
 
@@ -109,6 +110,31 @@ export default function RatingPage() {
             });
 
             if (hasBadWords) {
+                // Get hostel name
+                const hostelDoc = await getDoc(doc(db, 'hostels', hostelId as string));
+                const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'Unknown Hostel';
+
+                // Notify all admins about flagged review
+                try {
+                    const adminsQuery = query(
+                        collection(db, 'users'),
+                        where('role', '==', 'admin')
+                    );
+                    const adminsSnapshot = await getDocs(adminsQuery);
+                    
+                    const notificationPromises = adminsSnapshot.docs.map(adminDoc =>
+                        notifyAdminFlaggedReview(
+                            adminDoc.id,
+                            currentUser.displayName || 'A student',
+                            hostelName
+                        ).catch(err => console.error('Failed to notify admin:', err))
+                    );
+                    
+                    await Promise.all(notificationPromises);
+                } catch (err) {
+                    console.error('Error notifying admins:', err);
+                }
+
                 toast({
                     title: "Review Submitted for Review",
                     description: "Your review contains content that requires admin approval. You'll be notified once it's reviewed.",

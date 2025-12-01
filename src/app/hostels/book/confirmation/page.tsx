@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
+import { notifyBookingConfirmed, notifyAgentNewBooking } from '@/lib/notification-service';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -116,6 +117,39 @@ function ConfirmationContent() {
                             console.error('Failed to update room occupancy:', e);
                         }
                     }
+                    }
+
+                    // Get hostel name for notification
+                    const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
+                    const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'your hostel';
+                    const agentId = hostelDoc.exists() ? hostelDoc.data().agentId : null;
+
+                    // Send notification to student
+                    console.log('[Booking] Sending notification to student:', currentUser.uid);
+                    try {
+                        await notifyBookingConfirmed(
+                            currentUser.uid,
+                            hostelName,
+                            bookingRef.id
+                        );
+                        console.log('[Booking] Student notification sent successfully');
+                    } catch (err) {
+                        console.error('[Booking] Failed to send student notification:', err);
+                    }
+
+                    // Send notification to agent
+                    if (agentId) {
+                        console.log('[Booking] Sending notification to agent:', agentId);
+                        try {
+                            await notifyAgentNewBooking(
+                                agentId,
+                                bookingData.studentName || currentUser.displayName || 'A student',
+                                hostelName
+                            );
+                            console.log('[Booking] Agent notification sent successfully');
+                        } catch (err) {
+                            console.error('[Booking] Failed to send agent notification:', err);
+                        }
                     }
 
                     toast({
