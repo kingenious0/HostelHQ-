@@ -7,7 +7,7 @@ import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
-import { notifyBookingConfirmed, notifyAgentNewBooking } from '@/lib/notification-service';
+import { notifyBookingConfirmed, notifyAgentNewBooking } from "@/lib/notification-service-onesignal";
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 

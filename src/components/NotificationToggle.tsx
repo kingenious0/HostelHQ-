@@ -1,60 +1,101 @@
 "use client";
 
-import { Bell, BellOff, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Bell, BellOff, Loader2 } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { initOneSignal, subscribeToNotifications, setExternalUserId, isNotificationEnabled } from "@/lib/onesignal";
 
 export function NotificationToggle() {
-  const { isSupported, permission, isLoading, requestPermission } = usePushNotifications();
-  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
-  const handleToggle = async () => {
-    if (permission === 'granted') {
-      toast({
-        title: 'Notifications Enabled',
-        description: 'You can disable notifications in your browser settings.',
-      });
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsub();
+  }, []);
+
+  // Initialize OneSignal and check status
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
       return;
     }
 
+    (async () => {
+      try {
+        await initOneSignal();
+        const isEnabled = await isNotificationEnabled();
+        setEnabled(isEnabled);
+        
+        // Link OneSignal to Firebase user ID
+        if (isEnabled) {
+          await setExternalUserId(user.uid);
+        }
+      } catch (error) {
+        console.error('[NotificationToggle] Init error:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user]);
+
+  const handleToggle = async () => {
+    if (!user) {
+      alert("Please log in to enable notifications");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const token = await requestPermission();
-      if (token) {
-        toast({
-          title: 'Notifications Enabled!',
-          description: 'You will now receive push notifications for bookings, reviews, and updates.',
-        });
+      const playerId = await subscribeToNotifications();
+      if (playerId) {
+        await setExternalUserId(user.uid);
+        setEnabled(true);
+        alert("Notifications enabled! 🎉");
+      } else {
+        alert("Failed to enable notifications. Please check your browser settings.");
       }
     } catch (error) {
-      toast({
-        title: 'Failed to Enable Notifications',
-        description: 'Please check your browser settings and try again.',
-        variant: 'destructive',
-      });
+      console.error("[NotificationToggle] Error:", error);
+      alert("Failed to enable notifications");
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!isSupported) {
-    return null; // Don't show if not supported
+  if (!user) {
+    return null;
   }
 
   return (
     <Button
-      variant={permission === 'granted' ? 'default' : 'outline'}
+      variant="ghost"
       size="sm"
       onClick={handleToggle}
-      disabled={isLoading}
+      disabled={loading || enabled}
       className="w-full justify-start"
     >
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : permission === 'granted' ? (
-        <Bell className="h-4 w-4 mr-2" />
+      {loading ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading...
+        </>
+      ) : enabled ? (
+        <>
+          <Bell className="mr-2 h-4 w-4" />
+          Notifications Enabled
+        </>
       ) : (
-        <BellOff className="h-4 w-4 mr-2" />
+        <>
+          <BellOff className="mr-2 h-4 w-4" />
+          Enable Notifications
+        </>
       )}
-      {permission === 'granted' ? 'Notifications On' : 'Enable Notifications'}
     </Button>
   );
 }
