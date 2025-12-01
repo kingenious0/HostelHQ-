@@ -53,19 +53,21 @@ export async function subscribeToNotifications(): Promise<string | null> {
   try {
     const OneSignal = await waitForOneSignal();
     
-    // Show native browser permission prompt
-    await OneSignal.Slidedown.promptPush();
+    console.log('[OneSignal] Requesting permission...');
     
-    // Wait a bit for user to accept
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Request notification permission using Notifications API
+    const permission = await OneSignal.Notifications.requestPermission();
     
-    // Get subscription status
-    const isPushEnabled = await OneSignal.User.PushSubscription.optedIn;
+    console.log('[OneSignal] Permission result:', permission);
     
-    if (isPushEnabled) {
-      const playerId = OneSignal.User.PushSubscription.id;
-      console.log('[OneSignal] Subscribed with ID:', playerId);
-      return playerId || null;
+    if (permission) {
+      // Wait a moment for subscription to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Get the subscription ID
+      const subscriptionId = OneSignal.User.PushSubscription.id;
+      console.log('[OneSignal] Subscribed with ID:', subscriptionId);
+      return subscriptionId || null;
     } else {
       console.log('[OneSignal] User denied permission');
       return null;
