@@ -393,7 +393,7 @@ export default function MyBookingsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Tabs defaultValue="pending" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2">
+                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2 mb-3 sm:mb-4">
                                             <TabsTrigger value="pending" className="text-xs sm:text-xs px-2 py-2">
                                                 <span className="hidden sm:inline">Pending</span>
                                                 <span className="sm:hidden">Pend</span> ({filteredVisits('pending').length})
@@ -411,7 +411,7 @@ export default function MyBookingsPage() {
                                                 <span className="sm:hidden">Canc</span> ({filteredVisits('cancelled').length})
                                             </TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="pending" className="mt-4">
+                                        <TabsContent value="pending" className="mt-5 sm:mt-4">
                                             {loading ? (
                                                 <div className="flex justify-center py-8">
                                                     <Loader2 className="h-8 w-8 animate-spin" />
@@ -430,7 +430,7 @@ export default function MyBookingsPage() {
                                                 </Card>
                                             )}
                                         </TabsContent>
-                                        <TabsContent value="accepted" className="mt-4">
+                                        <TabsContent value="accepted" className="mt-6 sm:mt-4">
                                             {filteredVisits('accepted').length > 0 ? (
                                                 <div className="grid gap-4">
                                                     {filteredVisits('accepted').map(visit => (
@@ -445,7 +445,7 @@ export default function MyBookingsPage() {
                                                 </Card>
                                             )}
                                         </TabsContent>
-                                        <TabsContent value="completed" className="mt-4">
+                                        <TabsContent value="completed" className="mt-6 sm:mt-4">
                                             {filteredVisits('completed').length > 0 ? (
                                                 <div className="grid gap-4">
                                                     {filteredVisits('completed').map(visit => (
@@ -460,7 +460,7 @@ export default function MyBookingsPage() {
                                                 </Card>
                                             )}
                                         </TabsContent>
-                                        <TabsContent value="cancelled" className="mt-4">
+                                        <TabsContent value="cancelled" className="mt-6 sm:mt-4">
                                             {filteredVisits('cancelled').length > 0 ? (
                                                 <div className="grid gap-4">
                                                     {filteredVisits('cancelled').map(visit => (
@@ -487,7 +487,7 @@ export default function MyBookingsPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <Tabs defaultValue="confirmed" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2">
+                                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2 mb-3 sm:mb-4">
                                             <TabsTrigger value="pending" className="text-xs sm:text-xs px-2 py-2">
                                                 <span className="hidden sm:inline">Pending</span>
                                                 <span className="sm:hidden">Pend</span> ({filteredBookings('pending').length})
@@ -505,7 +505,7 @@ export default function MyBookingsPage() {
                                                 <span className="sm:hidden">Comp</span> ({filteredBookings('completed').length})
                                             </TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="pending" className="mt-4">
+                                        <TabsContent value="pending" className="mt-5 sm:mt-4">
                                             {loading ? (
                                                 <div className="flex justify-center py-8">
                                                     <Loader2 className="h-8 w-8 animate-spin" />
@@ -524,7 +524,7 @@ export default function MyBookingsPage() {
                                                 </Card>
                                             )}
                                         </TabsContent>
-                                        <TabsContent value="confirmed" className="mt-4">
+                                        <TabsContent value="confirmed" className="mt-5 sm:mt-4">
                                             {filteredBookings('confirmed').length > 0 ? (
                                                 <div className="grid gap-4">
                                                     {filteredBookings('confirmed').map(booking => (
@@ -539,7 +539,7 @@ export default function MyBookingsPage() {
                                                 </Card>
                                             )}
                                         </TabsContent>
-                                        <TabsContent value="cancelled" className="mt-4">
+                                        <TabsContent value="cancelled" className="mt-5 sm:mt-4">
                                             {filteredBookings('cancelled').length > 0 ? (
                                                 <div className="grid gap-4">
                                                     {filteredBookings('cancelled').map(booking => (
