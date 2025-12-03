@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
-export default function ManagerFirstLoginPage() {
+function FirstLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -58,10 +58,10 @@ export default function ManagerFirstLoginPage() {
 
       // If we have a uid (assisted mode), sign in with the temporary password first
       if (uid && tempPassword) {
-        const userSnap = await doc(db, "users", uid);
-        const userDoc = await getDoc(userSnap);
-        if (!userDoc.exists()) throw new Error("Manager not found");
-        const userData = userDoc.data() as any;
+        const userDocRef = doc(db, "users", uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (!userDocSnap.exists()) throw new Error("Manager not found");
+        const userData = userDocSnap.data() as any;
         const email = userData.email;
 
         const cred = await signInWithEmailAndPassword(auth, email, tempPassword);
@@ -186,5 +186,13 @@ export default function ManagerFirstLoginPage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+export default function ManagerFirstLoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <FirstLoginContent />
+    </Suspense>
   );
 }
