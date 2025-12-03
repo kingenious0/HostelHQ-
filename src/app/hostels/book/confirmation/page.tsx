@@ -6,8 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
-import { notifyBookingConfirmed, notifyAgentNewBooking } from "@/lib/notification-service-onesignal";
+import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment, getDocs, query, where } from 'firebase/firestore';
+import { notifyBookingConfirmed, notifyManagerNewBooking, notifyAdminNewBooking } from "@/lib/notification-service-onesignal";
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -121,8 +121,9 @@ function ConfirmationContent() {
 
                     // Get hostel name for notification
                     const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
-                    const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'your hostel';
-                    const agentId = hostelDoc.exists() ? hostelDoc.data().agentId : null;
+                    const hostelData = hostelDoc.exists() ? hostelDoc.data() as any : null;
+                    const hostelName = hostelData?.name || 'your hostel';
+                    const managerId = hostelData?.managerId as string | undefined;
 
                     // Send notification to student
                     console.log('[Booking] Sending notification to student:', currentUser.uid);
@@ -137,19 +138,37 @@ function ConfirmationContent() {
                         console.error('[Booking] Failed to send student notification:', err);
                     }
 
-                    // Send notification to agent
-                    if (agentId) {
-                        console.log('[Booking] Sending notification to agent:', agentId);
+                    // Send notification to manager if hostel has one
+                    if (managerId) {
+                        console.log('[Booking] Sending notification to manager:', managerId);
                         try {
-                            await notifyAgentNewBooking(
-                                agentId,
-                                bookingData.studentName || currentUser.displayName || 'A student',
-                                hostelName
+                            await notifyManagerNewBooking(
+                                managerId,
+                                hostelName,
+                                bookingRef.id
                             );
-                            console.log('[Booking] Agent notification sent successfully');
+                            console.log('[Booking] Manager notification sent successfully');
                         } catch (err) {
-                            console.error('[Booking] Failed to send agent notification:', err);
+                            console.error('[Booking] Failed to send manager notification:', err);
                         }
+                    }
+
+                    // Send notification to all admins about the new booking
+                    try {
+                        const adminsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
+                        await Promise.all(
+                            adminsSnap.docs.map((adminDoc) =>
+                                notifyAdminNewBooking(
+                                    adminDoc.id,
+                                    hostelName,
+                                    bookingRef.id
+                                ).catch((err) => {
+                                    console.error('[Booking] Failed to send admin booking notification:', err);
+                                })
+                            )
+                        );
+                    } catch (err) {
+                        console.error('[Booking] Failed to query admins for booking notification:', err);
                     }
 
                     toast({

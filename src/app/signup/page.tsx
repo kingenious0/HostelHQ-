@@ -622,8 +622,11 @@ export default function SignupPage() {
                 
                 // Store user ID in localStorage for quick biometric login
                 if (typeof window !== 'undefined') {
-                    localStorage.setItem('lastBiometricUserId', user.uid);
-                    console.log('✅ Stored biometric user ID for quick login');
+                    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+                    if (storage && typeof storage.setItem === 'function') {
+                        storage.setItem('lastBiometricUserId', user.uid);
+                        console.log('✅ Stored biometric user ID for quick login');
+                    }
                 }
             }
             

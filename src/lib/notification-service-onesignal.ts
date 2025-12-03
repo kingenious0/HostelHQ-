@@ -126,6 +126,45 @@ export async function notifyAgentNewBooking(agentId: string, studentName: string
 }
 
 /**
+ * Send notification to manager when a room is secured in their hostel
+ */
+export async function notifyManagerNewBooking(managerId: string, hostelName: string, bookingId: string) {
+  return sendNotification({
+    userId: managerId,
+    title: '🔔 New Room Secured',
+    body: `A student just secured a room at ${hostelName}.`,
+    url: `/manager/dashboard`,
+    data: { type: 'manager-new-booking', bookingId },
+  });
+}
+
+/**
+ * Send notification to admin when a new booking is made on any hostel
+ */
+export async function notifyAdminNewBooking(adminId: string, hostelName: string, bookingId: string) {
+  return sendNotification({
+    userId: adminId,
+    title: '🔔 New Hostel Booking',
+    body: `A student just secured a room at ${hostelName}.`,
+    url: `/admin/dashboard`,
+    data: { type: 'admin-new-booking', bookingId },
+  });
+}
+
+/**
+ * Send notification to agent when a student requests a visit
+ */
+export async function notifyAgentVisitRequest(agentId: string, studentName: string, hostelName: string, visitId: string) {
+  return sendNotification({
+    userId: agentId,
+    title: '👀 New Visit Request',
+    body: `${studentName} wants to visit ${hostelName}.`,
+    url: `/agent/dashboard`,
+    data: { type: 'agent-visit-request', visitId },
+  });
+}
+
+/**
  * Send notification to admin when new hostel is submitted
  */
 export async function notifyAdminNewHostel(adminId: string, hostelName: string, submitterName: string) {

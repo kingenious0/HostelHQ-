@@ -65,15 +65,19 @@ function safeParse(json: string | null): ClientSettings | null {
 
 export function loadSettings(): ClientSettings {
   if (typeof window === 'undefined') return defaultSettings;
-  const existing = safeParse(localStorage.getItem(STORAGE_KEY));
+  const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+  if (!storage || typeof storage.getItem !== 'function') return defaultSettings;
+  const existing = safeParse(storage.getItem(STORAGE_KEY));
   if (existing) return existing;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultSettings));
+  storage.setItem(STORAGE_KEY, JSON.stringify(defaultSettings));
   return defaultSettings;
 }
 
 export function saveSettings(next: ClientSettings) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+  if (!storage || typeof storage.setItem !== 'function') return;
+  storage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
 export function exportSettings(): string {
@@ -91,7 +95,10 @@ export function clearLocalData() {
   if (typeof window === 'undefined') return;
   try {
     // Clear app-specific keys; avoid wiping unrelated site storage
-    localStorage.removeItem(STORAGE_KEY);
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (storage && typeof storage.removeItem === 'function') {
+      storage.removeItem(STORAGE_KEY);
+    }
     // Clear Firestore persistence caches if present
     indexedDB?.deleteDatabase('firebase-firestore-database');
   } catch {}

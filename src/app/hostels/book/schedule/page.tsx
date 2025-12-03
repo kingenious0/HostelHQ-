@@ -8,6 +8,7 @@ import { Header } from '@/components/header';
 import { Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { notifyAgentVisitRequest } from "@/lib/notification-service-onesignal";
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -148,13 +149,14 @@ function SchedulingContent() {
                 console.error('Error fetching student/hostel info:', error);
             }
 
-            // Send SMS notification to agent
+            // Send notifications to agent about the visit request
             try {
                 // Get agent's phone number
                 const agentDoc = await getDoc(doc(db, 'users', selectedAgent.id));
                 if (agentDoc.exists()) {
                     const agentData = agentDoc.data();
                     const agentPhone = agentData.phoneNumber;
+                    const agentName = agentData.fullName || selectedAgent.fullName;
 
                     if (agentPhone) {
                         let visitDateFormatted = 'a scheduled date';
@@ -188,6 +190,11 @@ function SchedulingContent() {
                             console.error('Failed to send SMS notification');
                             // Don't block the booking if SMS fails
                         }
+
+                        // Fire-and-forget app notification to the selected agent
+                        notifyAgentVisitRequest(selectedAgent.id, studentName, hostelName, visitId).catch((e) => {
+                            console.error('Failed to send agent visit notification:', e);
+                        });
                     }
                 }
             } catch (smsError) {

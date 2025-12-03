@@ -143,7 +143,7 @@ function LoginPageInner() {
             });
 
             // Get stored user ID from last successful biometric login (if any)
-            const lastUserId = localStorage.getItem('lastBiometricUserId');
+            const lastUserId = typeof window !== 'undefined' && window.localStorage?.getItem ? window.localStorage.getItem('lastBiometricUserId') : null;
             
             // Try to verify with stored user ID first
             let userId = lastUserId;

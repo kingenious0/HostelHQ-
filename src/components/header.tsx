@@ -104,7 +104,9 @@ export function Header() {
   const [passwordDialogType, setPasswordDialogType] = useState<'phone' | 'profile'>('profile');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'system';
-    const stored = window.localStorage.getItem('hostelhq-theme') as ThemeMode | null;
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.getItem !== 'function') return 'system';
+    const stored = storage.getItem('hostelhq-theme') as ThemeMode | null;
     return stored ?? 'system';
   });
   const [fontScale, setFontScale] = useState<FontScale>('normal');
@@ -143,7 +145,9 @@ export function Header() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('hostelhq-font-scale') as FontScale | null;
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.getItem !== 'function') return;
+    const stored = storage.getItem('hostelhq-font-scale') as FontScale | null;
     const initial = stored ?? 'normal';
     setFontScale(initial);
     applyFontScale(initial);
@@ -151,7 +155,9 @@ export function Header() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('hostelhq-ui-scale');
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.getItem !== 'function') return;
+    const stored = storage.getItem('hostelhq-ui-scale');
     const initial = stored ? parseInt(stored, 10) : 100;
     setUiScale(initial);
     applyUiScale(initial);
@@ -159,19 +165,25 @@ export function Header() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem('hostelhq-theme', themeMode);
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.setItem !== 'function') return;
+    storage.setItem('hostelhq-theme', themeMode);
     applyTheme(themeMode);
   }, [themeMode, applyTheme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem('hostelhq-font-scale', fontScale);
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.setItem !== 'function') return;
+    storage.setItem('hostelhq-font-scale', fontScale);
     applyFontScale(fontScale);
   }, [fontScale, applyFontScale]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem('hostelhq-ui-scale', String(uiScale));
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.setItem !== 'function') return;
+    storage.setItem('hostelhq-ui-scale', String(uiScale));
     applyUiScale(uiScale);
   }, [uiScale, applyUiScale]);
 

@@ -4,15 +4,24 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, enableIndexedDbPersistence, clearIndexedDbPersistence } from 'firebase/firestore';
 import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
-// Lazy read of client setting for persistence; safe on server as it checks window
+// Lazy read of client setting for persistence; safe on server and in non-standard environments
 function shouldEnablePersistence(): boolean {
-  if (typeof window === 'undefined') return true; // default on SSR
+  // On the server (or environments without a real window/localStorage),
+  // default to enabling persistence and let the client decide later.
+  if (typeof window === 'undefined') return true;
+
   try {
-    const raw = localStorage.getItem('hostelhq:settings');
+    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
+    if (!storage || typeof storage.getItem !== 'function') return true;
+
+    const raw = storage.getItem('hostelhq:settings');
     if (!raw) return true;
+
     const parsed = JSON.parse(raw);
     return parsed?.data?.firestorePersistence !== false;
   } catch {
+    // If anything goes wrong (including weird mocked localStorage),
+    // fail open and keep persistence enabled rather than crashing SSR.
     return true;
   }
 }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Header } from '@/components/header';
@@ -12,6 +12,7 @@ import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Rep
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import {
   Dialog,
   DialogContent,
@@ -57,7 +58,7 @@ type User = {
   id: string;
   fullName: string;
   email: string;
-  role: 'student' | 'agent' | 'admin' | 'pending_agent';
+  role: 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager';
 }
 
 type OnlineAgent = {
@@ -448,7 +449,37 @@ export default function AdminDashboard() {
 
   const students = users.filter(u => u.role === 'student');
   const agents = users.filter(u => u.role === 'agent');
+  const managers = users.filter(u => u.role === 'hostel_manager');
+  const admins = users.filter(u => u.role === 'admin');
+  const pendingAgents = users.filter(u => u.role === 'pending_agent');
   const totalPending = pendingHostels.length + pendingReviews.length;
+
+  const userRoleData = [
+    { role: 'Students', count: students.length },
+    { role: 'Agents', count: agents.length },
+    { role: 'Admins', count: users.filter(u => u.role === 'admin').length },
+    { role: 'Managers', count: managers.length },
+    { role: 'Pending Agents', count: users.filter(u => u.role === 'pending_agent').length },
+  ];
+
+  const availabilityCounts: Record<Hostel['availability'], number> = {
+    Available: 0,
+    Limited: 0,
+    Full: 0,
+  };
+
+  approvedHostels.forEach((hostel) => {
+    const key = hostel.availability || 'Full';
+    availabilityCounts[key] += 1;
+  });
+
+  const availabilityData = [
+    { status: 'Available', value: availabilityCounts.Available },
+    { status: 'Limited', value: availabilityCounts.Limited },
+    { status: 'Full', value: availabilityCounts.Full },
+  ].filter(item => item.value > 0);
+
+  const AVAILABILITY_COLORS = ['#22c55e', '#f97316', '#ef4444'];
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -465,7 +496,7 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Students</CardTitle>
@@ -484,6 +515,16 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{agents.length}</div>
                  <p className="text-xs text-muted-foreground">Registered agents</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Managers</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{managers.length}</div>
+                 <p className="text-xs text-muted-foreground">Registered managers</p>
               </CardContent>
             </Card>
              <Card>
@@ -514,6 +555,62 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{totalPending}</div>
                  <p className="text-xs text-muted-foreground">Hostels, Agents & Reviews</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-2 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>User Roles Overview</CardTitle>
+                <CardDescription>Distribution of users by role.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-64">
+                {userRoleData.every(item => item.count === 0) ? (
+                  <p className="text-sm text-muted-foreground">No users found yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReBarChart data={userRoleData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="role" tick={{ fontSize: 12 }} interval={0} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip cursor={{ fill: 'rgba(148, 163, 184, 0.15)' }} />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </ReBarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Hostel Availability</CardTitle>
+                <CardDescription>How many live hostels are in each status.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-64">
+                {availabilityData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No approved hostels yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={availabilityData}
+                        dataKey="value"
+                        nameKey="status"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        innerRadius={40}
+                        paddingAngle={2}
+                      >
+                        {availabilityData.map((entry, index) => (
+                          <Cell key={entry.status} fill={AVAILABILITY_COLORS[index % AVAILABILITY_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Legend verticalAlign="bottom" height={24} />
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -728,77 +825,96 @@ export default function AdminDashboard() {
             </Card>
           
            
-                <Card>
-                    <CardHeader>
-                        <CardTitle>User Management</CardTitle>
-                        <CardDescription>View all registered users and manage their roles.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Full Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Role</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {users.length > 0 ? (
-                                    users.map(user => (
-                                        <TableRow key={user.id}>
-                                            <TableCell className="font-medium">{user.fullName}</TableCell>
-                                            <TableCell>{user.email}</TableCell>
-                                            <TableCell>
-                                                <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
-                                                    {user.role}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => toggleUserRole(user)}
-                                                        disabled={processingId === user.id || user.role === 'admin'}
-                                                        title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
-                                                    >
-                                                        {processingId === user.id ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : (
-                                                            user.role === 'student' ? <UserCheck className="h-4 w-4 text-blue-500" /> : <UserX className="h-4 w-4 text-orange-500" />
-                                                        )}
-                                                    </Button>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        onClick={() => handleDeleteUser(user)}
-                                                        disabled={processingId === user.id || user.role === 'admin'}
-                                                        title="Delete user"
-                                                    >
-                                                        {processingId === user.id ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : (
-                                                            <Trash2 className="h-4 w-4" />
-                                                        )}
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center h-24">
-                                            No users found.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">User Management</CardTitle>
+                <CardDescription>View all registered users and manage their roles.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Full Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.length > 0 ? (
+                      [
+                        { label: 'Admins', items: admins },
+                        { label: 'Managers', items: managers },
+                        { label: 'Agents', items: agents },
+                        { label: 'Students', items: students },
+                        { label: 'Pending Agents', items: pendingAgents },
+                      ].map(group =>
+                        group.items.length > 0 ? (
+                          <React.Fragment key={`group-${group.label}`}>
+                            <TableRow>
+                              <TableCell colSpan={4} className="bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                {group.label}
+                              </TableCell>
+                            </TableRow>
+                            {group.items.map(user => (
+                              <TableRow key={user.id}>
+                                <TableCell className="font-medium">{user.fullName}</TableCell>
+                                <TableCell>{user.email}</TableCell>
+                                <TableCell>
+                                  <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
+                                    {user.role}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => toggleUserRole(user)}
+                                      disabled={processingId === user.id || user.role === 'admin'}
+                                      title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
+                                    >
+                                      {processingId === user.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : user.role === 'student' ? (
+                                        <UserCheck className="h-4 w-4 text-blue-500" />
+                                      ) : (
+                                        <UserX className="h-4 w-4 text-orange-500" />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => handleDeleteUser(user)}
+                                      disabled={processingId === user.id || user.role === 'admin'}
+                                      title="Delete user"
+                                    >
+                                      {processingId === user.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </React.Fragment>
+                        ) : null
+                      )
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center h-24">
+                          No users found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                  <Card>
@@ -831,62 +947,6 @@ export default function AdminDashboard() {
                                     <TableRow>
                                         <TableCell colSpan={2} className="text-center h-24">
                                             No agents are currently online.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Pending Review Moderation</CardTitle>
-                        <CardDescription>Approve or reject new reviews from students.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Review</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {pendingReviews.length > 0 ? (
-                                    pendingReviews.map(review => (
-                                        <TableRow key={review.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    {[...Array(5)].map((_, i) => (
-                                                        <Star key={i} className={cn("h-4 w-4", i < review.rating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground/30")} />
-                                                    ))}
-                                                </div>
-                                                <p className="font-medium mt-1 truncate max-w-xs">{review.comment}</p>
-                                                <p className="text-xs text-muted-foreground">{review.studentName} on {format(new Date(review.createdAt), 'PP')}</p>
-                                            </TableCell>
-                                            <TableCell className="text-right space-x-1">
-                                                <Button
-                                                    variant="ghost" size="icon"
-                                                    className="h-8 w-8"
-                                                    disabled={processingId === review.id}
-                                                    onClick={() => handleReviewAction(review.id, 'reject')}
-                                                ><XCircle className="h-4 w-4 text-destructive" /></Button>
-                                                <Button
-                                                    variant="ghost" size="icon"
-                                                    className="h-8 w-8"
-                                                    disabled={processingId === review.id}
-                                                    onClick={() => handleReviewAction(review.id, 'approve')}
-                                                >
-                                                    {processingId === review.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCircle className="h-4 w-4 text-green-600" />}
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={2} className="text-center h-24">
-                                            No pending reviews.
                                         </TableCell>
                                     </TableRow>
                                 )}
