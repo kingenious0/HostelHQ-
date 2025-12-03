@@ -112,8 +112,13 @@ export default function ManagerDashboard() {
                 const userDocRef = doc(db, 'users', user.uid);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
-                    const data = userDocSnap.data() as { role?: string };
+                    const data = userDocSnap.data() as { role?: string; forcePasswordReset?: boolean };
                     setIsManager(data.role === 'hostel_manager');
+                    // Redirect to password reset if required
+                    if (data.role === 'hostel_manager' && data.forcePasswordReset) {
+                        router.replace('/manager/first-login');
+                        return;
+                    }
                 } else {
                     setIsManager(false);
                 }

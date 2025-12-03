@@ -842,13 +842,15 @@ export function Header() {
   if (isAgent) {
     roleNavLinks.push(
       { label: 'Agent Dashboard', href: '/agent/dashboard' },
-      { label: 'My Listings', href: '/agent/listings' }
+      { label: 'My Listings', href: '/agent/listings' },
+      { label: 'Create Manager', href: '/agent/create-manager' }
     );
   }
   if (isAdmin) {
     roleNavLinks.push(
       { label: 'Admin Console', href: '/admin/dashboard' },
       { label: 'Admin Listings', href: '/admin/listings' },
+      { label: 'Create Manager', href: '/admin/create-manager' },
     );
   }
   if (isManager) {
