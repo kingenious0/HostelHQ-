@@ -387,7 +387,7 @@ export default function RoomsPage() {
               Back
             </Button>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mt-8">
-              {roomInventory.length} Rooms in {hostel.name.toUpperCase()}
+              Rooms Available in {hostel.name.toUpperCase()}
             </h1>
             <div className="flex items-center justify-center text-white/90 mt-3">
               <MapPin className="h-5 w-5 mr-2" />
