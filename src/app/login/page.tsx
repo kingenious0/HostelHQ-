@@ -390,6 +390,9 @@ function LoginPageInner() {
                                     Sign Up
                                 </Link>
                             </p>
+                            <Link href="/forgot-password" className="text-sm text-slate-300 hover:text-white hover:underline">
+                                Forgot Password?
+                            </Link>
                         </CardFooter>
                     </Card>
                 </div>
