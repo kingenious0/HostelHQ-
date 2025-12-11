@@ -55,7 +55,7 @@ export async function notifyBookingConfirmed(userId: string, hostelName: string,
     userId,
     title: '🎉 Booking Confirmed!',
     body: `Your booking at ${hostelName} has been confirmed. Check your bookings for details.`,
-    url: `/student/my-bookings`,
+    url: `/my-bookings`,
     data: { type: 'booking-confirmed', bookingId },
   });
 }
@@ -68,7 +68,7 @@ export async function notifyVisitScheduled(userId: string, hostelName: string, v
     userId,
     title: '📅 Visit Scheduled',
     body: `Your visit to ${hostelName} is scheduled for ${visitDate}. Don't forget!`,
-    url: `/student/visits`,
+    url: `/my-bookings`,
     data: { type: 'visit-scheduled' },
   });
 }
