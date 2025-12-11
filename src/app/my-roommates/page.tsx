@@ -421,9 +421,12 @@ export default function MyRoommatesPage() {
                     <Header />
                     <main className="flex-1 p-2 sm:p-4 md:p-8 bg-gray-50/50">
                         <div className="max-w-4xl mx-auto">
-                            <div className="flex items-center justify-between mb-4 md:mb-6">
+                            <div className="flex items-center justify-between mb-2 md:mb-3">
                                 <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">My Roommates</h1>
                             </div>
+                            <p className="mb-4 text-xs sm:text-sm text-muted-foreground">
+                                Roommates and hostel mates are detected automatically from your confirmed bookings. You don&apos;t need to add them manually.
+                            </p>
 
                             <Card className="mb-6 border border-muted/40 bg-card/60">
                                 <CardHeader className="pb-3">
@@ -467,8 +470,8 @@ export default function MyRoommatesPage() {
 
                             <Tabs defaultValue="roommates" className="w-full">
                                 <TabsList className="mb-4">
-                                    <TabsTrigger value="roommates">Roommates</TabsTrigger>
-                                    <TabsTrigger value="hostelMates">Hostel Mates</TabsTrigger>
+                                    <TabsTrigger value="roommates">Roommates in your room</TabsTrigger>
+                                    <TabsTrigger value="hostelMates">Other students in your hostel</TabsTrigger>
                                 </TabsList>
 
                                 <TabsContent value="roommates">
@@ -535,8 +538,8 @@ export default function MyRoommatesPage() {
                                   ) : (
                                     <div className="text-center py-16">
                                         <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                                        <p className="text-lg text-muted-foreground">No Room Bundles in this room yet!</p>
-                                        <p className="text-muted-foreground mt-2">Details of your other roommates will not be displayed if their profile sharing is off.</p>
+                                        <p className="text-lg text-muted-foreground">No roommates in your room yet.</p>
+                                        <p className="text-muted-foreground mt-2">Once other students secure this room and allow profile sharing, they will appear here.</p>
                                     </div>
                                   )}
                                 </TabsContent>
@@ -579,7 +582,7 @@ export default function MyRoommatesPage() {
                                                   </div>
                                                 </div>
                                                 <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                                                  Lives in the same hostel as you. Exact contact details depend on their privacy settings.
+                                                  Lives in the same hostel as you (from confirmed bookings). Exact contact details depend on their privacy settings.
                                                 </p>
                                               </Card>
                                             ))}
@@ -591,7 +594,7 @@ export default function MyRoommatesPage() {
                                     <div className="text-center py-16">
                                       <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                                       <p className="text-lg text-muted-foreground">No other students secured in your hostel yet.</p>
-                                      <p className="text-muted-foreground mt-2">As more students secure this hostel, they will appear here.</p>
+                                      <p className="text-muted-foreground mt-2">As more students secure this hostel for permanent stay and allow profile sharing, they will appear here.</p>
                                     </div>
                                   )}
                                 </TabsContent>
