@@ -11,8 +11,8 @@ type MomoPaymentPayload = {
     provider: 'mtn' | 'vod' | 'tgo';
     label?: string;
     hostelId: string;
-    visitDate: string; 
-    visitTime: string; 
+    visitDate: string;
+    visitTime: string;
     visitType: 'agent' | 'self';
     studentName?: string; // For generating payment reference
 }
@@ -38,10 +38,10 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
-    
+
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
-    callback_url.searchParams.set('bookingType', 'secure');    callback_url.searchParams.set('visitDate', payload.visitDate);
+    callback_url.searchParams.set('bookingType', 'secure'); callback_url.searchParams.set('visitDate', payload.visitDate);
     callback_url.searchParams.set('visitTime', payload.visitTime);
     callback_url.searchParams.set('visitType', payload.visitType);
 
@@ -49,24 +49,24 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     const generatePaymentReference = () => {
         const name = payload.studentName || 'Student';
         const phone = payload.phone || '';
-        
+
         // Extract first 3 letters of name (remove spaces, capitalize first letter)
         const nameNoSpaces = name.replace(/\s+/g, '');
         const namePart = nameNoSpaces.length >= 3
             ? nameNoSpaces.substring(0, 3).charAt(0).toUpperCase() + nameNoSpaces.substring(1, 3).toLowerCase()
             : (nameNoSpaces.charAt(0).toUpperCase() + nameNoSpaces.substring(1).toLowerCase()).padEnd(3, 'x');
-        
+
         // Extract last 3 digits of phone (remove all non-digits first)
         const digitsOnly = phone.replace(/\D/g, '');
-        const phonePart = digitsOnly.length >= 3 
+        const phonePart = digitsOnly.length >= 3
             ? digitsOnly.slice(-3)
             : digitsOnly.padStart(3, '0');
-        
+
         // Add timestamp to ensure uniqueness
         const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
         return `VISIT-${namePart}${phonePart}-${timestamp}`;
     };
-    
+
     const paymentReference = generatePaymentReference();
 
 
@@ -95,16 +95,16 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
                     provider: payload.provider,
                 }
             }),
-            cache: 'no-store' 
+            cache: 'no-store'
         });
-        
+
         const result = await response.json();
 
         if (!response.ok || !result.status) {
             console.error('Paystack API Error:', result);
             throw new Error(result.message || "An error occurred with the payment provider.");
         }
-        
+
         return {
             status: true,
             authorization_url: result.data.authorization_url,
@@ -136,7 +136,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
-    
+
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
     callback_url.searchParams.set('bookingType', 'secure');
@@ -176,14 +176,14 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
             }),
             cache: 'no-store'
         });
-        
+
         const result = await response.json();
 
         if (!response.ok || !result.status) {
             console.error('Paystack API Error:', result);
             throw new Error(result.message || "An error occurred with the payment provider.");
         }
-        
+
         return {
             status: true,
             authorization_url: result.data.authorization_url,
@@ -194,3 +194,101 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
         return { status: false, message: "Could not connect to payment service." };
     }
 }
+
+import { adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+
+/**
+ * Verify Paystack Transaction and Process Booking (Securely on Server)
+ * - Verifies transaction with Paystack
+ * - Creates Booking record
+ * - Updates Room Occupancy
+ * - Credits Manager Wallet (Earnings Ledger)
+ */
+export async function verifyAndProcessBooking(reference: string, bookingData: any, hostelId: string, studentId: string) {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    if (!secretKey) return { success: false, message: "Server misconfiguration" };
+
+    try {
+        // 1. Verify Transaction
+        const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+            headers: { Authorization: `Bearer ${secretKey}` }
+        });
+        const verifyData = await verifyResponse.json();
+
+        if (!verifyData.status || verifyData.data.status !== 'success') {
+            return { success: false, message: "Payment verification failed." };
+        }
+
+        const amountPaid = verifyData.data.amount; // In Pesewas
+
+        // 2. Check if booking already exists for this reference
+        const bookingQuery = await adminDb.collection('bookings')
+            .where('paymentReference', '==', reference)
+            .get();
+
+        if (!bookingQuery.empty) {
+            return { success: true, message: "Booking already processed.", bookingId: bookingQuery.docs[0].id };
+        }
+
+        // 3. Create Booking Record
+        const bookingRef = adminDb.collection('bookings').doc();
+        const bookingPayload = {
+            studentId,
+            studentDetails: {
+                fullName: bookingData.studentName || '',
+                email: bookingData.email || '',
+                phoneNumber: bookingData.phoneNumber || '',
+                indexNumber: bookingData.indexNumber || '',
+                ghanaCardNumber: bookingData.ghanaCardNumber || '',
+                program: bookingData.departmentName || '',
+                level: bookingData.level || '',
+                guardianEmail: bookingData.guardianEmail || '',
+            },
+            hostelId,
+            roomTypeId: bookingData.roomTypeId || '',
+            roomId: bookingData.roomId || '',
+            roomNumber: bookingData.roomNumber || '',
+            paymentReference: reference,
+            amountPaid: amountPaid, // Pesewas
+            bookingDate: FieldValue.serverTimestamp(),
+            status: 'confirmed',
+            invoiceGenerated: false,
+        };
+
+        // 4. Run Transaction (Booking + Occupancy + Wallet)
+        await adminDb.runTransaction(async (t) => {
+            // A. Create Booking
+            t.set(bookingRef, bookingPayload);
+
+            // B. Update Occupancy
+            if (bookingData.roomTypeId) {
+                const rtRef = adminDb.collection('hostels').doc(hostelId).collection('roomTypes').doc(bookingData.roomTypeId);
+                t.update(rtRef, { occupancy: FieldValue.increment(1) });
+            }
+            if (bookingData.roomId) {
+                const rRef = adminDb.collection('hostels').doc(hostelId).collection('rooms').doc(bookingData.roomId);
+                t.update(rRef, { currentOccupancy: FieldValue.increment(1) });
+            }
+
+            // C. Update Manager Wallet (Earnings Ledger)
+            const hostelDoc = await t.get(adminDb.collection('hostels').doc(hostelId));
+            const managerId = hostelDoc.data()?.managerId;
+
+            if (managerId) {
+                const managerRef = adminDb.collection('users').doc(managerId);
+                // Credit the FULL amount paid for now. (Or apply commission logic here if needed)
+                t.update(managerRef, {
+                    walletBalance: FieldValue.increment(amountPaid)
+                });
+            }
+        });
+
+        return { success: true, message: "Booking confirmed successfully", bookingId: bookingRef.id };
+
+    } catch (error: any) {
+        console.error("verifyAndProcessBooking Error:", error);
+        return { success: false, message: error.message || "Failed to process booking." };
+    }
+}
+

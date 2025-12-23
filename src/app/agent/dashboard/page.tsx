@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import { ManagerWalletCard as WalletCard } from '@/components/manager/manager-wallet-card';
 
 type Visit = {
     id: string;
@@ -85,7 +86,7 @@ export default function AgentDashboard() {
         setLoading(true);
 
         const visitsQuery = query(
-            collection(db, "visits"), 
+            collection(db, "visits"),
             where("agentId", "==", currentUser.uid)
         );
 
@@ -102,7 +103,7 @@ export default function AgentDashboard() {
                     const hostelSnap = await getDoc(hostelRef);
                     if (hostelSnap.exists()) hostelName = hostelSnap.data().name;
                 } catch (e) { console.error("Error fetching hostel", e); }
-                
+
                 try {
                     const studentRef = doc(db, 'users', visit.studentId);
                     const studentSnap = await getDoc(studentRef);
@@ -114,8 +115,8 @@ export default function AgentDashboard() {
 
                 return { ...visit, hostelName, studentName, studentPhone };
             }));
-            
-            const sortedVisits = enrichedVisits.sort((a,b) => {
+
+            const sortedVisits = enrichedVisits.sort((a, b) => {
                 if (a.status === 'pending' && b.status !== 'pending') return -1;
                 if (a.status !== 'pending' && b.status === 'pending') return 1;
                 if (a.status === 'accepted' && b.status !== 'accepted') return -1;
@@ -169,7 +170,7 @@ export default function AgentDashboard() {
 
         return () => unsubscribeVisits();
     }, [currentUser]);
-    
+
     const handleUpdateRequest = async (visitId: string, newStatus: 'accepted' | 'cancelled' | 'completed') => {
         setProcessingId(visitId);
         try {
@@ -210,7 +211,7 @@ export default function AgentDashboard() {
             setProcessingId(null);
         }
     }
-    
+
     const openDetailsDialog = (visit: EnrichedVisit) => {
         setSelectedVisit(visit);
         setIsDetailsOpen(true);
@@ -218,7 +219,7 @@ export default function AgentDashboard() {
 
     if (loadingAuth) {
         return (
-             <div className="flex flex-col min-h-screen">
+            <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
@@ -232,7 +233,7 @@ export default function AgentDashboard() {
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                     <Alert variant="destructive" className="max-w-lg">
+                    <Alert variant="destructive" className="max-w-lg">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
@@ -243,9 +244,9 @@ export default function AgentDashboard() {
             </div>
         )
     }
-    
+
     const getStatusVariant = (status: Visit['status']): 'default' | 'secondary' | 'outline' | 'destructive' => {
-        switch(status) {
+        switch (status) {
             case 'completed': return 'default';
             case 'accepted': return 'secondary';
             case 'pending': return 'outline';
@@ -262,6 +263,13 @@ export default function AgentDashboard() {
             <audio ref={notificationAudioRef} src="/sounds/visit-notification.mp3" preload="auto" />
             <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
                 <div className="container mx-auto">
+
+                    {currentUser && (
+                        <div className="mb-8 max-w-md">
+                            <WalletCard userId={currentUser.uid} />
+                        </div>
+                    )}
+
                     <Card>
                         <CardHeader>
                             <div className="flex items-start justify-between gap-4">
@@ -337,7 +345,7 @@ export default function AgentDashboard() {
                     </Card>
                 </div>
             </main>
-            
+
             {selectedVisit && (
                 <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
                     <DialogContent className="sm:max-w-md">
@@ -366,7 +374,7 @@ export default function AgentDashboard() {
                                     </div>
                                 </div>
                             )}
-                             <div className="flex items-center gap-4 p-3 border rounded-lg">
+                            <div className="flex items-center gap-4 p-3 border rounded-lg">
                                 <Home className="h-6 w-6 text-muted-foreground" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Hostel</p>
@@ -385,41 +393,41 @@ export default function AgentDashboard() {
                         <DialogFooter className="pt-4 border-t">
                             {selectedVisit.status === 'pending' && (
                                 <div className="flex w-full gap-2">
-                                    <Button 
-                                        variant="outline" 
+                                    <Button
+                                        variant="outline"
                                         className="flex-1"
                                         onClick={() => handleUpdateRequest(selectedVisit.id, 'cancelled')}
                                         disabled={processingId === selectedVisit.id}
                                     >
-                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <X className="mr-1 h-4 w-4" />}
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="mr-1 h-4 w-4" />}
                                         Decline
                                     </Button>
-                                    <Button 
+                                    <Button
                                         className="flex-1"
                                         onClick={() => handleUpdateRequest(selectedVisit.id, 'accepted')}
                                         disabled={processingId === selectedVisit.id}
                                     >
-                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="mr-1 h-4 w-4" />}
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
                                         Accept
                                     </Button>
                                 </div>
                             )}
                             {selectedVisit.status === 'accepted' && (
-                                <Button 
+                                <Button
                                     className="w-full bg-green-600 hover:bg-green-700"
                                     onClick={() => handleUpdateRequest(selectedVisit.id, 'completed')}
                                     disabled={processingId === selectedVisit.id}
                                 >
-                                    {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
+                                    {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="mr-1 h-4 w-4" />}
                                     Mark as Complete
                                 </Button>
                             )}
-                             {selectedVisit.status === 'completed' && (
+                            {selectedVisit.status === 'completed' && (
                                 <div className="text-center w-full text-sm text-muted-foreground">
                                     This visit has been completed.
                                 </div>
                             )}
-                             {selectedVisit.status === 'cancelled' && (
+                            {selectedVisit.status === 'cancelled' && (
                                 <div className="text-center w-full text-sm text-muted-foreground">
                                     This visit was declined.
                                 </div>

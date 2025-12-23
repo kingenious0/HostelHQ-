@@ -10,12 +10,13 @@ import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment,
 import { notifyBookingConfirmed, notifyManagerNewBooking, notifyAdminNewBooking } from "@/lib/notification-service-onesignal";
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import { verifyAndProcessBooking } from '@/app/actions/paystack';
 
 function ConfirmationContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    
+
     const hostelId = searchParams.get('hostelId');
     const reference = searchParams.get('reference');
     const trxref = searchParams.get('trxref');
@@ -40,11 +41,11 @@ function ConfirmationContent() {
         if (loadingAuth || hasProcessed) {
             return;
         }
-        
+
         if (!currentUser) {
-            if(!loadingAuth) {
-                 toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive'});
-                 router.push('/login');
+            if (!loadingAuth) {
+                toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive' });
+                router.push('/login');
             }
             return;
         }
@@ -57,67 +58,41 @@ function ConfirmationContent() {
                 router.push('/');
                 return;
             }
-            
+
             // This is a secure hostel payment (has bookingType=secure OR trxref parameter)
             if ((bookingType === 'secure' || trxref) && hostelId && !visitTypeParam) {
                 try {
-                     const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-                     if(!userDoc.exists()) throw new Error("Student user record not found.");
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (!userDoc.exists()) throw new Error("Student user record not found.");
 
                     // Retrieve booking data from sessionStorage
                     const bookingDataStr = sessionStorage.getItem('pendingBookingData');
                     const bookingData = bookingDataStr ? JSON.parse(bookingDataStr) : {};
-                    
+
                     // Clear the sessionStorage after retrieving
                     sessionStorage.removeItem('pendingBookingData');
 
-                    const bookingRef = await addDoc(collection(db, 'bookings'), {
-                        studentId: currentUser.uid,
-                        studentDetails: {
-                            fullName: bookingData.studentName || userDoc.data()?.fullName,
-                            email: bookingData.email || currentUser.email,
-                            phoneNumber: bookingData.phoneNumber || userDoc.data()?.phone,
-                            indexNumber: bookingData.indexNumber || '',
-                            ghanaCardNumber: bookingData.ghanaCardNumber || '',
-                            program: bookingData.departmentName || '',
-                            level: bookingData.level || '',
-                            guardianEmail: bookingData.guardianEmail || '',
-                        },
-                        hostelId: hostelId,
-                        roomTypeId: bookingData.roomTypeId || '',
-                        roomId: bookingData.roomId || '',
-                        roomNumber: bookingData.roomNumber || '',
-                        paymentReference: trxref,
-                        amountPaid: bookingData.roomPrice || 0,
-                        bookingDate: serverTimestamp(),
-                        status: 'confirmed',
-                        invoiceGenerated: false,
-                    });
 
-                    // Increment occupancy for the secured room type so availability can be derived later
-                    if (bookingData.roomTypeId) {
-                        try {
-                            const roomTypeRef = doc(db, 'hostels', hostelId, 'roomTypes', bookingData.roomTypeId);
-                            await updateDoc(roomTypeRef, {
-                                occupancy: increment(1),
-                            });
-                        } catch (e) {
-                            console.error('Failed to update room type occupancy:', e);
-                            // We deliberately do not block the booking flow if this fails
-                        }
+                    // Use Server Action to securely verify transaction, create booking, and update manager wallet
+                    const result = await verifyAndProcessBooking(
+                        trxref || reference || '',
+                        bookingData,
+                        hostelId,
+                        currentUser.uid
+                    );
 
-                    // Increment occupancy for the specific physical room if provided
-                    if (bookingData.roomId) {
-                        try {
-                            const roomRef = doc(db, 'hostels', hostelId, 'rooms', bookingData.roomId);
-                            await updateDoc(roomRef, {
-                                currentOccupancy: increment(1),
-                            });
-                        } catch (e) {
-                            console.error('Failed to update room occupancy:', e);
-                        }
+                    if (!result.success) {
+                        throw new Error(result.message);
                     }
-                    }
+
+                    const bookingId = result.bookingId;
+
+                    // Re-construct basic data for notifications (client-side)
+                    // Note: We don't have the full bookingRef object here, but we have the ID.
+
+                    // ... Occupancy updates are handled by server action now ...
+
+
 
                     // Get hostel name for notification
                     const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
@@ -131,7 +106,7 @@ function ConfirmationContent() {
                         await notifyBookingConfirmed(
                             currentUser.uid,
                             hostelName,
-                            bookingRef.id
+                            bookingId
                         );
                         console.log('[Booking] Student notification sent successfully');
                     } catch (err) {
@@ -145,7 +120,7 @@ function ConfirmationContent() {
                             await notifyManagerNewBooking(
                                 managerId,
                                 hostelName,
-                                bookingRef.id
+                                bookingId
                             );
                             console.log('[Booking] Manager notification sent successfully');
                         } catch (err) {
@@ -161,7 +136,7 @@ function ConfirmationContent() {
                                 notifyAdminNewBooking(
                                     adminDoc.id,
                                     hostelName,
-                                    bookingRef.id
+                                    bookingId
                                 ).catch((err) => {
                                     console.error('[Booking] Failed to send admin booking notification:', err);
                                 })
@@ -175,11 +150,11 @@ function ConfirmationContent() {
                         title: "Room Secured!",
                         description: "Your payment was successful. Redirecting to your invoice...",
                     });
-                     router.push(`/hostels/book/success/${bookingRef.id}`);
+                    router.push(`/hostels/book/success/${bookingId}`);
 
                 } catch (error) {
                     console.error("Error creating booking record:", error);
-                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive'});
+                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive' });
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
@@ -191,7 +166,7 @@ function ConfirmationContent() {
                     // Fetch student details for the visit record
                     const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
                     const userData = userDoc.exists() ? userDoc.data() : {};
-                    
+
                     const visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
                         studentDetails: {
@@ -211,16 +186,16 @@ function ConfirmationContent() {
                         amountPaid: visitTypeParam === 'agent' ? 1 : 15, // Store the amount paid
                         bookingType: 'visit', // Mark as visit booking
                     });
-                    
+
                     const redirectUrl = visitTypeParam === 'self'
                         ? `/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`
                         : `/hostels/book/schedule?visitId=${visitRef.id}`;
-                    
+
                     router.push(redirectUrl);
 
                 } catch (error) {
                     console.error("Error creating visit record:", error);
-                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive'});
+                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive' });
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;

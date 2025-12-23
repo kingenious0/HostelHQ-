@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText } from 'lucide-react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -24,17 +24,29 @@ import { useToast } from '@/hooks/use-toast';
 import { uploadImage } from '@/lib/cloudinary';
 import { sendSMS } from '@/lib/wigal';
 import Image from 'next/image';
+import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
     roomTypes: Pick<RoomType, 'id' | 'name' | 'price'>[];
 };
 
 type Booking = {
+    id: string;
     hostelId: string;
-    roomTypeId?: string; // This might not exist on old bookings
+    roomTypeId?: string;
+    roomNumber?: string;
     bookingDate: Timestamp;
     status?: string;
     studentId?: string;
+    amountPaid?: number;
+    paymentReference?: string;
+    studentDetails?: {
+        fullName: string;
+        email: string;
+        phoneNumber: string;
+        guardianName?: string;
+        guardianPhone?: string;
+    };
 };
 
 type HostelRequest = {
@@ -55,6 +67,9 @@ export default function ManagerDashboard() {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loadingData, setLoadingData] = useState(true);
     const [chartData, setChartData] = useState<{ month: string; bookings: number }[]>([]);
+
+    const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+    const [bookingDetailOpen, setBookingDetailOpen] = useState(false);
 
     const [hostelRequests, setHostelRequests] = useState<HostelRequest[]>([]);
     const [loadingRequests, setLoadingRequests] = useState(true);
@@ -140,7 +155,7 @@ export default function ManagerDashboard() {
 
         setLoadingData(true);
         const hostelsQuery = query(collection(db, 'hostels'), where('managerId', '==', currentUser.uid));
-        
+
         const unsubscribeHostels = onSnapshot(hostelsQuery, async (snapshot) => {
             const fetchedHostels = await Promise.all(snapshot.docs.map(async (doc) => {
                 const roomTypesSnap = await getDocs(collection(doc.ref, 'roomTypes'));
@@ -150,7 +165,7 @@ export default function ManagerDashboard() {
                 });
                 return { id: doc.id, ...doc.data(), roomTypes } as ManagerHostel;
             }));
-            
+
             setHostels(fetchedHostels);
 
             if (fetchedHostels.length > 0) {
@@ -161,18 +176,21 @@ export default function ManagerDashboard() {
                     where('hostelId', 'in', hostelIds),
                     where('status', '==', 'confirmed')
                 );
-                
+
                 const unsubscribeBookings = onSnapshot(bookingsQuery, (bookingSnapshot) => {
-                    const fetchedBookings = bookingSnapshot.docs.map(bDoc => bDoc.data() as Booking);
+                    const fetchedBookings = bookingSnapshot.docs.map(bDoc => ({
+                        id: bDoc.id,
+                        ...bDoc.data()
+                    })) as Booking[];
                     setBookings(fetchedBookings);
-                    
+
                     // Fetch payment proofs for this manager's hostels
                     const paymentProofsQuery = query(
                         collection(db, 'paymentProofs'),
                         where('managerId', '==', currentUser.uid),
                         where('status', '==', 'pending')
                     );
-                    
+
                     const unsubscribePaymentProofs = onSnapshot(paymentProofsQuery, (proofSnapshot) => {
                         const fetchedProofs = proofSnapshot.docs.map(pDoc => ({
                             id: pDoc.id,
@@ -181,7 +199,7 @@ export default function ManagerDashboard() {
                         console.log('Fetched payment proofs:', fetchedProofs);
                         setPaymentProofs(fetchedProofs);
                     });
-                    
+
                     // Process data for the chart
                     const monthlyBookings = new Array(12).fill(0);
                     fetchedBookings.forEach(booking => {
@@ -191,7 +209,7 @@ export default function ManagerDashboard() {
                         }
                     });
 
-                    const currentYearMonths = Array.from({length: 12}, (_, i) => format(new Date(0, i), 'MMM'));
+                    const currentYearMonths = Array.from({ length: 12 }, (_, i) => format(new Date(0, i), 'MMM'));
 
                     setChartData(currentYearMonths.map((month, index) => ({
                         month,
@@ -201,9 +219,9 @@ export default function ManagerDashboard() {
                     setLoadingData(false);
                     return () => unsubscribePaymentProofs();
                 });
-                 return () => unsubscribeBookings();
+                return () => unsubscribeBookings();
             } else {
-                 setLoadingData(false);
+                setLoadingData(false);
             }
         });
 
@@ -270,7 +288,7 @@ export default function ManagerDashboard() {
 
     if (loadingAuth || isManager === null) {
         return (
-             <div className="flex flex-col min-h-screen">
+            <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
@@ -278,13 +296,13 @@ export default function ManagerDashboard() {
             </div>
         );
     }
-    
+
     if (!currentUser || !isManager) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                     <Alert variant="destructive" className="max-w-lg">
+                    <Alert variant="destructive" className="max-w-lg">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
@@ -331,7 +349,7 @@ export default function ManagerDashboard() {
         },
         {}
     );
-    
+
     const availabilityVariant: Record<Hostel['availability'], "default" | "secondary" | "destructive"> = {
         'Available': 'default',
         'Limited': 'secondary',
@@ -454,7 +472,7 @@ export default function ManagerDashboard() {
 
     const handleDeleteRoom = async (room: Room) => {
         if (!roomsHostelId || !room.id) return;
-        
+
         if (!confirm(`Are you sure you want to delete room "${room.roomNumber}"? This action cannot be undone.`)) {
             return;
         }
@@ -617,18 +635,18 @@ export default function ManagerDashboard() {
     };
 
     // Helper function to format payment status SMS messages
-function formatPaymentStatusSMS(
-    status: 'approved' | 'rejected',
-    studentName: string,
-    hostelName: string,
-    rejectionReason?: string
-): string {
-    if (status === 'approved') {
-        return `Hi ${studentName}, your payment proof for ${hostelName} has been APPROVED! Your booking is now confirmed. Welcome to HostelHQ! 🎉`;
-    } else {
-        return `Hi ${studentName}, your payment proof for ${hostelName} was NOT approved. Reason: ${rejectionReason || 'Please contact your hostel manager for details'}. Please submit a new payment proof if needed.`;
+    function formatPaymentStatusSMS(
+        status: 'approved' | 'rejected',
+        studentName: string,
+        hostelName: string,
+        rejectionReason?: string
+    ): string {
+        if (status === 'approved') {
+            return `Hi ${studentName}, your payment proof for ${hostelName} has been APPROVED! Your booking is now confirmed. Welcome to HostelHQ! 🎉`;
+        } else {
+            return `Hi ${studentName}, your payment proof for ${hostelName} was NOT approved. Reason: ${rejectionReason || 'Please contact your hostel manager for details'}. Please submit a new payment proof if needed.`;
+        }
     }
-}
 
     const openProofDialog = (proof: any) => {
         setSelectedProof(proof);
@@ -637,7 +655,7 @@ function formatPaymentStatusSMS(
 
     const handleApprovePayment = async () => {
         if (!selectedProof || !currentUser) return;
-        
+
         setProcessingProof(true);
         try {
             // Update payment proof status
@@ -654,7 +672,7 @@ function formatPaymentStatusSMS(
                 where('hostelId', '==', selectedProof.hostelId),
                 where('status', '==', 'pending')
             );
-            
+
             const bookingSnapshot = await getDocs(bookingsQuery);
             if (!bookingSnapshot.empty) {
                 const bookingDoc = bookingSnapshot.docs[0];
@@ -668,33 +686,33 @@ function formatPaymentStatusSMS(
             // Send SMS notification to student
             try {
                 console.log('🔍 Starting SMS notification process...');
-                
+
                 // Get student's phone number
                 const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
                 const studentData = studentDoc.data();
                 const studentPhone = studentData?.phone;
-                
+
                 console.log('🔍 Student data:', {
                     studentId: selectedProof.studentId,
                     hasPhone: !!studentPhone,
                     phone: studentPhone ? studentPhone.substring(0, 4) + '***' : 'none',
                     studentName: studentData?.fullName || studentData?.email
                 });
-                
+
                 if (studentPhone) {
                     const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
                     const smsMessage = formatPaymentStatusSMS('approved', selectedProof.studentName, hostelName);
-                    
+
                     console.log('🔍 SMS details:', {
                         hostelName,
                         messageLength: smsMessage.length,
                         messagePreview: smsMessage.substring(0, 50) + '...'
                     });
-                    
+
                     const smsResult = await sendSMS(studentPhone, smsMessage);
-                    
+
                     console.log('🔍 SMS result:', smsResult);
-                    
+
                     if (smsResult.success) {
                         console.log('✅ SMS sent successfully to student:', studentPhone);
                         toast({
@@ -730,7 +748,7 @@ function formatPaymentStatusSMS(
                     variant: 'default',
                 });
             }
-            
+
             setProofDialogOpen(false);
             setSelectedProof(null);
         } catch (error) {
@@ -747,10 +765,10 @@ function formatPaymentStatusSMS(
 
     const handleRejectPayment = async () => {
         if (!selectedProof || !currentUser) return;
-        
+
         const reason = prompt('Please provide a reason for rejection:');
         if (!reason) return;
-        
+
         setProcessingProof(true);
         try {
             await updateDoc(doc(db, 'paymentProofs', selectedProof.id), {
@@ -763,34 +781,34 @@ function formatPaymentStatusSMS(
             // Send SMS notification to student
             try {
                 console.log('🔍 Starting SMS notification process for rejection...');
-                
+
                 // Get student's phone number
                 const studentDoc = await getDoc(doc(db, 'users', selectedProof.studentId));
                 const studentData = studentDoc.data();
                 const studentPhone = studentData?.phone;
-                
+
                 console.log('🔍 Student data:', {
                     studentId: selectedProof.studentId,
                     hasPhone: !!studentPhone,
                     phone: studentPhone ? studentPhone.substring(0, 4) + '***' : 'none',
                     studentName: studentData?.fullName || studentData?.email
                 });
-                
+
                 if (studentPhone) {
                     const hostelName = hostels.find(h => h.id === selectedProof.hostelId)?.name || 'Your Hostel';
                     const smsMessage = formatPaymentStatusSMS('rejected', selectedProof.studentName, hostelName, reason);
-                    
+
                     console.log('🔍 SMS details:', {
                         hostelName,
                         reason,
                         messageLength: smsMessage.length,
                         messagePreview: smsMessage.substring(0, 50) + '...'
                     });
-                    
+
                     const smsResult = await sendSMS(studentPhone, smsMessage);
-                    
+
                     console.log('🔍 SMS result:', smsResult);
-                    
+
                     if (smsResult.success) {
                         console.log('✅ SMS sent successfully to student:', studentPhone);
                         toast({
@@ -826,7 +844,7 @@ function formatPaymentStatusSMS(
                     variant: 'default',
                 });
             }
-            
+
             setProofDialogOpen(false);
             setSelectedProof(null);
         } catch (error) {
@@ -845,18 +863,23 @@ function formatPaymentStatusSMS(
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 bg-gray-50/50 px-3 py-4 md:p-8">
-				<div className="w-full">
-					<h1 className="text-3xl font-bold font-headline mb-2">Manager Dashboard</h1>
-					<p className="text-sm text-muted-foreground mb-6">Overview of how your hostels are performing on HostelHQ.</p>
+                <div className="w-full">
+                    <h1 className="text-3xl font-bold font-headline mb-2">Manager Dashboard</h1>
+                    <p className="text-sm text-muted-foreground mb-6">Overview of how your hostels are performing on HostelHQ.</p>
 
-                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
+                        {currentUser && (
+                            <div className="md:col-span-1 h-full">
+                                <ManagerWalletCard userId={currentUser.uid} />
+                            </div>
+                        )}
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Hostels Managed</CardTitle>
                                 <Home className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin"/> : (
+                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                     <>
                                         <div className="text-2xl font-bold">{totalHostels}</div>
                                         <p className="text-xs text-muted-foreground">Active on HostelHQ</p>
@@ -870,7 +893,7 @@ function formatPaymentStatusSMS(
                                 <BarChart className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                               {loadingData ? <Loader2 className="h-6 w-6 animate-spin"/> : (
+                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                     <>
                                         <div className="text-2xl font-bold">{totalBookings}</div>
                                         <p className="text-xs text-muted-foreground">All-time bookings across your hostels</p>
@@ -884,7 +907,7 @@ function formatPaymentStatusSMS(
                                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin"/> : (
+                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                     <>
                                         <div className="text-2xl font-bold">{totalSecured}</div>
                                         <p className="text-xs text-muted-foreground">Confirmed bookings (secured beds)</p>
@@ -898,7 +921,7 @@ function formatPaymentStatusSMS(
                                 <BarChart className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin"/> : (
+                                {loadingData ? <Loader2 className="h-6 w-6 animate-spin" /> : (
                                     <>
                                         <div className="text-2xl font-bold">{activeStudents}</div>
                                         <p className="text-xs text-muted-foreground">Unique students with secured rooms</p>
@@ -971,7 +994,7 @@ function formatPaymentStatusSMS(
                     </Card>
 
                     <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7 mb-8">
-                         <Card className="lg:col-span-4">
+                        <Card className="lg:col-span-4">
                             <CardHeader>
                                 <div className="flex items-center justify-between gap-3 flex-wrap">
                                     <div>
@@ -1003,93 +1026,93 @@ function formatPaymentStatusSMS(
                                 </div>
                             </CardHeader>
                             <CardContent className="max-h-[350px] overflow-y-auto">
-                               {loadingData ? (
+                                {loadingData ? (
                                     <div className="flex items-center justify-center p-8">
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                     </div>
-                               ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Hostel Name</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="text-right">Bookings</TableHead>
-                                            <TableHead className="text-right">Secured</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {hostels.length > 0 ? hostels.map(hostel => {
-                                            const stats = hostelStats[hostel.id] || { bookings: 0, secured: 0 };
-                                            const handleDetach = async () => {
-                                                if (!confirm(`Remove ${hostel.name} from your managed hostels? This will not delete the hostel, only detach it from your account.`)) {
-                                                    return;
-                                                }
-                                                try {
-                                                    const ref = doc(db, 'hostels', hostel.id);
-                                                    await updateDoc(ref, { managerId: null });
-                                                    toast({
-                                                        title: 'Hostel detached',
-                                                        description: `${hostel.name} has been removed from your managed hostels.`,
-                                                    });
-                                                } catch (error) {
-                                                    console.error('Error detaching hostel from manager:', error);
-                                                    toast({
-                                                        title: 'Could not detach hostel',
-                                                        description: 'Please try again or contact support if the problem continues.',
-                                                        variant: 'destructive',
-                                                    });
-                                                }
-                                            };
+                                ) : (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Hostel Name</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead className="text-right">Bookings</TableHead>
+                                                <TableHead className="text-right">Secured</TableHead>
+                                                <TableHead className="text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {hostels.length > 0 ? hostels.map(hostel => {
+                                                const stats = hostelStats[hostel.id] || { bookings: 0, secured: 0 };
+                                                const handleDetach = async () => {
+                                                    if (!confirm(`Remove ${hostel.name} from your managed hostels? This will not delete the hostel, only detach it from your account.`)) {
+                                                        return;
+                                                    }
+                                                    try {
+                                                        const ref = doc(db, 'hostels', hostel.id);
+                                                        await updateDoc(ref, { managerId: null });
+                                                        toast({
+                                                            title: 'Hostel detached',
+                                                            description: `${hostel.name} has been removed from your managed hostels.`,
+                                                        });
+                                                    } catch (error) {
+                                                        console.error('Error detaching hostel from manager:', error);
+                                                        toast({
+                                                            title: 'Could not detach hostel',
+                                                            description: 'Please try again or contact support if the problem continues.',
+                                                            variant: 'destructive',
+                                                        });
+                                                    }
+                                                };
 
-                                            return (
-                                                <TableRow key={hostel.id}>
-                                                    <TableCell className="font-medium">{hostel.name}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
-                                                            {hostel.availability || 'N/A'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right text-sm text-muted-foreground">
-                                                        {stats.bookings}
-                                                    </TableCell>
-                                                    <TableCell className="text-right text-sm font-medium">
-                                                        {stats.secured}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-2">
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="xs"
-                                                                className="text-[11px]"
-                                                                onClick={() => openRoomsDialogForHostel(hostel.id)}
-                                                            >
-                                                                Manage Rooms
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="xs"
-                                                                className="text-[11px]"
-                                                                onClick={handleDetach}
-                                                            >
-                                                                Remove
-                                                            </Button>
-                                                        </div>
+                                                return (
+                                                    <TableRow key={hostel.id}>
+                                                        <TableCell className="font-medium">{hostel.name}</TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
+                                                                {hostel.availability || 'N/A'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-sm text-muted-foreground">
+                                                            {stats.bookings}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-sm font-medium">
+                                                            {stats.secured}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="xs"
+                                                                    className="text-[11px]"
+                                                                    onClick={() => openRoomsDialogForHostel(hostel.id)}
+                                                                >
+                                                                    Manage Rooms
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="xs"
+                                                                    className="text-[11px]"
+                                                                    onClick={handleDetach}
+                                                                >
+                                                                    Remove
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            }) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="h-24 text-center">
+                                                        You are not managing any hostels yet.
                                                     </TableCell>
                                                 </TableRow>
-                                            );
-                                        }) : (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="h-24 text-center">
-                                                    You are not managing any hostels yet.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                               )}
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -1098,11 +1121,11 @@ function formatPaymentStatusSMS(
                                 <CardTitle>Monthly Bookings</CardTitle>
                                 <CardDescription>A chart showing booking trends for the current year.</CardDescription>
                             </CardHeader>
-                             <CardContent>
+                            <CardContent>
                                 {loadingData ? (
-                                     <div className="flex items-center justify-center h-[300px]">
+                                    <div className="flex items-center justify-center h-[300px]">
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                     </div>
+                                    </div>
                                 ) : totalBookings > 0 ? (
                                     <BookingsChart data={chartData} />
                                 ) : (
@@ -1150,8 +1173,8 @@ function formatPaymentStatusSMS(
                                                     req.status === 'approved'
                                                         ? 'default'
                                                         : req.status === 'rejected'
-                                                        ? 'destructive'
-                                                        : 'secondary';
+                                                            ? 'destructive'
+                                                            : 'secondary';
                                                 return (
                                                     <TableRow key={req.id}>
                                                         <TableCell className="font-medium">{req.hostelName}</TableCell>
@@ -1196,13 +1219,14 @@ function formatPaymentStatusSMS(
                                                 <TableHead>Date</TableHead>
                                                 <TableHead>Hostel</TableHead>
                                                 <TableHead>Status</TableHead>
+                                                <TableHead className="text-right">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {bookings
                                                 .slice()
                                                 .sort((a, b) => b.bookingDate.toMillis() - a.bookingDate.toMillis())
-                                                .slice(0, 10)
+                                                .slice(0, 50) // Increased limit to see more
                                                 .map((booking, index) => {
                                                     const hostel = hostels.find((h) => h.id === booking.hostelId);
                                                     const date = booking.bookingDate?.toDate?.();
@@ -1211,20 +1235,34 @@ function formatPaymentStatusSMS(
                                                         status === 'confirmed'
                                                             ? 'default'
                                                             : status === 'cancelled'
-                                                            ? 'destructive'
-                                                            : 'secondary';
+                                                                ? 'destructive'
+                                                                : 'secondary';
                                                     return (
-                                                        <TableRow key={booking.hostelId + index}>
+                                                        <TableRow key={booking.id || booking.hostelId + index}>
                                                             <TableCell className="text-xs text-muted-foreground">
                                                                 {date ? format(date, 'dd MMM yyyy') : '—'}
                                                             </TableCell>
                                                             <TableCell className="font-medium">
                                                                 {hostel?.name || 'Unknown hostel'}
+                                                                {booking.roomNumber && <div className="text-xs text-muted-foreground">Room: {booking.roomNumber}</div>}
                                                             </TableCell>
                                                             <TableCell>
                                                                 <Badge variant={statusVariant as any} className="text-xs capitalize">
                                                                     {status}
                                                                 </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-8"
+                                                                    onClick={() => {
+                                                                        setSelectedBooking(booking);
+                                                                        setBookingDetailOpen(true);
+                                                                    }}
+                                                                >
+                                                                    View
+                                                                </Button>
                                                             </TableCell>
                                                         </TableRow>
                                                     );
@@ -1239,7 +1277,7 @@ function formatPaymentStatusSMS(
 
                 {/* Attach Existing Hostel Dialog */}
                 <Dialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen}>
-					<DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+                    <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>Attach an existing hostel</DialogTitle>
                             <DialogDescription>
@@ -1303,7 +1341,7 @@ function formatPaymentStatusSMS(
 
                 {/* Request New Hostel Dialog */}
                 <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-					<DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto mx-auto">
+                    <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto mx-auto">
                         <DialogHeader>
                             <DialogTitle className="text-lg sm:text-xl">Request a new hostel</DialogTitle>
                             <DialogDescription className="text-sm">
@@ -1587,11 +1625,10 @@ function formatPaymentStatusSMS(
                                                         key={num}
                                                         type="button"
                                                         onClick={() => toggleNewRoomNumber(num)}
-                                                        className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
-                                                            selected
-                                                                ? 'border-primary bg-primary text-primary-foreground'
-                                                                : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
-                                                        }`}
+                                                        className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${selected
+                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                            : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                            }`}
                                                     >
                                                         {num}
                                                     </button>
@@ -1649,13 +1686,13 @@ function formatPaymentStatusSMS(
                                         </p>
                                     </div>
                                 </div>
-                                
+
                                 <div>
                                     <p className="text-sm font-medium mb-2">Payment Proof Image</p>
                                     <div className="border rounded-lg overflow-hidden">
-                                        <img 
-                                            src={selectedProof.proofImageUrl} 
-                                            alt="Payment Proof" 
+                                        <img
+                                            src={selectedProof.proofImageUrl}
+                                            alt="Payment Proof"
                                             className="w-full h-auto max-h-96 object-contain"
                                         />
                                     </div>
@@ -1693,6 +1730,67 @@ function formatPaymentStatusSMS(
                                 )}
                                 Approve & Confirm Booking
                             </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Booking Details Dialog */}
+                <Dialog open={bookingDetailOpen} onOpenChange={setBookingDetailOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Booking Details</DialogTitle>
+                            <DialogDescription>
+                                Full information about this confirmed booking.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {selectedBooking && (
+                            <div className="space-y-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <h4 className="text-sm font-medium text-muted-foreground">Booking Info</h4>
+                                        <p className="font-semibold">{selectedBooking.roomNumber ? `Room ${selectedBooking.roomNumber}` : 'Room Signed'}</p>
+                                        <p className="text-sm text-muted-foreground">{selectedBooking.bookingDate?.toDate?.()?.toLocaleDateString()}</p>
+                                        <Badge variant="outline" className="mt-1">{selectedBooking.status}</Badge>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-medium text-muted-foreground">Payment</h4>
+                                        <p className="font-semibold text-green-600">GH₵ {((selectedBooking.amountPaid || 0) / 100).toFixed(2)}</p>
+                                        <p className="text-xs text-muted-foreground break-all">{selectedBooking.paymentReference || 'No Reference'}</p>
+                                    </div>
+                                </div>
+                                <div className="border-t pt-4">
+                                    <h4 className="text-sm font-medium text-muted-foreground mb-2">Student Information</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                                <UserIcon className="h-4 w-4 text-primary" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium">{selectedBooking.studentDetails?.fullName || 'Unknown Name'}</p>
+                                                <p className="text-xs text-muted-foreground">{selectedBooking.studentDetails?.email || 'No email'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                                <Phone className="h-4 w-4 text-primary" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium">{selectedBooking.studentDetails?.phoneNumber || 'No phone'}</p>
+                                                <p className="text-xs text-muted-foreground">Student Contact</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedBooking.studentDetails?.guardianName && (
+                                    <div className="border-t pt-4">
+                                        <h4 className="text-sm font-medium text-muted-foreground mb-2">Guardian Contact</h4>
+                                        <p className="text-sm"><span className="font-semibold">{selectedBooking.studentDetails.guardianName}</span>: {selectedBooking.studentDetails.guardianPhone}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button onClick={() => setBookingDetailOpen(false)}>Close</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
