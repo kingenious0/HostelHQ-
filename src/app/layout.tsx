@@ -1,4 +1,4 @@
-import type {Metadata, Viewport} from 'next';
+import type { Metadata, Viewport } from 'next';
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { RootLayoutShell } from "@/components/root-layout-shell";
@@ -32,6 +32,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0f172a" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/hostelhq-icon-new.png" />
         {/* OneSignal Web Push SDK */}
@@ -41,10 +42,13 @@ export default function RootLayout({
             __html: `
               window.OneSignalDeferred = window.OneSignalDeferred || [];
               OneSignalDeferred.push(async function(OneSignal) {
-                await OneSignal.init({
-                  appId: "${process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''}",
-                  allowLocalhostAsSecureOrigin: true,
-                });
+                // Initialize only if not localhost to avoid 404s and domain errors
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    await OneSignal.init({
+                      appId: "${process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''}",
+                      allowLocalhostAsSecureOrigin: true,
+                    });
+                }
               });
             `,
           }}

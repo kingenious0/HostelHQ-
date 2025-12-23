@@ -258,23 +258,37 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
 
         // 4. Run Transaction (Booking + Occupancy + Wallet)
         await adminDb.runTransaction(async (t) => {
-            // A. Create Booking
-            t.set(bookingRef, bookingPayload);
+            // Transaction Prerequisite: All Reads MUST happen before any Writes
 
-            // B. Update Occupancy
+            // Read: Get Hostel Doc Manager ID (for wallet credit)
+            const hostelRef = adminDb.collection('hostels').doc(hostelId);
+            const hostelSnap = await t.get(hostelRef);
+            const managerId = hostelSnap.exists ? hostelSnap.data()?.managerId : null;
+
+            // Read: Check RoomType and Room existence
+            let rtRef, rtSnap, rRef, rSnap;
+
             if (bookingData.roomTypeId) {
-                const rtRef = adminDb.collection('hostels').doc(hostelId).collection('roomTypes').doc(bookingData.roomTypeId);
-                t.update(rtRef, { occupancy: FieldValue.increment(1) });
+                rtRef = adminDb.collection('hostels').doc(hostelId).collection('roomTypes').doc(bookingData.roomTypeId);
+                rtSnap = await t.get(rtRef);
             }
             if (bookingData.roomId) {
-                const rRef = adminDb.collection('hostels').doc(hostelId).collection('rooms').doc(bookingData.roomId);
+                rRef = adminDb.collection('hostels').doc(hostelId).collection('rooms').doc(bookingData.roomId);
+                rSnap = await t.get(rRef);
+            }
+
+            // A. Create Booking (Write)
+            t.set(bookingRef, bookingPayload);
+
+            // B. Update Occupancy (Write)
+            if (rtRef && rtSnap && rtSnap.exists) {
+                t.update(rtRef, { occupancy: FieldValue.increment(1) });
+            }
+            if (rRef && rSnap && rSnap.exists) {
                 t.update(rRef, { currentOccupancy: FieldValue.increment(1) });
             }
 
-            // C. Update Manager Wallet (Earnings Ledger)
-            const hostelDoc = await t.get(adminDb.collection('hostels').doc(hostelId));
-            const managerId = hostelDoc.data()?.managerId;
-
+            // C. Update Manager Wallet (Earnings Ledger) (Write)
             if (managerId) {
                 const managerRef = adminDb.collection('users').doc(managerId);
                 // Credit the FULL amount paid for now. (Or apply commission logic here if needed)
