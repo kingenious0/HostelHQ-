@@ -403,3 +403,22 @@ export async function processBulkWithdrawalAction(requestIds: string[]) {
     }
 }
 
+
+/**
+ * ADMIN: Check Paystack Balance.
+ * Returns the balance of the integration currency (usually GHS).
+ */
+export async function getAdminPaystackBalance() {
+    try {
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+        return {
+            success: true,
+            balance: ghsBalance ? ghsBalance.balance : 0,
+            currency: 'GHS'
+        };
+    } catch (error: any) {
+        console.error("Get Admin Balance Failed:", error);
+        return { success: false, message: error.message };
+    }
+}

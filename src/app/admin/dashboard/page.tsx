@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -30,6 +29,7 @@ import { RoomType, Review } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/lib/sms-service';
+import { getAdminPaystackBalance } from '@/app/actions/payouts';
 
 type Hostel = {
   id: string;
@@ -93,6 +93,7 @@ export default function AdminDashboard() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedHostel, setSelectedHostel] = useState<PendingHostel | null>(null);
   const [isHostelDialogOpen, setIsHostelDialogOpen] = useState(false);
+  const [adminBalance, setAdminBalance] = useState<{ balance: number, currency: string } | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -158,6 +159,15 @@ export default function AdminDashboard() {
       updateOnlineAgents(initialAgents);
     };
     setupPresenceListener();
+
+    // Fetch Admin Balance
+    const fetchBalance = async () => {
+      const res = await getAdminPaystackBalance();
+      if (res.success) {
+        setAdminBalance({ balance: res.balance, currency: res.currency });
+      }
+    };
+    fetchBalance();
 
 
     return () => {
@@ -305,7 +315,7 @@ export default function AdminDashboard() {
         toast({ title: "Review Rejected", description: "The review has been deleted." });
       }
     } catch (error) {
-      console.error(`Error ${action}ing review:`, error);
+      console.error(`Error ${action}ing review: `, error);
       toast({ title: "Action Failed", description: `Could not ${action} the review.`, variant: 'destructive' });
     } finally {
       setProcessingId(null);
@@ -362,7 +372,7 @@ export default function AdminDashboard() {
 
   const toggleUserRole = async (user: User) => {
     const newRole = user.role === 'student' ? 'agent' : 'student';
-    if (!confirm(`Are you sure you want to change ${user.fullName}'s role to ${newRole}?`)) return;
+    if (!confirm(`Are you sure you want to change ${user.fullName} 's role to ${newRole}?`)) return;
 
     setProcessingId(user.id);
     toast({ title: 'Updating user role...' });
@@ -616,7 +626,25 @@ export default function AdminDashboard() {
           </div>
 
           {/* Security & Management */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
+            <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-3 opacity-10">
+                <DollarSign className="h-24 w-24 text-primary" />
+              </div>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-primary">Paystack Wallet</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center z-10">
+                  <span className="font-bold text-primary text-xs">GH</span>
+                </div>
+              </CardHeader>
+              <CardContent className="z-10 relative">
+                <div className="text-2xl font-bold tracking-tight text-primary">
+                  {adminBalance ? `GH₵ ${(adminBalance.balance / 100).toFixed(2)}` : <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Live Balance (GHS)</p>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Payouts</CardTitle>
