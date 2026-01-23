@@ -14,6 +14,18 @@ const getHeaders = () => ({
     'content-type': 'application/json',
 });
 
+const handleNetworkError = (error: any, context: string) => {
+    console.error(`Error in ${context}:`, error);
+    if (error instanceof TypeError && error.message === 'fetch failed') {
+        const cause = (error as any).cause;
+        if (cause && cause.code === 'ENOTFOUND') {
+            throw new Error(`Internet connection error: Unable to reach Paystack servers. Please check your network.`);
+        }
+        throw new Error(`Connection failed: Paystack servers are unreachable. Please try again later.`);
+    }
+    throw error;
+};
+
 // TYPES
 
 export type PaystackBank = {
@@ -119,8 +131,7 @@ export async function listBanks(country: string = 'ghana'): Promise<PaystackBank
 
         return json.data;
     } catch (error) {
-        console.error("Error listing banks:", error);
-        throw error;
+        handleNetworkError(error, "listing banks");
     }
 }
 
@@ -143,8 +154,7 @@ export async function createTransferRecipient(payload: TransferRecipientPayload)
 
         return json.data;
     } catch (error) {
-        console.error("Error creating transfer recipient:", error);
-        throw error;
+        handleNetworkError(error, "creating transfer recipient");
     }
 }
 
@@ -167,8 +177,7 @@ export async function initiateTransfer(payload: InitiateTransferPayload) {
 
         return json.data;
     } catch (error) {
-        console.error("Error initiating transfer:", error);
-        throw error;
+        handleNetworkError(error, "initiating transfer");
     }
 }
 
@@ -191,8 +200,7 @@ export async function initiateBulkTransfer(payload: InitiateBulkTransferPayload)
 
         return json.data;
     } catch (error) {
-        console.error("Error initiating bulk transfer:", error);
-        throw error;
+        handleNetworkError(error, "initiating bulk transfer");
     }
 }
 
@@ -215,7 +223,6 @@ export async function checkPaystackBalance() {
 
         return json.data; // Returns array of balances (different currencies)
     } catch (error) {
-        console.error("Error checking balance:", error);
-        throw error;
+        handleNetworkError(error, "checking balance");
     }
 }
