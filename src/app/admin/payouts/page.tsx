@@ -128,23 +128,35 @@ export default function AdminPayoutsPage() {
         setBulkProcessing(false);
     };
 
+
+    // ... existing handle bulk approve ...
+
     const totalRequested = requests.reduce((acc, r) => acc + r.amount, 0);
 
+    const [adminWithdrawOpen, setAdminWithdrawOpen] = useState(false);
     return (
         <div className="flex flex-col min-h-screen bg-gray-50/50">
             <Header />
             <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+                {/* ... existing header ... */}
+                {/* (Note: Header was patched in previous step, so we leave it be in this replacement logic, focusing on structure) */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight mb-2">Payout Control Center</h1>
                         <p className="text-muted-foreground">Manage and release agent/manager withdrawals.</p>
                     </div>
-                    <Button onClick={fetchData} variant="outline" size="icon">
-                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={() => setAdminWithdrawOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                            <DollarSign className="h-4 w-4" /> System Withdraw
+                        </Button>
+                        <Button onClick={fetchData} variant="outline" size="icon">
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4 mb-8">
+                    {/* ... cards ... */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Auto-Approval</CardTitle>
@@ -275,6 +287,87 @@ export default function AdminPayoutsPage() {
                     </Table>
                 </div>
             </main>
+
+            <AdminWithdrawalModal
+                isOpen={adminWithdrawOpen}
+                onClose={() => setAdminWithdrawOpen(false)}
+            />
         </div>
+    );
+}
+
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { processAdminWithdrawal } from "@/app/actions/payouts";
+
+function AdminWithdrawalModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+    const [loading, setLoading] = useState(false);
+    const [amount, setAmount] = useState("");
+    const [network, setNetwork] = useState("");
+    const [number, setNumber] = useState("");
+    const { toast } = useToast();
+
+    const handleSubmit = async () => {
+        if (!amount || !network || !number) {
+            toast({ title: "Incomplete", description: "Please fill all fields", variant: "destructive" });
+            return;
+        }
+
+        setLoading(true);
+        const val = Math.round(parseFloat(amount) * 100); // to pesewas
+
+        const result = await processAdminWithdrawal(val, { network, number });
+
+        setLoading(false);
+        if (result.success) {
+            toast({ title: "Success", description: result.message });
+            onClose();
+        } else {
+            toast({ title: "Error", description: result.message, variant: "destructive" });
+        }
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Admin System Withdrawal</DialogTitle>
+                    <DialogDescription>
+                        Transfer funds directly from Paystack to a specified account.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="flex flex-col space-y-1">
+                        <Label>Network</Label>
+                        <Select value={network} onValueChange={setNetwork}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Network" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="MTN">MTN MoMo</SelectItem>
+                                <SelectItem value="VOD">Telecel Cash</SelectItem>
+                                <SelectItem value="ATL">AT Money</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                        <Label>Number</Label>
+                        <Input value={number} onChange={e => setNumber(e.target.value)} placeholder="05xxxxxxxx" />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                        <Label>Amount (GHS)</Label>
+                        <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+                    <Button onClick={handleSubmit} disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Withdraw
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

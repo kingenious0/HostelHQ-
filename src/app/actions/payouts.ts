@@ -501,3 +501,54 @@ export async function getAdminPaystackBalance() {
         return { success: false, message: error.message };
     }
 }
+
+/**
+ * ADMIN: Direct Withdrawal (Self-Pay).
+ * Allows admin to withdraw funds directly from Paystack to a specific number.
+ */
+export async function processAdminWithdrawal(amount: number, paymentDetails: { network: string, number: string }) {
+    try {
+        // 1. Validate Input
+        if (amount <= 0) throw new Error("Invalid amount");
+        if (!paymentDetails.number || !paymentDetails.network) throw new Error("Missing payment details");
+
+        // 2. Check Balance
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+
+        if (!ghsBalance || ghsBalance.balance < amount) {
+            return {
+                success: false,
+                message: `Insufficient Balance. Available: ${(ghsBalance?.balance || 0) / 100} GHS`
+            };
+        }
+
+        // 3. Create/Get Recipient
+        const recipientData = await createTransferRecipient({
+            type: 'mobile_money',
+            name: "Admin Withdrawal",
+            account_number: paymentDetails.number,
+            bank_code: paymentDetails.network,
+            currency: 'GHS'
+        });
+
+        // 4. Initiate Transfer
+        const transferResult = await initiateTransfer({
+            source: 'balance',
+            amount: amount,
+            recipient: recipientData.recipient_code,
+            reason: "HostelHQ Admin Withdrawal"
+        });
+
+        revalidatePath('/admin/payouts');
+        return {
+            success: true,
+            message: "Withdrawal initiated successfully!",
+            reference: transferResult.reference
+        };
+
+    } catch (error: any) {
+        console.error("Admin Withdrawal Failed:", error);
+        return { success: false, message: error.message || "Withdrawal failed" };
+    }
+}
