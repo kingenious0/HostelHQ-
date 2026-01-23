@@ -103,10 +103,10 @@ export async function getSystemSettings() {
         if (docSnap.exists()) {
             return docSnap.data();
         }
-        return { autoApprove: false }; // Default
+        return { autoApprove: true }; // Default to Instant Payouts
     } catch (error) {
         console.error("Get Settings Failed:", error);
-        return { autoApprove: false };
+        return { autoApprove: true };
     }
 }
 
@@ -127,7 +127,7 @@ export async function setPayoutAutoApprove(enabled: boolean) {
  * Request a Payout (Withdrawal).
  * Deducts (holds) balance conceptually (or checks it), creates a request.
  */
-export async function requestWithdrawal(userId: string, amount: number) {
+export async function requestWithdrawal(userId: string, amount: number, paymentDetails?: { network: string, number: string }) {
     try {
         // 1. Check Auto-Approve Setting
         const settings = await getSystemSettings();
@@ -137,35 +137,89 @@ export async function requestWithdrawal(userId: string, amount: number) {
         const newRequestRef = doc(collection(db, 'payout_requests'));
         let requestData: any = {};
 
+        // 1b. Handle New Payment Details (Create Recipient if needed)
+        let recipientCodeToUse = '';
+
+        // We need to fetch user data first to check balance and existing codes
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) throw new Error("User does not exist!");
+        let userData = userSnap.data();
+
+        if (paymentDetails) {
+            // Create new recipient
+            const bankCode = paymentDetails.network; // 'MTN', 'VOD', 'ATL'
+            const accNum = paymentDetails.number;
+
+            // Validate
+            if (!['MTN', 'VOD', 'ATL'].includes(bankCode)) {
+                throw new Error("Invalid Network Selected");
+            }
+
+            try {
+                const recipientData = await createTransferRecipient({
+                    type: 'mobile_money',
+                    name: userData.fullName || "User", // Use user's name or fetch from lookup if we implemented that
+                    account_number: accNum,
+                    bank_code: bankCode,
+                    currency: 'GHS',
+                    metadata: {
+                        user_id: userId
+                    }
+                });
+
+                recipientCodeToUse = recipientData.recipient_code;
+
+                // Update user profile with latest used details
+                await updateDoc(userRef, {
+                    paystackRecipientCode: recipientCodeToUse,
+                    momoNumber: accNum,
+                    momoProviderName: recipientData.details.bank_name
+                });
+
+                // Refresh local data copy for the transaction block
+                userData = { ...userData, paystackRecipientCode: recipientCodeToUse, momoNumber: accNum };
+
+            } catch (err: any) {
+                console.error("Error creating recipient during withdraw:", err);
+                throw new Error("Failed to verify mobile money details: " + err.message);
+            }
+        } else {
+            // Use existing
+            recipientCodeToUse = userData.paystackRecipientCode;
+        }
+
+        if (!recipientCodeToUse) {
+            throw new Error("No payout method provided. Please enter your MoMo number.");
+        }
+
+
         // 2. Initial Transaction: Deduct Balance & Create Pending Request
         await runTransaction(db, async (transaction) => {
-            const userDoc = await transaction.get(userRef);
-            if (!userDoc.exists()) throw new Error("User does not exist!");
+            // Re-read user to be safe in transaction
+            const tUserDoc = await transaction.get(userRef);
+            if (!tUserDoc.exists()) throw new Error("User does not exist!");
+            const tUserData = tUserDoc.data();
 
-            const userData = userDoc.data();
-            const currentBalance = userData.walletBalance || 0;
+            const currentBalance = tUserData.walletBalance || 0;
 
             if (currentBalance < amount) {
                 throw new Error("Insufficient funds in wallet.");
             }
 
-            if (!userData.paystackRecipientCode) {
-                throw new Error("No payout method linked. Please link a MoMo number first.");
-            }
-
             // Deduct from wallet immediately
             transaction.update(userRef, {
                 walletBalance: currentBalance - amount,
-                frozenBalance: (userData.frozenBalance || 0) + amount
+                frozenBalance: (tUserData.frozenBalance || 0) + amount
             });
 
             // Create Payout Request
             requestData = {
                 userId,
-                userName: userData.fullName || "User",
+                userName: tUserData.fullName || "User",
                 amount,
-                phonenumber: userData.momoNumber,
-                recipientCode: userData.paystackRecipientCode,
+                phonenumber: paymentDetails?.number || tUserData.momoNumber || "N/A",
+                network: paymentDetails?.network || "N/A",
+                recipientCode: recipientCodeToUse,
                 status: 'pending', // Initially pending
                 requestedAt: new Date().toISOString(),
             };
@@ -344,11 +398,10 @@ export async function processBulkWithdrawalAction(requestIds: string[]) {
     try {
         if (!requestIds.length) return { success: false, message: "No requests selected" };
 
-        // 1. Fetch all requests to verify and prep payload
-        const transfers = [];
         const validRequestIds = [];
+        const transfersToProcess = [];
 
-        // Check balance first
+        // 1. Check balance first
         const balances = await checkPaystackBalance();
         const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
         let totalAmount = 0;
@@ -359,43 +412,69 @@ export async function processBulkWithdrawalAction(requestIds: string[]) {
             if (requestSnap.exists()) {
                 const data = requestSnap.data() as PayoutRequest;
                 if (data.status === 'pending') {
-                    transfers.push({
-                        amount: data.amount,
-                        recipient: data.recipientCode,
-                        reference: `BULK_${id}_${Date.now()}`,
-                        reason: "HostelHQ Bulk Payout"
-                    });
-                    validRequestIds.push(id);
+                    transfersToProcess.push({ ...data, id });
                     totalAmount += data.amount;
                 }
             }
         }
 
-        if (transfers.length === 0) return { success: false, message: "No valid pending requests found." };
+        if (transfersToProcess.length === 0) return { success: false, message: "No valid pending requests found." };
 
         if (!ghsBalance || ghsBalance.balance < totalAmount) {
-            return { success: false, message: `Insufficient Admin Playstack Balance. Needed: ${totalAmount / 100}, Available: ${ghsBalance?.balance / 100} GHS` };
+            return {
+                success: false,
+                message: `Insufficient Admin Playstack Balance. Needed: ${totalAmount / 100}, Available: ${ghsBalance?.balance / 100} GHS`
+            };
         }
 
-        // 2. Call Paystack Bulk API
-        const bulkResponse = await initiateBulkTransfer({
-            source: 'balance',
-            transfers: transfers
-        });
+        // 2. Process Transfers One-by-One (Loop Mode)
+        // This bypasses the "Bulk Transfer requires OTP off" restriction
+        let successCount = 0;
+        let failCount = 0;
 
-        // 3. Update all requests status
-        const batch = writeBatch(db);
-        validRequestIds.forEach(id => {
-            const ref = doc(db, 'payout_requests', id);
-            batch.update(ref, {
-                status: 'approved', // Assuming immediate success for logic flow
-                processedAt: new Date().toISOString(),
-            });
-        });
-        await batch.commit();
+        for (const req of transfersToProcess) {
+            try {
+                // Initiate Single Transfer
+                const transferResult = await initiateTransfer({
+                    source: 'balance',
+                    amount: req.amount,
+                    recipient: req.recipientCode,
+                    reason: "HostelHQ Payout"
+                });
+
+                // Update Request Status
+                const ref = doc(db, 'payout_requests', req.id);
+                await updateDoc(ref, {
+                    status: 'approved',
+                    processedAt: new Date().toISOString(),
+                    transferCode: transferResult.transfer_code,
+                    reference: transferResult.reference,
+                    adminNote: 'Processed via Serial Bulk Action'
+                });
+
+                successCount++;
+
+                // Small delay to be gentle on the API
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+            } catch (err: any) {
+                console.error(`Transfer failed for ${req.id}:`, err);
+                failCount++;
+                // Update with error note
+                const ref = doc(db, 'payout_requests', req.id);
+                await updateDoc(ref, {
+                    adminNote: `Failed: ${err.message || 'Unknown error'}`
+                });
+            }
+        }
 
         revalidatePath('/admin/payouts');
-        return { success: true, message: `Successfully initiated ${transfers.length} transfers!` };
+
+        if (failCount > 0) {
+            return { success: true, message: `Processed ${successCount} payouts. ${failCount} failed (check notes).` };
+        }
+
+        return { success: true, message: `Successfully initiated ${successCount} transfers!` };
 
     } catch (error: any) {
         console.error("Bulk Process Failed:", error);

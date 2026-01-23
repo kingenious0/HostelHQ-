@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { requestWithdrawal } from "@/app/actions/payouts";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -16,10 +17,15 @@ interface WithdrawalModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    // Pre-fill data if available
+    defaultNetwork?: string;
+    defaultNumber?: string;
 }
 
-export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onSuccess }: WithdrawalModalProps) {
+export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onSuccess, defaultNetwork, defaultNumber }: WithdrawalModalProps) {
     const [amount, setAmount] = useState("");
+    const [network, setNetwork] = useState(defaultNetwork || "");
+    const [phoneNumber, setPhoneNumber] = useState(defaultNumber || "");
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
@@ -37,10 +43,26 @@ export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onS
             return;
         }
 
+        if (!network) {
+            toast({ title: "Missing Information", description: "Please select a mobile network", variant: "destructive" });
+            return;
+        }
+
+        if (!phoneNumber || phoneNumber.length < 10) {
+            toast({ title: "Invalid Phone Number", description: "Please enter a valid mobile money number", variant: "destructive" });
+            return;
+        }
+
         setLoading(true);
         try {
             const amountPesewas = Math.round(val * 100);
-            const result = await requestWithdrawal(userId, amountPesewas);
+
+            // Pass the payment details to the server action
+            const result = await requestWithdrawal(userId, amountPesewas, {
+                network,
+                number: phoneNumber
+            });
+
             if (result.success) {
                 toast({ title: "Request Submitted", description: result.message });
                 onSuccess();
@@ -62,7 +84,7 @@ export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onS
                 <DialogHeader>
                     <DialogTitle>Withdraw Funds</DialogTitle>
                     <DialogDescription>
-                        Request a payout to your linked MoMo wallet.
+                        Enter your Mobile Money details to receive your payout.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -71,6 +93,30 @@ export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onS
                         <span className="text-sm text-muted-foreground">Available to Withdraw</span>
                         <div className="mt-1 text-3xl font-bold text-primary">
                             GH₵ {maxAmountGhs.toFixed(2)}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Network</Label>
+                            <Select value={network} onValueChange={setNetwork}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Network" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="MTN">MTN MoMo</SelectItem>
+                                    <SelectItem value="VOD">Telecel Cash (Vodafone)</SelectItem>
+                                    <SelectItem value="ATL">AT Money (AirtelTigo)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>MoMo Number</Label>
+                            <Input
+                                placeholder="024xxxxxxx"
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                            />
                         </div>
                     </div>
 
@@ -91,7 +137,7 @@ export function WithdrawalModal({ userId, availableBalance, isOpen, onClose, onS
                     <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
                     <Button onClick={handleSubmit} disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Submit Request
+                        Confirm Withdraw
                     </Button>
                 </DialogFooter>
             </DialogContent>

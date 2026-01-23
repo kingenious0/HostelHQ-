@@ -4,10 +4,8 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PaystackSetupModal } from "./paystack-setup-modal";
 import { WithdrawalModal } from "./withdrawal-modal";
-import { Wallet, ArrowUpRight, Plus, RefreshCw, CreditCard } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Wallet, ArrowUpRight, CreditCard } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -24,7 +22,6 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
         momoProviderName?: string;
     } | null>(null);
     const [loading, setLoading] = useState(true);
-    const [setupOpen, setSetupOpen] = useState(false);
     const [withdrawOpen, setWithdrawOpen] = useState(false);
 
     useEffect(() => {
@@ -54,6 +51,16 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
     }, [userId]);
 
     const hasLinkedAccount = !!balanceData?.recipientCode;
+
+    // Helper to map saved provider name back to code for pre-filling
+    const getNetworkCode = (name?: string) => {
+        if (!name) return "";
+        const lower = name.toLowerCase();
+        if (lower.includes('mtn')) return 'MTN';
+        if (lower.includes('vodafone') || lower.includes('telecel')) return 'VOD';
+        if (lower.includes('airtel') || lower.includes('tigo')) return 'ATL';
+        return "";
+    };
 
     return (
         <>
@@ -88,15 +95,9 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
                         <div className="h-9 w-full rounded bg-muted animate-pulse"></div>
                     ) : (
                         <>
-                            {!hasLinkedAccount ? (
-                                <Button className="w-full gap-2" variant="default" onClick={() => setSetupOpen(true)}>
-                                    <Plus className="h-4 w-4" /> Link Payout Method
-                                </Button>
-                            ) : (
-                                <Button className="w-full gap-2" variant="default" onClick={() => setWithdrawOpen(true)}>
-                                    <ArrowUpRight className="h-4 w-4" /> Withdraw Funds
-                                </Button>
-                            )}
+                            <Button className="w-full gap-2" variant="default" onClick={() => setWithdrawOpen(true)}>
+                                <ArrowUpRight className="h-4 w-4" /> Withdraw Funds
+                            </Button>
 
                             {/* Real-time indicator (optional) */}
                             <div className="flex justify-center mt-2">
@@ -113,19 +114,14 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
                 </CardFooter>
             </Card>
 
-            <PaystackSetupModal
-                userId={userId}
-                isOpen={setupOpen}
-                onClose={() => setSetupOpen(false)}
-                onSuccess={() => { }}
-            />
-
             <WithdrawalModal
                 userId={userId}
                 availableBalance={balanceData?.balance || 0}
                 isOpen={withdrawOpen}
                 onClose={() => setWithdrawOpen(false)}
                 onSuccess={() => { }}
+                defaultNetwork={getNetworkCode(balanceData?.momoProviderName)}
+                defaultNumber={balanceData?.momoNumber}
             />
         </>
     );
