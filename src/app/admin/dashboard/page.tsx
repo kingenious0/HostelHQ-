@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { RoomType, Review } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/lib/sms-service';
+import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/app/actions/sms';
 import { getAdminPaystackBalance } from '@/app/actions/payouts';
 
 type Hostel = {
