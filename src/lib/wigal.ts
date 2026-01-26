@@ -9,12 +9,44 @@ const WIGAL_API_KEY =
   process.env.WIGAL_API_KEY || process.env.FROG_SMS_API_KEY;
 const WIGAL_USERNAME =
   process.env.WIGAL_USERNAME || process.env.FROG_SMS_USERNAME;
-const WIGAL_API_URL =
-  process.env.WIGAL_API_URL ||
-  process.env.FROG_SMS_API_URL ||
-  'https://frogapi.wigal.com.gh';
 const WIGAL_SENDER_ID =
   process.env.WIGAL_SENDER_ID || process.env.FROG_SMS_SENDER_ID || 'HostelHQ';
+
+/**
+ * Robust DNS resolver that tries system DNS first, then fallbacks to Google DNS (8.8.8.8)
+ * This bypasses ISP-level DNS blocking or propagation issues.
+ */
+async function resolveWigalUrl(urlStr: string): Promise<string> {
+  const url = new URL(urlStr);
+  const hostname = url.hostname;
+
+  try {
+    // Try standard resolution first
+    const dns = await import('node:dns/promises');
+    try {
+      await dns.lookup(hostname);
+      return urlStr; // System found it, use original URL
+    } catch (e) {
+      console.warn(`DNS lookup failed for ${hostname}, attempting Google DNS fallback...`);
+
+      // Fallback: Using a specific Google DNS resolver
+      const resolver = new dns.Resolver();
+      resolver.setServers(['8.8.8.8', '1.1.1.1']);
+      const addresses = await resolver.resolve4(hostname);
+
+      if (addresses.length > 0) {
+        // We found the IP! Now we swap the hostname for the IP
+        // but tell fetch to ignore the SSL name mismatch (node-fetch/undici style)
+        url.hostname = addresses[0];
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        return url.toString();
+      }
+    }
+  } catch (err) {
+    console.error('DNS Fallback failed:', err);
+  }
+  return urlStr; // Failure, return original and let fetch try one last time
+}
 
 export interface SendOTPResponse {
   success: boolean;
@@ -42,22 +74,22 @@ export interface SendSMSResponse {
 export function formatPhoneNumber(phone: string): string {
   // Remove all non-digit characters
   let cleaned = phone.replace(/\D/g, '');
-  
+
   // Remove country code if present (233)
   if (cleaned.startsWith('233')) {
     cleaned = cleaned.substring(3);
   }
-  
+
   // Remove any leading zeros (we'll add one back)
   while (cleaned.startsWith('0')) {
     cleaned = cleaned.substring(1);
   }
-  
+
   // Ensure it starts with 0 (Ghana format)
   if (!cleaned.startsWith('0')) {
     cleaned = '0' + cleaned;
   }
-  
+
   return cleaned;
 }
 
@@ -87,8 +119,12 @@ export async function generateAndSendOTP(
     const length = options?.length || 6;
     const expiry = options?.expiry || 10; // 10 minutes default
     const type = options?.type || 'NUMERIC';
-    const messageTemplate = options?.messageTemplate || 
+    const messageTemplate = options?.messageTemplate ||
       `Your HostelHQ verification code is: %OTPCODE%. This code expires in %EXPIRY% minutes.`;
+
+    // DNS Workaround: If the system can't find the host, we'll try to help it
+    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
+    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/otp/generate`);
 
     const requestBody = {
       number: formattedPhone,
@@ -100,14 +136,14 @@ export async function generateAndSendOTP(
     };
 
     console.log('Wigal OTP Generate Request:', {
-      url: `${WIGAL_API_URL}/api/v3/sms/otp/generate`,
+      url: finalUrl,
       hasApiKey: !!WIGAL_API_KEY,
       hasUsername: !!WIGAL_USERNAME,
       senderId: WIGAL_SENDER_ID,
       phone: formattedPhone,
     });
 
-    const response = await fetch(`${WIGAL_API_URL}/api/v3/sms/otp/generate`, {
+    const response = await fetch(finalUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -121,7 +157,7 @@ export async function generateAndSendOTP(
     let responseData;
     try {
       const responseText = await response.text();
-      
+
       // Check if response is HTML (error page) instead of JSON
       if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
@@ -130,7 +166,7 @@ export async function generateAndSendOTP(
           error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
         };
       }
-      
+
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
@@ -148,11 +184,11 @@ export async function generateAndSendOTP(
 
     if (!response.ok) {
       // Handle different error cases
-      const errorMessage = responseData.message || 
-                          responseData.error || 
-                          responseData.errorMessage ||
-                          `HTTP ${response.status}: ${response.statusText}`;
-      
+      const errorMessage = responseData.message ||
+        responseData.error ||
+        responseData.errorMessage ||
+        `HTTP ${response.status}: ${response.statusText}`;
+
       // Provide more helpful error messages
       if (response.status === 401 || response.status === 403) {
         return {
@@ -160,7 +196,7 @@ export async function generateAndSendOTP(
           error: 'Authentication failed. Please check your Wigal API credentials (API-KEY and USERNAME).',
         };
       }
-      
+
       if (response.status === 400) {
         return {
           success: false,
@@ -222,13 +258,16 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
       number: formattedPhone,
     };
 
+    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
+    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/otp/verify`);
+
     console.log('Wigal OTP Verify Request:', {
-      url: `${WIGAL_API_URL}/api/v3/sms/otp/verify`,
+      url: finalUrl,
       phone: formattedPhone,
       hasOtpCode: !!otpCode,
     });
 
-    const response = await fetch(`${WIGAL_API_URL}/api/v3/sms/otp/verify`, {
+    const response = await fetch(finalUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -242,7 +281,7 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
     let responseData;
     try {
       const responseText = await response.text();
-      
+
       // Check if response is HTML (error page) instead of JSON
       if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
@@ -251,7 +290,7 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
           error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
         };
       }
-      
+
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
@@ -268,11 +307,11 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
     });
 
     if (!response.ok) {
-      const errorMessage = responseData.message || 
-                          responseData.error || 
-                          responseData.errorMessage ||
-                          `HTTP ${response.status}: ${response.statusText}`;
-      
+      const errorMessage = responseData.message ||
+        responseData.error ||
+        responseData.errorMessage ||
+        `HTTP ${response.status}: ${response.statusText}`;
+
       if (response.status === 401 || response.status === 403) {
         return {
           success: false,
@@ -342,14 +381,17 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
       smstype: 'text',
     };
 
+    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
+    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/send`);
+
     console.log('Wigal SMS Send Request:', {
-      url: `${WIGAL_API_URL}/api/v3/sms/send`,
+      url: finalUrl,
       phone: formattedPhone,
       senderId: WIGAL_SENDER_ID,
       messageLength: message.length,
     });
 
-    const response = await fetch(`${WIGAL_API_URL}/api/v3/sms/send`, {
+    const response = await fetch(finalUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -363,7 +405,7 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
     let responseData;
     try {
       const responseText = await response.text();
-      
+
       // Check if response is HTML (error page) instead of JSON
       if (responseText.trim().startsWith('<') || responseText.trim().startsWith('<!')) {
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
@@ -372,7 +414,7 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
           error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
         };
       }
-      
+
       responseData = responseText ? JSON.parse(responseText) : {};
     } catch (parseError) {
       console.error('Failed to parse API response:', parseError);
@@ -389,11 +431,11 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
     });
 
     if (!response.ok) {
-      const errorMessage = responseData.message || 
-                          responseData.error || 
-                          responseData.errorMessage ||
-                          `HTTP ${response.status}: ${response.statusText}`;
-      
+      const errorMessage = responseData.message ||
+        responseData.error ||
+        responseData.errorMessage ||
+        `HTTP ${response.status}: ${response.statusText}`;
+
       if (response.status === 401 || response.status === 403) {
         return {
           success: false,

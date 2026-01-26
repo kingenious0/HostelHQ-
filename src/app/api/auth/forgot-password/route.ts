@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { generateAndSendOTP, formatPhoneNumber } from '@/lib/wigal';
 
 export async function POST(req: NextRequest) {
@@ -16,27 +16,54 @@ export async function POST(req: NextRequest) {
 
     // Format phone number
     const formattedPhone = formatPhoneNumber(phoneNumber);
-    
-    // Normalize phone to match storage format (233XXXXXXXXX)
-    let normalizedPhone = phoneNumber.replace(/\D/g, '');
-    if (normalizedPhone.startsWith('0') && normalizedPhone.length === 10) {
-      normalizedPhone = '233' + normalizedPhone.substring(1);
+
+    // Normalize phone to match storage format (try both 233 and local format)
+    let cleaned = phoneNumber.replace(/\D/g, '');
+    let searchNumbers = [cleaned];
+
+    if (cleaned.startsWith('0') && cleaned.length === 10) {
+      const local = cleaned.substring(1);
+      searchNumbers.push(local);
+      searchNumbers.push('233' + local);
+    } else if (cleaned.startsWith('233') && cleaned.length === 12) {
+      const local = cleaned.substring(3);
+      searchNumbers.push(local);
+      searchNumbers.push('0' + local);
+    } else if (cleaned.length === 9) {
+      searchNumbers.push('0' + cleaned);
+      searchNumbers.push('233' + cleaned);
     }
 
-    // Find user by phone number
+    // Find user by phone number - try all possible formats in both field and document ID
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('phoneNumber', '==', normalizedPhone));
-    const snap = await getDocs(q);
+    const q = query(usersRef, where('phoneNumber', 'in', searchNumbers));
+    let snap = await getDocs(q);
 
-    if (snap.empty) {
+    let userData: any = null;
+    let userId: string = '';
+
+    if (!snap.empty) {
+      userData = snap.docs[0].data();
+      userId = snap.docs[0].id;
+    } else {
+      // If not found as a field, try checking if the phone number is the document ID
+      for (const num of searchNumbers) {
+        const docRef = doc(db, 'users', num);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          userData = docSnap.data();
+          userId = docSnap.id;
+          break;
+        }
+      }
+    }
+
+    if (!userData) {
       return NextResponse.json(
         { success: false, error: 'No account found with this phone number' },
         { status: 404 }
       );
     }
-
-    const userData = snap.docs[0].data();
-    const userId = snap.docs[0].id;
 
     // Send OTP via Wigal
     const otpResult = await generateAndSendOTP(formattedPhone, {
