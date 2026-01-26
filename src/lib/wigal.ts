@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Wigal (FROG) SMS Service
  * Handles OTP sending, verification, and SMS notifications via Wigal FROG API

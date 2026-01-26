@@ -22,7 +22,7 @@ import { BookingsChart } from '@/components/bookings-chart';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { uploadImage } from '@/lib/cloudinary';
-import { sendSMS } from '@/lib/wigal';
+import { sendSMS } from '@/app/actions/sms';
 import Image from 'next/image';
 import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
 
