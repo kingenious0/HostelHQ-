@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -8,9 +10,29 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, updateProfile, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { loadSettings, saveSettings, clearLocalData, type ClientSettings } from '@/lib/clientSettings';
-import { BackButton } from '@/components/ui/back-button';
+import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
+import {
+  Loader2,
+  Calendar,
+  CreditCard,
+  Users,
+  Banknote,
+  Settings as SettingsIcon,
+  LogOut,
+  ChevronLeft,
+  User,
+  Shield,
+  Eye,
+  Palette,
+  Database,
+  AlertTriangle,
+  Bell,
+  CheckCircle
+} from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 
 interface AppUser {
   uid: string;
@@ -19,489 +41,331 @@ interface AppUser {
   role: string;
   profileImage?: string;
   phone?: string;
-  address?: string;
-  bio?: string;
-  nationality?: string;
-  gender?: string;
-  privacySettings?: {
-    showPicture: boolean;
-    showProfile: boolean;
-    showProgrammeOfStudy: boolean;
-    showPhoneNumber: boolean;
-    showEmailAddress: boolean;
-    roommateContactMode?: 'phone' | 'whatsapp' | 'basic';
-    whatsappNumber?: string;
-  };
-  offlineSmsOptIn?: boolean;
 }
 
 export default function SettingsPage() {
-    const { toast } = useToast();
-    const [user, setUser] = useState<FirebaseUser | null>(null);
-    const [appUser, setAppUser] = useState<AppUser | null>(null);
-    const [fullName, setFullName] = useState('');
-    const [initialName, setInitialName] = useState('');
-    const [saving, setSaving] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [settings, setSettings] = useState<ClientSettings | null>(null);
-    const [privacySettings, setPrivacySettings] = useState({
-      showPicture: true,
-      showProfile: true,
-      showProgrammeOfStudy: true,
-      showPhoneNumber: true,
-      showEmailAddress: true,
-      roommateContactMode: 'phone' as 'phone' | 'whatsapp' | 'basic',
-      whatsappNumber: '',
-    });
-    const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [initialName, setInitialName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<ClientSettings | null>(null);
+  const [privacySettings, setPrivacySettings] = useState({
+    showPicture: true,
+    showProfile: true,
+    showProgrammeOfStudy: true,
+    showPhoneNumber: true,
+    showEmailAddress: true,
+    roommateContactMode: 'phone' as 'phone' | 'whatsapp' | 'basic',
+    whatsappNumber: '',
+  });
+  const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
 
-    useEffect(() => {
-        const unsubAuth = onAuthStateChanged(auth, async (u) => {
-            setUser(u);
-            if (!u) {
-                setLoading(false);
-                setAppUser(null);
-                return;
-            }
-
-            const userDocRef = doc(db, "users", u.uid);
-            const unsubFirestore = onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const userData = docSnap.data() as AppUser;
-                    setAppUser({
-                        uid: u.uid,
-                        email: u.email!,
-                        fullName: userData.fullName || u.displayName || '',
-                        role: userData.role || 'student',
-                        profileImage: userData.profileImage || u.photoURL || '',
-                        phone: userData.phone || '',
-                        address: userData.address || '',
-                        bio: userData.bio || '',
-                        nationality: userData.nationality || '',
-                        gender: userData.gender || '',
-                        privacySettings: userData.privacySettings,
-                    });
-                    setFullName(userData.fullName || u.displayName || '');
-                    setInitialName(userData.fullName || u.displayName || '');
-                    setPrivacySettings(userData.privacySettings || {
-                      showPicture: true,
-                      showProfile: true,
-                      showProgrammeOfStudy: true,
-                      showPhoneNumber: true,
-                      showEmailAddress: true,
-                      roommateContactMode: 'phone',
-                      whatsappNumber: userData.phone || '',
-                    });
-                    setOfflineSmsOptIn(!!userData.offlineSmsOptIn);
-                } else {
-                    // If user exists in Auth but not in DB, create a basic profile
-                    const newUser: AppUser = {
-                        uid: u.uid,
-                        email: u.email!,
-                        fullName: u.displayName || '',
-                        role: 'student', // Default role
-                        profileImage: u.photoURL || '',
-                    };
-                    updateDoc(userDocRef, newUser, { merge: true }); // Create initial user doc
-                    setAppUser(newUser);
-                    setFullName(newUser.fullName);
-                    setInitialName(newUser.fullName);
-                    setPrivacySettings({
-                      showPicture: true,
-                      showProfile: true,
-                      showProgrammeOfStudy: true,
-                      showPhoneNumber: true,
-                      showEmailAddress: true,
-                      roommateContactMode: 'phone',
-                      whatsappNumber: '',
-                    });
-                    setOfflineSmsOptIn(false);
-                }
-                setLoading(false);
-            }, (error) => {
-                console.error("Error fetching user profile:", error);
-                toast({ title: "Error loading profile", variant: 'destructive' });
-                setLoading(false);
-            });
-
-            return () => unsubFirestore();
-        });
-        return () => unsubAuth();
-    }, []);
-
-    const canSave = user && fullName.trim() && fullName.trim() !== initialName.trim() && !saving;
-    const canSavePrivacy = user && !loading && !saving; // Simplistic check for now
-
-    useEffect(() => {
-        // Load client-side UI settings (theme, data usage) after mount to avoid hydration mismatch
-        const clientSettings = loadSettings();
-        setSettings(clientSettings);
-    }, []);
-
-    const handleSave = async () => {
-        if (!user) return;
-        const name = fullName.trim();
-        if (!name) return;
-        setSaving(true);
-        try {
-            // Optimistic UI
-            setInitialName(name);
-
-            // Persist minimal server-side: update users doc and auth displayName
-            const userRef = doc(db, 'users', user.uid);
-            await updateDoc(userRef, { fullName: name });
-            await updateProfile(user, { displayName: name }).catch(() => {});
-
-            toast({ title: 'Name updated' });
-        } catch (e) {
-            setInitialName(fullName); // revert optimistic change if needed
-            toast({ title: 'Failed to update name', variant: 'destructive' });
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleSavePrivacy = async () => {
-      if (!user) return;
-      setSaving(true);
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { privacySettings: privacySettings });
-        toast({ title: 'Privacy settings updated' });
-      } catch (e) {
-        console.error("Error saving privacy settings:", e);
-        toast({ title: 'Failed to update privacy settings', variant: 'destructive' });
-      } finally {
-        setSaving(false);
-      }
-    };
-
-    const handleRoommateContactModeClick = (mode: 'phone' | 'whatsapp' | 'basic') => {
-      if (!user) return;
-
-      if (mode === 'whatsapp') {
-        try {
-          const existing = privacySettings.whatsappNumber || appUser?.phone || '';
-          const input = window.prompt('Enter your WhatsApp number (include country code)', existing);
-          if (!input) return;
-          const cleaned = input.replace(/[^0-9+]/g, '');
-          if (!cleaned) return;
-          setPrivacySettings(prev => ({
-            ...prev,
-            roommateContactMode: 'whatsapp',
-            whatsappNumber: cleaned,
-          }));
-          handleSavePrivacy();
-        } catch {
-          // ignore prompt errors
-        }
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (!u) {
+        setLoading(false);
+        setAppUser(null);
         return;
       }
 
-      setPrivacySettings(prev => ({
-        ...prev,
-        roommateContactMode: mode,
-      }));
-      handleSavePrivacy();
-    };
-
-    const updateSetting = <K extends keyof ClientSettings>(section: K, updater: (prev: ClientSettings[K]) => ClientSettings[K]) => {
-        if (!settings) return; // Ignore updates until settings are loaded
-        const nextSection = updater(settings[section]);
-        const next = { ...settings, [section]: nextSection } as ClientSettings;
-        setSettings(next);
-        saveSettings(next);
-        
-        // Apply theme change immediately
-        if (section === 'profile' && 'theme' in nextSection) {
-            const newTheme = (nextSection as any).theme;
-            document.documentElement.classList.toggle('dark', newTheme === 'dark');
+      const userDocRef = doc(db, "users", u.uid);
+      const unsubFirestore = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const userData = docSnap.data();
+          setAppUser({
+            uid: u.uid,
+            email: u.email!,
+            fullName: userData.fullName || u.displayName || '',
+            role: userData.role || 'student',
+            profileImage: userData.profileImage || u.photoURL || '',
+          });
+          setFullName(userData.fullName || u.displayName || '');
+          setInitialName(userData.fullName || u.displayName || '');
+          setPrivacySettings(userData.privacySettings || {
+            showPicture: true,
+            showProfile: true,
+            showProgrammeOfStudy: true,
+            showPhoneNumber: true,
+            showEmailAddress: true,
+            roommateContactMode: 'phone',
+            whatsappNumber: userData.phone || '',
+          });
+          setOfflineSmsOptIn(!!userData.offlineSmsOptIn);
         }
-    };
+        setLoading(false);
+      });
 
-    const handlePrivacyToggle = (key: keyof AppUser['privacySettings'], checked: boolean) => {
-      setPrivacySettings(prev => ({
-        ...prev,
-        [key]: checked,
-      }));
-    };
+      return () => unsubFirestore();
+    });
+    return () => unsubAuth();
+  }, []);
 
-    const handleOfflineSmsToggle = async (checked: boolean) => {
-      if (!user) return;
-      setSaving(true);
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { offlineSmsOptIn: checked });
-        setOfflineSmsOptIn(checked);
-        toast({
-          title: checked ? 'Offline SMS enabled' : 'Offline SMS disabled',
-          description: checked
-            ? 'Students can select you while you are offline and you will receive SMS alerts.'
-            : 'Students will only be able to select you when you are online.',
-        });
-      } catch (e) {
-        console.error('Error updating offline SMS preference:', e);
-        toast({ title: 'Failed to update agent notification setting', variant: 'destructive' });
-      } finally {
-        setSaving(false);
-      }
-    };
+  useEffect(() => {
+    setSettings(loadSettings());
+  }, []);
 
+  const handleSave = async () => {
+    if (!user) return;
+    const name = fullName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { fullName: name });
+      await updateProfile(user, { displayName: name });
+      setInitialName(name);
+      toast({ title: 'Profile Updated', description: 'Your display name has been saved.' });
+    } catch (e) {
+      toast({ title: 'Update Failed', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSavePrivacy = async (updatedPrivacy?: typeof privacySettings) => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { privacySettings: updatedPrivacy || privacySettings });
+      toast({ title: 'Privacy Saved', description: 'Roommate preferences updated.' });
+    } catch (e) {
+      toast({ title: 'Save Failed', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggle = (key: keyof typeof privacySettings, val: boolean) => {
+    const next = { ...privacySettings, [key]: val };
+    setPrivacySettings(next);
+    handleSavePrivacy(next);
+  };
+
+  const updateAppearance = <K extends keyof ClientSettings['profile']>(key: K, value: any) => {
+    if (!settings) return;
+    const next = {
+      ...settings,
+      profile: { ...settings.profile, [key]: value }
+    } as ClientSettings;
+    setSettings(next);
+    saveSettings(next);
+    if (key === 'theme') {
+      document.documentElement.classList.toggle('dark', value === 'dark');
+    }
+  };
+
+  const navItems = [
+    { label: 'My Bookings', href: '/my-bookings', icon: Calendar },
+    { label: 'Payments', href: '/payments', icon: CreditCard },
+    { label: 'My Roommates', href: '/my-roommates', icon: Users },
+    { label: 'Bank Accounts', href: '/bank-accounts', icon: Banknote },
+    { label: 'Settings', href: '/settings', icon: SettingsIcon },
+  ];
+
+  if (loading) {
     return (
-        <div className="flex flex-col min-h-screen bg-gray-50/50">
-            <Header />
-            <main className="flex-1 p-8 max-w-2xl mx-auto">
-                <div className="flex items-center gap-4 mb-6">
-                    <BackButton />
-                    <h1 className="text-2xl font-bold">Settings</h1>
-                </div>
-                <p className="text-muted-foreground mt-2">Update your preferences here.</p>
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </main>
+      </div>
+    );
+  }
 
-                <div className="mt-8 space-y-8">
-                    <div>
-                        <h2 className="text-lg font-semibold">Profile</h2>
-                        <p className="text-sm text-muted-foreground">This updates only your display name.</p>
-                        <div className="mt-4 flex items-center gap-3">
-                            <Input
-                                placeholder="Full name"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                disabled={loading || saving}
-                            />
-                            <Button onClick={handleSave} disabled={!canSave}>
-                                {saving ? 'Saving...' : 'Save'}
-                            </Button>
-                        </div>
-                    </div>
+  return (
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar collapsible="icon" className="border-r border-border/50 bg-card/50 backdrop-blur-xl">
+          <SidebarHeader className="p-4">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10 border-2 border-primary/10">
+                {appUser?.profileImage ? (
+                  <AvatarImage src={appUser.profileImage} />
+                ) : (
+                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                    {appUser?.fullName?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <div className="flex flex-col truncate group-data-[collapsible=icon]:hidden">
+                <span className="font-bold text-sm truncate">{appUser?.fullName || 'User'}</span>
+                <span className="text-[10px] text-muted-foreground truncate">{appUser?.email}</span>
+              </div>
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-4 py-2">System</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {navItems.map((item) => (
+                    <SidebarMenuItem key={item.label}>
+                      <SidebarMenuButton asChild isActive={pathname === item.href} className={cn(
+                        "transition-all duration-200",
+                        pathname === item.href ? "bg-primary text-primary-foreground shadow-md" : "hover:bg-primary/5 hover:text-primary"
+                      )}>
+                        <Link href={item.href} className="flex items-center gap-3 py-6">
+                          <item.icon className="h-4 w-4" />
+                          <span className="font-medium">{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarRail />
+        </Sidebar>
 
-                    {/* General profile sharing controls */}
-                    <div>
-                        <h2 className="text-lg font-semibold">Profile sharing</h2>
-                        <p className="text-sm text-muted-foreground">Choose what parts of your profile your roommates and hostel mates can see.</p>
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Show picture</p>
-                                    <p className="text-sm text-muted-foreground">Allow others to see your profile photo.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showPicture}
-                                    onCheckedChange={(v) => handlePrivacyToggle('showPicture', v)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
+        <SidebarInset className="flex flex-col min-w-0">
+          <Header />
+          <main className="flex-1 overflow-x-hidden pt-4 pb-24 md:pb-8">
+            <div className="container mx-auto max-w-4xl px-4 sm:px-6">
+              <div className="mb-10 text-center md:text-left">
+                <h1 className="text-3xl md:text-4xl font-extrabold font-headline tracking-tight text-foreground mb-2">Settings</h1>
+                <p className="text-muted-foreground text-sm max-w-lg">Manage your identity, privacy, and app experience.</p>
+              </div>
 
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Show profile</p>
-                                    <p className="text-sm text-muted-foreground">Turn this off to hide your profile completely from roommate lists.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showProfile}
-                                    onCheckedChange={(v) => handlePrivacyToggle('showProfile', v)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Show programme & level</p>
-                                    <p className="text-sm text-muted-foreground">Share your programme of study and level.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showProgrammeOfStudy}
-                                    onCheckedChange={(v) => handlePrivacyToggle('showProgrammeOfStudy', v)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Show phone number</p>
-                                    <p className="text-sm text-muted-foreground">Let roommates see your phone when contact mode allows it.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showPhoneNumber}
-                                    onCheckedChange={(v) => handlePrivacyToggle('showPhoneNumber', v)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Show email address</p>
-                                    <p className="text-sm text-muted-foreground">Allow roommates to see your email.</p>
-                                </div>
-                                <Switch
-                                    checked={privacySettings.showEmailAddress}
-                                    onCheckedChange={(v) => handlePrivacyToggle('showEmailAddress', v)}
-                                    disabled={loading || saving}
-                                />
-                            </div>
-                        </div>
-                        <div className="mt-3">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={handleSavePrivacy}
-                                disabled={!canSavePrivacy}
-                            >
-                                {saving ? 'Saving...' : 'Save profile sharing'}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* Privacy settings for roommates / hostel mates */}
-                    <div>
-                      <h2 className="text-lg font-semibold">Roommates &amp; hostel mates</h2>
-                      <p className="text-sm text-muted-foreground">
-                        Control how much contact information your roommates and hostel mates can see.
-                      </p>
-                      <div className="mt-4 space-y-4 border rounded-md p-4">
+              <div className="space-y-8">
+                {/* Profile Section */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <User className="h-5 w-5 text-primary" />
+                    <h2 className="text-xl font-bold font-headline">Identity</h2>
+                  </div>
+                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                    <CardContent className="p-6">
+                      <div className="space-y-4">
                         <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">Roommate contact visibility</p>
-                          <p className="text-sm text-muted-foreground">This affects how your details appear on the My Roommates and Hostel Mates pages.</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={privacySettings.roommateContactMode === 'phone' ? 'default' : 'outline'}
-                            onClick={() => handleRoommateContactModeClick('phone')}
-                            disabled={loading || saving}
-                          >
-                            Show phone to roommates
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={privacySettings.roommateContactMode === 'whatsapp' ? 'default' : 'outline'}
-                            onClick={() => handleRoommateContactModeClick('whatsapp')}
-                            disabled={loading || saving}
-                          >
-                            WhatsApp only
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={privacySettings.roommateContactMode === 'basic' ? 'default' : 'outline'}
-                            onClick={() => handleRoommateContactModeClick('basic')}
-                            disabled={loading || saving}
-                          >
-                            Name &amp; programme only
-                          </Button>
-                        </div>
-                        <div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={handleSavePrivacy}
-                            disabled={!canSavePrivacy}
-                          >
-                            {saving ? 'Saving...' : 'Save roommate privacy'}
-                          </Button>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Display Name</p>
+                          <div className="flex gap-3">
+                            <Input
+                              value={fullName}
+                              onChange={e => setFullName(e.target.value)}
+                              className="rounded-xl h-12 bg-muted/20 border-border/40"
+                              placeholder="Electronic Student Name"
+                            />
+                            <Button
+                              disabled={!fullName.trim() || fullName === initialName || saving}
+                              onClick={handleSave}
+                              className="rounded-xl px-8 h-12 font-bold"
+                            >
+                              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </CardContent>
+                  </Card>
+                </section>
 
-                    {appUser?.role === 'agent' && (
-                      <div>
-                        <h2 className="text-lg font-semibold">Agent notifications</h2>
-                        <p className="text-sm text-muted-foreground">Control whether students can select you for visits while you are offline.</p>
-                        <div className="mt-4 flex items-center justify-between border rounded-md p-3">
+                {/* Privacy Section */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Shield className="h-5 w-5 text-green-600" />
+                    <h2 className="text-xl font-bold font-headline">Privacy & Safety</h2>
+                  </div>
+                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                    <CardContent className="p-6 divide-y divide-border/40">
+                      {[
+                        { id: 'showProfile', label: 'Public Profile Visibility', desc: 'Allows roommates to see your profile.' },
+                        { id: 'showPicture', label: 'Show Profile Photo', desc: 'Display your picture to other students.' },
+                        { id: 'showProgrammeOfStudy', label: 'Show Programme', desc: 'Share your academic details.' },
+                        { id: 'showPhoneNumber', label: 'Share Phone Number', desc: 'Necessary for easy connection.' },
+                      ].map((item) => (
+                        <div key={item.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
                           <div>
-                            <p className="font-medium">Allow offline visit requests</p>
-                            <p className="text-sm text-muted-foreground">When you are offline, students can still pick you and you will receive SMS alerts.</p>
+                            <p className="font-bold text-sm">{item.label}</p>
+                            <p className="text-xs text-muted-foreground">{item.desc}</p>
                           </div>
                           <Switch
-                            checked={offlineSmsOptIn}
-                            onCheckedChange={handleOfflineSmsToggle}
-                            disabled={loading || saving}
+                            checked={(privacySettings as any)[item.id]}
+                            onCheckedChange={v => handleToggle(item.id as any, v)}
                           />
                         </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </section>
+
+                {/* Appearance Section */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Palette className="h-5 w-5 text-primary" />
+                    <h2 className="text-xl font-bold font-headline">Appearance</h2>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Card className="rounded-3xl border-transparent premium-shadow bg-white/80 backdrop-blur-md">
+                      <CardContent className="p-5 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-sm">Dark Mode</p>
+                          <p className="text-[10px] text-muted-foreground">High contrast theme</p>
+                        </div>
+                        <Switch
+                          checked={settings?.profile.theme === 'dark'}
+                          onCheckedChange={v => updateAppearance('theme', v ? 'dark' : 'light')}
+                        />
+                      </CardContent>
+                    </Card>
+                    <Card className="rounded-3xl border-transparent premium-shadow bg-white/80 backdrop-blur-md">
+                      <CardContent className="p-5 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-sm">Reduced Motion</p>
+                          <p className="text-[10px] text-muted-foreground">Minimize animations</p>
+                        </div>
+                        <Switch
+                          checked={!!settings?.profile.reducedMotion}
+                          onCheckedChange={v => updateAppearance('reducedMotion', !!v)}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                </section>
+
+                {/* Data & Performance */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Database className="h-5 w-5 text-blue-600" />
+                    <h2 className="text-xl font-bold font-headline">Data & Cache</h2>
+                  </div>
+                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div>
+                          <p className="font-bold text-sm">Cache Management</p>
+                          <p className="text-xs text-muted-foreground">Free up space by clearing local hostel data.</p>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="rounded-xl px-6 font-bold"
+                          onClick={() => {
+                            clearLocalData();
+                            toast({ title: 'Cache Purged', description: 'Local storage has been cleared.' });
+                          }}
+                        >
+                          Clear Local Data
+                        </Button>
                       </div>
-                    )}
+                    </CardContent>
+                  </Card>
+                </section>
 
-                    <div>
-                        <h2 className="text-lg font-semibold">Appearance</h2>
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Dark mode</p>
-                                    <p className="text-sm text-muted-foreground">Use a dark theme for low light environments.</p>
-                                </div>
-                                <Switch
-                                    checked={settings?.profile.theme === 'dark'}
-                                    onCheckedChange={(v) => updateSetting('profile', (p) => ({ ...p, theme: v ? 'dark' : 'light' }))}
-                                    disabled={!settings}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Reduced motion</p>
-                                    <p className="text-sm text-muted-foreground">Minimize animations to reduce motion.</p>
-                                </div>
-                                <Switch
-                                    checked={!!settings?.profile.reducedMotion}
-                                    onCheckedChange={(v) => updateSetting('profile', (p) => ({ ...p, reducedMotion: !!v }))}
-                                    disabled={!settings}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h2 className="text-lg font-semibold">Data usage</h2>
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Low data mode</p>
-                                    <p className="text-sm text-muted-foreground">Defer heavy images and maps to save bandwidth.</p>
-                                </div>
-                                <Switch
-                                    checked={!!settings?.data.lowDataMode}
-                                    onCheckedChange={(v) => updateSetting('data', (d) => ({ ...d, lowDataMode: !!v }))}
-                                    disabled={!settings}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between border rounded-md p-3">
-                                <div>
-                                    <p className="font-medium">Firestore offline cache</p>
-                                    <p className="text-sm text-muted-foreground">Keep data available offline using browser storage.</p>
-                                </div>
-                                <Switch
-                                    checked={!!settings?.data.firestorePersistence}
-                                    onCheckedChange={(v) => updateSetting('data', (d) => ({ ...d, firestorePersistence: !!v }))}
-                                    disabled={!settings}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <div>
-                        <h2 className="text-lg font-semibold">Danger zone</h2>
-                        <p className="text-sm text-muted-foreground">Clear locally cached data for this app on this device.</p>
-                        <div className="mt-3">
-                            <Button
-                                variant="destructive"
-                                onClick={() => {
-                                    clearLocalData();
-                                    setSettings(loadSettings());
-                                    toast({ title: 'Local data cleared' });
-                                }}
-                            >
-                                Clear local data
-                            </Button>
-                        </div>
-                    </div>
+                <div className="pt-8 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.3em]">HostelHQ v2.4.0 • AAMUSTED Edition</p>
                 </div>
-            </main>
-        </div>
-    );
+              </div>
+            </div>
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  );
 }
-
-

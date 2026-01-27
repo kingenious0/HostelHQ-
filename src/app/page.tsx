@@ -62,8 +62,8 @@ export default async function Home({ searchParams }: HomeProps) {
         <Hero />
 
         <section className="container mx-auto -mt-16 px-4 sm:px-6 lg:px-10 relative z-10">
-          <div className="rounded-[2rem] border border-white/10 bg-white/70 dark:bg-slate-900/70 p-1 shadow-2xl backdrop-blur-2xl">
-            <div className="p-4 sm:p-6">
+          <div className="glass-premium rounded-[2.5rem] p-2">
+            <div className="p-4 sm:p-8">
               <h2 className="sr-only">Find a hostel</h2>
               <SearchForm />
             </div>
@@ -76,10 +76,10 @@ export default async function Home({ searchParams }: HomeProps) {
               <p className="text-sm font-bold text-primary uppercase tracking-[0.2em] mb-1">
                 {filteredHostels.length} {filteredHostels.length === 1 ? "hostel" : "hostels"} available
               </p>
-              <h2 className="text-3xl font-headline font-bold text-foreground sm:text-4xl">
+              <h2 className="text-3xl font-headline font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl mb-2">
                 {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery
-                  ? "Search results"
-                  : "Authentic stays only. No cap"}
+                  ? <span className="text-gradient">Search results</span>
+                  : <>Authentic stays only. <span className="text-gradient">No cap</span></>}
               </h2>
             </div>
           </header>

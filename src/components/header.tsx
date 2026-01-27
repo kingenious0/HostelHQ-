@@ -53,6 +53,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
@@ -884,7 +887,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 transition-all duration-300">
       <div className="border-b border-border/40 transition-all bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-20 items-center justify-between gap-4 px-3 sm:h-24 sm:px-6">
+        <div className="container mx-auto flex h-20 items-center justify-between gap-2 px-2 sm:h-24 sm:gap-4 sm:px-6">
           <div className="flex flex-1 items-center gap-3">
             <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
               <SheetTrigger asChild>
@@ -927,62 +930,25 @@ export function Header() {
                   ))}
                 </nav>
 
-                {isStudent && (
-                  <div className="mt-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button className="w-full justify-between rounded-full bg-primary/5 text-primary hover:bg-primary/10">
-                          <span>My Bookings</span>
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-56">
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
-                            <Link href="/my-bookings">
-                              <Briefcase className="mr-2 h-4 w-4" />
-                              <span>My Bookings</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
-                            <Link href="/payments">
-                              <CreditCard className="mr-2 h-4 w-4" />
-                              <span>Payments</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
-                            <Link href="/my-roommates">
-                              <Users className="mr-2 h-4 w-4" />
-                              <span>My Roommates</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
-                        <SheetClose asChild>
-                          <DropdownMenuItem asChild>
-                            <Link href="/bank-accounts">
-                              <Banknote className="mr-2 h-4 w-4" />
-                              <span>Bank Accounts</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </SheetClose>
-                        {isStudent && (
-                          <SheetClose asChild>
-                            <DropdownMenuItem asChild>
-                              <Link href="/settings">
-                                <Settings className="mr-2 h-4 w-4" />
-                                <span>Settings</span>
-                              </Link>
-                            </DropdownMenuItem>
-                          </SheetClose>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                <div className="mt-auto pb-6 space-y-4">
+                  {/* Notification Toggle in Mobile Sidebar */}
+                  {appUser && (
+                    <div className="mt-4">
+                      <NotificationToggle />
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="h-4 w-4 text-primary" />
+                      233 (0) 597626090 / 233 (0) 536 282 694
+                    </Link>
+                    <Link href="mailto:hostelhqghana@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Mail className="h-4 w-4 text-primary" />
+                      hostelhqghana@gmail.com
+                    </Link>
                   </div>
-                )}
+                </div>
 
                 {/* UI Scale Slider in Mobile Sidebar */}
                 <div className="mt-6 border-t pt-4">
@@ -1044,13 +1010,13 @@ export function Header() {
                 </div>
               </SheetContent>
             </Sheet>
-            <Link href="/" className="flex items-center gap-2" aria-label="HostelHQ home">
-              <div className="relative h-14 w-[200px] sm:h-16 sm:w-[280px] md:h-[72px] md:w-[320px]">
+            <Link href="/" className="flex items-center gap-1 sm:gap-2 shrink-1 min-w-0" aria-label="HostelHQ home">
+              <div className="relative h-10 w-[140px] sm:h-14 sm:w-[200px] md:h-16 md:w-[280px] lg:h-[72px] lg:w-[320px]">
                 <Image
                   src="/HostelHQ Web App Logo.png"
                   alt="HostelHQ"
                   fill
-                  sizes="(max-width: 640px) 200px, (max-width: 768px) 280px, 320px"
+                  sizes="(max-width: 640px) 140px, (max-width: 768px) 200px, (max-width: 1024px) 280px, 320px"
                   className="object-contain object-left"
                   priority
                 />
@@ -1153,6 +1119,10 @@ export function Header() {
                         Help Center
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => window.dispatchEvent(new CustomEvent('openHostie'))}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      <span>Chat with Hostie</span>
+                    </DropdownMenuItem>
                     {isAgent && (
                       <>
                         <DropdownMenuItem asChild>
@@ -1220,68 +1190,77 @@ export function Header() {
                       </>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
-                    <div className="space-y-1 px-1 pb-1">
-                      {themeOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setThemeMode(option.value)}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
-                            themeMode === option.value ? "bg-primary/5 text-primary" : "text-foreground hover:bg-muted"
-                          )}
-                        >
-                          <span className="flex items-center gap-3">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background">
-                              {option.icon}
-                            </span>
-                            {option.label}
-                          </span>
-                          {themeMode === option.value && <Check className="h-4 w-4 text-primary" />}
-                        </button>
-                      ))}
-                    </div>
-                    <DropdownMenuLabel className="mt-1 text-xs text-muted-foreground">Text size</DropdownMenuLabel>
-                    <div className="space-y-1 px-1 pb-2">
-                      {fontSizeOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setFontScale(option.value)}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors",
-                            fontScale === option.value ? "bg-primary/5 text-primary" : "text-foreground hover:bg-muted"
-                          )}
-                        >
-                          <span>{option.label}</span>
-                          {fontScale === option.value && <Check className="h-4 w-4 text-primary" />}
-                        </button>
-                      ))}
-                    </div>
-                    <DropdownMenuLabel className="mt-1 text-xs text-muted-foreground">UI Scale ({uiScale}%)</DropdownMenuLabel>
-                    <div className="px-3 pb-3 pt-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">A</span>
-                        <Slider
-                          value={[uiScale]}
-                          onValueChange={(values) => setUiScale(values[0])}
-                          min={70}
-                          max={130}
-                          step={5}
-                          className="flex-1"
-                        />
-                        <span className="text-sm font-medium text-muted-foreground">A</span>
+                    <div className="px-2 py-3 bg-muted/30 rounded-xl mx-1 mb-1 border border-border/40">
+                      <div className="flex items-center gap-2 mb-3 px-1">
+                        <MonitorCog className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Display Settings</span>
                       </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[10px] text-muted-foreground">Smaller</span>
-                        <button
-                          onClick={() => setUiScale(100)}
-                          className="text-[10px] text-primary hover:underline"
-                        >
-                          Reset
-                        </button>
-                        <span className="text-[10px] text-muted-foreground">Larger</span>
+
+                      <div className="space-y-4">
+                        {/* Theme Grid */}
+                        <div className="grid grid-cols-3 gap-1">
+                          {themeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setThemeMode(option.value); }}
+                              className={cn(
+                                "flex flex-col items-center justify-center gap-1.5 rounded-lg py-2 transition-all",
+                                themeMode === option.value
+                                  ? "bg-primary text-primary-foreground shadow-sm"
+                                  : "bg-background/50 text-muted-foreground hover:bg-background hover:text-foreground border border-transparent hover:border-border/60"
+                              )}
+                            >
+                              {option.icon}
+                              <span className="text-[10px] font-medium">{option.label}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Text Size Slider - Better for mobile than buttons */}
+                        <div className="px-1">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase">Text Size</span>
+                            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-bold lowercase italic">{fontScale}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground font-medium">A</span>
+                            <Slider
+                              value={[fontScale === 'normal' ? 0 : fontScale === 'large' ? 1 : 2]}
+                              onValueChange={(values) => {
+                                const scales: FontScale[] = ['normal', 'large', 'xlarge'];
+                                setFontScale(scales[values[0]]);
+                              }}
+                              max={2}
+                              step={1}
+                              className="flex-1"
+                            />
+                            <span className="text-lg text-muted-foreground font-medium leading-none">A</span>
+                          </div>
+                        </div>
+
+                        {/* UI Scale */}
+                        <div className="px-1 border-t border-border/30 pt-3">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase">UI Scale: {uiScale}%</span>
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setUiScale(100); }}
+                              className="text-[9px] font-bold text-primary hover:underline hover:text-primary/80 uppercase"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Slider
+                              value={[uiScale]}
+                              onValueChange={(values) => setUiScale(values[0])}
+                              min={70}
+                              max={130}
+                              step={5}
+                              className="flex-1"
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <DropdownMenuSeparator />
@@ -1364,38 +1343,38 @@ export function Header() {
 
       {/* Mobile Bottom Navigation - 95% of users */}
       <div className="fixed bottom-0 left-0 z-50 w-full h-16 md:hidden">
-        <div className="grid h-full max-w-lg grid-cols-4 mx-auto mobile-nav-blur border-t px-2">
-          <Link href="/" className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname === '/' ? 'text-primary' : 'text-muted-foreground')}>
-            <HomeIcon className={cn("w-6 h-6 mb-1 transition-transform group-active:scale-90", pathname === '/' && "animate-pulse")} />
+        <div className="grid h-full max-w-lg grid-cols-5 mx-auto mobile-nav-blur border-t px-1">
+          <Link href="/" className={cn("inline-flex flex-col items-center justify-center group", pathname === '/' ? 'text-primary' : 'text-muted-foreground')}>
+            <HomeIcon className={cn("w-5 h-5 mb-1 transition-transform group-active:scale-90", pathname === '/' && "animate-pulse")} />
             <span className="text-[10px] font-medium">Home</span>
           </Link>
-          <Link href="/#all-hostels" className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname?.includes('hostels') ? 'text-primary' : 'text-muted-foreground')}>
-            <Compass className="w-6 h-6 mb-1 group-active:scale-90" />
-            <span className="text-[10px] font-medium">Explore</span>
-          </Link>
-          <Link href={isStudent ? "/my-bookings" : "/login"} className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname === '/my-bookings' ? 'text-primary' : 'text-muted-foreground')}>
-            <Briefcase className="w-6 h-6 mb-1 group-active:scale-90" />
+          <Link href={appUser ? "/my-bookings" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/my-bookings' ? 'text-primary' : 'text-muted-foreground')}>
+            <Briefcase className="w-5 h-5 mb-1 group-active:scale-90" />
             <span className="text-[10px] font-medium">Bookings</span>
           </Link>
-          <button
-            onClick={() => {
-              const profileTrigger = document.querySelector('[data-profile-trigger]');
-              if (profileTrigger) (profileTrigger as HTMLElement).click();
-              else setIsNavOpen(true);
-            }}
-            className="inline-flex flex-col items-center justify-center px-5 group text-muted-foreground"
+          <Link href={appUser ? "/payments" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/payments' ? 'text-primary' : 'text-muted-foreground')}>
+            <CreditCard className="w-5 h-5 mb-1 group-active:scale-90" />
+            <span className="text-[10px] font-medium">Payments</span>
+          </Link>
+          <Link href={appUser ? "/my-roommates" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/my-roommates' ? 'text-primary' : 'text-muted-foreground')}>
+            <Users className="w-5 h-5 mb-1 group-active:scale-90" />
+            <span className="text-[10px] font-medium">Roommates</span>
+          </Link>
+          <Link
+            href={appUser ? "/profile" : "/login"}
+            className={cn("inline-flex flex-col items-center justify-center group", pathname === '/profile' ? 'text-primary' : 'text-muted-foreground')}
           >
             <div className="relative mb-1">
-              <Avatar className="h-6 w-6 border border-primary/20">
+              <Avatar className="h-5 w-5 border border-primary/20 transition-transform group-active:scale-90">
                 {appUser?.profileImage ? (
                   <AvatarImage src={appUser.profileImage} />
                 ) : (
-                  <AvatarFallback className="text-[8px]">{appUser?.fullName?.charAt(0) || 'U'}</AvatarFallback>
+                  <AvatarFallback className="text-[8px] font-bold">{appUser?.fullName?.charAt(0) || 'U'}</AvatarFallback>
                 )}
               </Avatar>
             </div>
             <span className="text-[10px] font-medium">Profile</span>
-          </button>
+          </Link>
         </div>
       </div>
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>

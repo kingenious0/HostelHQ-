@@ -128,38 +128,37 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
     const distanceText = hostel.distanceToUniversity || 'N/A';
 
     return (
-        <Card className="w-full overflow-hidden transition-all hover:shadow-2xl hover:shadow-primary/5 duration-500 ease-out transform hover:-translate-y-2 flex flex-col group border border-border/40 rounded-3xl bg-card shadow-sm">
+        <Card className="w-full overflow-hidden flex flex-col group glass-card rounded-[2rem] border-0">
             <Link href={`/hostels/${hostel.id}`} className="block flex flex-col flex-grow">
                 {/* Image Section - Top Half */}
                 <CardHeader className="p-0">
-                    <div className="relative h-56 w-full overflow-hidden bg-background/40 px-3 pt-3">
-                        <Carousel autoPlay={false} className="h-full rounded-2xl overflow-hidden shadow-inner">
-                            <CarouselContent className="h-full">
-                                {(hostel.images?.length ? hostel.images.slice(0, 4) : ['/placeholder.jpg']).map((image, index) => (
+                    <div className="relative h-64 w-full overflow-hidden">
+                        <Carousel autoPlay={false} className="h-full w-full">
+                            <CarouselContent className="h-full ml-0">
+                                {(hostel.images?.length ? hostel.images.slice(0, 4) : ['/AAMUSTED-Full-shot.jpeg']).map((image, index) => (
                                     <CarouselItem key={index} className="h-full">
-                                        <div className="relative h-full w-full">
+                                        <div className="relative h-full w-full min-h-[256px]">
                                             <Image
                                                 src={image}
                                                 alt={`${hostel.name} preview ${index + 1}`}
                                                 fill
-                                                className="object-cover transition-transform duration-700 group-hover:scale-110"
-                                                data-ai-hint="hostel exterior"
+                                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                                className="object-cover transition-transform duration-1000 group-hover:scale-110"
                                                 priority={index === 0}
                                             />
                                         </div>
                                     </CarouselItem>
                                 ))}
                             </CarouselContent>
-                            {/* Navigation Arrows - Only visible on hover */}
-                            <CarouselPrevious className="left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 border-0 h-8 w-8 z-10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <CarouselNext className="right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 border-0 h-8 w-8 z-10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <CarouselPrevious className="left-4 top-1/2 -translate-y-1/2 bg-white/30 backdrop-blur-md border-0 h-9 w-9 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white/50" />
+                            <CarouselNext className="right-4 top-1/2 -translate-y-1/2 bg-white/30 backdrop-blur-md border-0 h-9 w-9 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white/50" />
                         </Carousel>
 
                         {/* Availability Badge Overlay */}
-                        <div className="absolute top-5 right-5 z-10">
-                            <Badge className={cn("rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md shadow-lg border-white/20",
-                                hostel.availability === 'Available' ? 'bg-green-500/80 text-white' :
-                                    hostel.availability === 'Limited' ? 'bg-yellow-500/80 text-white' : 'bg-red-500/80 text-white')}>
+                        <div className="absolute top-4 right-4 z-10">
+                            <Badge className={cn("rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest backdrop-blur-xl shadow-lg border-white/40",
+                                hostel.availability === 'Available' ? 'bg-green-500/90 text-white' :
+                                    hostel.availability === 'Limited' ? 'bg-yellow-500/90 text-white' : 'bg-red-500/90 text-white')}>
                                 {hostel.availability}
                             </Badge>
                         </div>
@@ -167,71 +166,73 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 </CardHeader>
 
                 {/* Information Section - Bottom Half */}
-                <CardContent className="p-5 flex-grow bg-card">
+                <CardContent className="p-6 flex-grow">
                     {/* Rating & availability */}
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm font-semibold text-foreground">
-                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />
+                    <div className="mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 rounded-full bg-secondary/30 px-3 py-1 text-xs font-bold text-secondary-foreground border border-secondary/20">
+                            <Star className="h-3.5 w-3.5 fill-accent text-accent" />
                             {hostel.rating.toFixed(1)}
                             {typeof hostel.numberOfReviews === "number" && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                    ({hostel.numberOfReviews} {hostel.numberOfReviews === 1 ? 'review' : 'reviews'})
-                                </span>
+                                <span className="opacity-60 font-normal">({hostel.numberOfReviews})</span>
                             )}
                         </div>
                         {isStudent && totalRoomsAvailable > 0 && (
-                            <Badge variant="secondary" className="flex items-center gap-1 text-xs font-semibold uppercase tracking-widest">
-                                <DoorOpen className="h-3.5 w-3.5" />
-                                {totalRoomsAvailable} {totalRoomsAvailable === 1 ? 'room' : 'rooms'} available
-                            </Badge>
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                {totalRoomsAvailable} {totalRoomsAvailable === 1 ? 'room' : 'rooms'} left
+                            </span>
                         )}
                     </div>
 
                     {/* Hostel Name */}
-                    <CardTitle className="text-xl font-bold font-headline text-foreground mb-2 leading-tight line-clamp-1 group-hover:text-primary transition-colors">
+                    <CardTitle className="text-2xl font-extrabold font-headline mb-2 leading-tight tracking-tight group-hover:text-primary transition-colors duration-300">
                         {hostel.name}
                     </CardTitle>
 
-                    {/* Location with Primary Map Pin */}
-                    <div className="flex items-center text-muted-foreground/80 text-xs mb-3">
-                        <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0 text-primary" />
-                        <span className="truncate font-medium">{hostel.location}</span>
+                    {/* Location & Distance */}
+                    <div className="space-y-1.5 mb-6">
+                        <div className="flex items-center text-muted-foreground text-xs">
+                            <MapPin className="h-3.5 w-3.5 mr-1.5 text-primary/70" />
+                            <span className="truncate">{hostel.location}</span>
+                        </div>
+                        {distanceText !== 'N/A' && (
+                            <div className="flex items-center text-primary/80 text-[10px] font-bold uppercase tracking-widest">
+                                <User className="h-3 w-3 mr-1.5" />
+                                {distanceText} FROM CAMPUS
+                            </div>
+                        )}
                     </div>
 
-                    <Separator className="my-3 opacity-50" />
+                    <Separator className="mb-4 opacity-30" />
 
-                    {/* Distance from Campus with Primary Walking Person Icon */}
-                    {distanceText !== 'N/A' && (
-                        <div className="flex items-center text-muted-foreground text-sm mb-4">
-                            <User className="h-4 w-4 mr-1.5 flex-shrink-0 text-primary" />
-                            <span className="font-medium uppercase">{distanceText} FROM CAMPUS</span>
-                        </div>
-                    )}
-
-                    {/* Occupancy by Gender - Male/Female Icons */}
-                    <div className="flex items-center justify-between mb-4 mt-auto">
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center px-2 py-1 bg-primary/5 rounded-lg border border-primary/10">
-                                <User className="h-3.5 w-3.5 text-primary mr-1" strokeWidth={2.5} />
-                                <span className="text-xs font-bold text-foreground">{displayMaleCount}</span>
+                    {/* Occupancy & Price */}
+                    <div className="flex items-center justify-between mt-auto">
+                        <div className="flex -space-x-2">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center" title="Male Occupants">
+                                <User className="h-3.5 w-3.5 text-primary" />
                             </div>
-                            <div className="flex items-center px-2 py-1 bg-primary/5 rounded-lg border border-primary/10">
-                                <UserCircle2 className="h-3.5 w-3.5 text-primary mr-1" strokeWidth={2.5} />
-                                <span className="text-xs font-bold text-foreground">{displayFemaleCount}</span>
+                            <div className="h-8 w-8 rounded-full bg-accent/10 border-2 border-background flex items-center justify-center" title="Female Occupants">
+                                <UserCircle2 className="h-3.5 w-3.5 text-accent" />
+                            </div>
+                            <div className="pl-3.5 flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-none">{displayMaleCount + displayFemaleCount}</span>
+                                <span className="text-[9px] text-muted-foreground uppercase">capacity</span>
                             </div>
                         </div>
                         {renderPrice()}
                     </div>
-
                 </CardContent>
             </Link>
 
-            {/* View Detail Button */}
-            <CardFooter className="p-4 sm:p-5 pt-0 bg-card">
+            {/* Optimized CTA Padding */}
+            <CardFooter className="p-6 pt-0">
                 <Link href={`/hostels/${hostel.id}`} className="w-full">
-                    <Button className="w-full bg-primary hover:bg-primary/90 text-white font-semibold px-4 py-2.5 rounded-lg shadow-sm flex items-center justify-center gap-2">
-                        View Detail
-                        <ArrowRight className="h-4 w-4" />
+                    <Button className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold rounded-2xl shadow-lg shadow-primary/10 group/btn overflow-hidden relative">
+                        <span className="relative z-10 flex items-center gap-2">
+                            View Details
+                            <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-1000" />
                     </Button>
                 </Link>
             </CardFooter>

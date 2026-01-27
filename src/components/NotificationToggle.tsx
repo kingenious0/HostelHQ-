@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Bell, BellOff, Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { initOneSignal, subscribeToNotifications, setExternalUserId, isNotificationEnabled } from "@/lib/onesignal";
 
-export function NotificationToggle() {
+export const NotificationToggle = forwardRef<HTMLButtonElement, React.ComponentPropsWithoutRef<typeof Button>>((props, ref) => {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -31,7 +31,7 @@ export function NotificationToggle() {
         await initOneSignal();
         const isEnabled = await isNotificationEnabled();
         setEnabled(isEnabled);
-        
+
         // Link OneSignal to Firebase user ID
         if (isEnabled) {
           await setExternalUserId(user.uid);
@@ -44,7 +44,10 @@ export function NotificationToggle() {
     })();
   }, [user]);
 
-  const handleToggle = async () => {
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!user) {
       alert("Please log in to enable notifications");
       return;
@@ -68,26 +71,29 @@ export function NotificationToggle() {
     }
   };
 
+  // If no user, render a hidden button to satisfy Radix requirements in asChild
   if (!user) {
-    return null;
+    return <button ref={ref} className="hidden" aria-hidden="true" />;
   }
 
   return (
     <Button
+      {...props}
+      ref={ref}
       variant="ghost"
       size="sm"
       onClick={handleToggle}
       disabled={loading || enabled}
-      className="w-full justify-start"
+      className="w-full justify-start h-8 px-2"
     >
       {loading ? (
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading...
+          Loading Notifications...
         </>
       ) : enabled ? (
         <>
-          <Bell className="mr-2 h-4 w-4" />
+          <Bell className="mr-2 h-4 w-4 text-green-500" />
           Notifications Enabled
         </>
       ) : (
@@ -98,4 +104,6 @@ export function NotificationToggle() {
       )}
     </Button>
   );
-}
+});
+
+NotificationToggle.displayName = "NotificationToggle";

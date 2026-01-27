@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,13 +26,19 @@ import {
     CheckCircle,
     XCircle,
     FileText,
-    Menu
+    Menu,
+    MessageSquare,
+    Phone,
+    Lock,
+    ShieldCheck,
+    Building2
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs, Timestamp, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 type RoommateContactMode = 'phone' | 'whatsapp' | 'basic';
 
@@ -57,34 +63,34 @@ interface Booking {
     status: 'confirmed' | 'pending' | 'cancelled';
     studentId: string;
     studentDetails?: {
-      fullName?: string;
-      email?: string;
-      phoneNumber?: string;
-      program?: string;
-      level?: string;
+        fullName?: string;
+        email?: string;
+        phoneNumber?: string;
+        program?: string;
+        level?: string;
     };
 }
 
 interface AppUser {
-  uid: string;
-  email: string;
-  fullName: string;
-  role: string;
-  profileImage?: string;
-  phone?: string;
-  address?: string;
-  bio?: string;
-  nationality?: string;
-  gender?: string;
-  privacySettings?: { // Example structure for privacy settings
-    showPicture: boolean;
-    showProfile: boolean;
-    showProgrammeOfStudy: boolean;
-    showPhoneNumber: boolean;
-    showEmailAddress: boolean;
-    roommateContactMode?: RoommateContactMode;
-    whatsappNumber?: string;
-  };
+    uid: string;
+    email: string;
+    fullName: string;
+    role: string;
+    profileImage?: string;
+    phone?: string;
+    address?: string;
+    bio?: string;
+    nationality?: string;
+    gender?: string;
+    privacySettings?: {
+        showPicture: boolean;
+        showProfile: boolean;
+        showProgrammeOfStudy: boolean;
+        showPhoneNumber: boolean;
+        showEmailAddress: boolean;
+        roommateContactMode?: RoommateContactMode;
+        whatsappNumber?: string;
+    };
 }
 
 export default function MyRoommatesPage() {
@@ -98,6 +104,7 @@ export default function MyRoommatesPage() {
     const [contactMode, setContactMode] = useState<RoommateContactMode>('phone');
     const { toast } = useToast();
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -114,7 +121,6 @@ export default function MyRoommatesPage() {
     useEffect(() => {
         if (!currentUser) return;
 
-        // Listen for real-time updates to the current user's profile
         const userDocRef = doc(db, "users", currentUser.uid);
         const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -130,7 +136,7 @@ export default function MyRoommatesPage() {
                     bio: userData.bio || '',
                     nationality: userData.nationality || '',
                     gender: userData.gender || '',
-                    privacySettings: userData.privacySettings, // Fetch privacy settings
+                    privacySettings: userData.privacySettings,
                 });
                 if (userData.privacySettings?.roommateContactMode) {
                     setContactMode(userData.privacySettings.roommateContactMode);
@@ -138,130 +144,110 @@ export default function MyRoommatesPage() {
             } else {
                 setAppUser(null);
             }
-        }, (error) => {
-            console.error("Error fetching user profile:", error);
-            setAppUser(null);
         });
 
-        // Fetch user's confirmed bookings to find their room
-        const bookingsQuery = query(
-            collection(db, "bookings"),
-            where("studentId", "==", currentUser.uid),
-            where("status", "==", "confirmed")
-        );
-        const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
-            const fetchedBookings = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Booking[];
-            setUserBookings(fetchedBookings);
+        const fetchRoommatesData = async () => {
+            setLoading(true);
+            const bookingsQuery = query(
+                collection(db, "bookings"),
+                where("studentId", "==", currentUser.uid),
+                where("status", "==", "confirmed")
+            );
 
-            const currentRoommates: Roommate[] = [];
-            const hostelMateGroups: Record<string, { hostelName: string; mates: Roommate[] }> = {};
+            const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
+                const fetchedBookings = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Booking[];
+                setUserBookings(fetchedBookings);
 
-            for (const booking of fetchedBookings) {
-                if (!booking.hostelId) continue;
+                const currentRoommates: Roommate[] = [];
+                const hostelMateGroups: Record<string, { hostelName: string; mates: Roommate[] }> = {};
 
-                // 1) Roommates in the SAME ROOM
-                if (booking.roomNumber) {
-                    const roommatesInRoomQuery = query(
+                for (const booking of fetchedBookings) {
+                    if (!booking.hostelId) continue;
+
+                    if (booking.roomNumber) {
+                        const roommatesInRoomQuery = query(
+                            collection(db, "bookings"),
+                            where("hostelId", "==", booking.hostelId),
+                            where("roomNumber", "==", booking.roomNumber),
+                            where("status", "==", "confirmed"),
+                            where("studentId", "!=", currentUser.uid)
+                        );
+                        const roommateSnapshots = await getDocs(roommatesInRoomQuery);
+
+                        for (const rDoc of roommateSnapshots.docs) {
+                            const roommateBookingData = rDoc.data() as Booking;
+                            const roommateUserDoc = await getDoc(doc(db, "users", roommateBookingData.studentId));
+                            if (roommateUserDoc.exists()) {
+                                const roommateData = roommateUserDoc.data() as AppUser;
+                                const privacy = roommateData.privacySettings || {};
+                                if (privacy.showProfile === false) continue;
+
+                                const rContactMode: RoommateContactMode = privacy.roommateContactMode || 'phone';
+                                currentRoommates.push({
+                                    uid: roommateUserDoc.id,
+                                    fullName: roommateData.fullName || 'Unknown Roommate',
+                                    email: privacy.showEmailAddress !== false ? (roommateData.email || roommateBookingData.studentDetails?.email || '') : '',
+                                    profileImage: privacy.showPicture === false ? '' : (roommateData.profileImage || ''),
+                                    phone: privacy.showPhoneNumber !== false && rContactMode !== 'basic' ? (roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '') : undefined,
+                                    whatsappNumber: privacy.whatsappNumber,
+                                    program: privacy.showProgrammeOfStudy !== false ? roommateBookingData.studentDetails?.program : undefined,
+                                    level: privacy.showProgrammeOfStudy !== false ? roommateBookingData.studentDetails?.level : undefined,
+                                    contactMode: rContactMode,
+                                });
+                            }
+                        }
+                    }
+
+                    const hostelmatesQuery = query(
                         collection(db, "bookings"),
                         where("hostelId", "==", booking.hostelId),
-                        where("roomNumber", "==", booking.roomNumber),
                         where("status", "==", "confirmed"),
                         where("studentId", "!=", currentUser.uid)
                     );
-                    const roommateSnapshots = await getDocs(roommatesInRoomQuery);
+                    const hostelmateSnapshots = await getDocs(hostelmatesQuery);
 
-                    for (const rDoc of roommateSnapshots.docs) {
-                        const roommateBookingData = rDoc.data() as Booking;
-                        const roommateUserDoc = await getDoc(doc(db, "users", roommateBookingData.studentId));
-                        if (roommateUserDoc.exists()) {
-                            const roommateData = roommateUserDoc.data() as AppUser;
-                            const privacy = roommateData.privacySettings || {};
-                            if (privacy.showProfile === false) continue; // Do not display if profile sharing is off
+                    for (const hDoc of hostelmateSnapshots.docs) {
+                        const mateBooking = hDoc.data() as Booking;
+                        const mateUserDoc = await getDoc(doc(db, "users", mateBooking.studentId));
+                        if (!mateUserDoc.exists()) continue;
+                        const mateUser = mateUserDoc.data() as AppUser;
+                        const privacy = mateUser.privacySettings || {};
+                        if (privacy.showProfile === false) continue;
 
-                            const roommateContactMode: RoommateContactMode =
-                              privacy.roommateContactMode || 'phone';
-                            const canShowPhone = privacy.showPhoneNumber !== false;
-                            const canShowEmail = privacy.showEmailAddress !== false;
-                            const canShowProgramme = privacy.showProgrammeOfStudy !== false;
+                        const hostelName = mateBooking.hostelName || booking.hostelName || 'Hostel';
+                        const group = hostelMateGroups[booking.hostelId] || { hostelName, mates: [] };
 
-                            currentRoommates.push({
-                                uid: roommateUserDoc.id,
-                                fullName: roommateData.fullName || 'Unknown Roommate',
-                                email: canShowEmail ? (roommateData.email || roommateBookingData.studentDetails?.email || '') : '',
-                                profileImage: privacy.showPicture === false ? '' : (roommateData.profileImage || ''),
-                                phone:
-                                  canShowPhone && roommateContactMode !== 'basic'
-                                    ? (roommateData.phone || roommateBookingData.studentDetails?.phoneNumber || '')
-                                    : undefined,
+                        if (!group.mates.some(m => m.uid === mateUserDoc.id)) {
+                            const rContactMode: RoommateContactMode = privacy.roommateContactMode || 'phone';
+                            group.mates.push({
+                                uid: mateUserDoc.id,
+                                fullName: mateUser.fullName || 'Hostel mate',
+                                email: privacy.showEmailAddress !== false ? (mateUser.email || mateBooking.studentDetails?.email || '') : '',
+                                profileImage: privacy.showPicture === false ? '' : (mateUser.profileImage || ''),
+                                phone: privacy.showPhoneNumber !== false && rContactMode !== 'basic' ? (mateUser.phone || mateBooking.studentDetails?.phoneNumber || '') : undefined,
                                 whatsappNumber: privacy.whatsappNumber,
-                                program: canShowProgramme ? roommateBookingData.studentDetails?.program : undefined,
-                                level: canShowProgramme ? roommateBookingData.studentDetails?.level : undefined,
-                                contactMode: roommateContactMode,
+                                program: privacy.showProgrammeOfStudy !== false ? mateBooking.studentDetails?.program : undefined,
+                                level: privacy.showProgrammeOfStudy !== false ? mateBooking.studentDetails?.level : undefined,
+                                contactMode: rContactMode,
                             });
+                            hostelMateGroups[booking.hostelId] = group;
                         }
                     }
                 }
 
-                // 2) Hostel mates in the SAME HOSTEL (any room)
-                const hostelmatesQuery = query(
-                    collection(db, "bookings"),
-                    where("hostelId", "==", booking.hostelId),
-                    where("status", "==", "confirmed"),
-                    where("studentId", "!=", currentUser.uid)
-                );
-                const hostelmateSnapshots = await getDocs(hostelmatesQuery);
+                setRoommates(currentRoommates);
+                setHostelMates(hostelMateGroups);
+                setLoading(false);
+            });
 
-                for (const hDoc of hostelmateSnapshots.docs) {
-                    const mateBooking = hDoc.data() as Booking;
-                    const mateUserDoc = await getDoc(doc(db, "users", mateBooking.studentId));
-                    if (!mateUserDoc.exists()) continue;
-                    const mateUser = mateUserDoc.data() as AppUser;
-                    const privacy = mateUser.privacySettings || {};
-                    if (privacy.showProfile === false) continue;
+            return unsubscribeBookings;
+        };
 
-                    const contactModeForMate: RoommateContactMode =
-                        privacy.roommateContactMode || 'phone';
+        const unsubscribeRoommatesDataP = fetchRoommatesData();
 
-                    const hostelName = mateBooking.hostelName || booking.hostelName || 'Hostel';
-                    const group = hostelMateGroups[booking.hostelId] || { hostelName, mates: [] };
-
-                    // avoid duplicates by uid
-                    if (!group.mates.some(m => m.uid === mateUserDoc.id)) {
-                        const canShowPhone = privacy.showPhoneNumber !== false;
-                        const canShowEmail = privacy.showEmailAddress !== false;
-                        const canShowProgramme = privacy.showProgrammeOfStudy !== false;
-
-                        group.mates.push({
-                            uid: mateUserDoc.id,
-                            fullName: mateUser.fullName || 'Hostel mate',
-                            email: canShowEmail ? (mateUser.email || mateBooking.studentDetails?.email || '') : '',
-                            profileImage: privacy.showPicture === false ? '' : (mateUser.profileImage || ''),
-                            phone:
-                              canShowPhone && contactModeForMate !== 'basic'
-                                ? (mateUser.phone || mateBooking.studentDetails?.phoneNumber || '')
-                                : undefined,
-                            whatsappNumber: privacy.whatsappNumber,
-                            program: canShowProgramme ? mateBooking.studentDetails?.program : undefined,
-                            level: canShowProgramme ? mateBooking.studentDetails?.level : undefined,
-                            contactMode: contactModeForMate,
-                        });
-                        hostelMateGroups[booking.hostelId] = group;
-                    }
-                }
-            }
-
-            setRoommates(currentRoommates);
-            setHostelMates(hostelMateGroups);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching bookings for roommates:", error);
-            toast({ title: "Error fetching roommates", variant: 'destructive' });
-            setLoading(false);
-        });
-
-        return () => { 
+        return () => {
             unsubscribeUserProfile();
-            unsubscribeBookings();
+            unsubscribeRoommatesDataP.then(unsub => unsub());
         };
     }, [currentUser]);
 
@@ -269,23 +255,29 @@ export default function MyRoommatesPage() {
         if (!currentUser) return;
         setContactMode(mode);
         try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await updateDoc(userDocRef, {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
                 'privacySettings.roommateContactMode': mode,
             });
-            toast({ title: 'Privacy updated' });
+            toast({ title: 'Privacy Updated', description: `Your contact mode is now: ${mode}` });
         } catch (error) {
-            console.error('Failed to update roommate privacy mode', error);
-            toast({ title: 'Could not update privacy settings', variant: 'destructive' });
+            toast({ title: 'Update Failed', variant: 'destructive' });
         }
     };
+
+    const navItems = [
+        { label: 'My Bookings', href: '/my-bookings', icon: Calendar },
+        { label: 'Payments', href: '/payments', icon: CreditCard },
+        { label: 'My Roommates', href: '/my-roommates', icon: Users },
+        { label: 'Bank Accounts', href: '/bank-accounts', icon: Banknote },
+        { label: 'Settings', href: '/settings', icon: Settings },
+    ];
 
     if (loadingAuth) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
-                    <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
                 </main>
             </div>
         );
@@ -295,12 +287,15 @@ export default function MyRoommatesPage() {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
-                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                    <Alert variant="destructive" className="max-w-lg">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Access Denied</AlertTitle>
-                        <AlertDescription>
-                            You must be logged in to view your roommates.
+                <main className="flex-1 flex items-center justify-center py-12 px-4 bg-muted/20">
+                    <Alert variant="destructive" className="max-w-lg border-primary/20 bg-white shadow-xl rounded-[2rem]">
+                        <AlertTriangle className="h-5 w-5 text-primary" />
+                        <AlertTitle className="text-primary font-black uppercase tracking-tight">Access Denied</AlertTitle>
+                        <AlertDescription className="text-muted-foreground mt-2">
+                            Please login to see your room community.
+                            <Link href="/login" className="ml-2 inline-flex items-center text-primary font-bold hover:underline">
+                                Login here <ArrowRight className="ml-1 h-3 w-3" />
+                            </Link>
                         </AlertDescription>
                     </Alert>
                 </main>
@@ -310,104 +305,54 @@ export default function MyRoommatesPage() {
 
     return (
         <SidebarProvider>
-            <div className="flex min-h-screen w-full">
-                <Sidebar collapsible="icon" className="bg-white border-r border-gray-200">
-                    <SidebarHeader className="p-3 md:p-4">
-                        <div className="flex items-center space-x-2 md:space-x-3">
-                            <Avatar className="h-8 w-8 md:h-10 md:w-10">
+            <div className="flex min-h-screen w-full bg-background">
+                <Sidebar collapsible="icon" className="border-r border-border/50 bg-white/50 backdrop-blur-xl">
+                    <SidebarHeader className="p-4">
+                        <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border-2 border-primary/10">
                                 {appUser?.profileImage ? (
                                     <AvatarImage src={appUser.profileImage} alt="Profile" />
                                 ) : (
-                                    <AvatarFallback className="text-xs md:text-sm">
-                                        {appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
+                                    <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                                        {appUser?.fullName?.charAt(0) || 'U'}
                                     </AvatarFallback>
                                 )}
                             </Avatar>
-                            <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-gray-900 dark:text-white truncate text-sm md:text-base">{appUser?.fullName || 'User'}</h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{appUser?.email}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 md:h-8 md:w-8 p-0"
-                                    onClick={() => router.push('/profile')}
-                                >
-                                    <Edit className="h-3 w-3 md:h-4 md:w-4" />
-                                </Button>
-                                <SidebarTrigger className="h-8 w-8" />
+                            <div className="flex flex-col truncate group-data-[collapsible=icon]:hidden">
+                                <span className="font-bold text-sm truncate">{appUser?.fullName || 'User'}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{appUser?.email}</span>
                             </div>
                         </div>
                     </SidebarHeader>
-                    <SidebarSeparator />
+                    <SidebarSeparator className="opacity-50" />
                     <SidebarContent>
                         <SidebarGroup>
-                            <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                            <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-4 py-2">Account</SidebarGroupLabel>
                             <SidebarGroupContent>
                                 <SidebarMenu>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild isActive={false}>
-                                            <Link href="/profile">
-                                                <UserIcon />
-                                                <span>My Profile</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild isActive={false}>
-                                            <Link href="/my-bookings">
-                                                <Calendar />
-                                                <span>My Bookings</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild isActive={false}>
-                                            <Link href="/payments">
-                                                <CreditCard />
-                                                <span>Payments</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild isActive>
-                                            <Link href="/my-roommates">
-                                                <Users />
-                                                <span>My Roommates</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild>
-                                            <Link href="/bank-accounts">
-                                                <Banknote />
-                                                <span>Bank Accounts</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                    <SidebarMenuItem>
-                                        <SidebarMenuButton asChild>
-                                            <Link href="/settings">
-                                                <Settings />
-                                                <span>Settings</span>
-                                            </Link>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
+                                    {navItems.map((item) => (
+                                        <SidebarMenuItem key={item.label}>
+                                            <SidebarMenuButton asChild isActive={pathname === item.href} className={cn(
+                                                "transition-all duration-200",
+                                                pathname === item.href ? "bg-primary text-primary-foreground shadow-md" : "hover:bg-primary/5 hover:text-primary"
+                                            )}>
+                                                <Link href={item.href} className="flex items-center gap-3 py-6">
+                                                    <item.icon className="h-4 w-4" />
+                                                    <span className="font-medium">{item.label}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
                                     <SidebarMenuItem>
                                         <SidebarMenuButton
                                             onClick={async () => {
-                                                try {
-                                                    await firebaseSignOut(auth);
-                                                    router.push('/login');
-                                                } catch (e) {
-                                                    toast({ title: 'Sign out failed', variant: 'destructive' });
-                                                }
+                                                await firebaseSignOut(auth);
+                                                router.push('/login');
                                             }}
-                                            className="text-red-600 hover:text-red-700"
+                                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
                                         >
-                                            <LogOut />
-                                            <span>Sign Out</span>
+                                            <LogOut className="h-4 w-4" />
+                                            <span className="font-medium">Sign Out</span>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 </SidebarMenu>
@@ -417,186 +362,105 @@ export default function MyRoommatesPage() {
                     <SidebarRail />
                 </Sidebar>
 
-                <SidebarInset className="flex flex-col">
+                <SidebarInset className="flex flex-col min-w-0">
                     <Header />
-                    <main className="flex-1 p-2 sm:p-4 md:p-8 bg-gray-50/50">
-                        <div className="max-w-4xl mx-auto">
-                            <div className="flex items-center justify-between mb-2 md:mb-3">
-                                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">My Roommates</h1>
+                    <main className="flex-1 overflow-x-hidden pt-4 pb-24 md:pb-8">
+                        <div className="container mx-auto max-w-5xl px-4 sm:px-6">
+                            <div className="mb-10 text-center md:text-left">
+                                <h1 className="text-3xl md:text-4xl font-extrabold font-headline tracking-tight text-foreground mb-2">My Roommates</h1>
+                                <p className="text-muted-foreground text-sm max-w-lg">Connect with students staying in the same room or hostel as you.</p>
                             </div>
-                            <p className="mb-4 text-xs sm:text-sm text-muted-foreground">
-                                Roommates and hostel mates are detected automatically from your confirmed bookings. You don&apos;t need to add them manually.
-                            </p>
 
-                            <Card className="mb-6 border border-muted/40 bg-card/60">
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-base sm:text-lg">Safety &amp; privacy</CardTitle>
-                                    <CardDescription>
-                                        Choose how much contact information your roommates can see. This only affects how your details appear on their My Roommates page.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="space-y-1 text-sm text-muted-foreground max-w-md">
-                                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">Roommate contact visibility</p>
+                            {/* Privacy Controls */}
+                            <Card className="mb-12 rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                                <CardHeader className="pb-4 bg-primary/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white">
+                                            <Lock className="h-4 w-4" />
+                                        </div>
+                                        <CardTitle className="text-lg">Privacy Controls</CardTitle>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
+                                    <CardDescription>Control how your roommates can contact you.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-6">
+                                    <div className="flex flex-col sm:flex-row items-center gap-2 bg-muted/30 p-2 rounded-2xl">
                                         <Button
-                                            type="button"
+                                            variant={contactMode === 'phone' ? 'default' : 'ghost'}
                                             size="sm"
-                                            variant={contactMode === 'phone' ? 'default' : 'outline'}
+                                            className="flex-1 rounded-xl font-bold h-10 transition-all"
                                             onClick={() => handleContactModeChange('phone')}
                                         >
-                                            Show phone to roommates
+                                            <Phone className="mr-2 h-4 w-4" /> Phone Visible
                                         </Button>
                                         <Button
-                                            type="button"
+                                            variant={contactMode === 'whatsapp' ? 'default' : 'ghost'}
                                             size="sm"
-                                            variant={contactMode === 'whatsapp' ? 'default' : 'outline'}
+                                            className="flex-1 rounded-xl font-bold h-10 transition-all"
                                             onClick={() => handleContactModeChange('whatsapp')}
                                         >
-                                            WhatsApp only
+                                            <MessageSquare className="mr-2 h-4 w-4" /> WhatsApp Only
                                         </Button>
                                         <Button
-                                            type="button"
+                                            variant={contactMode === 'basic' ? 'default' : 'ghost'}
                                             size="sm"
-                                            variant={contactMode === 'basic' ? 'default' : 'outline'}
+                                            className="flex-1 rounded-xl font-bold h-10 transition-all"
                                             onClick={() => handleContactModeChange('basic')}
                                         >
-                                            Name &amp; programme only
+                                            <ShieldCheck className="mr-2 h-4 w-4" /> Strictly Name
                                         </Button>
                                     </div>
                                 </CardContent>
                             </Card>
 
                             <Tabs defaultValue="roommates" className="w-full">
-                                <TabsList className="mb-4">
-                                    <TabsTrigger value="roommates">Roommates in your room</TabsTrigger>
-                                    <TabsTrigger value="hostelMates">Other students in your hostel</TabsTrigger>
+                                <TabsList className="bg-muted/50 p-1 rounded-2xl mb-8 flex h-auto">
+                                    <TabsTrigger value="roommates" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs font-bold tracking-wide transition-all flex-1">
+                                        MY ROOMMATES ({roommates.length})
+                                    </TabsTrigger>
+                                    <TabsTrigger value="hostelMates" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-xs font-bold tracking-wide transition-all flex-1">
+                                        HOSTEL COMMUNITY
+                                    </TabsTrigger>
                                 </TabsList>
 
-                                <TabsContent value="roommates">
-                                  {loading ? (
-                                    <div className="flex justify-center py-12">
-                                        <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
-                                    </div>
-                                  ) : roommates.length > 0 ? (
-                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                      {roommates.map(roommate => (
-                                        <Card key={roommate.uid} className="bg-white shadow-md rounded-lg p-6 flex flex-col gap-4">
-                                            <div className="flex items-center gap-4">
-                                              <Avatar className="h-12 w-12">
-                                                {roommate.profileImage ? (
-                                                    <AvatarImage src={roommate.profileImage} alt={roommate.fullName} />
-                                                ) : (
-                                                    <AvatarFallback>{roommate.fullName.charAt(0)}</AvatarFallback>
-                                                )}
-                                              </Avatar>
-                                              <div className="space-y-1">
-                                                <h3 className="font-semibold text-base sm:text-lg">{roommate.fullName}</h3>
-                                                {(roommate.program || roommate.level) && (
-                                                  <p className="text-xs sm:text-sm text-muted-foreground">
-                                                    {[roommate.program, roommate.level && `Level ${roommate.level}`].filter(Boolean).join(' • ')}
-                                                  </p>
-                                                )}
-                                                {roommate.contactMode !== 'basic' && roommate.email && (
-                                                  <p className="text-xs sm:text-sm text-muted-foreground break-words">{roommate.email}</p>
-                                                )}
-                                              </div>
-                                            </div>
-                                            {roommate.contactMode === 'phone' && roommate.phone && (
-                                              <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
-                                                <p className="font-medium text-foreground">Phone: {roommate.phone}</p>
-                                                <p className="text-[11px] text-muted-foreground">This roommate chose to share their phone number with you.</p>
-                                              </div>
-                                            )}
-                                            {roommate.contactMode === 'whatsapp' && roommate.phone && (
-                                              <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
-                                                <p className="font-medium text-foreground">WhatsApp available</p>
-                                                {roommate.whatsappNumber && (
-                                                  <a
-                                                    href={`https://wa.me/${roommate.whatsappNumber.replace(/[^0-9+]/g, '')}?text=${encodeURIComponent("Hi, I'm your roommate from HostelHQ.")}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-green-600 hover:underline text-xs sm:text-sm"
-                                                  >
-                                                    Tap to chat on WhatsApp
-                                                  </a>
-                                                )}
-                                                {!roommate.whatsappNumber && (
-                                                  <p className="text-[11px] text-muted-foreground">This roommate prefers WhatsApp only.</p>
-                                                )}
-                                              </div>
-                                            )}
-                                            {roommate.contactMode === 'basic' && (
-                                              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                                                This roommate prefers to only share their name and programme. You can connect with them on campus.
-                                              </p>
-                                            )}
-                                        </Card>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="text-center py-16">
-                                        <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                                        <p className="text-lg text-muted-foreground">No roommates in your room yet.</p>
-                                        <p className="text-muted-foreground mt-2">Once other students secure this room and allow profile sharing, they will appear here.</p>
-                                    </div>
-                                  )}
+                                <TabsContent value="roommates" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    {roommates.length > 0 ? (
+                                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                                            {roommates.map(mate => (
+                                                <RoommateCard key={mate.uid} mate={mate} isRoommate />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="py-20 flex flex-col items-center justify-center text-center bg-muted/20 rounded-[2rem] border border-dashed border-border/60">
+                                            <Users className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                                            <p className="text-sm font-medium text-muted-foreground">It&apos;s quiet in here... No roommates yet.</p>
+                                        </div>
+                                    )}
                                 </TabsContent>
 
-                                <TabsContent value="hostelMates">
-                                  {loading ? (
-                                    <div className="flex justify-center py-12">
-                                      <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
-                                    </div>
-                                  ) : Object.keys(hostelMates).length > 0 ? (
-                                    <div className="space-y-8">
-                                      {Object.entries(hostelMates).map(([hostelId, data]) => (
-                                        <div key={hostelId} className="space-y-3">
-                                          <div className="flex items-baseline justify-between">
-                                            <h2 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white">
-                                              Hostel mates – {data.hostelName}
-                                            </h2>
-                                            <span className="text-xs text-muted-foreground">
-                                              {data.mates.length} student{data.mates.length !== 1 ? 's' : ''}
-                                            </span>
-                                          </div>
-                                          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                            {data.mates.map(mate => (
-                                              <Card key={mate.uid} className="bg-white shadow-md rounded-lg p-6 flex flex-col gap-4">
-                                                <div className="flex items-center gap-4">
-                                                  <Avatar className="h-12 w-12">
-                                                    {mate.profileImage ? (
-                                                      <AvatarImage src={mate.profileImage} alt={mate.fullName} />
-                                                    ) : (
-                                                      <AvatarFallback>{mate.fullName.charAt(0)}</AvatarFallback>
-                                                    )}
-                                                  </Avatar>
-                                                  <div className="space-y-1">
-                                                    <h3 className="font-semibold text-base sm:text-lg">{mate.fullName}</h3>
-                                                    {(mate.program || mate.level) && (
-                                                      <p className="text-xs sm:text-sm text-muted-foreground">
-                                                        {[mate.program, mate.level && `Level ${mate.level}`].filter(Boolean).join(' • ')}
-                                                      </p>
-                                                    )}
-                                                  </div>
+                                <TabsContent value="hostelMates" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    {Object.keys(hostelMates).length > 0 ? (
+                                        <div className="space-y-12">
+                                            {Object.entries(hostelMates).map(([hostelId, data]) => (
+                                                <div key={hostelId}>
+                                                    <div className="flex items-center gap-3 mb-6">
+                                                        <Building2 className="h-5 w-5 text-primary/60" />
+                                                        <h2 className="font-black text-xl tracking-tight">{data.hostelName}</h2>
+                                                        <Badge variant="secondary" className="rounded-full">{data.mates.length}</Badge>
+                                                    </div>
+                                                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                                                        {data.mates.map(mate => (
+                                                            <RoommateCard key={mate.uid} mate={mate} />
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                                <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                                                  Lives in the same hostel as you (from confirmed bookings). Exact contact details depend on their privacy settings.
-                                                </p>
-                                              </Card>
                                             ))}
-                                          </div>
                                         </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="text-center py-16">
-                                      <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                                      <p className="text-lg text-muted-foreground">No other students secured in your hostel yet.</p>
-                                      <p className="text-muted-foreground mt-2">As more students secure this hostel for permanent stay and allow profile sharing, they will appear here.</p>
-                                    </div>
-                                  )}
+                                    ) : (
+                                        <div className="py-20 flex flex-col items-center justify-center text-center bg-muted/20 rounded-[2rem] border border-dashed border-border/60">
+                                            <Building2 className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                                            <p className="text-sm font-medium text-muted-foreground">No hostel community updates yet.</p>
+                                        </div>
+                                    )}
                                 </TabsContent>
                             </Tabs>
                         </div>
@@ -607,4 +471,69 @@ export default function MyRoommatesPage() {
     );
 }
 
+function RoommateCard({ mate, isRoommate = false }: { mate: Roommate, isRoommate?: boolean }) {
+    return (
+        <Card className="rounded-[2rem] border-border/40 shadow-sm glass-card overflow-hidden hover:shadow-xl transition-all duration-300 group">
+            <div className="p-6">
+                <div className="flex flex-col items-center text-center mb-6">
+                    <div className="relative mb-4">
+                        <Avatar className="h-24 w-24 border-4 border-white shadow-lg">
+                            {mate.profileImage ? (
+                                <AvatarImage src={mate.profileImage} className="object-cover" />
+                            ) : (
+                                <AvatarFallback className="bg-primary/5 text-primary text-xl font-black">
+                                    {mate.fullName.charAt(0)}
+                                </AvatarFallback>
+                            )}
+                        </Avatar>
+                        <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-white flex items-center justify-center shadow-md">
+                            {isRoommate ? <ShieldCheck className="h-4 w-4 text-green-600" /> : <Users className="h-4 w-4 text-primary" />}
+                        </div>
+                    </div>
+                    <h3 className="font-black text-lg text-foreground mb-1 group-hover:text-primary transition-colors">{mate.fullName}</h3>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">{mate.program || 'Student'}</p>
+                </div>
 
+                <div className="space-y-3 pt-4 border-t border-border/40">
+                    {mate.contactMode !== 'basic' && (
+                        <>
+                            {mate.phone && (
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground font-bold">PHONE</span>
+                                    <span className="font-semibold">{mate.phone}</span>
+                                </div>
+                            )}
+                            {mate.email && (
+                                <div className="flex items-center justify-between text-xs overflow-hidden">
+                                    <span className="text-muted-foreground font-bold">EMAIL</span>
+                                    <span className="font-semibold truncate ml-2">{mate.email}</span>
+                                </div>
+                            )}
+                        </>
+                    )}
+                    {mate.contactMode === 'basic' && (
+                        <div className="text-center py-2 px-4 bg-muted/30 rounded-xl">
+                            <p className="text-[10px] font-bold text-muted-foreground italic uppercase">Private Profile</p>
+                        </div>
+                    )}
+                </div>
+
+                {mate.contactMode === 'whatsapp' && mate.whatsappNumber && (
+                    <Button asChild className="w-full mt-6 rounded-2xl bg-[#25D366] hover:bg-[#128C7E] text-white font-bold h-11 border-none">
+                        <a href={`https://wa.me/${mate.whatsappNumber.replace(/[^0-9+]/g, '')}`} target="_blank" rel="noreferrer">
+                            <MessageSquare className="mr-2 h-4 w-4" /> WhatsApp
+                        </a>
+                    </Button>
+                )}
+
+                {mate.phone && mate.contactMode === 'phone' && (
+                    <Button asChild className="w-full mt-6 rounded-2xl bg-primary text-white font-bold h-11">
+                        <a href={`tel:${mate.phone}`}>
+                            <Phone className="mr-2 h-4 w-4" /> Call Roommate
+                        </a>
+                    </Button>
+                )}
+            </div>
+        </Card>
+    );
+}

@@ -18,11 +18,6 @@ const FOOTER_HIDDEN_PATHS = [
   "/login",
 ];
 
-const CHATBOT_HIDDEN_PATHS = [
-  "/signup",
-  "/login",
-];
-
 const FOOTER_HIDDEN_PREFIXES = [
   "/manager",
   "/admin",
@@ -36,16 +31,18 @@ interface RootLayoutShellProps {
 export function RootLayoutShell({ children }: RootLayoutShellProps) {
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  
-  // Check if current path is a room details page (pattern: /hostels/[id]/rooms/[roomId])
+
+  // Settings for visibility
   const isRoomDetailsPage = /^\/hostels\/[^\/]+\/rooms\/[^\/]+$/.test(pathname);
-  
+  const isHostelDetailPage = /^\/hostels\/[^\/]+$/.test(pathname);
+  const CHATBOT_VISIBLE_PATHS = ["/faq", "/help-center", "/contact"];
+
   const hideFooter =
     FOOTER_HIDDEN_PATHS.includes(pathname) ||
     FOOTER_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
     isRoomDetailsPage;
 
-  const hideChatbot = CHATBOT_HIDDEN_PATHS.includes(pathname);
+  const showChatbot = CHATBOT_VISIBLE_PATHS.includes(pathname) || isHostelDetailPage;
 
   // Track user authentication status for AI context
   useEffect(() => {
@@ -59,7 +56,7 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
   const userContext = React.useMemo(() => {
     const hostelMatch = pathname.match(/^\/hostels\/([^\/]+)/);
     const roomMatch = pathname.match(/^\/hostels\/[^\/]+\/rooms\/([^\/]+)/);
-    
+
     return {
       isLoggedIn,
       hostelId: hostelMatch?.[1],
@@ -71,7 +68,7 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     <div className="flex min-h-full flex-col">
       {children}
       {!hideFooter && <Footer />}
-      {!hideChatbot && <AIAssistant userContext={userContext} />}
+      {showChatbot && <AIAssistant userContext={userContext} />}
     </div>
   );
 }

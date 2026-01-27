@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { 
-  MessageCircle, 
-  X, 
-  Send, 
-  Bot, 
-  User, 
+import {
+  MessageCircle,
+  X,
+  Send,
+  Bot,
+  User,
   Loader2,
   Minimize2,
   Maximize2,
@@ -72,6 +72,15 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    const handleOpen = () => {
+      setIsOpen(true);
+      setIsMinimized(false);
+    };
+    window.addEventListener('openHostie', handleOpen);
+    return () => window.removeEventListener('openHostie', handleOpen);
+  }, []);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
@@ -126,14 +135,14 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      
+
       // Update session data for context continuity
       if (response.sessionData) {
         setSessionData(response.sessionData);
       }
     } catch (error) {
       console.error('Error sending message to AI assistant:', error);
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -186,7 +195,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-[9999]"
+        className="fixed bottom-40 right-4 sm:bottom-6 sm:right-6 h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 z-[9999]"
         size="icon"
       >
         <MessageCircle className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -196,7 +205,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
   }
 
   return (
-    <Card 
+    <Card
       className={cn(
         "fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-96 max-w-md shadow-2xl border-0 z-[9999] transition-all duration-200",
         isMinimized ? "h-16" : "h-[70vh] sm:h-[600px]"
@@ -247,15 +256,15 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                       <Bot className="h-4 w-4 text-primary-foreground" />
                     </div>
                   )}
-                  
+
                   <div className={cn(
                     "max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 text-sm break-words",
-                    message.role === 'user' 
-                      ? "bg-primary text-primary-foreground ml-auto" 
+                    message.role === 'user'
+                      ? "bg-primary text-primary-foreground ml-auto"
                       : "bg-muted"
                   )}>
                     <p className="whitespace-pre-wrap">{message.content}</p>
-                    
+
                     {message.suggestedActions && message.suggestedActions.length > 0 && (
                       <div className="mt-3 space-y-2">
                         <p className="text-xs opacity-70">Suggested actions:</p>
@@ -274,7 +283,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                         </div>
                       </div>
                     )}
-                    
+
                     {message.followUpQuestions && message.followUpQuestions.length > 0 && (
                       <div className="mt-3 space-y-2">
                         <p className="text-xs opacity-70">You might also ask:</p>
@@ -300,7 +309,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                   )}
                 </div>
               ))}
-              
+
               {isLoading && (
                 <div className="flex gap-3 justify-start">
                   <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center">
@@ -314,7 +323,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
                   </div>
                 </div>
               )}
-              
+
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>

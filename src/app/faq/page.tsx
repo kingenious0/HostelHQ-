@@ -193,7 +193,11 @@ export default function FAQPage() {
                     <p className="font-semibold text-white text-sm">+233 (0) 597626090 / +233 (0) 536 282 694</p>
                   </div>
                 </div>
-                <Button variant="secondary" className="w-full text-primary text-sm py-2">
+                <Button
+                  variant="secondary"
+                  className="w-full text-primary text-sm py-2"
+                  onClick={() => window.dispatchEvent(new CustomEvent('openHostie'))}
+                >
                   Chat with support
                 </Button>
               </CardContent>

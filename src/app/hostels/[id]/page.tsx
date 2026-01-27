@@ -6,8 +6,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -248,7 +249,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         return Number.isNaN(parsed) ? null : parsed;
     };
 
-    const primaryImages = hostel.images?.length ? hostel.images : ['/placeholder.jpg'];
+    const primaryImages = hostel.images?.length ? hostel.images : ['/AAMUSTED-Full-shot.jpeg'];
 
     const roomInventory = useMemo<RoomInventoryItem[]>(() => {
         const rooms = (hostel as any)?.rooms;
@@ -436,21 +437,35 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     // Mobile Sticky Container
     const renderMobileStickyCTA = () => {
         return (
-            <div className="fixed bottom-16 left-0 z-40 w-full p-4 md:hidden animate-in fade-in slide-in-from-bottom-5 duration-500">
-                <div className="glass-dark rounded-3xl p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/20">
+            <div className="fixed bottom-20 left-0 z-40 w-full p-4 md:hidden animate-in fade-in slide-in-from-bottom-5 duration-500">
+                <div className="glass-premium rounded-[2.5rem] p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/80">
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Starting from</span>
-                        <div className="flex items-baseline gap-1 text-white">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Starting from</span>
+                        <div className="flex items-baseline gap-1 text-primary">
                             <span className="text-xs font-bold">GH₵</span>
                             <span className="text-xl font-bold">{(hostel.priceRange?.min || hostel.price || 0).toLocaleString()}</span>
                         </div>
                     </div>
                     {hostel.availability === 'Full' ? (
                         <Button disabled variant="secondary" className="rounded-2xl px-6">Full</Button>
+                    ) : existingBooking ? (
+                        <Button
+                            onClick={() => router.push(`/my-bookings`)}
+                            className="rounded-2xl px-8 bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-600/20"
+                        >
+                            Secured
+                        </Button>
+                    ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
+                        <Button
+                            onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                            className="rounded-2xl px-8 bg-primary text-white font-bold shadow-lg shadow-primary/20"
+                        >
+                            Track Visit
+                        </Button>
                     ) : (
                         <Button
                             onClick={() => router.push(`/hostels/${hostel.id}/book`)}
-                            className="rounded-2xl px-8 bg-accent text-accent-foreground font-bold shadow-lg shadow-accent/20"
+                            className="rounded-2xl px-8 bg-primary text-white font-bold shadow-lg shadow-primary/20"
                         >
                             Book Visit
                         </Button>
@@ -595,91 +610,161 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     return (
-        <div className="grid lg:grid-cols-[1fr_0.4fr] gap-8 lg:gap-12 relative pb-32 md:pb-0">
+        <div className="grid lg:grid-cols-[1fr_0.42fr] gap-8 lg:gap-16 relative pb-32 md:pb-0">
             {renderMobileStickyCTA()}
-            <div className="order-2 lg:order-1 space-y-10">
-                <Carousel className="w-full relative group" autoPlay autoPlayInterval={4500}>
-                    <CarouselContent>
-                        {hostel.images.map((img: string, index: number) => (
-                            <CarouselItem key={index}>
-                                <div className="relative h-[300px] sm:h-[400px] lg:h-[500px] w-full overflow-hidden rounded-[2.5rem] shadow-2xl">
-                                    <Image
-                                        src={img}
-                                        alt={`${hostel.name} image ${index + 1}`}
-                                        fill
-                                        className="object-cover group-hover:scale-105 transition-transform duration-1000"
-                                        data-ai-hint="hostel interior"
-                                        priority={index === 0}
-                                    />
-                                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                            </CarouselItem>
-                        ))}
-                    </CarouselContent>
-                    <CarouselPrevious className="left-6 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <CarouselNext className="right-6 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Carousel>
-
-                <div className="mt-8 space-y-6">
-                    <div>
-                        <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
-                        <p className="mt-2 text-foreground/80 leading-relaxed">{hostel.description}</p>
-                        {(hostel.nearbyLandmarks || hostel.distanceToUniversity) && (
-                            <div className="mt-3 space-y-1 text-sm text-muted-foreground">
-                                {hostel.nearbyLandmarks && (
-                                    <p>
-                                        {/aamusted/i.test(hostel.nearbyLandmarks)
-                                            ? 'Near AAMUSTED University'
-                                            : `Nearby: ${hostel.nearbyLandmarks}`}
-                                    </p>
-                                )}
-                                {hostel.distanceToUniversity && (
-                                    <p>Distance to AAMUSTED University: {hostel.distanceToUniversity}</p>
-                                )}
-                            </div>
-                        )}
+            <div className="lg:col-span-2 mb-4">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full gap-2 text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors pr-6"
+                    onClick={() => router.back()}
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Hostels
+                </Button>
+            </div>
+            <div className="order-2 lg:order-1 space-y-12">
+                {/* Immersive Gallery Section */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[350px] sm:h-[450px] lg:h-[550px]">
+                    <div className="md:col-span-3 relative group overflow-hidden rounded-[2.5rem] shadow-2xl">
+                        <Image
+                            src={primaryImages[0]}
+                            alt={`${hostel.name} main`}
+                            fill
+                            className="object-cover transition-transform duration-1000 group-hover:scale-105"
+                            priority
+                        />
+                        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80" />
+                        <div className="absolute bottom-8 left-8">
+                            <Badge className="bg-white/20 backdrop-blur-md border-white/30 text-white mb-3">Main View</Badge>
+                            <h2 className="text-white text-3xl font-bold font-headline drop-shadow-lg">{hostel.name}</h2>
+                        </div>
                     </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><FileText className="h-5 w-5 text-muted-foreground" />Student Bills</h3>
-                        {hostel.billsIncluded && hostel.billsIncluded.length > 0 && (
-                            <div>
-                                <p className="font-medium">Hostel Bills included:</p>
-                                <p className="text-muted-foreground">{hostel.billsIncluded.join(', ')}.</p>
-                            </div>
-                        )}
-                        {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
-                            <div>
-                                <p className="font-medium">Hostel Bills Excludes:</p>
-                                <p className="text-muted-foreground">{hostel.billsExcluded.join(', ')}.</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-muted-foreground" />Security & Safety</h3>
-                        {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
-                            <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                                {hostel.securityAndSafety.map(item => <li key={item}>{item}</li>)}
-                            </ul>
-                        )}
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                        <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {hostel.amenities.map((amenity: string) => (
-                                <div key={amenity} className="flex items-center gap-3">
-                                    <div className="p-2 bg-secondary rounded-md">
-                                        {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
+                    <div className="hidden md:grid grid-rows-2 gap-4">
+                        {primaryImages.slice(1, 3).map((img, idx) => (
+                            <div key={idx} className="relative group overflow-hidden rounded-[2rem] shadow-xl border border-white/20">
+                                <Image
+                                    src={img}
+                                    alt={`${hostel.name} detail ${idx + 1}`}
+                                    fill
+                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                                />
+                                {idx === 1 && primaryImages.length > 3 && (
+                                    <div
+                                        className="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center cursor-pointer hover:bg-black/50 transition-colors"
+                                        onClick={() => setRoomsDialogOpen(true)}
+                                    >
+                                        <div className="p-3 rounded-full bg-white/20 border border-white/40 mb-2">
+                                            <ImagePlus className="text-white h-6 w-6" />
+                                        </div>
+                                        <span className="text-white font-bold text-sm">+{primaryImages.length - 3} Photos</span>
                                     </div>
-                                    <span className="text-sm font-medium capitalize">{amenity}</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-8 space-y-10">
+                    <div className="glass-premium rounded-[2.5rem] p-10 border border-white/40 shadow-premium overflow-hidden relative">
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                            <BookOpen className="h-40 w-40 text-primary" />
+                        </div>
+                        <h3 className="text-2xl font-extrabold font-headline mb-6 tracking-tight flex items-center gap-3">
+                            <div className="h-8 w-1.5 bg-primary rounded-full" />
+                            About this Hostel
+                        </h3>
+                        <p className="text-lg text-foreground/80 leading-relaxed font-medium mb-8 max-w-3xl">
+                            {hostel.description}
+                        </p>
+                        <div className="flex flex-wrap gap-4">
+                            {hostel.institution && (
+                                <div className="flex items-center gap-3 px-6 py-3 bg-secondary/30 rounded-2xl border border-secondary/20 transition-all hover:bg-secondary/40">
+                                    <User className="h-5 w-5 text-secondary-foreground" />
+                                    <span className="text-sm font-bold text-secondary-foreground">{hostel.institution}</span>
+                                </div>
+                            )}
+                            {hostel.distanceToUniversity && (
+                                <div className="flex items-center gap-3 px-6 py-3 bg-accent/10 rounded-2xl border border-accent/20 transition-all hover:bg-accent/20">
+                                    <Clock className="h-5 w-5 text-accent-foreground" />
+                                    <span className="text-sm font-bold text-accent-foreground">{hostel.distanceToUniversity} from Campus</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 transition-all hover:bg-primary/10">
+                                <UsersIcon className="h-5 w-5 text-primary" />
+                                <span className="text-sm font-bold text-primary">{hostel.gender} Students Only</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-6">
+                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                            <Receipt className="h-6 w-6 text-primary" />
+                            Financial Breakdown
+                        </h3>
+                        <div className="grid sm:grid-cols-2 gap-6">
+                            {hostel.billsIncluded && hostel.billsIncluded.length > 0 && (
+                                <div className="p-6 bg-green-50/50 rounded-3xl border border-green-100">
+                                    <p className="font-bold text-green-800 mb-3 flex items-center gap-2 uppercase text-xs tracking-widest">
+                                        <Check className="h-4 w-4" /> Included in Rent
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {hostel.billsIncluded.map(bill => (
+                                            <Badge key={bill} variant="outline" className="bg-white border-green-200 text-green-700 rounded-lg">{bill}</Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
+                                <div className="p-6 bg-red-50/50 rounded-3xl border border-red-100">
+                                    <p className="font-bold text-red-800 mb-3 flex items-center gap-2 uppercase text-xs tracking-widest">
+                                        <AlertTriangle className="h-4 w-4" /> Excluded / Extra
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {hostel.billsExcluded.map(bill => (
+                                            <Badge key={bill} variant="outline" className="bg-white border-red-200 text-red-700 rounded-lg">{bill}</Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-6">
+                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                            <ShieldCheck className="h-6 w-6 text-primary" />
+                            Security & Safety
+                        </h3>
+                        {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                {hostel.securityAndSafety.map(item => (
+                                    <div key={item} className="flex items-center gap-3 p-4 bg-white/40 rounded-2xl border border-white/20">
+                                        <div className="h-2 w-2 rounded-full bg-primary" />
+                                        <span className="text-sm font-semibold text-foreground/80">{item}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-6">
+                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                            <Wifi className="h-6 w-6 text-primary" />
+                            Premium Amenities
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {hostel.amenities.map((amenity: string) => (
+                                <div key={amenity} className="flex flex-col items-center justify-center p-6 bg-white/40 rounded-[2rem] border border-white/20 hover:border-primary/30 transition-all group/amenity">
+                                    <div className="p-3 bg-primary/5 rounded-2xl mb-3 group-hover/amenity:bg-primary group-hover/amenity:text-white transition-colors">
+                                        {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <DoorOpen className="h-6 w-6" />}
+                                    </div>
+                                    <span className="text-xs font-bold uppercase tracking-widest text-center">{amenity}</span>
                                 </div>
                             ))}
                         </div>
@@ -839,214 +924,181 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
                 </div>
             </div>
-            <div className="flex flex-col order-1 lg:order-2 lg:sticky lg:top-32 h-fit">
-                <div className="glass-dark dark:glass p-6 sm:p-8 rounded-[2rem] border border-border/40 shadow-xl space-y-6">
-                    <Badge
-                        variant="outline"
-                        className={cn("text-xs font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full w-fit", currentAvailability.className)}
-                    >
-                        {currentAvailability.text}
-                    </Badge>
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-headline">{hostel.name}</h1>
-                    <div className="flex items-center text-muted-foreground mt-2">
-                        <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                        <span className="text-sm sm:text-base">{hostel.location}</span>
-                    </div>
-                    {(hostel.nearbyLandmarks || hostel.distanceToUniversity) && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {hostel.nearbyLandmarks && (
-                                <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
-                                    {/aamusted/i.test(hostel.nearbyLandmarks)
-                                        ? 'Near AAMUSTED University'
-                                        : `Nearby: ${hostel.nearbyLandmarks}`}
-                                </Badge>
-                            )}
-                            {hostel.distanceToUniversity && (
-                                <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
-                                    Distance: {hostel.distanceToUniversity}
-                                </Badge>
-                            )}
-                        </div>
-                    )}
-                    <div className="mt-4 flex justify-between items-center text-xs sm:text-sm text-muted-foreground">
-                        <span className="uppercase tracking-wide font-semibold">Share</span>
+            <div className="flex flex-col order-1 lg:order-2 lg:sticky lg:top-32 h-fit space-y-8">
+                <div className="glass-premium p-8 rounded-[3rem] border border-white shadow-2xl space-y-8 overflow-hidden relative">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
+
+                    <div className="flex items-center justify-between">
+                        <Badge
+                            variant="outline"
+                            className={cn("text-[10px] font-bold uppercase tracking-[0.2em] px-4 py-1.5 rounded-full", currentAvailability.className)}
+                        >
+                            {currentAvailability.text}
+                        </Badge>
                         <div className="relative">
                             <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-9 w-9 rounded-full border-primary/30 text-primary bg-primary/5 hover:bg-primary/10"
+                                className="h-10 w-10 rounded-full border-primary/20 text-primary bg-primary/5 hover:bg-primary/10 transition-all"
                                 onClick={() => setShareMenuOpen((open) => !open)}
                             >
                                 <Share2 className="h-4 w-4" />
                             </Button>
                             {shareMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-40 rounded-md border bg-popover shadow-lg z-20">
+                                <div className="absolute right-0 mt-3 w-48 rounded-2xl border bg-white/95 backdrop-blur-xl shadow-2xl z-50 p-2 border-white/40">
                                     <button
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
                                         onClick={() => { setShareMenuOpen(false); handleShare('whatsapp'); }}
                                     >
-                                        <MessageCircle className="h-3.5 w-3.5" />
+                                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
+                                            <MessageCircle className="h-4 w-4" />
+                                        </div>
                                         <span>WhatsApp</span>
                                     </button>
                                     <button
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
                                         onClick={() => { setShareMenuOpen(false); handleShare('twitter'); }}
                                     >
-                                        <Twitter className="h-3.5 w-3.5" />
+                                        <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-400">
+                                            <Twitter className="h-4 w-4" />
+                                        </div>
                                         <span>Twitter</span>
                                     </button>
                                     <button
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
-                                        onClick={() => { setShareMenuOpen(false); handleShare('facebook'); }}
-                                    >
-                                        <Facebook className="h-3.5 w-3.5" />
-                                        <span>Facebook</span>
-                                    </button>
-                                    <button
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
                                         onClick={() => { setShareMenuOpen(false); handleShare('copy'); }}
                                     >
-                                        {shareCopied ? (
-                                            <Check className="h-3.5 w-3.5 text-green-600" />
-                                        ) : (
-                                            <Copy className="h-3.5 w-3.5" />
-                                        )}
-                                        <span>{shareCopied ? 'Link copied' : 'Copy link'}</span>
+                                        <div className={`h-8 w-8 rounded-lg ${shareCopied ? 'bg-green-100 text-green-600' : 'bg-gray-50 text-gray-600'} flex items-center justify-center`}>
+                                            {shareCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                        </div>
+                                        <span>{shareCopied ? 'Copied!' : 'Copy Link'}</span>
                                     </button>
                                 </div>
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center mt-4">
-                        <div className="flex items-center text-yellow-500">
-                            {[...Array(5)].map((_, i) => (
-                                <Star key={i} className={`h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
-                            ))}
+
+                    <div className="space-y-3">
+                        <h1 className="text-3xl font-extrabold font-headline leading-tight tracking-tight text-gradient">{hostel.name}</h1>
+                        <div className="flex items-center text-muted-foreground/80">
+                            <MapPin className="h-4 w-4 mr-2 text-primary/60" />
+                            <span className="text-sm font-medium">{hostel.location}</span>
                         </div>
-                        <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({totalReviews} {totalReviews === 1 ? 'review' : 'reviews'})</span>
                     </div>
 
-                    <div className="mt-6 sm:mt-8 flex items-baseline gap-2">
-                        {renderPrice()}
-                        <span className="text-sm sm:text-base text-muted-foreground">/year</span>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                        <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
-                            <Smartphone className="h-4 w-4" />
-                            Mobile Money
-                        </Badge>
-                        <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
-                            <CreditCard className="h-4 w-4" />
-                            Visa & Mastercard
-                        </Badge>
-                    </div>
-
-                    {getPrimaryCTA()}
-
-                    {(hostel.roomTypes?.length ?? 0) > 1 && (
-                        <Button
-                            variant="outline"
-                            className="w-full mt-3 border-primary/40 text-primary hover:bg-primary/5"
-                            onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
-                        >
-                            View all room options
-                        </Button>
-                    )}
-
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs sm:text-sm bg-background/70 border border-primary/10 rounded-xl p-3 sm:p-4">
-                        <div className="flex items-start gap-2">
-                            <ShieldCheck className="h-4 w-4 text-primary mt-0.5" />
-                            <div>
-                                <p className="font-semibold text-foreground">Trusted agents</p>
-                                <p className="text-[11px] sm:text-xs text-muted-foreground">Only verified agents and admins can list hostels.</p>
+                    <div className="flex items-center justify-between p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                        <div className="flex items-center gap-2">
+                            <div className="flex text-yellow-400">
+                                {[...Array(5)].map((_, i) => (
+                                    <Star key={i} className={`h-4 w-4 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
+                                ))}
                             </div>
+                            <span className="text-sm font-bold">{reviewAverage.toFixed(1)}</span>
                         </div>
-                        <div className="flex items-start gap-2">
-                            <CreditCard className="h-4 w-4 text-primary mt-0.5" />
-                            <div>
-                                <p className="font-semibold text-foreground">Secure payments</p>
-                                <p className="text-[11px] sm:text-xs text-muted-foreground">Pay via trusted mobile money and card providers.</p>
+                        <span className="text-xs text-muted-foreground font-medium underline underline-offset-4 cursor-pointer">
+                            {totalReviews} Student Reviews
+                        </span>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="flex items-end justify-between">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Starting from</p>
+                                {renderPrice()}
                             </div>
+                            <span className="text-sm font-bold text-muted-foreground pb-1">/ year</span>
                         </div>
-                        <div className="flex items-start gap-2">
-                            <Smartphone className="h-4 w-4 text-primary mt-0.5" />
-                            <div>
-                                <p className="font-semibold text-foreground">Student-first support</p>
-                                <p className="text-[11px] sm:text-xs text-muted-foreground">Track visits and bookings from your HostelHQ account.</p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-secondary/20 rounded-xl border border-secondary/30 flex items-center gap-2">
+                                <Smartphone className="h-4 w-4 text-secondary-foreground" />
+                                <span className="text-[10px] font-bold text-secondary-foreground uppercase">MoMo</span>
+                            </div>
+                            <div className="p-3 bg-secondary/20 rounded-xl border border-secondary/30 flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-secondary-foreground" />
+                                <span className="text-[10px] font-bold text-secondary-foreground uppercase">Card</span>
                             </div>
                         </div>
                     </div>
 
-                    {(hostel.roomTypes?.length ?? 0) === 1 && (
-                        <Card className="mt-6 sm:mt-8 shadow-md">
-                            <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div>
-                                    <CardTitle className="text-lg sm:text-xl">Room Type & Pricing</CardTitle>
-                                    <CardDescription className="text-sm">This hostel offers a single room type. Review the details and proceed to book a visit or secure it.</CardDescription>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="text-xs sm:text-sm">Room Type</TableHead>
-                                                <TableHead className="text-xs sm:text-sm">Availability</TableHead>
-                                                <TableHead className="text-xs sm:text-sm">Price/Year</TableHead>
-                                                <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {hostel.roomTypes?.map((room) => (
-                                                <TableRow key={room.id}>
-                                                    <TableCell>
-                                                        <p className="font-medium text-sm sm:text-base">{room.name}</p>
-                                                        <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
-                                                            {room.beds && (
-                                                                <span className="flex items-center gap-1">
-                                                                    <Bed className="h-3 w-3" /> {room.beds} Beds
-                                                                </span>
-                                                            )}
-                                                            {room.bathrooms && (
-                                                                <span className="flex items-center gap-1">
-                                                                    <Bath className="h-3 w-3" /> {room.bathrooms}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant={getRoomAvailabilityVariant(room.availability)}
-                                                            className="text-xs"
-                                                        >
-                                                            {hostel.availability === 'Full' ? 'Full' : room.availability}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="font-semibold text-sm sm:text-base">
-                                                        GH₵{room.price.toLocaleString()}
-                                                    </TableCell>
-                                                    <TableCell className="text-right space-y-2">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="w-full justify-center mb-1"
-                                                            onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
-                                                        >
-                                                            View Rooms
-                                                        </Button>
-                                                        {getVisitButton(room)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                    <div className="space-y-4 pt-4 border-t border-primary/5">
+                        {getPrimaryCTA()}
 
+                        {(hostel.roomTypes?.length ?? 0) > 1 && (
+                            <Button
+                                variant="outline"
+                                className="w-full h-14 rounded-2xl border-primary/20 text-primary hover:bg-primary/5 font-bold group"
+                                onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
+                            >
+                                Compare Room Options
+                                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                            </Button>
+                        )}
+                    </div>
+
+                    <div className="bg-background/80 backdrop-blur-sm rounded-[1.5rem] border border-primary/5 p-5 space-y-4">
+                        <div className="flex items-start gap-3">
+                            <div className="h-8 w-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 shrink-0">
+                                <ShieldCheck className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold">Verified Agent</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">This property has been physically inspected by our team.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                <Lock className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold">Encrypted Payments</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">Your data and payments are secured with end-to-end encryption.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {(hostel.roomTypes?.length ?? 0) === 1 && (
+                <div className="mt-8 space-y-4">
+                    <h4 className="text-lg font-bold font-headline flex items-center gap-2">
+                        <Bed className="h-5 w-5 text-primary" />
+                        Room Specification
+                    </h4>
+                    {hostel.roomTypes?.map((room) => (
+                        <div key={room.id} className="glass-card rounded-3xl p-6 border-primary/10 hover:border-primary/30 shadow-sm group">
+                            <div className="flex items-start justify-between mb-4">
+                                <div>
+                                    <h5 className="text-xl font-bold">{room.name}</h5>
+                                    <div className="flex items-center gap-4 mt-2">
+                                        {room.beds && (
+                                            <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Beds
+                                            </span>
+                                        )}
+                                        {room.bathrooms && (
+                                            <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                                                <Bath className="h-3.5 w-3.5 text-primary" /> {room.bathrooms}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <Badge variant={getRoomAvailabilityVariant(room.availability)} className="px-3 py-1 rounded-full uppercase tracking-tighter text-[10px] font-bold">
+                                    {room.availability}
+                                </Badge>
+                            </div>
+                            <div className="flex items-center justify-between pt-4 border-t border-primary/5">
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Annual Rate</p>
+                                    <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
+                                </div>
+                                {getVisitButton(room)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
         </div>
     );
 }
@@ -1079,95 +1131,121 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
     };
 
     return (
-        <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
-            <div>
-                <Carousel className="w-full" autoPlay autoPlayInterval={4500}>
-                    <CarouselContent>
-                        {(hostel.images ?? ['/placeholder.jpg']).map((img: string, index: number) => (
-                            <CarouselItem key={index}>
-                                <div className="relative h-80 sm:h-96 w-full overflow-hidden rounded-2xl">
-                                    <Image
-                                        src={img}
-                                        alt={`${hostel.name} image ${index + 1}`}
-                                        fill
-                                        className="object-cover"
-                                        data-ai-hint="hostel exterior"
-                                        priority={index === 0}
-                                    />
-                                </div>
-                            </CarouselItem>
-                        ))}
-                    </CarouselContent>
-                    <CarouselPrevious className="left-4 hidden md:flex" />
-                    <CarouselNext className="right-4 hidden md:flex" />
-                </Carousel>
-                <div className="mt-8">
-                    <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
-                    <p className="mt-2 text-foreground/80 leading-relaxed line-clamp-5">{hostel.description}</p>
-                </div>
-            </div>
-            <div className="flex flex-col">
-                <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
-                <div className="flex items-center text-muted-foreground mt-2">
-                    <MapPin className="h-5 w-5 mr-2" />
-                    <span>{hostel.location}</span>
-                </div>
-                <div className="flex items-center mt-4">
-                    <div className="flex items-center text-yellow-500">
-                        {[...Array(5)].map((_, i) => (
-                            <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
-                        ))}
+        <div className="grid lg:grid-cols-[1fr_0.42fr] gap-8 lg:gap-16 relative">
+            <div className="order-2 lg:order-1 space-y-12">
+                <div className="relative group h-[350px] sm:h-[450px] lg:h-[550px] w-full overflow-hidden rounded-[2.5rem] shadow-2xl">
+                    <Image
+                        src={hostel.images?.[0] || '/AAMUSTED-Full-shot.jpeg'}
+                        alt={hostel.name}
+                        fill
+                        className="object-cover transition-transform duration-1000 group-hover:scale-105"
+                        priority
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="absolute bottom-10 left-10 right-10 flex flex-col items-start">
+                        <Badge className="bg-accent text-accent-foreground mb-4 font-bold border-0">Limited Preview</Badge>
+                        <h1 className="text-white text-4xl sm:text-5xl font-extrabold font-headline mb-4 drop-shadow-xl">{hostel.name}</h1>
+                        <div className="flex items-center text-white/90 gap-4 mb-6">
+                            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
+                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                                <span className="font-bold">{hostel.rating.toFixed(1)}</span>
+                                <span className="text-xs opacity-70">({hostel.numberOfReviews} reviews)</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
+                                <MapPin className="h-4 w-4" />
+                                <span className="text-sm font-medium">{hostel.location}</span>
+                            </div>
+                        </div>
                     </div>
-                    <span className="ml-3 text-lg text-muted-foreground">({hostel.numberOfReviews} {hostel.numberOfReviews === 1 ? 'review' : 'reviews'})</span>
                 </div>
 
-                <div className="mt-8">
-                    <h3 className="text-lg font-semibold font-headline mb-3">Amenities</h3>
-                    <div className="flex flex-wrap gap-3">
+                <div className="glass-premium rounded-[2.5rem] p-10 border border-white/40 shadow-premium">
+                    <h3 className="text-2xl font-extrabold font-headline mb-6 tracking-tight flex items-center gap-3">
+                        <div className="h-8 w-1.5 bg-primary rounded-full" />
+                        Hostel Highlights
+                    </h3>
+                    <p className="text-lg text-foreground/80 leading-relaxed font-medium mb-10">
+                        {hostel.description}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         {(hostel.amenities ?? []).slice(0, 4).map((amenity: string) => (
-                            <Badge key={amenity} variant="outline" className="text-sm p-2 flex items-center gap-2">
-                                {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
-                                <span className="font-medium capitalize">{amenity}</span>
-                            </Badge>
+                            <div key={amenity} className="flex flex-col items-center p-6 bg-secondary/10 rounded-[2rem] border border-secondary/20">
+                                <div className="p-3 bg-secondary/20 rounded-2xl mb-3 text-secondary-foreground">
+                                    {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <DoorOpen className="h-6 w-6" />}
+                                </div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-center text-secondary-foreground">{amenity}</span>
+                            </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="mt-8 flex items-baseline gap-2">
-                    {renderPrice()}
-                    <span className="text-base text-muted-foreground">/year</span>
-                </div>
-
-                {hostel.availability === 'Full' ? (
-                    <Button
-                        size="lg"
-                        className="w-full mt-6 text-lg h-14"
-                        variant="secondary"
-                        disabled
-                        title="This hostel is fully booked"
-                    >
-                        Hostel Fully Booked
-                    </Button>
-                ) : (
-                    <Button
-                        size="lg"
-                        className="w-full mt-6 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 text-lg h-14"
-                        onClick={handleLoginRedirect}
-                    >
-                        Apply to Secure Hostel
-                    </Button>
-                )}
-
-                <Card className="mt-8 bg-muted/30">
-                    <CardHeader>
-                        <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground" /> Log in for full details</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground text-sm">
-                            Create a free student account to see all photos, room types, and book a visit.
+                <Card className="rounded-[2.5rem] border-primary/20 bg-primary/5 overflow-hidden border-2 border-dashed">
+                    <CardContent className="p-10 flex flex-col items-center text-center">
+                        <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                            <Lock className="h-8 w-8 text-primary" />
+                        </div>
+                        <h4 className="text-2xl font-bold mb-3">Unlock Restricted Content</h4>
+                        <p className="text-muted-foreground mb-8 max-w-md">
+                            Join thousands of students on HostelHQ. Get access to detailed room prices, high-quality photo galleries, and direct booking options.
                         </p>
+                        <Button
+                            className="bg-primary text-white h-14 px-10 rounded-2xl font-bold shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
+                            onClick={handleLoginRedirect}
+                        >
+                            Log In as Student
+                        </Button>
                     </CardContent>
                 </Card>
+            </div>
+
+            <div className="flex flex-col lg:sticky lg:top-32 h-fit space-y-6">
+                <div className="glass-premium p-8 rounded-[2.5rem] border border-white/40 shadow-2xl space-y-8">
+                    <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-[0.3em] font-bold text-muted-foreground">Investment</p>
+                        <div className="flex items-baseline gap-2">
+                            {renderPrice()}
+                            <span className="text-muted-foreground">/per year</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-4 bg-green-50 rounded-2xl border border-green-100 text-green-800">
+                            <ShieldCheck className="h-5 w-5" />
+                            <span className="text-sm font-bold">Verified Hostel Listing</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-blue-800">
+                            <Badge className="bg-blue-600 text-white border-0 h-5 w-5 flex items-center justify-center p-0 rounded-full">✓</Badge>
+                            <span className="text-sm font-bold">Safe & Secure Booking</span>
+                        </div>
+                    </div>
+
+                    {hostel.availability === 'Full' ? (
+                        <Button
+                            size="lg"
+                            className="w-full h-16 rounded-[1.25rem] text-lg font-bold"
+                            variant="secondary"
+                            disabled
+                        >
+                            Currently Full
+                        </Button>
+                    ) : (
+                        <Button
+                            size="lg"
+                            className="w-full h-16 rounded-[1.25rem] text-lg font-bold bg-accent hover:bg-accent/90 text-accent-foreground shadow-xl shadow-accent/10"
+                            onClick={handleLoginRedirect}
+                        >
+                            Secure My Place
+                        </Button>
+                    )}
+
+                    <Separator className="opacity-50" />
+
+                    <div className="p-4 rounded-xl bg-background/50 border border-border/50">
+                        <p className="text-xs text-center text-muted-foreground font-medium">
+                            Need help? <Link href="/help-center" className="text-primary font-bold hover:underline">Contact Support</Link>
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );
