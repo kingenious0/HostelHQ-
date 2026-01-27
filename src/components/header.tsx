@@ -34,6 +34,9 @@ import {
   Users,
   Banknote,
   Settings,
+  Search,
+  Home as HomeIcon,
+  Compass,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -220,15 +223,15 @@ export function Header() {
           if (docSnap.exists()) {
             const userData = docSnap.data() as AppUser;
             const currentUser: AppUser = {
-                uid: user.uid,
-                email: userData.email || user.email!,
-                fullName: userData.fullName || user.displayName || '',
-                role: userData.role || 'student',
-                profileImage: userData.profileImage || user.photoURL || '',
-                phone: userData.phoneNumber || userData.phone || '',
-                address: userData.address || '',
-                bio: userData.bio || '',
-                authEmail: userData.authEmail || user.email!, // Store original auth email
+              uid: user.uid,
+              email: userData.email || user.email!,
+              fullName: userData.fullName || user.displayName || '',
+              role: userData.role || 'student',
+              profileImage: userData.profileImage || user.photoURL || '',
+              phone: userData.phoneNumber || userData.phone || '',
+              address: userData.address || '',
+              bio: userData.bio || '',
+              authEmail: userData.authEmail || user.email!, // Store original auth email
             };
             setAppUser(currentUser);
             setProfileData(currentUser);
@@ -261,114 +264,114 @@ export function Header() {
   const handleEditProfile = async () => {
     if (!appUser) return;
     setIsProfileOpen(true);
-    
+
     try {
-        const userDocRef = doc(db, "users", appUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            
-            // Check all possible phone field names (phoneNumber is the primary field from signup)
-            const phone = userData.phoneNumber || userData.phone || appUser.phone || '';
-            const fullName = userData.fullName || appUser.fullName || '';
-            const email = userData.email || appUser.email || '';
-            
-            console.log('🔍 Profile Loading Debug:', {
-                userData: userData,
-                phone: phone,
-                fullName: fullName,
-                email: email,
-                appUserPhone: appUser.phone,
-                appUserFullName: appUser.fullName
-            });
-            
-            // If we have phone but no email, generate it
-            const displayEmail = email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
-            
-            setProfileData({
-                fullName: fullName,
-                email: displayEmail,
-                phone: phone,
-                address: userData.address || '',
-                bio: userData.bio || '',
-                profileImage: userData.profileImage || appUser.profileImage || ''
-            });
-            
-            // Store original values for comparison
-            setOriginalPhone(phone);
-            setOriginalName(fullName);
-            console.log('📋 Profile loaded - setting originalName to:', fullName, 'phone:', phone);
-        } else {
-            // Fallback to appUser data
-            const phone = appUser.phone || '';
-            const fullName = appUser.fullName || '';
-            const email = appUser.email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
-            
-            setProfileData({
-                fullName: fullName,
-                email: email,
-                phone: phone,
-                address: '',
-                bio: '',
-                profileImage: appUser.profileImage || ''
-            });
-            setOriginalPhone(phone);
-            setOriginalName(fullName);
-        }
+      const userDocRef = doc(db, "users", appUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+
+        // Check all possible phone field names (phoneNumber is the primary field from signup)
+        const phone = userData.phoneNumber || userData.phone || appUser.phone || '';
+        const fullName = userData.fullName || appUser.fullName || '';
+        const email = userData.email || appUser.email || '';
+
+        console.log('🔍 Profile Loading Debug:', {
+          userData: userData,
+          phone: phone,
+          fullName: fullName,
+          email: email,
+          appUserPhone: appUser.phone,
+          appUserFullName: appUser.fullName
+        });
+
+        // If we have phone but no email, generate it
+        const displayEmail = email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
+
+        setProfileData({
+          fullName: fullName,
+          email: displayEmail,
+          phone: phone,
+          address: userData.address || '',
+          bio: userData.bio || '',
+          profileImage: userData.profileImage || appUser.profileImage || ''
+        });
+
+        // Store original values for comparison
+        setOriginalPhone(phone);
+        setOriginalName(fullName);
+        console.log('📋 Profile loaded - setting originalName to:', fullName, 'phone:', phone);
+      } else {
+        // Fallback to appUser data
+        const phone = appUser.phone || '';
+        const fullName = appUser.fullName || '';
+        const email = appUser.email || (phone && fullName ? generateEmail(fullName, phone, appUser.role) : '');
+
+        setProfileData({
+          fullName: fullName,
+          email: email,
+          phone: phone,
+          address: '',
+          bio: '',
+          profileImage: appUser.profileImage || ''
+        });
+        setOriginalPhone(phone);
+        setOriginalName(fullName);
+      }
     } catch (error) {
-        console.error('Error loading profile:', error);
+      console.error('Error loading profile:', error);
     }
   };
 
   const loadProfileData = async () => {
     if (!appUser) return;
-    
+
     try {
-        const userDocRef = doc(db, "users", appUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            setProfileData({
-                fullName: userData.fullName || appUser.fullName || '',
-                email: appUser.email || '',
-                phone: userData.phone || '',
-                address: userData.address || '',
-                bio: userData.bio || '',
-                profileImage: userData.profileImage || appUser.profileImage || ''
-            });
-        } else {
-            setProfileData({
-                fullName: appUser.fullName || '',
-                email: appUser.email || '',
-                phone: '',
-                address: '',
-                bio: '',
-                profileImage: appUser.profileImage || ''
-            });
-        }
+      const userDocRef = doc(db, "users", appUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        setProfileData({
+          fullName: userData.fullName || appUser.fullName || '',
+          email: appUser.email || '',
+          phone: userData.phone || '',
+          address: userData.address || '',
+          bio: userData.bio || '',
+          profileImage: userData.profileImage || appUser.profileImage || ''
+        });
+      } else {
+        setProfileData({
+          fullName: appUser.fullName || '',
+          email: appUser.email || '',
+          phone: '',
+          address: '',
+          bio: '',
+          profileImage: appUser.profileImage || ''
+        });
+      }
     } catch (error) {
-        console.error('Error loading profile:', error);
+      console.error('Error loading profile:', error);
     }
   };
 
   // Generate email from name, phone, and role
   const generateEmail = (fullName: string, phone: string, role: string) => {
     if (!fullName || !phone || !role) return '';
-    
+
     // Extract first 3 letters of name
     const nameNoSpaces = fullName.replace(/\s+/g, '');
     const namePart = nameNoSpaces.length >= 3
       ? nameNoSpaces.substring(0, 3).toLowerCase()
       : nameNoSpaces.toLowerCase().padEnd(3, 'x');
-    
+
     // Extract last 3 digits of phone
     const digitsOnly = phone.replace(/\D/g, '');
-    const phonePart = digitsOnly.length >= 3 
+    const phonePart = digitsOnly.length >= 3
       ? digitsOnly.slice(-3)
       : digitsOnly.padStart(3, '0');
-    
+
     // Get role prefix
     let rolePrefix = 'stu'; // default
     if (role === 'agent' || role === 'pending_agent') {
@@ -378,26 +381,26 @@ export function Header() {
     } else if (role === 'admin') {
       rolePrefix = 'adm';
     }
-    
+
     return `${rolePrefix}-${namePart}${phonePart}@hostelhq.com`;
   };
 
   const handleSaveProfile = async () => {
     if (!appUser) return;
-    
+
     // Check what fields changed (normalize phone numbers for comparison)
     const normalizePhone = (phone: string) => phone?.replace(/\D/g, '') || '';
-    
+
     // Handle case where originalPhone might be empty/undefined
     const currentPhoneNormalized = normalizePhone(profileData.phone || '');
     const originalPhoneNormalized = normalizePhone(originalPhone || '');
-    
+
     // Phone field is read-only, so never detect phone changes
     const phoneChanged = false;
     const nameChanged = profileData.fullName !== originalName;
     const addressChanged = profileData.address !== (appUser.address || '');
     const bioChanged = profileData.bio !== (appUser.bio || '');
-    
+
     console.log('🔍 Save Profile Debug:', {
       phoneChanged,
       nameChanged,
@@ -418,7 +421,7 @@ export function Header() {
         normalizedEqual: normalizePhone(profileData.phone) === normalizePhone(originalPhone)
       }
     });
-    
+
     // If phone changed, require password + OTP verification
     if (phoneChanged) {
       console.log('🔄 Phone changed - using phone flow - needs (password + OTP)');
@@ -427,7 +430,7 @@ export function Header() {
       setIsPasswordDialogOpen(true);
       return;
     }
-    
+
     // If only name, address, or bio changed, require password verification only
     if (nameChanged || addressChanged || bioChanged) {
       console.log('👤 Profile changed - using profile flow (password only)', { nameChanged, addressChanged, bioChanged });
@@ -436,44 +439,44 @@ export function Header() {
       setIsPasswordDialogOpen(true);
       return;
     }
-    
+
     setIsSavingProfile(true);
     try {
-        const userDocRef = doc(db, "users", appUser.uid);
-        const updateData: any = {
-            fullName: profileData.fullName,
-            phone: profileData.phone,
-            phoneNumber: profileData.phone, // Store in both fields for compatibility
-            address: profileData.address,
-            bio: profileData.bio,
-            profileImage: profileData.profileImage,
-            updatedAt: new Date().toISOString()
-        };
-        
-        // If name changed, update email
-        if (nameChanged && profileData.phone) {
-            const newEmail = generateEmail(profileData.fullName || '', profileData.phone, appUser.role);
-            updateData.email = newEmail;
-            
-            toast({ 
-                title: 'Email Updated', 
-                description: `Your email has been updated to ${newEmail}` 
-            });
-        }
-        
-        await updateDoc(userDocRef, updateData);
-        
-        // Update appUser state to reflect changes immediately in header
-        setAppUser(prev => prev ? { ...prev, ...profileData, email: updateData.email || prev.email } as AppUser : null);
+      const userDocRef = doc(db, "users", appUser.uid);
+      const updateData: any = {
+        fullName: profileData.fullName,
+        phone: profileData.phone,
+        phoneNumber: profileData.phone, // Store in both fields for compatibility
+        address: profileData.address,
+        bio: profileData.bio,
+        profileImage: profileData.profileImage,
+        updatedAt: new Date().toISOString()
+      };
 
-        toast({ title: 'Profile updated successfully!' });
-        setIsProfileOpen(false);
-        setOriginalName(profileData.fullName || '');
+      // If name changed, update email
+      if (nameChanged && profileData.phone) {
+        const newEmail = generateEmail(profileData.fullName || '', profileData.phone, appUser.role);
+        updateData.email = newEmail;
+
+        toast({
+          title: 'Email Updated',
+          description: `Your email has been updated to ${newEmail}`
+        });
+      }
+
+      await updateDoc(userDocRef, updateData);
+
+      // Update appUser state to reflect changes immediately in header
+      setAppUser(prev => prev ? { ...prev, ...profileData, email: updateData.email || prev.email } as AppUser : null);
+
+      toast({ title: 'Profile updated successfully!' });
+      setIsProfileOpen(false);
+      setOriginalName(profileData.fullName || '');
     } catch (error) {
-        console.error('Error saving profile:', error);
-        toast({ title: 'Failed to update profile', variant: 'destructive' });
+      console.error('Error saving profile:', error);
+      toast({ title: 'Failed to update profile', variant: 'destructive' });
     } finally {
-        setIsSavingProfile(false);
+      setIsSavingProfile(false);
     }
   };
 
@@ -483,7 +486,7 @@ export function Header() {
       toast({ title: 'Please enter your password', variant: 'destructive' });
       return;
     }
-    
+
     setIsVerifying(true);
     try {
       console.log('🔐 Phone Password verification debug:', {
@@ -492,35 +495,35 @@ export function Header() {
         authEmail: appUser?.authEmail,
         passwordLength: password.length
       });
-      
+
       // Use the original authEmail for authentication if available
       const emailForAuth = appUser?.authEmail || auth.currentUser?.email || appUser.email;
       console.log('🔑 Using email for phone auth:', emailForAuth);
-      
+
       // Import reauthenticateWithCredential and EmailAuthProvider
       const { reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth');
       const credential = EmailAuthProvider.credential(emailForAuth, password);
-      
+
       await reauthenticateWithCredential(auth.currentUser!, credential);
-      
+
       // Password verified, now send OTP
       setIsPasswordDialogOpen(false);
       setPassword('');
-      
+
       // In production, you would send SMS OTP here
       // For now, we'll simulate it
-      toast({ 
-        title: 'Verification Code Sent', 
-        description: `A 6-digit code has been sent to ${newPhone}` 
+      toast({
+        title: 'Verification Code Sent',
+        description: `A 6-digit code has been sent to ${newPhone}`
       });
-      
+
       setIsOtpDialogOpen(true);
     } catch (error: any) {
       console.error('Password verification error:', error);
-      toast({ 
-        title: 'Incorrect Password', 
-        description: 'Please check your password and try again', 
-        variant: 'destructive' 
+      toast({
+        title: 'Incorrect Password',
+        description: 'Please check your password and try again',
+        variant: 'destructive'
       });
     } finally {
       setIsVerifying(false);
@@ -532,7 +535,7 @@ export function Header() {
       toast({ title: 'Please enter your password', variant: 'destructive' });
       return;
     }
-    
+
     setIsVerifying(true);
     try {
       // Verify password with Firebase Auth using reauthentication
@@ -540,32 +543,32 @@ export function Header() {
       if (!user || !user.email) {
         throw new Error('User not authenticated');
       }
-      
+
       console.log('🔐 Password verification debug:', {
         firebaseAuthEmail: user.email,
         firestoreEmail: appUser?.email,
         authEmail: appUser?.authEmail,
         passwordLength: password.length
       });
-      
+
       // Use the original authEmail for authentication if available
       const emailForAuth = appUser?.authEmail || user.email;
       console.log('🔑 Using email for auth:', emailForAuth);
-      
+
       const { reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth');
       const credential = EmailAuthProvider.credential(emailForAuth, password);
       await reauthenticateWithCredential(user, credential);
-      
+
       // Password verified, complete profile update
       setIsPasswordDialogOpen(false);
       setPassword('');
       await completeProfileUpdate();
     } catch (error: any) {
       console.error('Password verification error:', error);
-      toast({ 
-        title: 'Incorrect Password', 
-        description: 'Please check your password and try again', 
-        variant: 'destructive' 
+      toast({
+        title: 'Incorrect Password',
+        description: 'Please check your password and try again',
+        variant: 'destructive'
       });
     } finally {
       setIsVerifying(false);
@@ -577,7 +580,7 @@ export function Header() {
       toast({ title: 'Please enter the 6-digit code', variant: 'destructive' });
       return;
     }
-    
+
     // OTP verified, complete phone number change directly
     setIsOtpDialogOpen(false);
     setOtp('');
@@ -590,7 +593,7 @@ export function Header() {
     try {
       const userDocRef = doc(db, "users", appUser!.uid);
       const nameChanged = profileData.fullName !== originalName;
-      
+
       console.log('🔍 Profile Update Debug:', {
         currentName: profileData.fullName,
         originalName: originalName,
@@ -598,7 +601,7 @@ export function Header() {
         phone: appUser!.phone,
         role: appUser!.role
       });
-      
+
       const updateData: any = {
         fullName: profileData.fullName,
         address: profileData.address,
@@ -606,39 +609,39 @@ export function Header() {
         profileImage: profileData.profileImage,
         updatedAt: new Date().toISOString()
       };
-      
+
       // If name changed, update email (use current phone from appUser or profileData)
       if (nameChanged) {
         const currentPhone = appUser!.phone || profileData.phone || '';
-        
+
         if (currentPhone) {
           const newEmail = generateEmail(profileData.fullName || '', currentPhone, appUser!.role);
           updateData.email = newEmail;
           console.log('📧 Updating email from name change:', newEmail, 'using phone:', currentPhone);
-          
+
           // Note: We skip Firebase Auth email update to avoid verification requirements
           // The app uses Firestore data primarily, so this is sufficient
           console.log('ℹSkipping Firebase Auth email update to avoid verification requirement');
-          
-          toast({ 
-            title: 'Email Updated', 
-            description: `Your email has been updated to ${newEmail}` 
+
+          toast({
+            title: 'Email Updated',
+            description: `Your email has been updated to ${newEmail}`
           });
         } else {
           console.log('⚠️ Cannot update email - no phone number available');
           console.log('🔍 Debug - appUser.phone:', appUser!.phone, 'profileData.phone:', profileData.phone);
         }
       }
-      
+
       await updateDoc(userDocRef, updateData);
-      
+
       // Update appUser state
       setAppUser(prev => {
         if (!prev) return null;
         const updatedEmail = updateData.email || prev.email || '';
         console.log('🔄 Updated appUser with new email:', updatedEmail);
-        return { 
-          ...prev, 
+        return {
+          ...prev,
           fullName: profileData.fullName || prev.fullName,
           address: profileData.address || prev.address || '',
           bio: profileData.bio || prev.bio || '',
@@ -646,22 +649,22 @@ export function Header() {
           email: updatedEmail
         };
       });
-      
+
       // Update original values
       setOriginalName(profileData.fullName || '');
-      
-      toast({ 
-        title: 'Profile Updated', 
-        description: 'Your profile has been updated successfully' 
+
+      toast({
+        title: 'Profile Updated',
+        description: 'Your profile has been updated successfully'
       });
-      
+
       setIsProfileOpen(false);
     } catch (error: any) {
       console.error('Profile update error:', error);
-      toast({ 
-        title: 'Update Failed', 
-        description: 'Failed to update profile. Please try again.', 
-        variant: 'destructive' 
+      toast({
+        title: 'Update Failed',
+        description: 'Failed to update profile. Please try again.',
+        variant: 'destructive'
       });
     } finally {
       setIsSavingProfile(false);
@@ -672,11 +675,11 @@ export function Header() {
     try {
       const userDocRef = doc(db, "users", appUser!.uid);
       const newEmail = generateEmail(profileData.fullName || '', newPhone, appUser!.role);
-      
+
       // Note: Skip Firebase Auth email update to avoid verification requirements
       // The app uses Firestore data primarily, so updating Firestore is sufficient
       console.log('ℹ️ Skipping Firebase Auth email update for phone change to avoid verification requirement');
-      
+
       await updateDoc(userDocRef, {
         phone: newPhone,
         phoneNumber: newPhone,
@@ -687,35 +690,35 @@ export function Header() {
         profileImage: profileData.profileImage,
         updatedAt: new Date().toISOString()
       });
-      
+
       // Update appUser state
-      setAppUser(prev => prev ? { 
-        ...prev, 
-        ...profileData, 
-        phone: newPhone, 
-        email: newEmail 
+      setAppUser(prev => prev ? {
+        ...prev,
+        ...profileData,
+        phone: newPhone,
+        email: newEmail
       } as AppUser : null);
-      
+
       // Update profileData and original values
       setProfileData(prev => ({ ...prev, phone: newPhone, email: newEmail }));
       setOriginalPhone(newPhone);
       setOriginalName(profileData.fullName);
-      
-      toast({ 
-        title: 'Profile Updated Successfully!', 
-        description: `Your email has been updated to ${newEmail}. All your bookings and data have been preserved.` 
+
+      toast({
+        title: 'Profile Updated Successfully!',
+        description: `Your email has been updated to ${newEmail}. All your bookings and data have been preserved.`
       });
-      
+
       // Close all dialogs
       setIsProfileOpen(false);
       setNewPhone('');
       setIsVerifying(false);
     } catch (error) {
       console.error('Phone change error:', error);
-      toast({ 
-        title: 'Update Failed', 
-        description: 'Could not update phone number. Please try again.', 
-        variant: 'destructive' 
+      toast({
+        title: 'Update Failed',
+        description: 'Could not update phone number. Please try again.',
+        variant: 'destructive'
       });
       setIsVerifying(false);
     }
@@ -724,14 +727,14 @@ export function Header() {
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-        toast({ title: 'Uploading image...', duration: 3000 });
-        const imageUrl = await uploadImage(file);
-        if (imageUrl) {
-            setProfileData(prev => ({ ...prev, profileImage: imageUrl }));
-            toast({ title: 'Image uploaded successfully!' });
-        } else {
-            toast({ title: 'Image upload failed', variant: 'destructive' });
-        }
+      toast({ title: 'Uploading image...', duration: 3000 });
+      const imageUrl = await uploadImage(file);
+      if (imageUrl) {
+        setProfileData(prev => ({ ...prev, profileImage: imageUrl }));
+        toast({ title: 'Image uploaded successfully!' });
+      } else {
+        toast({ title: 'Image upload failed', variant: 'destructive' });
+      }
     }
   };
 
@@ -743,10 +746,10 @@ export function Header() {
       agentPresenceChannel.current = ablyClient.channels.get('agents:live');
       const enterPresence = async () => {
         try {
-          await agentPresenceChannel.current?.presence.enter({ 
-            id: appUser.uid, 
-            fullName: appUser.fullName, 
-            email: appUser.email 
+          await agentPresenceChannel.current?.presence.enter({
+            id: appUser.uid,
+            fullName: appUser.fullName,
+            email: appUser.email
           });
         } catch (e) {
           console.error('Error entering Ably presence:', e);
@@ -756,29 +759,38 @@ export function Header() {
 
       // --- Start Location Tracking ---
       if ('geolocation' in navigator) {
+        let lastToastTime = 0;
         locationWatcherId.current = navigator.geolocation.watchPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
             const agentGpsChannel = ablyClient.channels.get(`agent:${appUser.uid}:gps`);
-            
+
             // Publish to Ably for real-time map updates
             agentGpsChannel.publish('location', { lat: latitude, lng: longitude });
 
-            // Also update Firestore for initial location fetching
+            // Also update Firestore
             const userDocRef = doc(db, "users", appUser.uid);
             await updateDoc(userDocRef, {
-              location: { lat: latitude, lng: longitude }
+              location: { lat: latitude, lng: longitude },
+              lastActive: new Date().toISOString()
             });
           },
           (error) => {
-            if(error.code === 1) { // PERMISSION_DENIED
-              toast({ title: 'Location Access Denied', description: 'Please enable location services to be visible to students.', variant: 'destructive'});
+            const now = Date.now();
+            // Only toast once every 5 minutes to avoid spamming
+            if (error.code === 1 && now - lastToastTime > 300000) {
+              lastToastTime = now;
+              toast({
+                title: 'Location visibility limited',
+                description: 'Enable location to help students find you on the map.',
+                variant: 'default'
+              });
             }
           },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+          { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
         );
       }
-      
+
     }
 
     // --- Cleanup function ---
@@ -810,7 +822,7 @@ export function Header() {
       setAuthAction(false);
     }
   };
-  
+
   // Role helpers
   const isAgent = appUser?.role === 'agent';
   const isAdmin = appUser?.role === 'admin';
@@ -831,33 +843,29 @@ export function Header() {
     { value: 'xlarge', label: 'Extra large' },
   ];
 
-  const roleNavLinks: { label: string; href: string }[] = [];
+  /* Base links are always visible */
+  const navLinks = baseNavLinks;
 
-  if (isStudent) {
-    roleNavLinks.push(
-      { label: 'My Bookings', href: '/my-bookings' },
-      { label: 'Payments', href: '/payments' },
-    );
-  }
+  /* Manageable links (consolidated into a dropdown for cleaner UI) */
+  const manageLinks: { label: string; href: string; icon?: React.ReactNode }[] = [];
   if (isAgent) {
-    roleNavLinks.push(
-      { label: 'Agent Dashboard', href: '/agent/dashboard' },
-      { label: 'My Listings', href: '/agent/listings' },
-      { label: 'Create Manager', href: '/agent/create-manager' }
+    manageLinks.push(
+      { label: 'Dashboard', href: '/agent/dashboard', icon: <LayoutDashboard className="mr-2 h-4 w-4" /> },
+      { label: 'My Listings', href: '/agent/listings', icon: <ListPlus className="mr-2 h-4 w-4" /> },
+      { label: 'Create Manager', href: '/agent/create-manager', icon: <UserPlus className="mr-2 h-4 w-4" /> }
     );
   }
   if (isAdmin) {
-    roleNavLinks.push(
-      { label: 'Admin Console', href: '/admin/dashboard' },
-      { label: 'Admin Listings', href: '/admin/listings' },
-      { label: 'Create Manager', href: '/admin/create-manager' },
+    manageLinks.push(
+      { label: 'Admin Console', href: '/admin/dashboard', icon: <LayoutDashboard className="mr-2 h-4 w-4" /> },
+      { label: 'All Listings', href: '/admin/listings', icon: <ListPlus className="mr-2 h-4 w-4" /> },
+      { label: 'Hostel Requests', href: '/admin/hostel-requests', icon: <FileText className="mr-2 h-4 w-4" /> },
+      { label: 'Payment Accounts', href: '/admin/bank-accounts', icon: <Banknote className="mr-2 h-4 w-4" /> }
     );
   }
   if (isManager) {
-    roleNavLinks.push({ label: 'Manager Console', href: '/manager/dashboard' });
+    manageLinks.push({ label: 'Manager Console', href: '/manager/dashboard', icon: <Building className="mr-2 h-4 w-4" /> });
   }
-
-  const navLinks = [...baseNavLinks, ...roleNavLinks];
 
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
     { value: 'system', label: 'System', icon: <MonitorCog className="h-4 w-4" /> },
@@ -874,31 +882,31 @@ export function Header() {
     );
 
   return (
-    <header className="sticky top-0 z-50">
-      <div className="border-b border-border/60 bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-50 transition-all duration-300">
+      <div className="border-b border-border/40 transition-all bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-20 items-center justify-between gap-4 px-3 sm:h-24 sm:px-6">
           <div className="flex flex-1 items-center gap-3">
             <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open navigation">
-                  <Menu className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="md:hidden transition-transform active:scale-95" aria-label="Open navigation">
+                  <Menu className="h-6 w-6" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] sm:w-[320px]">
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2 text-lg">
-                    <div className="relative h-12 w-[200px]">
+                    <div className="relative h-14 w-[180px]">
                       <Image
                         src="/HostelHQ Web App Logo.png"
                         alt="HostelHQ"
                         fill
-                        sizes="200px"
+                        sizes="180px"
                         className="object-contain object-left"
                         priority
                       />
                     </div>
                   </SheetTitle>
-                  <SheetDescription>Curated hostels, transparent pricing, and trusted support for students.</SheetDescription>
+                  <SheetDescription className="text-left mt-2">Find your next home with confidence.</SheetDescription>
                 </SheetHeader>
                 <nav className="mt-6 flex flex-col gap-2">
                   {baseNavLinks.map((link) => (
@@ -993,8 +1001,8 @@ export function Header() {
                   </div>
                   <div className="flex justify-between mt-1">
                     <span className="text-[10px] text-muted-foreground">Smaller</span>
-                    <button 
-                      onClick={() => setUiScale(100)} 
+                    <button
+                      onClick={() => setUiScale(100)}
                       className="text-[10px] text-primary hover:underline"
                     >
                       Reset
@@ -1049,12 +1057,32 @@ export function Header() {
               </div>
             </Link>
           </div>
-          <nav className="hidden flex-1 items-center justify-center gap-2 md:flex">
+          <nav className="hidden flex-1 items-center justify-center gap-6 md:flex">
             {navLinks.map((link) => (
               <Link key={`${link.href}-${link.label}`} href={link.href} className={navLinkClasses(link.href)}>
                 {link.label}
               </Link>
             ))}
+
+            {(isAgent || isAdmin || isManager) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 flex items-center gap-1.5 focus:outline-none focus:ring-0">
+                    Manage <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-56 rounded-2xl p-2 border-border/40 shadow-2xl backdrop-blur-xl">
+                  {manageLinks.map((link) => (
+                    <DropdownMenuItem key={link.href} asChild className="rounded-xl cursor-pointer">
+                      <Link href={link.href} className="flex items-center">
+                        {link.icon}
+                        <span>{link.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </nav>
           <div className="flex flex-1 items-center justify-end gap-3">
             {!loading && appUser && (
@@ -1088,7 +1116,7 @@ export function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 max-h-[calc(100vh-4rem)] overflow-y-auto">
-                    {appUser ? (
+                {appUser ? (
                   <>
                     <DropdownMenuLabel>
                       <div className="font-semibold">{appUser.fullName}</div>
@@ -1247,8 +1275,8 @@ export function Header() {
                       </div>
                       <div className="flex justify-between mt-1">
                         <span className="text-[10px] text-muted-foreground">Smaller</span>
-                        <button 
-                          onClick={() => setUiScale(100)} 
+                        <button
+                          onClick={() => setUiScale(100)}
                           className="text-[10px] text-primary hover:underline"
                         >
                           Reset
@@ -1317,8 +1345,8 @@ export function Header() {
                       </div>
                       <div className="flex justify-between mt-1">
                         <span className="text-[10px] text-muted-foreground">Smaller</span>
-                        <button 
-                          onClick={() => setUiScale(100)} 
+                        <button
+                          onClick={() => setUiScale(100)}
                           className="text-[10px] text-primary hover:underline"
                         >
                           Reset
@@ -1333,82 +1361,119 @@ export function Header() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation - 95% of users */}
+      <div className="fixed bottom-0 left-0 z-50 w-full h-16 md:hidden">
+        <div className="grid h-full max-w-lg grid-cols-4 mx-auto mobile-nav-blur border-t px-2">
+          <Link href="/" className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname === '/' ? 'text-primary' : 'text-muted-foreground')}>
+            <HomeIcon className={cn("w-6 h-6 mb-1 transition-transform group-active:scale-90", pathname === '/' && "animate-pulse")} />
+            <span className="text-[10px] font-medium">Home</span>
+          </Link>
+          <Link href="/#all-hostels" className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname?.includes('hostels') ? 'text-primary' : 'text-muted-foreground')}>
+            <Compass className="w-6 h-6 mb-1 group-active:scale-90" />
+            <span className="text-[10px] font-medium">Explore</span>
+          </Link>
+          <Link href={isStudent ? "/my-bookings" : "/login"} className={cn("inline-flex flex-col items-center justify-center px-5 group", pathname === '/my-bookings' ? 'text-primary' : 'text-muted-foreground')}>
+            <Briefcase className="w-6 h-6 mb-1 group-active:scale-90" />
+            <span className="text-[10px] font-medium">Bookings</span>
+          </Link>
+          <button
+            onClick={() => {
+              const profileTrigger = document.querySelector('[data-profile-trigger]');
+              if (profileTrigger) (profileTrigger as HTMLElement).click();
+              else setIsNavOpen(true);
+            }}
+            className="inline-flex flex-col items-center justify-center px-5 group text-muted-foreground"
+          >
+            <div className="relative mb-1">
+              <Avatar className="h-6 w-6 border border-primary/20">
+                {appUser?.profileImage ? (
+                  <AvatarImage src={appUser.profileImage} />
+                ) : (
+                  <AvatarFallback className="text-[8px]">{appUser?.fullName?.charAt(0) || 'U'}</AvatarFallback>
+                )}
+              </Avatar>
+            </div>
+            <span className="text-[10px] font-medium">Profile</span>
+          </button>
+        </div>
+      </div>
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
         <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-                <DialogTitle>Edit Profile</DialogTitle>
-                <DialogDescription>Manage your profile information and picture.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-2">
-                <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16">
-                        {profileData.profileImage ? (
-                            <AvatarImage src={profileData.profileImage} alt="Profile" />
-                        ) : (
-                            <AvatarFallback>
-                                {profileData.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
-                            </AvatarFallback>
-                        )}
-                    </Avatar>
-                    <div>
-                        <Label htmlFor="photo" className="text-sm">Profile Photo</Label>
-                        <div className="mt-1 flex items-center gap-2">
-                            <Input id="photo" type="file" accept="image/*" onChange={handleImageUpload} className="h-9" />
-                            <Button variant="outline" size="sm" onClick={() => setProfileData(p => ({...p, profileImage: ''}))}><X className="h-3 w-3 mr-1"/>Remove</Button>
-                        </div>
-                    </div>
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>Manage your profile information and picture.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-16 w-16">
+                {profileData.profileImage ? (
+                  <AvatarImage src={profileData.profileImage} alt="Profile" />
+                ) : (
+                  <AvatarFallback>
+                    {profileData.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <div>
+                <Label htmlFor="photo" className="text-sm">Profile Photo</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input id="photo" type="file" accept="image/*" onChange={handleImageUpload} className="h-9" />
+                  <Button variant="outline" size="sm" onClick={() => setProfileData(p => ({ ...p, profileImage: '' }))}><X className="h-3 w-3 mr-1" />Remove</Button>
                 </div>
-                <div className="grid gap-2">
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <div className="relative">
-                        <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input id="fullName" className="pl-9" value={profileData.fullName} onChange={(e) => setProfileData(p => ({...p, fullName: e.target.value}))} />
-                    </div>
-                </div>
-                <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input id="email" className="pl-9" value={profileData.email} disabled />
-                    </div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                    <div className="grid gap-2">
-                        <Label htmlFor="phone">Phone</Label>
-                        <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                id="phone" 
-                                className="pl-9 bg-muted/50 text-foreground placeholder:text-muted-foreground" 
-                                value={profileData.phone} 
-                                readOnly 
-                                placeholder="Phone number (contact admin to change)"
-                            />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            📞 To change your phone number, please contact support for security verification.
-                        </p>
-                    </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="address">Address</Label>
-                        <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input id="address" className="pl-9" value={profileData.address} onChange={(e) => setProfileData(p => ({...p, address: e.target.value}))} />
-                        </div>
-                    </div>
-                </div>
-                <div className="grid gap-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <Textarea id="bio" rows={3} value={profileData.bio} onChange={(e) => setProfileData(p => ({...p, bio: e.target.value}))} />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" onClick={() => setIsProfileOpen(false)}><X className="h-4 w-4 mr-2"/>Cancel</Button>
-                    <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
-                        {isSavingProfile ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <Save className="h-4 w-4 mr-2"/>}
-                        Save Changes
-                    </Button>
-                </div>
+              </div>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <div className="relative">
+                <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="fullName" className="pl-9" value={profileData.fullName} onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input id="email" className="pl-9" value={profileData.email} disabled />
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="phone">Phone</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    className="pl-9 bg-muted/50 text-foreground placeholder:text-muted-foreground"
+                    value={profileData.phone}
+                    readOnly
+                    placeholder="Phone number (contact admin to change)"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  📞 To change your phone number, please contact support for security verification.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="address">Address</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input id="address" className="pl-9" value={profileData.address} onChange={(e) => setProfileData(p => ({ ...p, address: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bio">Bio</Label>
+              <Textarea id="bio" rows={3} value={profileData.bio} onChange={(e) => setProfileData(p => ({ ...p, bio: e.target.value }))} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setIsProfileOpen(false)}><X className="h-4 w-4 mr-2" />Cancel</Button>
+              <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
+                {isSavingProfile ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Changes
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1430,9 +1495,9 @@ export function Header() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                type="password" 
+              <Input
+                id="password"
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (passwordDialogType === 'phone' ? handlePasswordVerify() : handlePasswordVerifyForProfile())}
@@ -1469,9 +1534,9 @@ export function Header() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="otp">Verification Code</Label>
-              <Input 
-                id="otp" 
-                type="text" 
+              <Input
+                id="otp"
+                type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 onKeyDown={(e) => e.key === 'Enter' && handleOtpVerify()}

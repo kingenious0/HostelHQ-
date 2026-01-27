@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MapboxLocationPicker from '@/components/mapbox-location-picker';
+import { resizeImage } from '@/lib/image-utils';
 import { notifyAdminsOfNewHostelSubmission } from '@/app/actions/sms';
 
 const hostelAmenitiesList = [
@@ -89,6 +90,7 @@ export default function AgentUploadPage() {
 
     // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
     const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -242,19 +244,12 @@ export default function AgentUploadPage() {
             const imageUrls = await Promise.all(photos.map(uploadImage));
             toast({ title: 'Images Uploaded!', description: 'Your photos have been compressed and saved.' });
 
-            // 2. Enhance description with AI
+            // 2. Enhance description with AI (only if it's very short/placeholder)
             let finalDescription = description;
             const roomFeaturesString = roomTypes.map(rt => `${rt.name} at GHS ${rt.price}`).join('; ');
-            if (photos.length > 0 && description) {
+            if (photos.length > 0 && description && description.length < 150) {
                 try {
-                    const photoDataUris = await Promise.all(photos.map(file => {
-                        return new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(file);
-                        });
-                    }));
+                    const photoDataUris = await Promise.all(photos.map(file => resizeImage(file, 1024, 0.7)));
 
                     const input = {
                         photosDataUris: photoDataUris,
@@ -729,8 +724,8 @@ export default function AgentUploadPage() {
                                                                         type="button"
                                                                         onClick={() => toggleRoomNumberForType(index, num, !selected)}
                                                                         className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${selected
-                                                                                ? 'border-primary bg-primary text-primary-foreground'
-                                                                                : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
+                                                                            ? 'border-primary bg-primary text-primary-foreground'
+                                                                            : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
                                                                             }`}
                                                                     >
                                                                         {num}
@@ -856,9 +851,55 @@ export default function AgentUploadPage() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="description">Main Hostel Description</Label>
-                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students." rows={6} />
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Sparkles className="h-3 w-3" /> An AI will enhance this description upon submission to make it more appealing.</p>
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="description">Main Hostel Description</Label>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+                                                onClick={async () => {
+                                                    if (!description.trim()) {
+                                                        toast({ title: "Empty Description", description: "Please write something first for the AI to enhance.", variant: "destructive" });
+                                                        return;
+                                                    }
+                                                    setIsEnhancing(true);
+                                                    try {
+                                                        const roomFeaturesString = roomTypes.map(rt => `${rt.name} at GHS ${rt.price}`).join('; ');
+                                                        const photoDataUris = await Promise.all(photos.map(file => resizeImage(file, 1024, 0.7)));
+
+                                                        const result = await enhanceHostelDescription({
+                                                            photosDataUris: photoDataUris,
+                                                            gpsLocation,
+                                                            nearbyLandmarks,
+                                                            amenities: selectedAmenities.join(', '),
+                                                            roomFeatures: roomFeaturesString,
+                                                            currentDescription: description,
+                                                        });
+                                                        setDescription(result.enhancedDescription);
+                                                        toast({ title: "Magic Complete!", description: "Your description has been professionally enhanced." });
+                                                    } catch (error) {
+                                                        console.error("AI Enhancement failed:", error);
+                                                        toast({
+                                                            title: "Enhancement Failed",
+                                                            description: "AI magic is currently resting. Please check your API configuration or try again later.",
+                                                            variant: 'destructive'
+                                                        });
+                                                    } finally {
+                                                        setIsEnhancing(false);
+                                                    }
+                                                }}
+                                                disabled={isEnhancing || photos.length === 0}
+                                            >
+                                                {isEnhancing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                                                Magic Enhance
+                                            </Button>
+                                        </div>
+                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the hostel, its features, and what makes it a great place for students." rows={6} />
+                                        <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                            <Lightbulb className="h-3 w-3 text-primary" />
+                                            {photos.length === 0 ? "Upload photos first to use AI Magic Enhance." : "AI uses your photos and details to write a professional description."}
+                                        </p>
                                     </div>
                                 </div>
                             )}

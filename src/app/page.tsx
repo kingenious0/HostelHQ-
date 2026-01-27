@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Hero } from "@/components/hero";
 
 export const dynamic = "force-dynamic";
 
@@ -58,81 +59,28 @@ export default async function Home({ searchParams }: HomeProps) {
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
       <main className="flex-1 bg-background">
-        {/* Hero Section with glassmorphism overlay */}
-        <section className="relative w-full overflow-hidden bg-slate-900">
-          <div className="absolute inset-0">
-            <video
-  className="absolute inset-0 h-full w-full object-cover brightness-[0.55]"
-  autoPlay
-  loop
-  muted
-  playsInline
->
-  <source src="/videos/building-tour.mp4" type="video/mp4" />
-</video>
-          </div>
+        <Hero />
 
-          <div className="relative container mx-auto flex min-h-[420px] flex-col items-center justify-center px-4 pt-24 pb-20 sm:px-6 lg:px-10">
-            <div className="max-w-3xl rounded-3xl border border-white/15 bg-white/10 px-6 py-7 text-center shadow-[0_18px_45px_rgba(15,23,42,0.55)] backdrop-blur-xl sm:px-10 sm:py-10">
-              <p className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/15 px-4 py-1 text-xs font-medium uppercase tracking-[0.35em] text-slate-50/90">
-                Make off‑campus living easier
-              </p>
-              <h1 className="mt-5 text-3xl font-headline font-extrabold text-slate-50 sm:text-4xl lg:text-5xl">
-                Find verified hostels fast, easy & secure.
-              </h1>
-              <p className="mt-4 text-sm leading-relaxed text-slate-100/85 sm:text-base">
-                Compare real student hostels, check availability, and secure your bed online in a few clicks.
-                HostelHQ keeps payments, agreements and landlord communication all in one safe place.
-              </p>
-              <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:justify-center">
-                <Button asChild size="lg" className="w-full rounded-full bg-primary text-primary-foreground sm:w-auto">
-                  <Link href="#all-hostels">Get started . browse hostels</Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="lg"
-                  className="w-full rounded-full border-white/40 bg-white/10 text-slate-50 hover:bg-white/20 sm:w-auto"
-                >
-                  <Link href="/contact">Talk to a student advisor</Link>
-                </Button>
-              </div>
-              <p className="mt-3 text-xs text-slate-100/70">
-                No extra agent fees. Just transparent prices and support before, during and after movein.
-              </p>
+        <section className="container mx-auto -mt-16 px-4 sm:px-6 lg:px-10 relative z-10">
+          <div className="rounded-[2rem] border border-white/10 bg-white/70 dark:bg-slate-900/70 p-1 shadow-2xl backdrop-blur-2xl">
+            <div className="p-4 sm:p-6">
+              <h2 className="sr-only">Find a hostel</h2>
+              <SearchForm />
             </div>
-          </div>
-        </section>
-
-        <section className="container mx-auto -mt-12 px-4 sm:px-6 lg:px-10">
-          <div className="rounded-3xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.55)] backdrop-blur-xl sm:p-8">
-            <h2 className="sr-only">Find a hostel</h2>
-            <SearchForm />
           </div>
         </section>
 
         <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
             <div>
-              <p className="text-sm text-muted-foreground">
-                {filteredHostels.length} {filteredHostels.length === 1 ? "hostel" : "hostels"} curated for students
+              <p className="text-sm font-bold text-primary uppercase tracking-[0.2em] mb-1">
+                {filteredHostels.length} {filteredHostels.length === 1 ? "hostel" : "hostels"} available
               </p>
-              <h2 className="text-3xl font-headline font-semibold text-foreground">
+              <h2 className="text-3xl font-headline font-bold text-foreground sm:text-4xl">
                 {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery
                   ? "Search results"
-                  : "All verified hostels"}
+                  : "Authentic stays only. No cap"}
               </h2>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
-                Trusted landlords
-              </span>
-              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
-                Digital agreements
-              </span>
-              <span className="rounded-full border border-border px-3 py-1 bg-card/40">
-                Campus transfers
-              </span>
             </div>
           </header>
 
@@ -177,50 +125,53 @@ export default async function Home({ searchParams }: HomeProps) {
           )}
         </section>
 
-        <section className="bg-background border-t border-border/40">
-          <div className="container mx-auto flex flex-wrap items-center justify-center gap-8 px-4 py-12 sm:px-6 lg:px-10">
-            {(brands.length ? brands : [
-              { id: "frog", name: "Frog.wigal", logoUrl: "/brands/frog-wigal.svg" },
-              { id: "hubtel", name: "Hubtel", logoUrl: "/brands/hubtel.svg" },
-              { id: "paystack", name: "Paystack", logoUrl: "/brands/paystack.svg" },
-            ]).map((brand: { id: string; name: string; logoUrl: string }) => (
-              <div key={brand.id} className="flex flex-col items-center gap-3 text-center">
-                <Image
-                  src={brand.logoUrl}
-                  alt={`${brand.name} logo`}
-                  width={160}
-                  height={60}
-                  className="h-12 w-40 object-contain"
-                />
-                <span className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-300">{brand.name}</span>
+        <section className="bg-muted/30 border-y border-border/40 overflow-hidden">
+          <div className="container mx-auto px-4 py-16 text-center">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.3em] mb-10">Our Trusted Partners</p>
+            <div className="flex flex-wrap items-center justify-center gap-10 opacity-60 hover:opacity-100 transition-opacity duration-500">
+              {(brands.length ? brands : [
+                { id: "frog", name: "Frog.wigal", logoUrl: "/brands/frog-wigal.svg" },
+                { id: "hubtel", name: "Hubtel", logoUrl: "/brands/hubtel.svg" },
+                { id: "paystack", name: "Paystack", logoUrl: "/brands/paystack.svg" },
+              ]).map((brand: { id: string; name: string; logoUrl: string }) => (
+                <div key={brand.id} className="flex flex-col items-center gap-2">
+                  <div className="h-10 w-32 relative grayscale">
+                    <Image
+                      src={brand.logoUrl}
+                      alt={`${brand.name} logo`}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="container mx-auto px-4 pb-20 pt-10 sm:px-6 lg:px-10">
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              {
+                title: "24/7 student help",
+                description: "We answer WhatsApp, calls, and email to keep bookings moving quickly.",
+              },
+              {
+                title: "Verified landlords",
+                description: "Every property manager is audited for pricing transparency and safety.",
+              },
+              {
+                title: "Secure payments",
+                description: "We support mobile money, bank transfers, and escrow for peace of mind.",
+              },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">{item.title}</p>
+                <p className="mt-2 text-sm text-slate-600">{item.description}</p>
               </div>
             ))}
           </div>
         </section>
-
-      <section className="container mx-auto px-4 pb-20 pt-10 sm:px-6 lg:px-10">
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            {
-              title: "24/7 student help",
-              description: "We answer WhatsApp, calls, and email to keep bookings moving quickly.",
-            },
-            {
-              title: "Verified landlords",
-              description: "Every property manager is audited for pricing transparency and safety.",
-            },
-            {
-              title: "Secure payments",
-              description: "We support mobile money, bank transfers, and escrow for peace of mind.",
-            },
-          ].map((item) => (
-            <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">{item.title}</p>
-              <p className="mt-2 text-sm text-slate-600">{item.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
       </main>
     </div>
   );

@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MapboxLocationPicker from '@/components/mapbox-location-picker';
+import { resizeImage } from '@/lib/image-utils';
 
 const hostelAmenitiesList = [
     'WiFi',
@@ -84,9 +85,10 @@ export default function AdminUploadPage() {
     const [billsIncluded, setBillsIncluded] = useState<string[]>([]);
     const [billsExcluded, setBillsExcluded] = useState<string[]>([]);
     const [securityAndSafety, setSecurityAndSafety] = useState<string[]>([]);
-    
+
     // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [userRole, setUserRole] = useState<string | null>(null);
@@ -162,7 +164,7 @@ export default function AdminUploadPage() {
     };
 
     const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>, item: string, checked: boolean) => {
-        setter(prev => 
+        setter(prev =>
             checked ? [...prev, item] : prev.filter(i => i !== item)
         );
     };
@@ -193,7 +195,7 @@ export default function AdminUploadPage() {
             toast({ title: 'No Photos', description: 'Please upload at least one photo.', variant: 'destructive' });
             return;
         }
-        
+
         if (roomTypes.some(rt => !rt.name || !rt.price || rt.price <= 0)) {
             toast({ title: 'Invalid Room Types', description: 'Please ensure all room types have a name and a valid price.', variant: 'destructive' });
             return;
@@ -235,20 +237,13 @@ export default function AdminUploadPage() {
             // 1. Upload images to Cloudinary
             const imageUrls = await Promise.all(photos.map(uploadImage));
             toast({ title: 'Images Uploaded!', description: 'Your photos have been compressed and saved.' });
-            
-            // 2. Enhance description with AI
+
+            // 2. Enhance description with AI (only if it's very short/placeholder)
             let finalDescription = description;
             const roomFeaturesString = roomTypes.map(rt => `${rt.name} at GHS ${rt.price}`).join('; ');
-            if (photos.length > 0 && description) {
+            if (photos.length > 0 && description && description.length < 150) {
                 try {
-                    const photoDataUris = await Promise.all(photos.map(file => {
-                        return new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(file);
-                        });
-                    }));
+                    const photoDataUris = await Promise.all(photos.map(file => resizeImage(file, 1024, 0.7)));
 
                     const input = {
                         photosDataUris: photoDataUris,
@@ -274,7 +269,7 @@ export default function AdminUploadPage() {
                     });
                 }
             }
-            
+
             // 3. Create hostel directly in 'hostels' collection (approved by default for admins)
             const batch = writeBatch(db);
             const hostelRef = doc(collection(db, 'hostels'));
@@ -319,7 +314,7 @@ export default function AdminUploadPage() {
                 securityAndSafety: securityAndSafety,
                 gender: gender,
             });
-            
+
             // 4. Save room types and create physical numbered rooms based on roomNumbers or numberOfRooms
             const roomTypeRefs: string[] = [];
 
@@ -340,7 +335,7 @@ export default function AdminUploadPage() {
 
             // For each room type, create physical rooms under hostels/{hostelId}/rooms
             let totalRoomsCreated = 0;
-            
+
             for (let index = 0; index < roomTypes.length; index++) {
                 const room = roomTypes[index];
                 const capacityPerRoom = room.capacity ?? 0;
@@ -388,13 +383,13 @@ export default function AdminUploadPage() {
                     }
                 }
             }
-            
+
             console.log(`[Room Creation] Total rooms to be created: ${totalRoomsCreated}`);
 
             await batch.commit();
 
             toast({ title: 'Hostel Created Successfully!', description: 'The hostel has been published and is now live.' });
-            router.push('/admin/dashboard'); 
+            router.push('/admin/dashboard');
         } catch (error) {
             console.error("Submission error: ", error);
             setIsSubmitting(false);
@@ -419,14 +414,14 @@ export default function AdminUploadPage() {
                 return false;
             }
         }
-        
+
         if (step === 2) {
             // Validate room types
             if (roomTypes.length === 0) {
                 toast({ title: 'Missing Information', description: 'Please add at least one room type.', variant: 'destructive' });
                 return false;
             }
-            
+
             for (const [index, room] of roomTypes.entries()) {
                 if (!room.name) {
                     toast({ title: 'Missing Information', description: `Please select a room type name for Room Type ${index + 1}.`, variant: 'destructive' });
@@ -440,7 +435,7 @@ export default function AdminUploadPage() {
                     toast({ title: 'Missing Information', description: `Please select the number of rooms for Room Type ${index + 1}.`, variant: 'destructive' });
                     return false;
                 }
-                
+
                 // Check if room numbers are selected when numberOfRooms is set
                 const targetCount = room.numberOfRooms ?? 0;
                 const selectedCount = room.roomNumbers?.length ?? 0;
@@ -454,7 +449,7 @@ export default function AdminUploadPage() {
                 }
             }
         }
-        
+
         if (step === 4) {
             // Validate location (photos and location step)
             if (!latitude || !longitude) {
@@ -462,7 +457,7 @@ export default function AdminUploadPage() {
                 return false;
             }
         }
-        
+
         return true;
     };
 
@@ -470,7 +465,7 @@ export default function AdminUploadPage() {
         if (!validateCurrentStep()) {
             return;
         }
-        
+
         if (step < totalSteps) {
             setStep(s => s + 1);
         }
@@ -484,7 +479,7 @@ export default function AdminUploadPage() {
 
     if (loadingAuth) {
         return (
-             <div className="flex flex-col min-h-screen">
+            <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
@@ -498,7 +493,7 @@ export default function AdminUploadPage() {
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                     <Alert variant="destructive" className="max-w-lg">
+                    <Alert variant="destructive" className="max-w-lg">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
@@ -522,9 +517,9 @@ export default function AdminUploadPage() {
                             <CardTitle className="text-2xl font-headline">Create a New Hostel</CardTitle>
                             <CardDescription>{
                                 step === 1 ? 'Hostel Information' :
-                                step === 2 ? 'Room Types & Pricing' :
-                                step === 3 ? 'Facilities & Location' : 
-                                step === 4 ? 'Description & Photos' : 'Submission'
+                                    step === 2 ? 'Room Types & Pricing' :
+                                        step === 3 ? 'Facilities & Location' :
+                                            step === 4 ? 'Description & Photos' : 'Submission'
                             }</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -564,7 +559,7 @@ export default function AdminUploadPage() {
                                     </div>
                                 </div>
                             )}
-                             {step === 2 && (
+                            {step === 2 && (
                                 <div className="space-y-4">
                                     <Label className="text-base font-semibold">Room Types & Pricing</Label>
                                     <p className="text-sm text-muted-foreground">Add all the different types of rooms available in this hostel.</p>
@@ -573,190 +568,190 @@ export default function AdminUploadPage() {
                                         const occupancy = room.occupancy ?? 0;
                                         const hasError = capacity > 0 && occupancy > capacity;
                                         return (
-                                        <div key={index} className="flex flex-col gap-3 p-4 border rounded-lg relative">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor={`room-name-${index}`}>Room Type Name *</Label>
-                                                    <Select 
-                                                        value={room.name} 
-                                                        onValueChange={(value) => handleRoomTypeChange(index, 'name', value)}
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select room type" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="1 IN A ROOM">1 IN A ROOM</SelectItem>
-                                                            <SelectItem value="2 IN A ROOM">2 IN A ROOM</SelectItem>
-                                                            <SelectItem value="3 IN A ROOM">3 IN A ROOM</SelectItem>
-                                                            <SelectItem value="4 IN A ROOM">4 IN A ROOM</SelectItem>
-                                                            <SelectItem value="5 IN A ROOM">5 IN A ROOM</SelectItem>
-                                                            <SelectItem value="6 IN A ROOM">6 IN A ROOM</SelectItem>
-                                                            <SelectItem value="7 IN A ROOM">7 IN A ROOM</SelectItem>
-                                                            <SelectItem value="8 IN A ROOM">8 IN A ROOM</SelectItem>
-                                                            <SelectItem value="9 IN A ROOM">9 IN A ROOM</SelectItem>
-                                                            <SelectItem value="10 IN A ROOM">10 IN A ROOM</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
+                                            <div key={index} className="flex flex-col gap-3 p-4 border rounded-lg relative">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor={`room-name-${index}`}>Room Type Name *</Label>
+                                                        <Select
+                                                            value={room.name}
+                                                            onValueChange={(value) => handleRoomTypeChange(index, 'name', value)}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select room type" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="1 IN A ROOM">1 IN A ROOM</SelectItem>
+                                                                <SelectItem value="2 IN A ROOM">2 IN A ROOM</SelectItem>
+                                                                <SelectItem value="3 IN A ROOM">3 IN A ROOM</SelectItem>
+                                                                <SelectItem value="4 IN A ROOM">4 IN A ROOM</SelectItem>
+                                                                <SelectItem value="5 IN A ROOM">5 IN A ROOM</SelectItem>
+                                                                <SelectItem value="6 IN A ROOM">6 IN A ROOM</SelectItem>
+                                                                <SelectItem value="7 IN A ROOM">7 IN A ROOM</SelectItem>
+                                                                <SelectItem value="8 IN A ROOM">8 IN A ROOM</SelectItem>
+                                                                <SelectItem value="9 IN A ROOM">9 IN A ROOM</SelectItem>
+                                                                <SelectItem value="10 IN A ROOM">10 IN A ROOM</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵) *</Label>
+                                                        <Input
+                                                            id={`room-price-${index}`}
+                                                            type="number"
+                                                            placeholder="3500"
+                                                            value={room.price || ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value;
+                                                                // Allow empty string or valid numbers
+                                                                if (value === '' || !isNaN(Number(value))) {
+                                                                    handleRoomTypeChange(index, 'price', value === '' ? 0 : Number(value));
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor={`room-capacity-${index}`}>Persons (per room)</Label>
+                                                        <Input
+                                                            id={`room-capacity-${index}`}
+                                                            type="number"
+                                                            min="1"
+                                                            placeholder="e.g., 4"
+                                                            value={room.capacity || ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value;
+                                                                if (value === '' || !isNaN(Number(value))) {
+                                                                    handleRoomTypeChange(index, 'capacity', value === '' ? 0 : Number(value));
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor={`room-occupancy-${index}`}>Current Occupancy</Label>
+                                                        <Input
+                                                            id={`room-occupancy-${index}`}
+                                                            type="number"
+                                                            min="0"
+                                                            placeholder="e.g., 2"
+                                                            value={room.occupancy || ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value;
+                                                                if (value === '' || !isNaN(Number(value))) {
+                                                                    handleRoomTypeChange(index, 'occupancy', value === '' ? 0 : Number(value));
+                                                                }
+                                                            }}
+                                                            className={hasError ? 'border-red-500' : ''}
+                                                        />
+                                                        {hasError && (
+                                                            <p className="text-xs text-red-500">Occupancy cannot exceed capacity</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor={`room-number-${index}`}>Number of Rooms *</Label>
+                                                        <Select
+                                                            value={room.numberOfRooms ? String(room.numberOfRooms) : ''}
+                                                            onValueChange={(value) => handleRoomTypeChange(index, 'numberOfRooms', Number(value))}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select number of rooms" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="max-h-60">
+                                                                {Array.from({ length: 200 }, (_, i) => i + 1).map((num) => (
+                                                                    <SelectItem key={num} value={String(num)}>
+                                                                        {num} {num === 1 ? 'room' : 'rooms'}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor={`room-price-${index}`}>Price/Year (GH₵) *</Label>
-                                                    <Input
-                                                        id={`room-price-${index}`}
-                                                        type="number"
-                                                        placeholder="3500"
-                                                        value={room.price || ''}
-                                                        onChange={(e) => {
-                                                            const value = e.target.value;
-                                                            // Allow empty string or valid numbers
-                                                            if (value === '' || !isNaN(Number(value))) {
-                                                                handleRoomTypeChange(index, 'price', value === '' ? 0 : Number(value));
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                                
-                                                <div className="space-y-2">
-                                                    <Label htmlFor={`room-capacity-${index}`}>Persons (per room)</Label>
-                                                    <Input
-                                                        id={`room-capacity-${index}`}
-                                                        type="number"
-                                                        min="1"
-                                                        placeholder="e.g., 4"
-                                                        value={room.capacity || ''}
-                                                        onChange={(e) => {
-                                                            const value = e.target.value;
-                                                            if (value === '' || !isNaN(Number(value))) {
-                                                                handleRoomTypeChange(index, 'capacity', value === '' ? 0 : Number(value));
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor={`room-occupancy-${index}`}>Current Occupancy</Label>
-                                                    <Input
-                                                        id={`room-occupancy-${index}`}
-                                                        type="number"
-                                                        min="0"
-                                                        placeholder="e.g., 2"
-                                                        value={room.occupancy || ''}
-                                                        onChange={(e) => {
-                                                            const value = e.target.value;
-                                                            if (value === '' || !isNaN(Number(value))) {
-                                                                handleRoomTypeChange(index, 'occupancy', value === '' ? 0 : Number(value));
-                                                            }
-                                                        }}
-                                                        className={hasError ? 'border-red-500' : ''}
-                                                    />
-                                                    {hasError && (
-                                                        <p className="text-xs text-red-500">Occupancy cannot exceed capacity</p>
-                                                    )}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor={`room-number-${index}`}>Number of Rooms *</Label>
-                                                    <Select 
-                                                        value={room.numberOfRooms ? String(room.numberOfRooms) : ''} 
-                                                        onValueChange={(value) => handleRoomTypeChange(index, 'numberOfRooms', Number(value))}
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select number of rooms" />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="max-h-60">
-                                                            {Array.from({ length: 200 }, (_, i) => i + 1).map((num) => (
-                                                                <SelectItem key={num} value={String(num)}>
-                                                                    {num} {num === 1 ? 'room' : 'rooms'}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            <div className="mt-3 space-y-2">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <Label>Room Numbers (optional)</Label>
-                                                    <p className="text-[11px] text-muted-foreground">
-                                                        Pick real room numbers, or leave empty and we will auto-generate.
-                                                    </p>
-                                                </div>
-                                                <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
-                                                    <div className="grid grid-cols-6 gap-1 text-xs">
-                                                        {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
-                                                            const selected = (room.roomNumbers || []).includes(num);
-                                                            return (
-                                                                <button
-                                                                    key={num}
-                                                                    type="button"
-                                                                    onClick={() => toggleRoomNumberForType(index, num, !selected)}
-                                                                    className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${
-                                                                        selected
+                                                <div className="mt-3 space-y-2">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <Label>Room Numbers (optional)</Label>
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Pick real room numbers, or leave empty and we will auto-generate.
+                                                        </p>
+                                                    </div>
+                                                    <div className="max-h-32 overflow-y-auto rounded-md border border-dashed border-muted-foreground/30 p-2">
+                                                        <div className="grid grid-cols-6 gap-1 text-xs">
+                                                            {Array.from({ length: 200 }, (_, i) => String(i + 1)).map((num) => {
+                                                                const selected = (room.roomNumbers || []).includes(num);
+                                                                return (
+                                                                    <button
+                                                                        key={num}
+                                                                        type="button"
+                                                                        onClick={() => toggleRoomNumberForType(index, num, !selected)}
+                                                                        className={`inline-flex items-center justify-center rounded border px-1.5 py-1 transition-colors ${selected
                                                                             ? 'border-primary bg-primary text-primary-foreground'
                                                                             : 'border-muted-foreground/30 bg-background text-muted-foreground hover:border-primary/50'
-                                                                    }`}
-                                                                >
-                                                                    {num}
-                                                                </button>
+                                                                            }`}
+                                                                    >
+                                                                        {num}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-4 space-y-2">
+                                                    <Label>Room Amenities</Label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {roomAmenitiesList.map((amenity) => {
+                                                            const currentAmenities = room.roomAmenities || [];
+                                                            const checked = currentAmenities.includes(amenity);
+
+                                                            return (
+                                                                <div key={amenity} className="flex items-center space-x-2">
+                                                                    <Checkbox
+                                                                        id={`room-${index}-amenity-${amenity}`}
+                                                                        checked={checked}
+                                                                        onCheckedChange={(isChecked) => {
+                                                                            const newRoomTypes = [...roomTypes];
+                                                                            const rt = { ...(newRoomTypes[index] as RoomType) };
+                                                                            const next = new Set(rt.roomAmenities || []);
+
+                                                                            if (isChecked) {
+                                                                                next.add(amenity);
+                                                                            } else {
+                                                                                next.delete(amenity);
+                                                                            }
+
+                                                                            rt.roomAmenities = Array.from(next);
+                                                                            newRoomTypes[index] = rt;
+                                                                            setRoomTypes(newRoomTypes);
+                                                                        }}
+                                                                    />
+                                                                    <label
+                                                                        htmlFor={`room-${index}-amenity-${amenity}`}
+                                                                        className="text-xs sm:text-sm"
+                                                                    >
+                                                                        {amenity}
+                                                                    </label>
+                                                                </div>
                                                             );
                                                         })}
                                                     </div>
                                                 </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="absolute top-2 right-2 h-7 w-7 text-muted-foreground"
+                                                    onClick={() => removeRoomType(index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </div>
-                                            <div className="mt-4 space-y-2">
-                                                <Label>Room Amenities</Label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {roomAmenitiesList.map((amenity) => {
-                                                        const currentAmenities = room.roomAmenities || [];
-                                                        const checked = currentAmenities.includes(amenity);
-
-                                                        return (
-                                                            <div key={amenity} className="flex items-center space-x-2">
-                                                                <Checkbox
-                                                                    id={`room-${index}-amenity-${amenity}`}
-                                                                    checked={checked}
-                                                                    onCheckedChange={(isChecked) => {
-                                                                        const newRoomTypes = [...roomTypes];
-                                                                        const rt = { ...(newRoomTypes[index] as RoomType) };
-                                                                        const next = new Set(rt.roomAmenities || []);
-
-                                                                        if (isChecked) {
-                                                                            next.add(amenity);
-                                                                        } else {
-                                                                            next.delete(amenity);
-                                                                        }
-
-                                                                        rt.roomAmenities = Array.from(next);
-                                                                        newRoomTypes[index] = rt;
-                                                                        setRoomTypes(newRoomTypes);
-                                                                    }}
-                                                                />
-                                                                <label
-                                                                    htmlFor={`room-${index}-amenity-${amenity}`}
-                                                                    className="text-xs sm:text-sm"
-                                                                >
-                                                                    {amenity}
-                                                                </label>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="absolute top-2 right-2 h-7 w-7 text-muted-foreground"
-                                                onClick={() => removeRoomType(index)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    )})}
+                                        )
+                                    })}
                                     <Button variant="outline" onClick={addRoomType} className="w-full">
                                         <PlusCircle className="mr-2 h-4 w-4" />
                                         Add Another Room Type
                                     </Button>
                                 </div>
                             )}
-                             {step === 3 && (
+                            {step === 3 && (
                                 <div className="space-y-6">
-                                     <div>
+                                    <div>
                                         <Label className="text-base font-semibold">Amenities & Services</Label>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
                                             {hostelAmenitiesList.map(item => (
@@ -768,7 +763,7 @@ export default function AdminUploadPage() {
                                         </div>
                                     </div>
                                     <div>
-                                        <Label className="text-base font-semibold flex items-center gap-2"><FileText className="h-4 w-4"/>Student Bills</Label>
+                                        <Label className="text-base font-semibold flex items-center gap-2"><FileText className="h-4 w-4" />Student Bills</Label>
                                         <div className="p-3 border rounded-md mt-2 space-y-4">
                                             <p className="text-sm font-medium">Included:</p>
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -781,7 +776,7 @@ export default function AdminUploadPage() {
                                             </div>
                                             <p className="text-sm font-medium">Excluded:</p>
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                                 {billsExcludedList.map(item => (
+                                                {billsExcludedList.map(item => (
                                                     <div key={item} className="flex items-center space-x-2">
                                                         <Checkbox id={`bills-exc-${item}`} checked={billsExcluded.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setBillsExcluded, item, !!checked)} />
                                                         <label htmlFor={`bills-exc-${item}`} className="text-sm">{item}</label>
@@ -791,9 +786,9 @@ export default function AdminUploadPage() {
                                         </div>
                                     </div>
                                     <div>
-                                        <Label className="text-base font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4"/>Security & Safety</Label>
+                                        <Label className="text-base font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Security & Safety</Label>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-                                             {securitySafetyList.map(item => (
+                                            {securitySafetyList.map(item => (
                                                 <div key={item} className="flex items-center space-x-2">
                                                     <Checkbox id={`sec-${item}`} checked={securityAndSafety.includes(item)} onCheckedChange={(checked) => handleCheckboxChange(setSecurityAndSafety, item, !!checked)} />
                                                     <label htmlFor={`sec-${item}`} className="text-sm">{item}</label>
@@ -805,9 +800,9 @@ export default function AdminUploadPage() {
                             )}
                             {step === 4 && (
                                 <div className="space-y-6">
-                                     <div>
+                                    <div>
                                         <Label htmlFor="photos-input">Upload up to 5 Photos</Label>
-                                        <div 
+                                        <div
                                             className="mt-2 border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-accent/10"
                                             onClick={() => document.getElementById('photos-input')?.click()}
                                         >
@@ -820,10 +815,10 @@ export default function AdminUploadPage() {
                                                 <div key={i} className="relative bg-muted aspect-square rounded-md flex items-center justify-center overflow-hidden">
                                                     <Image
                                                         src={preview}
-                                                        alt={`Preview ${i+1}`}
+                                                        alt={`Preview ${i + 1}`}
                                                         fill
                                                         sizes="(max-width: 640px) 100vw, 200px"
-                                                        style={{objectFit: 'cover'}}
+                                                        style={{ objectFit: 'cover' }}
                                                     />
                                                 </div>
                                             ))}
@@ -847,14 +842,60 @@ export default function AdminUploadPage() {
                                             initialAddress={fullAddress}
                                         />
                                     </div>
-                                     <div className="space-y-2">
-                                        <Label htmlFor="description">Main Hostel Description</Label>
-                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the room, its features, and what makes it a great place for students." rows={6} />
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Sparkles className="h-3 w-3" /> An AI will enhance this description upon submission to make it more appealing.</p>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="description">Main Hostel Description</Label>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+                                                onClick={async () => {
+                                                    if (!description.trim()) {
+                                                        toast({ title: "Empty Description", description: "Please write something first for the AI to enhance.", variant: "destructive" });
+                                                        return;
+                                                    }
+                                                    setIsEnhancing(true);
+                                                    try {
+                                                        const roomFeaturesString = roomTypes.map(rt => `${rt.name} at GHS ${rt.price}`).join('; ');
+                                                        const photoDataUris = await Promise.all(photos.map(file => resizeImage(file, 1024, 0.7)));
+
+                                                        const result = await enhanceHostelDescription({
+                                                            photosDataUris: photoDataUris,
+                                                            gpsLocation,
+                                                            nearbyLandmarks,
+                                                            amenities: selectedAmenities.join(', '),
+                                                            roomFeatures: roomFeaturesString,
+                                                            currentDescription: description,
+                                                        });
+                                                        setDescription(result.enhancedDescription);
+                                                        toast({ title: "Magic Complete!", description: "Your description has been professionally enhanced." });
+                                                    } catch (error) {
+                                                        console.error("AI Enhancement failed:", error);
+                                                        toast({
+                                                            title: "Enhancement Failed",
+                                                            description: "AI magic is currently resting. Please check your API configuration or try again later.",
+                                                            variant: 'destructive'
+                                                        });
+                                                    } finally {
+                                                        setIsEnhancing(false);
+                                                    }
+                                                }}
+                                                disabled={isEnhancing || photos.length === 0}
+                                            >
+                                                {isEnhancing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                                                Magic Enhance
+                                            </Button>
+                                        </div>
+                                        <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the hostel, its features, and what makes it a great place for students." rows={6} />
+                                        <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                            <Lightbulb className="h-3 w-3 text-primary" />
+                                            {photos.length === 0 ? "Upload photos first to use AI Magic Enhance." : "AI uses your photos and details to write a professional description."}
+                                        </p>
                                     </div>
                                 </div>
                             )}
-                             {step === 5 && (
+                            {step === 5 && (
                                 <div className="space-y-4 text-center">
                                     <h3 className="text-xl font-semibold">Final Check</h3>
                                     <p className="text-muted-foreground">You are about to publish <span className="font-bold">{hostelName}</span>. This hostel will be live immediately. Please confirm all details are correct.</p>
@@ -874,8 +915,8 @@ export default function AdminUploadPage() {
                                 <Button onClick={nextStep} disabled={isSubmitting || !currentUser}>Next</Button>
                             ) : (
                                 <Button onClick={handleSubmit} disabled={isSubmitting || !currentUser}>
-                                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                  {isSubmitting ? 'Publishing...' : 'Publish Hostel'}
+                                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    {isSubmitting ? 'Publishing...' : 'Publish Hostel'}
                                 </Button>
                             )}
                         </CardFooter>

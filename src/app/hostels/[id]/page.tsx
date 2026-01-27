@@ -31,50 +31,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
-  'wifi': <Wifi className="h-5 w-5" />,
-  'parking': <ParkingSquare className="h-5 w-5" />,
-  'kitchen': <Utensils className="h-5 w-5" />,
-  'laundry': <Droplets className="h-5 w-5" />,
-  'ac': <Snowflake className="h-5 w-5" />,
-  'gym': <Dumbbell className="h-5 w-5" />,
-  'study area': <BookOpen className="h-5 w-5" />,
+    'wifi': <Wifi className="h-5 w-5" />,
+    'parking': <ParkingSquare className="h-5 w-5" />,
+    'kitchen': <Utensils className="h-5 w-5" />,
+    'laundry': <Droplets className="h-5 w-5" />,
+    'ac': <Snowflake className="h-5 w-5" />,
+    'gym': <Dumbbell className="h-5 w-5" />,
+    'study area': <BookOpen className="h-5 w-5" />,
 };
 
 const availabilityInfo: Record<Hostel['availability'], { text: string, icon: React.ReactNode, className: string }> = {
-    'Available': { text: 'Rooms Available', icon: <DoorOpen />, className: 'bg-green-100 text-green-800 border-green-200'},
-    'Limited': { text: 'Limited Rooms', icon: <Clock />, className: 'bg-yellow-100 text-yellow-800 border-yellow-200'},
-    'Full': { text: 'Hostel Full', icon: <Lock />, className: 'bg-red-100 text-red-800 border-red-200'},
+    'Available': { text: 'Rooms Available', icon: <DoorOpen />, className: 'bg-green-100 text-green-800 border-green-200' },
+    'Limited': { text: 'Limited Rooms', icon: <Clock />, className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    'Full': { text: 'Hostel Full', icon: <Lock />, className: 'bg-red-100 text-red-800 border-red-200' },
 };
 
 interface AppUser {
-  uid: string;
-  email: string;
-  fullName: string;
-  role: 'student' | 'agent' | 'admin';
-  profileImage?: string;
+    uid: string;
+    email: string;
+    fullName: string;
+    role: 'student' | 'agent' | 'admin';
+    profileImage?: string;
 }
 
 type Visit = {
-  id: string;
-  status: 'pending' | 'accepted' | 'completed' | 'cancelled';
-  studentCompleted?: boolean;
+    id: string;
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    studentCompleted?: boolean;
 }
 
 type ExistingBooking = {
-  id: string;
-  status: string;
-  roomTypeId?: string;
+    id: string;
+    status: string;
+    roomTypeId?: string;
 }
 
 type RoomInventoryItem = {
-  id: string;
-  label: string;
-  type: string;
-  price: number;
-  occupancy: number;
-  capacity: number | null;
-  gender: string;
-  image: string;
+    id: string;
+    label: string;
+    type: string;
+    price: number;
+    occupancy: number;
+    capacity: number | null;
+    gender: string;
+    image: string;
 };
 
 function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUser: AppUser | null }) {
@@ -136,7 +136,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         studentCompleted: doc.data().studentCompleted
                     } as Visit))
                     .find(visit => visit.status === 'completed' && visit.studentCompleted === true);
-                
+
                 // If no completed visit, find any non-cancelled visit
                 const activeOrCompletedVisit = completedVisit || visitSnapshot.docs
                     .map(doc => ({
@@ -145,7 +145,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         studentCompleted: doc.data().studentCompleted
                     } as Visit))
                     .find(visit => visit.status !== 'cancelled');
-                
+
                 setExistingVisit(activeOrCompletedVisit || null);
             } else {
                 setExistingVisit(null);
@@ -252,7 +252,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     const roomInventory = useMemo<RoomInventoryItem[]>(() => {
         const rooms = (hostel as any)?.rooms;
-        
+
         // If we have physical rooms, show them
         if (Array.isArray(rooms) && rooms.length > 0) {
             return rooms.map((room: any, index: number) => {
@@ -260,12 +260,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 const matchingType = hostel.roomTypes?.find(
                     (rt) => String(rt.id ?? '') === String(room.roomTypeId ?? '')
                 );
-                
+
                 const capacity = room.capacity ?? matchingType?.capacity ?? parseCapacityFromName(matchingType?.name ?? room.roomType ?? room.type);
                 const fallbackId = room.id ?? `room-${index}`;
                 const typeName = matchingType?.name ?? room.roomType ?? room.type ?? hostel.roomTypes?.[0]?.name ?? 'Room';
                 const occupancyFromBookings = roomOccupancy[fallbackId] ?? room.currentOccupancy ?? 0;
-                
+
                 return {
                     id: fallbackId,
                     label: room.roomNumber ?? room.number ?? room.name ?? `Room ${index + 1}`,
@@ -289,7 +289,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             const capacity = roomType.capacity ?? parseCapacityFromName(roomType.name);
             const roomTypeId = roomType.id ?? `roomType-${typeIndex}`;
             const confirmedOccupants = roomOccupancy[roomTypeId] ?? roomOccupancy[roomType.name] ?? 0;
-            
+
             return {
                 id: roomTypeId,
                 label: roomType.name,
@@ -348,14 +348,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
 
     const getRoomAvailabilityVariant = (availability: RoomType['availability']) => {
-        switch(availability) {
+        switch (availability) {
             case 'Available': return 'default';
             case 'Limited': return 'secondary';
             case 'Full': return 'destructive';
             default: return 'outline';
         }
     }
-    
+
     const getVisitButton = (room: RoomType) => {
         // If the hostel is marked Full by admin, block all room-level CTAs
         if (hostel.availability === 'Full') {
@@ -375,32 +375,32 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             // Check if this room type matches the secured room
             const isSecuredRoom = existingBooking.roomTypeId === room.id;
             return (
-                <Button 
+                <Button
                     size="sm"
                     disabled
                     className="bg-green-600 hover:bg-green-600 text-white cursor-not-allowed"
                 >
-                    <ShieldCheck className="mr-2 h-4 w-4"/>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
                     {isSecuredRoom ? 'Hostel Secured' : 'Room Secured'}
                 </Button>
             );
         }
 
         if (existingVisit === undefined) {
-             return <Button variant="outline" size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking...</Button>;
+            return <Button variant="outline" size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking...</Button>;
         }
 
         if (existingVisit) {
             // Only show Secure Room if visit is completed AND student has marked it complete
             if (existingVisit.status === 'completed' && existingVisit.studentCompleted === true) {
                 return (
-                    <Button 
+                    <Button
                         size="sm"
                         disabled={room.availability === 'Full'}
                         onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
                         className="bg-accent hover:bg-accent/90 text-accent-foreground"
                     >
-                        <ShieldCheck className="mr-2 h-4 w-4"/>
+                        <ShieldCheck className="mr-2 h-4 w-4" />
                         Secure Room
                     </Button>
                 );
@@ -408,12 +408,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             // If visit exists but not completed, show Track Visit
             if (existingVisit.status !== 'cancelled') {
                 return (
-                    <Button 
+                    <Button
                         variant="outline"
                         size="sm"
                         onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
                     >
-                        <Ticket className="mr-2 h-4 w-4"/>
+                        <Ticket className="mr-2 h-4 w-4" />
                         Track Visit
                     </Button>
                 );
@@ -421,17 +421,45 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         return (
-            <Button 
+            <Button
                 variant="outline"
                 size="sm"
                 disabled={room.availability === 'Full'}
                 onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
+                className="rounded-xl"
             >
                 Book Visit
             </Button>
         );
     }
-    
+
+    // Mobile Sticky Container
+    const renderMobileStickyCTA = () => {
+        return (
+            <div className="fixed bottom-16 left-0 z-40 w-full p-4 md:hidden animate-in fade-in slide-in-from-bottom-5 duration-500">
+                <div className="glass-dark rounded-3xl p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/20">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Starting from</span>
+                        <div className="flex items-baseline gap-1 text-white">
+                            <span className="text-xs font-bold">GH₵</span>
+                            <span className="text-xl font-bold">{(hostel.priceRange?.min || hostel.price || 0).toLocaleString()}</span>
+                        </div>
+                    </div>
+                    {hostel.availability === 'Full' ? (
+                        <Button disabled variant="secondary" className="rounded-2xl px-6">Full</Button>
+                    ) : (
+                        <Button
+                            onClick={() => router.push(`/hostels/${hostel.id}/book`)}
+                            className="rounded-2xl px-8 bg-accent text-accent-foreground font-bold shadow-lg shadow-accent/20"
+                        >
+                            Book Visit
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     const renderPrice = () => {
         const priceStyle = "text-4xl font-bold";
         if (!hostel.priceRange || hostel.priceRange.min === 0) {
@@ -446,7 +474,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             </span>
         );
     };
-    
+
     const getPrimaryCTA = () => {
         // If the hostel is marked Full by admin, block all CTAs
         if (hostel.availability === 'Full') {
@@ -467,29 +495,29 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         if (existingBooking !== undefined && existingBooking !== null) {
             return (
                 <div className="space-y-3 mt-6">
-                    <Button 
-                        size="lg" 
-                        className="w-full h-14 bg-green-600 hover:bg-green-600 text-white cursor-not-allowed" 
+                    <Button
+                        size="lg"
+                        className="w-full h-14 bg-green-600 hover:bg-green-600 text-white cursor-not-allowed"
                         disabled
                     >
-                        <ShieldCheck className="mr-2 h-5 w-5"/>
+                        <ShieldCheck className="mr-2 h-5 w-5" />
                         Hostel Secured
                     </Button>
                     <div className="flex gap-2">
-                        <Button 
-                            variant="outline" 
-                            className="flex-1" 
+                        <Button
+                            variant="outline"
+                            className="flex-1"
                             onClick={() => router.push(`/invoice/${existingBooking.id}`)}
                         >
-                            <FileText className="mr-2 h-4 w-4"/>
+                            <FileText className="mr-2 h-4 w-4" />
                             View Invoice
                         </Button>
-                        <Button 
-                            variant="outline" 
-                            className="flex-1" 
+                        <Button
+                            variant="outline"
+                            className="flex-1"
                             onClick={() => router.push(`/agreement/${existingBooking.id}`)}
                         >
-                            <FileText className="mr-2 h-4 w-4"/>
+                            <FileText className="mr-2 h-4 w-4" />
                             View Agreement
                         </Button>
                     </div>
@@ -498,18 +526,18 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         if (existingVisit === undefined) {
-             return <Button size="lg" className="w-full mt-6 h-14" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Checking Status...</Button>;
+            return <Button size="lg" className="w-full mt-6 h-14" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking Status...</Button>;
         }
 
         if (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') {
             return (
-                 <Button size="lg" className="w-full mt-6 h-14 bg-primary text-primary-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}>
-                    <Ticket className="mr-2 h-5 w-5"/>
+                <Button size="lg" className="w-full mt-6 h-14 bg-primary text-primary-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}>
+                    <Ticket className="mr-2 h-5 w-5" />
                     Track Your Visit
                 </Button>
             );
         }
-        
+
         // After a fully completed visit, guide the student to secure a specific room
         if (existingVisit?.status === 'completed' && existingVisit?.studentCompleted === true) {
             const roomTypes = hostel.roomTypes || [];
@@ -522,7 +550,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
                         onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${roomTypes[0].id}`)}
                     >
-                        <ShieldCheck className="mr-2 h-5 w-5"/>
+                        <ShieldCheck className="mr-2 h-5 w-5" />
                         Secure This Room
                     </Button>
                 );
@@ -536,7 +564,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
                         onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                     >
-                        <ShieldCheck className="mr-2 h-5 w-5"/>
+                        <ShieldCheck className="mr-2 h-5 w-5" />
                         View available rooms to secure your space
                     </Button>
                 );
@@ -549,48 +577,50 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
                     onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
                 >
-                    <ShieldCheck className="mr-2 h-5 w-5"/>
+                    <ShieldCheck className="mr-2 h-5 w-5" />
                     Secure This Hostel
                 </Button>
             );
         }
-        
+
         return (
-             <Button
+            <Button
                 size="lg"
                 className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
                 onClick={() => router.push(`/hostels/${hostel.id}/book`)}
-             >
+            >
                 Book a Visit
-             </Button>
+            </Button>
         );
     };
 
     return (
-        <div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
-            <div className="order-2 lg:order-1">
-                <Carousel className="w-full" autoPlay autoPlayInterval={4500}>
+        <div className="grid lg:grid-cols-[1fr_0.4fr] gap-8 lg:gap-12 relative pb-32 md:pb-0">
+            {renderMobileStickyCTA()}
+            <div className="order-2 lg:order-1 space-y-10">
+                <Carousel className="w-full relative group" autoPlay autoPlayInterval={4500}>
                     <CarouselContent>
-                    {hostel.images.map((img: string, index: number) => (
+                        {hostel.images.map((img: string, index: number) => (
                             <CarouselItem key={index}>
-                                <div className="relative h-64 sm:h-80 lg:h-96 w-full overflow-hidden rounded-2xl">
-                            <Image
-                                src={img}
-                                alt={`${hostel.name} image ${index + 1}`}
-                                fill
-                                className="object-cover"
-                                data-ai-hint="hostel interior"
-                                priority={index === 0}
-                            />
-                        </div>
+                                <div className="relative h-[300px] sm:h-[400px] lg:h-[500px] w-full overflow-hidden rounded-[2.5rem] shadow-2xl">
+                                    <Image
+                                        src={img}
+                                        alt={`${hostel.name} image ${index + 1}`}
+                                        fill
+                                        className="object-cover group-hover:scale-105 transition-transform duration-1000"
+                                        data-ai-hint="hostel interior"
+                                        priority={index === 0}
+                                    />
+                                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
                             </CarouselItem>
-                    ))}
+                        ))}
                     </CarouselContent>
-                    <CarouselPrevious className="left-4 hidden md:flex" />
-                    <CarouselNext className="right-4 hidden md:flex" />
+                    <CarouselPrevious className="left-6 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <CarouselNext className="right-6 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </Carousel>
-                
-                 <div className="mt-8 space-y-6">
+
+                <div className="mt-8 space-y-6">
                     <div>
                         <h3 className="text-xl font-semibold font-headline mb-4">Description</h3>
                         <p className="mt-2 text-foreground/80 leading-relaxed">{hostel.description}</p>
@@ -611,28 +641,28 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
 
                     <Separator />
-                    
+
                     <div className="space-y-4">
-                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><FileText className="h-5 w-5 text-muted-foreground"/>Student Bills</h3>
+                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><FileText className="h-5 w-5 text-muted-foreground" />Student Bills</h3>
                         {hostel.billsIncluded && hostel.billsIncluded.length > 0 && (
                             <div>
                                 <p className="font-medium">Hostel Bills included:</p>
                                 <p className="text-muted-foreground">{hostel.billsIncluded.join(', ')}.</p>
                             </div>
                         )}
-                         {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
+                        {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
                             <div>
                                 <p className="font-medium">Hostel Bills Excludes:</p>
                                 <p className="text-muted-foreground">{hostel.billsExcluded.join(', ')}.</p>
                             </div>
                         )}
                     </div>
-                    
+
                     <Separator />
 
                     <div className="space-y-4">
-                         <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-muted-foreground"/>Security & Safety</h3>
-                         {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
+                        <h3 className="text-xl font-semibold font-headline flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-muted-foreground" />Security & Safety</h3>
+                        {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
                             <ul className="list-disc list-inside text-muted-foreground space-y-1">
                                 {hostel.securityAndSafety.map(item => <li key={item}>{item}</li>)}
                             </ul>
@@ -645,21 +675,21 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {hostel.amenities.map((amenity: string) => (
-                            <div key={amenity} className="flex items-center gap-3">
-                               <div className="p-2 bg-secondary rounded-md">
-                                 {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
-                               </div>
-                               <span className="text-sm font-medium capitalize">{amenity}</span>
-                            </div>
+                                <div key={amenity} className="flex items-center gap-3">
+                                    <div className="p-2 bg-secondary rounded-md">
+                                        {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
+                                    </div>
+                                    <span className="text-sm font-medium capitalize">{amenity}</span>
+                                </div>
                             ))}
                         </div>
                     </div>
 
                     <Separator />
-                    
+
                     <div className="space-y-6">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
+                            <div>
                                 <h3 className="text-xl font-semibold font-headline">What students are saying</h3>
                                 <p className="text-sm text-muted-foreground">Transparent feedback helps you decide faster.</p>
                             </div>
@@ -710,7 +740,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                 <SelectValue placeholder="Rating" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {[5,4,3,2,1].map(value => (
+                                                {[5, 4, 3, 2, 1].map(value => (
                                                     <SelectItem key={value} value={value.toString()}>
                                                         {value} Star{value === 1 ? '' : 's'}
                                                     </SelectItem>
@@ -741,8 +771,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             {hostel.priceRange?.min
                                                 ? `GH₵${hostel.priceRange.min.toLocaleString()}`
                                                 : hostel.price
-                                                ? `GH₵${hostel.price.toLocaleString()}`
-                                                : 'Contact for pricing'}
+                                                    ? `GH₵${hostel.price.toLocaleString()}`
+                                                    : 'Contact for pricing'}
                                         </p>
                                         <div className="mt-2 flex items-center gap-1 text-yellow-400">
                                             {[...Array(5)].map((_, i) => (
@@ -769,251 +799,253 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         </div>
                         <div className="space-y-4">
                             <h4 className="text-lg font-semibold">Latest reviews</h4>
-                        {(hostel.reviews && hostel.reviews.length > 0) ? (
-                            <div className="space-y-6">
+                            {(hostel.reviews && hostel.reviews.length > 0) ? (
+                                <div className="space-y-6">
                                     {hostel.reviews.map((review) => (
                                         <div key={review.id} className="flex gap-4 rounded-xl border border-border/40 bg-background/80 p-4">
-                                         <Avatar>
-                                            {review.userProfileImage ? (
-                                              <AvatarImage src={review.userProfileImage} alt={review.studentName} />
-                                            ) : (
-                                              <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
-                                            )}
-                                        </Avatar>
+                                            <Avatar>
+                                                {review.userProfileImage ? (
+                                                    <AvatarImage src={review.userProfileImage} alt={review.studentName} />
+                                                ) : (
+                                                    <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
+                                                )}
+                                            </Avatar>
                                             <div className="space-y-2">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                <p className="font-semibold">{review.studentName}</p>
+                                                    <p className="font-semibold">{review.studentName}</p>
                                                     <span className="text-xs text-muted-foreground">
                                                         {format(new Date(review.createdAt), 'PP')}
                                                     </span>
-                                            </div>
+                                                </div>
                                                 <div className="flex items-center gap-1">
-                                                {[...Array(5)].map((_, i) => (
+                                                    {[...Array(5)].map((_, i) => (
                                                         <Star
                                                             key={`${review.id}-${i}`}
                                                             className={`h-4 w-4 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/30'}`}
                                                         />
-                                                ))}
-                                            </div>
+                                                    ))}
+                                                </div>
                                                 <p className="text-sm leading-relaxed text-foreground/80">{review.comment}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
+                                    ))}
+                                </div>
+                            ) : (
                                 <p className="text-sm text-muted-foreground">
                                     No reviews yet. Be the first to share your experience staying at {hostel.name}.
                                 </p>
-                        )}
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="flex flex-col order-1 lg:order-2">
-                <Badge 
-                    variant="outline"
-                    className={cn("text-sm sm:text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}
-                >
-                    {currentAvailability.icon} {currentAvailability.text}
-                </Badge>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-headline">{hostel.name}</h1>
-                <div className="flex items-center text-muted-foreground mt-2">
-                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                    <span className="text-sm sm:text-base">{hostel.location}</span>
-                </div>
-                {(hostel.nearbyLandmarks || hostel.distanceToUniversity) && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {hostel.nearbyLandmarks && (
-                            <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
-                                {/aamusted/i.test(hostel.nearbyLandmarks)
-                                    ? 'Near AAMUSTED University'
-                                    : `Nearby: ${hostel.nearbyLandmarks}`}
-                            </Badge>
-                        )}
-                        {hostel.distanceToUniversity && (
-                            <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
-                                Distance: {hostel.distanceToUniversity}
-                            </Badge>
-                        )}
+            <div className="flex flex-col order-1 lg:order-2 lg:sticky lg:top-32 h-fit">
+                <div className="glass-dark dark:glass p-6 sm:p-8 rounded-[2rem] border border-border/40 shadow-xl space-y-6">
+                    <Badge
+                        variant="outline"
+                        className={cn("text-xs font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full w-fit", currentAvailability.className)}
+                    >
+                        {currentAvailability.text}
+                    </Badge>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold font-headline">{hostel.name}</h1>
+                    <div className="flex items-center text-muted-foreground mt-2">
+                        <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                        <span className="text-sm sm:text-base">{hostel.location}</span>
                     </div>
-                )}
-                <div className="mt-4 flex justify-between items-center text-xs sm:text-sm text-muted-foreground">
-                    <span className="uppercase tracking-wide font-semibold">Share</span>
-                    <div className="relative">
+                    {(hostel.nearbyLandmarks || hostel.distanceToUniversity) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {hostel.nearbyLandmarks && (
+                                <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
+                                    {/aamusted/i.test(hostel.nearbyLandmarks)
+                                        ? 'Near AAMUSTED University'
+                                        : `Nearby: ${hostel.nearbyLandmarks}`}
+                                </Badge>
+                            )}
+                            {hostel.distanceToUniversity && (
+                                <Badge variant="outline" className="text-xs sm:text-sm rounded-full border-primary/30 bg-primary/5 text-primary">
+                                    Distance: {hostel.distanceToUniversity}
+                                </Badge>
+                            )}
+                        </div>
+                    )}
+                    <div className="mt-4 flex justify-between items-center text-xs sm:text-sm text-muted-foreground">
+                        <span className="uppercase tracking-wide font-semibold">Share</span>
+                        <div className="relative">
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 rounded-full border-primary/30 text-primary bg-primary/5 hover:bg-primary/10"
+                                onClick={() => setShareMenuOpen((open) => !open)}
+                            >
+                                <Share2 className="h-4 w-4" />
+                            </Button>
+                            {shareMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-40 rounded-md border bg-popover shadow-lg z-20">
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        onClick={() => { setShareMenuOpen(false); handleShare('whatsapp'); }}
+                                    >
+                                        <MessageCircle className="h-3.5 w-3.5" />
+                                        <span>WhatsApp</span>
+                                    </button>
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        onClick={() => { setShareMenuOpen(false); handleShare('twitter'); }}
+                                    >
+                                        <Twitter className="h-3.5 w-3.5" />
+                                        <span>Twitter</span>
+                                    </button>
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        onClick={() => { setShareMenuOpen(false); handleShare('facebook'); }}
+                                    >
+                                        <Facebook className="h-3.5 w-3.5" />
+                                        <span>Facebook</span>
+                                    </button>
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
+                                        onClick={() => { setShareMenuOpen(false); handleShare('copy'); }}
+                                    >
+                                        {shareCopied ? (
+                                            <Check className="h-3.5 w-3.5 text-green-600" />
+                                        ) : (
+                                            <Copy className="h-3.5 w-3.5" />
+                                        )}
+                                        <span>{shareCopied ? 'Link copied' : 'Copy link'}</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center mt-4">
+                        <div className="flex items-center text-yellow-500">
+                            {[...Array(5)].map((_, i) => (
+                                <Star key={i} className={`h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
+                            ))}
+                        </div>
+                        <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({totalReviews} {totalReviews === 1 ? 'review' : 'reviews'})</span>
+                    </div>
+
+                    <div className="mt-6 sm:mt-8 flex items-baseline gap-2">
+                        {renderPrice()}
+                        <span className="text-sm sm:text-base text-muted-foreground">/year</span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                        <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
+                            <Smartphone className="h-4 w-4" />
+                            Mobile Money
+                        </Badge>
+                        <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
+                            <CreditCard className="h-4 w-4" />
+                            Visa & Mastercard
+                        </Badge>
+                    </div>
+
+                    {getPrimaryCTA()}
+
+                    {(hostel.roomTypes?.length ?? 0) > 1 && (
                         <Button
                             variant="outline"
-                            size="icon"
-                            className="h-9 w-9 rounded-full border-primary/30 text-primary bg-primary/5 hover:bg-primary/10"
-                            onClick={() => setShareMenuOpen((open) => !open)}
+                            className="w-full mt-3 border-primary/40 text-primary hover:bg-primary/5"
+                            onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                         >
-                            <Share2 className="h-4 w-4" />
+                            View all room options
                         </Button>
-                        {shareMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-40 rounded-md border bg-popover shadow-lg z-20">
-                                <button
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
-                                    onClick={() => { setShareMenuOpen(false); handleShare('whatsapp'); }}
-                                >
-                                    <MessageCircle className="h-3.5 w-3.5" />
-                                    <span>WhatsApp</span>
-                                </button>
-                                <button
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
-                                    onClick={() => { setShareMenuOpen(false); handleShare('twitter'); }}
-                                >
-                                    <Twitter className="h-3.5 w-3.5" />
-                                    <span>Twitter</span>
-                                </button>
-                                <button
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
-                                    onClick={() => { setShareMenuOpen(false); handleShare('facebook'); }}
-                                >
-                                    <Facebook className="h-3.5 w-3.5" />
-                                    <span>Facebook</span>
-                                </button>
-                                <button
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-accent"
-                                    onClick={() => { setShareMenuOpen(false); handleShare('copy'); }}
-                                >
-                                    {shareCopied ? (
-                                        <Check className="h-3.5 w-3.5 text-green-600" />
-                                    ) : (
-                                        <Copy className="h-3.5 w-3.5" />
-                                    )}
-                                    <span>{shareCopied ? 'Link copied' : 'Copy link'}</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-                <div className="flex items-center mt-4">
-                    <div className="flex items-center text-yellow-500">
-                        {[...Array(5)].map((_, i) => (
-                            <Star key={i} className={`h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
-                        ))}
-                    </div>
-                    <span className="ml-2 sm:ml-3 text-sm sm:text-base lg:text-lg text-muted-foreground">({totalReviews} {totalReviews === 1 ? 'review' : 'reviews'})</span>
-                </div>
-                
-                 <div className="mt-6 sm:mt-8 flex items-baseline gap-2">
-                    {renderPrice()}
-                    <span className="text-sm sm:text-base text-muted-foreground">/year</span>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                    <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
-                        <Smartphone className="h-4 w-4" />
-                        Mobile Money
-                    </Badge>
-                    <Badge variant="outline" className="gap-2 rounded-full border-primary/30 bg-primary/5 text-primary">
-                        <CreditCard className="h-4 w-4" />
-                        Visa & Mastercard
-                    </Badge>
-                </div>
+                    )}
 
-                {getPrimaryCTA()}
-
-                {(hostel.roomTypes?.length ?? 0) > 1 && (
-                    <Button
-                        variant="outline"
-                        className="w-full mt-3 border-primary/40 text-primary hover:bg-primary/5"
-                        onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
-                    >
-                        View all room options
-                    </Button>
-                )}
-
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs sm:text-sm bg-background/70 border border-primary/10 rounded-xl p-3 sm:p-4">
-                    <div className="flex items-start gap-2">
-                        <ShieldCheck className="h-4 w-4 text-primary mt-0.5" />
-                        <div>
-                            <p className="font-semibold text-foreground">Trusted agents</p>
-                            <p className="text-[11px] sm:text-xs text-muted-foreground">Only verified agents and admins can list hostels.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                        <CreditCard className="h-4 w-4 text-primary mt-0.5" />
-                        <div>
-                            <p className="font-semibold text-foreground">Secure payments</p>
-                            <p className="text-[11px] sm:text-xs text-muted-foreground">Pay via trusted mobile money and card providers.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                        <Smartphone className="h-4 w-4 text-primary mt-0.5" />
-                        <div>
-                            <p className="font-semibold text-foreground">Student-first support</p>
-                            <p className="text-[11px] sm:text-xs text-muted-foreground">Track visits and bookings from your HostelHQ account.</p>
-                        </div>
-                    </div>
-                </div>
-
-                {(hostel.roomTypes?.length ?? 0) === 1 && (
-                        <Card className="mt-6 sm:mt-8 shadow-md">
-                        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs sm:text-sm bg-background/70 border border-primary/10 rounded-xl p-3 sm:p-4">
+                        <div className="flex items-start gap-2">
+                            <ShieldCheck className="h-4 w-4 text-primary mt-0.5" />
                             <div>
-                                <CardTitle className="text-lg sm:text-xl">Room Type & Pricing</CardTitle>
-                                <CardDescription className="text-sm">This hostel offers a single room type. Review the details and proceed to book a visit or secure it.</CardDescription>
+                                <p className="font-semibold text-foreground">Trusted agents</p>
+                                <p className="text-[11px] sm:text-xs text-muted-foreground">Only verified agents and admins can list hostels.</p>
                             </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="text-xs sm:text-sm">Room Type</TableHead>
-                                        <TableHead className="text-xs sm:text-sm">Availability</TableHead>
-                                        <TableHead className="text-xs sm:text-sm">Price/Year</TableHead>
-                                        <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {hostel.roomTypes?.map((room) => (
-                                        <TableRow key={room.id}>
-                                            <TableCell>
-                                                <p className="font-medium text-sm sm:text-base">{room.name}</p>
-                                                <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
-                                                    {room.beds && (
-                                                        <span className="flex items-center gap-1">
-                                                            <Bed className="h-3 w-3" /> {room.beds} Beds
-                                                        </span>
-                                                    )}
-                                                    {room.bathrooms && (
-                                                        <span className="flex items-center gap-1">
-                                                            <Bath className="h-3 w-3" /> {room.bathrooms}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant={getRoomAvailabilityVariant(room.availability)}
-                                                    className="text-xs"
-                                                >
-                                                    {hostel.availability === 'Full' ? 'Full' : room.availability}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="font-semibold text-sm sm:text-base">
-                                                GH₵{room.price.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell className="text-right space-y-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="w-full justify-center mb-1"
-                                                    onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
-                                                >
-                                                    View Rooms
-                                                </Button>
-                                                {getVisitButton(room)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                        </Table>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <CreditCard className="h-4 w-4 text-primary mt-0.5" />
+                            <div>
+                                <p className="font-semibold text-foreground">Secure payments</p>
+                                <p className="text-[11px] sm:text-xs text-muted-foreground">Pay via trusted mobile money and card providers.</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <Smartphone className="h-4 w-4 text-primary mt-0.5" />
+                            <div>
+                                <p className="font-semibold text-foreground">Student-first support</p>
+                                <p className="text-[11px] sm:text-xs text-muted-foreground">Track visits and bookings from your HostelHQ account.</p>
+                            </div>
+                        </div>
                     </div>
-                    </CardContent>
-                        </Card>
-                )}
 
+                    {(hostel.roomTypes?.length ?? 0) === 1 && (
+                        <Card className="mt-6 sm:mt-8 shadow-md">
+                            <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div>
+                                    <CardTitle className="text-lg sm:text-xl">Room Type & Pricing</CardTitle>
+                                    <CardDescription className="text-sm">This hostel offers a single room type. Review the details and proceed to book a visit or secure it.</CardDescription>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-xs sm:text-sm">Room Type</TableHead>
+                                                <TableHead className="text-xs sm:text-sm">Availability</TableHead>
+                                                <TableHead className="text-xs sm:text-sm">Price/Year</TableHead>
+                                                <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {hostel.roomTypes?.map((room) => (
+                                                <TableRow key={room.id}>
+                                                    <TableCell>
+                                                        <p className="font-medium text-sm sm:text-base">{room.name}</p>
+                                                        <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground mt-1">
+                                                            {room.beds && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Bed className="h-3 w-3" /> {room.beds} Beds
+                                                                </span>
+                                                            )}
+                                                            {room.bathrooms && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Bath className="h-3 w-3" /> {room.bathrooms}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge
+                                                            variant={getRoomAvailabilityVariant(room.availability)}
+                                                            className="text-xs"
+                                                        >
+                                                            {hostel.availability === 'Full' ? 'Full' : room.availability}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="font-semibold text-sm sm:text-base">
+                                                        GH₵{room.price.toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right space-y-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="w-full justify-center mb-1"
+                                                            onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
+                                                        >
+                                                            View Rooms
+                                                        </Button>
+                                                        {getVisitButton(room)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                </div>
             </div>
         </div>
     );
@@ -1022,7 +1054,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
     const router = useRouter();
     const { toast } = useToast();
-    
+
     const handleLoginRedirect = () => {
         toast({
             title: "Please Log In",
@@ -1031,7 +1063,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
         });
         router.push('/login');
     };
-    
+
     const renderPrice = () => {
         if (!hostel.priceRange || hostel.priceRange.min === 0) {
             return <span className="text-4xl font-bold text-destructive">GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
@@ -1049,22 +1081,22 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
     return (
         <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
             <div>
-                 <Carousel className="w-full" autoPlay autoPlayInterval={4500}>
+                <Carousel className="w-full" autoPlay autoPlayInterval={4500}>
                     <CarouselContent>
-                    {(hostel.images ?? ['/placeholder.jpg']).map((img: string, index: number) => (
+                        {(hostel.images ?? ['/placeholder.jpg']).map((img: string, index: number) => (
                             <CarouselItem key={index}>
                                 <div className="relative h-80 sm:h-96 w-full overflow-hidden rounded-2xl">
-                            <Image
-                                src={img}
-                                alt={`${hostel.name} image ${index + 1}`}
-                                fill
-                                className="object-cover"
-                                data-ai-hint="hostel exterior"
-                                priority={index === 0}
-                            />
-                        </div>
+                                    <Image
+                                        src={img}
+                                        alt={`${hostel.name} image ${index + 1}`}
+                                        fill
+                                        className="object-cover"
+                                        data-ai-hint="hostel exterior"
+                                        priority={index === 0}
+                                    />
+                                </div>
                             </CarouselItem>
-                    ))}
+                        ))}
                     </CarouselContent>
                     <CarouselPrevious className="left-4 hidden md:flex" />
                     <CarouselNext className="right-4 hidden md:flex" />
@@ -1075,15 +1107,15 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                 </div>
             </div>
             <div className="flex flex-col">
-                 <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
-                 <div className="flex items-center text-muted-foreground mt-2">
+                <h1 className="text-4xl font-bold font-headline">{hostel.name}</h1>
+                <div className="flex items-center text-muted-foreground mt-2">
                     <MapPin className="h-5 w-5 mr-2" />
                     <span>{hostel.location}</span>
                 </div>
-                 <div className="flex items-center mt-4">
+                <div className="flex items-center mt-4">
                     <div className="flex items-center text-yellow-500">
                         {[...Array(5)].map((_, i) => (
-                        <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
+                            <Star key={i} className={`h-6 w-6 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                         ))}
                     </div>
                     <span className="ml-3 text-lg text-muted-foreground">({hostel.numberOfReviews} {hostel.numberOfReviews === 1 ? 'review' : 'reviews'})</span>
@@ -1100,7 +1132,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                         ))}
                     </div>
                 </div>
-                
+
                 <div className="mt-8 flex items-baseline gap-2">
                     {renderPrice()}
                     <span className="text-base text-muted-foreground">/year</span>
@@ -1128,7 +1160,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 
                 <Card className="mt-8 bg-muted/30">
                     <CardHeader>
-                        <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground"/> Log in for full details</CardTitle>
+                        <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-muted-foreground" /> Log in for full details</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <p className="text-muted-foreground text-sm">
@@ -1143,47 +1175,34 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
 
 
 export default function HostelDetailPage() {
-  const [hostel, setHostel] = useState<Hostel | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const routeParams = useParams();
-  const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
+    const [hostel, setHostel] = useState<Hostel | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [appUser, setAppUser] = useState<AppUser | null>(null);
+    const [authChecked, setAuthChecked] = useState(false);
+    const routeParams = useParams();
+    const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
 
-  useEffect(() => {
-      const fetchHostelData = async () => {
-          if (id) {
-            const hostelData = await getHostel(id);
-            if (hostelData) {
-                setHostel(hostelData);
-            } else {
-                notFound();
+    useEffect(() => {
+        const fetchHostelData = async () => {
+            if (id) {
+                const hostelData = await getHostel(id);
+                if (hostelData) {
+                    setHostel(hostelData);
+                } else {
+                    notFound();
+                }
             }
-          }
-          setLoading(false);
-      };
-      fetchHostelData();
+            setLoading(false);
+        };
+        fetchHostelData();
 
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (user) {
-            const userDocRef = doc(db, "users", user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                setAppUser({
-                    uid: user.uid,
-                    email: user.email!,
-                    fullName: userData.fullName,
-                    role: userData.role,
-                    profileImage: userData.profileImage, // Fetch profile image
-                });
-            } else {
-                // If user not in 'users', check 'pendingUsers'
-                const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
-                const pendingUserDocSnap = await getDoc(pendingUserDocRef);
-                if (pendingUserDocSnap.exists()) {
-                    const userData = pendingUserDocSnap.data();
-                     setAppUser({
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    setAppUser({
                         uid: user.uid,
                         email: user.email!,
                         fullName: userData.fullName,
@@ -1191,41 +1210,54 @@ export default function HostelDetailPage() {
                         profileImage: userData.profileImage, // Fetch profile image
                     });
                 } else {
-                    setAppUser(null);
+                    // If user not in 'users', check 'pendingUsers'
+                    const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
+                    const pendingUserDocSnap = await getDoc(pendingUserDocRef);
+                    if (pendingUserDocSnap.exists()) {
+                        const userData = pendingUserDocSnap.data();
+                        setAppUser({
+                            uid: user.uid,
+                            email: user.email!,
+                            fullName: userData.fullName,
+                            role: userData.role,
+                            profileImage: userData.profileImage, // Fetch profile image
+                        });
+                    } else {
+                        setAppUser(null);
+                    }
                 }
+            } else {
+                setAppUser(null);
             }
-          } else {
-              setAppUser(null);
-          }
-          setAuthChecked(true);
-      });
-      return () => unsubscribe();
-  }, [id]);
+            setAuthChecked(true);
+        });
+        return () => unsubscribe();
+    }, [id]);
 
 
-  if (loading || !authChecked) {
+    if (loading || !authChecked) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                </main>
+            </div>
+        )
+    }
+
+    if (!hostel) {
+        notFound();
+    }
+
+    const isStudent = appUser?.role === 'student';
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-16 w-16 animate-spin text-primary" />
+            <main className="flex-1 container mx-auto px-4 md:px-6 py-12">
+                {isStudent ? <FullHostelDetails hostel={hostel} currentUser={appUser} /> : <LimitedHostelDetails hostel={hostel} />}
             </main>
         </div>
-    )
-  }
-
-  if (!hostel) {
-    notFound();
-  }
-
-  const isStudent = appUser?.role === 'student';
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-1 container mx-auto px-4 md:px-6 py-12">
-        {isStudent ? <FullHostelDetails hostel={hostel} currentUser={appUser} /> : <LimitedHostelDetails hostel={hostel} />}
-      </main>
-    </div>
-  );
+    );
 }

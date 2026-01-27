@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 body {
-  font-family: 'PT Sans', sans-serif;
+  font-family: 'Outfit', 'Inter', 'PT Sans', sans-serif;
+  letter-spacing: -0.01em;
 }
 
 @layer base {
@@ -18,18 +19,22 @@ body {
 
     /* AAMUSTED-inspired palette */
     /* Deep maroon as primary */
-    --primary: 350 70% 32%; /* approx #8B1A2B */
+    --primary: 350 70% 32%;
+    /* approx #8B1A2B */
     --primary-foreground: 0 0% 100%;
 
     /* Soft gold as secondary */
-    --secondary: 46 95% 88%; /* light gold background */
-    --secondary-foreground: 26 68% 32%; /* darker gold text */
+    --secondary: 46 95% 88%;
+    /* light gold background */
+    --secondary-foreground: 26 68% 32%;
+    /* darker gold text */
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
     /* Rich gold accent for CTAs and highlights */
-    --accent: 42 96% 55%; /* approx #F2B200 */
+    --accent: 42 96% 55%;
+    /* approx #F2B200 */
     --accent-foreground: 26 68% 18%;
 
     /* Destructive stays red but tuned to work with maroon */
@@ -41,11 +46,16 @@ body {
     --ring: 350 70% 32%;
 
     /* Chart colours can lean on green / gold / maroon variations */
-    --chart-1: 142 50% 32%;  /* deep green */
-    --chart-2: 42 90% 55%;   /* gold */
-    --chart-3: 350 70% 38%;  /* lighter maroon */
-    --chart-4: 142 45% 45%;  /* mid green */
-    --chart-5: 42 85% 72%;   /* pale gold */
+    --chart-1: 142 50% 32%;
+    /* deep green */
+    --chart-2: 42 90% 55%;
+    /* gold */
+    --chart-3: 350 70% 38%;
+    /* lighter maroon */
+    --chart-4: 142 45% 45%;
+    /* mid green */
+    --chart-5: 42 85% 72%;
+    /* pale gold */
 
     --radius: 0.5rem;
     --sidebar-background: 210 20% 98%;
@@ -58,7 +68,20 @@ body {
     --sidebar-ring: 350 70% 32%;
     --font-scale: 1;
     --ui-scale: 1;
+
+    /* Premium Gradients */
+    --gradient-primary: linear-gradient(135deg, #8B1A2B 0%, #5d111d 100%);
+    --gradient-gold: linear-gradient(135deg, #F2B200 0%, #c18e00 100%);
+    --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    --gradient-mesh: radial-gradient(at 0% 0%, hsla(350, 70%, 32%, 0.15) 0, transparent 50%),
+      radial-gradient(at 50% 0%, hsla(222, 84%, 4%, 0.1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(350, 70%, 32%, 0.15) 0, transparent 50%);
+
+    /* Dynamic Shadows */
+    --shadow-premium: 0 20px 50px -12px rgba(139, 26, 43, 0.15);
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
   }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -91,7 +114,7 @@ body {
     --chart-3: 350 70% 50%;
     --chart-4: 142 45% 55%;
     --chart-5: 42 85% 72%;
-    
+
     --sidebar-background: 222.2 47% 8%;
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 350 75% 45%;
@@ -107,33 +130,114 @@ body {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Mobile viewport improvements */
   html {
     font-size: calc(16px * var(--font-scale) * var(--ui-scale));
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   /* Ensure proper mobile scrolling */
   body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
-  
+
   /* Mobile-specific improvements for form elements */
   @media (max-width: 640px) {
-    input, select, textarea {
-      font-size: 16px; /* Prevents zoom on iOS */
+
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+      /* Prevents zoom on iOS */
     }
+
+    .container {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+    }
+  }
+
+  /* Premium Utility Classes */
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-dark {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .text-gradient {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-image: var(--gradient-primary);
+  }
+
+  .premium-shadow {
+    box-shadow: var(--shadow-premium);
+  }
+
+  /* Custom Animations */
+  @keyframes float {
+    0% {
+      transform: translateY(0px);
+    }
+
+    50% {
+      transform: translateY(-10px);
+    }
+
+    100% {
+      transform: translateY(0px);
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Mobile Bottom Tab Bar */
+  .mobile-nav-blur {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .dark .mobile-nav-blur {
+    background: rgba(15, 23, 42, 0.85);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Smooth reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal.active {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 /* Print-only styles for invoice */
 @media print {
+
   /* Hide everything by default */
   body * {
     visibility: hidden;

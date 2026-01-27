@@ -25,7 +25,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
         {/* PWA: manifest & basic meta tags for installability */}
@@ -54,7 +54,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-body antialiased min-h-full bg-background" suppressHydrationWarning>
+      <body className="font-body antialiased min-h-full bg-background selection:bg-primary/10 selection:text-primary" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {

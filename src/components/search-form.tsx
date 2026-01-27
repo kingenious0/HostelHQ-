@@ -61,17 +61,17 @@ export function SearchForm() {
     const hasActiveFilters = searchQuery || locationQuery || institution || roomType || gender;
 
     return (
-        <Card className="bg-card/90 backdrop-blur-sm p-3 sm:p-4 rounded-xl shadow-2xl mx-2 sm:mx-0 border border-border/60">
-            <CardContent className="p-2 sm:p-3">
+        <Card className="glass dark:glass-dark p-2 sm:p-4 rounded-[2.5rem] shadow-2xl mx-2 sm:mx-0 border border-white/10">
+            <CardContent className="p-2 sm:p-4">
                 <div className="flex flex-col gap-5 sm:gap-6">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                         <div className="relative">
-                            <University className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
+                            <University className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-primary/60 z-10" />
                             <Select onValueChange={setInstitution} value={institution}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-14 text-sm sm:text-base rounded-2xl border-none bg-white/50 dark:bg-slate-800/50 focus:ring-primary/20">
                                     <SelectValue placeholder="Select Institution" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-2xl border-border/40 shadow-2xl">
                                     <SelectItem value="KNUST KUMASI CAMPUS">KNUST KUMASI CAMPUS</SelectItem>
                                     <SelectItem value="KNUST OBUASI CAMPUS">KNUST OBUASI CAMPUS</SelectItem>
                                     <SelectItem value="KUMASI TECHNICAL UNIVERSITY (KSTU)">KUMASI TECHNICAL UNIVERSITY (KSTU)</SelectItem>
@@ -81,12 +81,12 @@ export function SearchForm() {
                             </Select>
                         </div>
                         <div className="relative">
-                            <DoorOpen className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
+                            <DoorOpen className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-primary/60 z-10" />
                             <Select onValueChange={setRoomType} value={roomType}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-14 text-sm sm:text-base rounded-2xl border-none bg-white/50 dark:bg-slate-800/50 focus:ring-primary/20">
                                     <SelectValue placeholder="Select Room Type" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-2xl border-border/40 shadow-2xl">
                                     <SelectItem value="1 IN A ROOM">1 IN A ROOM</SelectItem>
                                     <SelectItem value="2 IN A ROOM">2 IN A ROOM</SelectItem>
                                     <SelectItem value="3 IN A ROOM">3 IN A ROOM</SelectItem>
@@ -97,12 +97,12 @@ export function SearchForm() {
                             </Select>
                         </div>
                         <div className="relative">
-                            <Users className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground z-10" />
+                            <Users className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-primary/60 z-10" />
                             <Select onValueChange={setGender} value={gender}>
-                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90">
+                                <SelectTrigger className="w-full pl-10 sm:pl-12 h-14 text-sm sm:text-base rounded-2xl border-none bg-white/50 dark:bg-slate-800/50 focus:ring-primary/20">
                                     <SelectValue placeholder="Select Gender" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-2xl border-border/40 shadow-2xl">
                                     <SelectItem value="Male">Male</SelectItem>
                                     <SelectItem value="Female">Female</SelectItem>
                                     <SelectItem value="Mixed">Mixed</SelectItem>
@@ -111,27 +111,27 @@ export function SearchForm() {
                         </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
                         <div className="relative w-full">
-                            <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                            <Input 
-                                placeholder="Search hostel name..." 
-                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90"
+                            <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-primary/60" />
+                            <Input
+                                placeholder="Search hostel name..."
+                                className="pl-10 sm:pl-12 h-14 text-sm sm:text-base rounded-2xl border-none bg-white/50 dark:bg-slate-800/50 focus-visible:ring-primary/20"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                         <div className="relative w-full">
-                            <MapPin className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                            <Input 
-                                placeholder="Enter location" 
-                                className="pl-10 sm:pl-12 h-12 sm:h-14 text-sm sm:text-base rounded-lg text-foreground bg-background/90"
+                            <MapPin className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-primary/60" />
+                            <Input
+                                placeholder="Enter location"
+                                className="pl-10 sm:pl-12 h-14 text-sm sm:text-base rounded-2xl border-none bg-white/50 dark:bg-slate-800/50 focus-visible:ring-primary/20"
                                 value={locationQuery}
                                 onChange={(e) => setLocationQuery(e.target.value)}
                             />
                         </div>
                     </div>
-                    
+
                     {hasActiveFilters && (
                         <Button
                             type="button"
