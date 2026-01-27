@@ -9,19 +9,32 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { Shield, Phone, Save, Loader2, MessageSquare, Bell } from 'lucide-react';
+import { Shield, Phone, Save, Loader2, MessageSquare, Bell, CreditCard, RefreshCw } from 'lucide-react';
+import { getPaystackSettings, updatePaystackSettings, type PaystackSettings } from '@/app/actions/settings';
+import { Switch } from '@/components/ui/switch';
 
 export default function AdminSettingsPage() {
     const { toast } = useToast();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    
+
     // Admin profile data
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [smsNotifications, setSmsNotifications] = useState(true);
+
+    // Paystack Settings
+    const [paystackSettings, setPaystackSettings] = useState<PaystackSettings>({
+        mode: 'test',
+        testPublicKey: '',
+        testSecretKey: '',
+        livePublicKey: '',
+        liveSecretKey: ''
+    });
+    const [loadingPaystack, setLoadingPaystack] = useState(true);
+    const [savingPaystack, setSavingPaystack] = useState(false);
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -43,12 +56,28 @@ export default function AdminSettingsPage() {
             setLoading(false);
         });
 
+
+        const fetchPaystackSettings = async () => {
+            try {
+                const settings = await getPaystackSettings();
+                if (settings) {
+                    setPaystackSettings(settings);
+                }
+            } catch (error) {
+                console.error('Error fetching paystack settings:', error);
+            } finally {
+                setLoadingPaystack(false);
+            }
+        };
+
+        fetchPaystackSettings();
+
         return () => unsubscribe();
     }, []);
 
     const handleSaveProfile = async () => {
         if (!user) return;
-        
+
         setSaving(true);
         try {
             await updateDoc(doc(db, 'users', user.uid), {
@@ -59,35 +88,59 @@ export default function AdminSettingsPage() {
                 updatedAt: new Date().toISOString()
             });
 
-            toast({ 
-                title: "Settings Updated", 
-                description: "Your admin settings have been saved successfully." 
+            toast({
+                title: "Settings Updated",
+                description: "Your admin settings have been saved successfully."
             });
         } catch (error) {
             console.error('Error saving settings:', error);
-            toast({ 
-                title: "Error", 
-                description: "Failed to save settings. Please try again.", 
-                variant: 'destructive' 
+            toast({
+                title: "Error",
+                description: "Failed to save settings. Please try again.",
+                variant: 'destructive'
             });
         } finally {
             setSaving(false);
         }
     };
 
+    const handleSavePaystack = async () => {
+        setSavingPaystack(true);
+        try {
+            const result = await updatePaystackSettings(paystackSettings);
+            if (result.success) {
+                toast({
+                    title: "Paystack Settings Saved",
+                    description: `API keys for ${paystackSettings.mode} mode are now active.`
+                });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            console.error('Error saving Paystack settings:', error);
+            toast({
+                title: "Error",
+                description: "Failed to save Paystack settings.",
+                variant: 'destructive'
+            });
+        } finally {
+            setSavingPaystack(false);
+        }
+    };
+
     const handleTestSMS = async () => {
         if (!phone) {
-            toast({ 
-                title: "Phone Number Required", 
-                description: "Please add your phone number first.", 
-                variant: 'destructive' 
+            toast({
+                title: "Phone Number Required",
+                description: "Please add your phone number first.",
+                variant: 'destructive'
             });
             return;
         }
 
         try {
             const message = `🧪 HOSTELHQ: Test SMS notification\n\nThis is a test message from HostelHQ admin panel. Your SMS notifications are working correctly!\n\nAdmin: ${fullName}`;
-            
+
             const response = await fetch('/api/sms/send-test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -103,10 +156,10 @@ export default function AdminSettingsPage() {
             if (!contentType || !contentType.includes('application/json')) {
                 const text = await response.text();
                 console.error('Received HTML instead of JSON:', text.substring(0, 200));
-                toast({ 
-                    title: "API Error", 
-                    description: "Server returned HTML instead of JSON. Please refresh and try again.", 
-                    variant: 'destructive' 
+                toast({
+                    title: "API Error",
+                    description: "Server returned HTML instead of JSON. Please refresh and try again.",
+                    variant: 'destructive'
                 });
                 return;
             }
@@ -118,39 +171,39 @@ export default function AdminSettingsPage() {
                 console.error('JSON parsing error:', jsonError);
                 const text = await response.text();
                 console.error('Response text:', text.substring(0, 200));
-                toast({ 
-                    title: "API Response Error", 
-                    description: "Invalid response from server. Please refresh and try again.", 
-                    variant: 'destructive' 
+                toast({
+                    title: "API Response Error",
+                    description: "Invalid response from server. Please refresh and try again.",
+                    variant: 'destructive'
                 });
                 return;
             }
-            
+
             if (data.success) {
                 if (data.devMode) {
-                    toast({ 
-                        title: "SMS Test Successful (Development Mode)", 
-                        description: "SMS will be sent when deployed to production. Check console for details." 
+                    toast({
+                        title: "SMS Test Successful (Development Mode)",
+                        description: "SMS will be sent when deployed to production. Check console for details."
                     });
                 } else {
-                    toast({ 
-                        title: "Test SMS Sent via Wigal", 
-                        description: "Check your phone for the test message from HostelHQ." 
+                    toast({
+                        title: "Test SMS Sent via Wigal",
+                        description: "Check your phone for the test message from HostelHQ."
                     });
                 }
             } else {
-                toast({ 
-                    title: "SMS Failed", 
-                    description: data.error || "Failed to send test SMS via Wigal.", 
-                    variant: 'destructive' 
+                toast({
+                    title: "SMS Failed",
+                    description: data.error || "Failed to send test SMS via Wigal.",
+                    variant: 'destructive'
                 });
             }
         } catch (error) {
             console.error('Error sending test SMS:', error);
-            toast({ 
-                title: "Error", 
-                description: "Failed to send test SMS. Check Wigal configuration.", 
-                variant: 'destructive' 
+            toast({
+                title: "Error",
+                description: "Failed to send test SMS. Check Wigal configuration.",
+                variant: 'destructive'
             });
         }
     };
@@ -177,7 +230,116 @@ export default function AdminSettingsPage() {
                     <h1 className="text-3xl font-bold">Admin Settings</h1>
                 </div>
 
-                {/* Profile Settings */}
+                {/* Paystack API Settings */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <CreditCard className="h-5 w-5" />
+                            Paystack API Configuration
+                        </CardTitle>
+                        <CardDescription>
+                            Switch between Test and Live modes and manage your API keys
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                            <div className="space-y-0.5">
+                                <Label className="text-base font-semibold">Active Mode</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Current environment: <span className={`font-bold uppercase ${paystackSettings.mode === 'live' ? 'text-red-600' : 'text-blue-600'}`}>{paystackSettings.mode}</span>
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-sm font-medium ${paystackSettings.mode === 'test' ? 'text-blue-600' : 'text-muted-foreground'}`}>Test</span>
+                                <Switch
+                                    checked={paystackSettings.mode === 'live'}
+                                    onCheckedChange={(checked) => setPaystackSettings(prev => ({ ...prev, mode: checked ? 'live' : 'test' }))}
+                                />
+                                <span className={`text-sm font-medium ${paystackSettings.mode === 'live' ? 'text-red-600' : 'text-muted-foreground'}`}>Live</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Test Keys */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-blue-50/10">
+                                <h3 className="font-semibold text-blue-700 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                    Test Keys
+                                </h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="testPublicKey">Public Key</Label>
+                                    <Input
+                                        id="testPublicKey"
+                                        value={paystackSettings.testPublicKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, testPublicKey: e.target.value }))}
+                                        placeholder="pk_test_..."
+                                        type="password"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="testSecretKey">Secret Key</Label>
+                                    <Input
+                                        id="testSecretKey"
+                                        value={paystackSettings.testSecretKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, testSecretKey: e.target.value }))}
+                                        placeholder="sk_test_..."
+                                        type="password"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Live Keys */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-red-50/10">
+                                <h3 className="font-semibold text-red-700 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-red-500" />
+                                    Live Keys
+                                </h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="livePublicKey">Public Key</Label>
+                                    <Input
+                                        id="livePublicKey"
+                                        value={paystackSettings.livePublicKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, livePublicKey: e.target.value }))}
+                                        placeholder="pk_live_..."
+                                        type="password"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="liveSecretKey">Secret Key</Label>
+                                    <Input
+                                        id="liveSecretKey"
+                                        value={paystackSettings.liveSecretKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, liveSecretKey: e.target.value }))}
+                                        placeholder="sk_live_..."
+                                        type="password"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <Button
+                                onClick={handleSavePaystack}
+                                disabled={savingPaystack}
+                                className={paystackSettings.mode === 'live' ? 'bg-red-600 hover:bg-red-700' : ''}
+                            >
+                                {savingPaystack ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Saving Keys...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="h-4 w-4 mr-2" />
+                                        Save & Switch to {paystackSettings.mode.toUpperCase()}
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* SMS Notification Settings */}
                 <Card>
                     <CardHeader>
                         <CardTitle>Profile Information</CardTitle>
@@ -207,7 +369,7 @@ export default function AdminSettingsPage() {
                                 />
                             </div>
                         </div>
-                        
+
                         <div className="space-y-2">
                             <Label htmlFor="phone">
                                 <Phone className="h-4 w-4 inline mr-1" />
@@ -221,12 +383,12 @@ export default function AdminSettingsPage() {
                                 placeholder="+233XXXXXXXXXX"
                             />
                             <p className="text-sm text-muted-foreground">
-                                Include country code (e.g., +233 for Ghana). This number will receive SMS notifications 
+                                Include country code (e.g., +233 for Ghana). This number will receive SMS notifications
                                 when agents submit new hostels for approval.
                             </p>
                         </div>
 
-                        <Button 
+                        <Button
                             onClick={handleSaveProfile}
                             disabled={saving}
                             className="w-full md:w-auto"
@@ -266,14 +428,12 @@ export default function AdminSettingsPage() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    phone ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                }`}>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${phone ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
                                     {phone ? 'Phone Set' : 'No Phone'}
                                 </span>
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    smsNotifications ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                                }`}>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${smsNotifications ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                                    }`}>
                                     {smsNotifications ? 'Enabled' : 'Disabled'}
                                 </span>
                                 <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
@@ -283,7 +443,7 @@ export default function AdminSettingsPage() {
                         </div>
 
                         {phone && (
-                            <Button 
+                            <Button
                                 onClick={handleTestSMS}
                                 variant="outline"
                                 className="w-full md:w-auto"
@@ -296,7 +456,7 @@ export default function AdminSettingsPage() {
                         {!phone && (
                             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                 <p className="text-sm text-yellow-800">
-                                    ⚠️ Phone number is required to receive SMS notifications. 
+                                    ⚠️ Phone number is required to receive SMS notifications.
                                     Please add your phone number above.
                                 </p>
                             </div>

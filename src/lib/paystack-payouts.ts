@@ -1,18 +1,16 @@
-
 import { PAYSTACK_PUBLIC_KEY } from "./paystack";
-
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+import { getPaystackKeys } from "./paystack-utils";
 
 const BASE_URL = 'https://api.paystack.co';
 
-if (!PAYSTACK_SECRET_KEY) {
-    console.error("PAYSTACK_SECRET_KEY is not defined in environment variables.");
-}
 
-const getHeaders = () => ({
-    authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-    'content-type': 'application/json',
-});
+const getHeaders = async () => {
+    const { secretKey } = await getPaystackKeys();
+    return {
+        authorization: `Bearer ${secretKey}`,
+        'content-type': 'application/json',
+    };
+};
 
 const handleNetworkError = (error: any, context: string) => {
     console.error(`Error in ${context}:`, error);
@@ -118,7 +116,7 @@ export async function listBanks(country: string = 'ghana'): Promise<PaystackBank
     try {
         const response = await fetch(`${BASE_URL}/bank?country=${country}&currency=GHS`, {
             method: 'GET',
-            headers: getHeaders(),
+            headers: await getHeaders(),
             cache: 'no-store' // Ensure fresh data
         });
 
@@ -142,7 +140,7 @@ export async function createTransferRecipient(payload: TransferRecipientPayload)
     try {
         const response = await fetch(`${BASE_URL}/transferrecipient`, {
             method: 'POST',
-            headers: getHeaders(),
+            headers: await getHeaders(),
             body: JSON.stringify(payload),
         });
 
@@ -165,7 +163,7 @@ export async function initiateTransfer(payload: InitiateTransferPayload) {
     try {
         const response = await fetch(`${BASE_URL}/transfer`, {
             method: 'POST',
-            headers: getHeaders(),
+            headers: await getHeaders(),
             body: JSON.stringify(payload),
         });
 
@@ -188,7 +186,7 @@ export async function initiateBulkTransfer(payload: InitiateBulkTransferPayload)
     try {
         const response = await fetch(`${BASE_URL}/transfer/bulk`, {
             method: 'POST',
-            headers: getHeaders(),
+            headers: await getHeaders(),
             body: JSON.stringify(payload),
         });
 
@@ -211,7 +209,7 @@ export async function checkPaystackBalance() {
     try {
         const response = await fetch(`${BASE_URL}/balance`, {
             method: 'GET',
-            headers: getHeaders(),
+            headers: await getHeaders(),
             cache: 'no-store'
         });
 

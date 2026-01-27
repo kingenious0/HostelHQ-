@@ -2,6 +2,7 @@
 "use server";
 
 import { PAYSTACK_PUBLIC_KEY } from "@/lib/paystack";
+import { getPaystackKeys } from "@/lib/paystack-utils";
 import { headers } from "next/headers";
 
 type MomoPaymentPayload = {
@@ -26,7 +27,7 @@ type HostelPaymentPayload = {
 }
 
 export async function initializeMomoPayment(payload: MomoPaymentPayload) {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    const { secretKey } = await getPaystackKeys();
 
     if (!secretKey) {
         console.error("Paystack secret key is not configured.");
@@ -124,7 +125,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
 
 
 export async function initializeHostelPayment(payload: HostelPaymentPayload) {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    const { secretKey } = await getPaystackKeys();
 
     if (!secretKey) {
         console.error("Paystack secret key is not configured.");
@@ -206,7 +207,7 @@ import { FieldValue } from "firebase-admin/firestore";
  * - Credits Manager Wallet (Earnings Ledger)
  */
 export async function verifyAndProcessBooking(reference: string, bookingData: any, hostelId: string, studentId: string) {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    const { secretKey } = await getPaystackKeys();
     if (!secretKey) return { success: false, message: "Server misconfiguration" };
 
     try {
