@@ -1,5 +1,6 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { llama33x70bVersatile } from 'genkitx-groq';
 import { getHostels, getHostel } from '@/lib/data';
 import { HOSTELHQ_KNOWLEDGE, HOSTIE_PERSONALITY } from '@/ai/knowledge-base';
 
@@ -11,8 +12,8 @@ const searchHostelsTool = ai.defineTool(
     description: 'Search for hostels by location, price, institution, or gender.',
     inputSchema: z.object({
       location: z.string().optional(),
-      minPrice: z.number().optional(),
-      maxPrice: z.number().optional(),
+      minPrice: z.coerce.number().optional(),
+      maxPrice: z.coerce.number().optional(),
       institution: z.string().optional(),
       gender: z.string().optional(),
     }),
@@ -20,18 +21,19 @@ const searchHostelsTool = ai.defineTool(
   },
   async (input) => {
     console.log('[AI Tool] Searching hostels with input:', input);
+
     const hostels = await getHostels({
-      location: input.location,
-      institution: input.institution,
-      gender: input.gender,
+      location: input.location?.trim() || undefined,
+      institution: input.institution?.trim() || undefined,
+      gender: input.gender?.trim() || undefined,
     });
 
-    // Filter by price if provided since getHostels doesn't support it directly
+    // Filter by price if provided
     return hostels.filter(h => {
-      const minMatch = input.minPrice ? h.priceRange.min >= input.minPrice : true;
-      const maxMatch = input.maxPrice ? h.priceRange.max <= input.maxPrice : true;
+      const minMatch = input.minPrice !== undefined ? h.priceRange.min >= input.minPrice : true;
+      const maxMatch = input.maxPrice !== undefined ? h.priceRange.max <= input.maxPrice : true;
       return minMatch && maxMatch;
-    }).slice(0, 5); // Return top 5 matches
+    }).slice(0, 5);
   }
 );
 
@@ -87,10 +89,7 @@ const ChatAssistantOutputSchema = z.object({
 
 const prompt = ai.definePrompt({
   name: 'chatAssistantPrompt',
-  model: 'googleai/gemini-2.0-flash',
-  config: {
-    temperature: 0.5,
-  },
+  model: llama33x70bVersatile,
   input: { schema: ChatAssistantInputSchema },
   output: { schema: ChatAssistantOutputSchema },
   tools: [searchHostelsTool, getHostelDetailsTool],
@@ -99,26 +98,27 @@ const prompt = ai.definePrompt({
   **About HostelHQ:**
   ${HOSTELHQ_KNOWLEDGE.platform.description}
   
-  **How to help:**
-  - If they want to find hostels, use 'searchHostels'.
-  - If they want details about a hostel, use 'getHostelDetails'.
-  - Provide friendly, clear advice based on the HostelHQ Knowledge Base.
+  **Available Tools:**
+  - searchHostels: Use this to search for hostels.
+  - getHostelDetails: Use this to get full info on a specific hostel.
   
-  **Context:**
-  - Current Page: {{userContext.currentPage}}
-  {{#if userContext.hostelId}} - Viewing Hostel: {{userContext.hostelId}}{{/if}}
+  **Task:**
+  1. If the user is asking for hostels or recommendations, use 'searchHostels'.
+  2. If the user mentions a specific hostel, use 'getHostelDetails'.
+  3. Respond only with a tool call if you need tools.
+  4. Once you have tool results, generate a friendly 'response' and provide any 'suggestedActions'.
+  5. Your final response MUST be a JSON object matching the required schema.
   
-  **History:**
+  **Current Context:**
+  - Page: {{userContext.currentPage}}
+  
+  **Conversation History:**
   {{#each conversationHistory}}
   {{role}}: {{content}}
   {{/each}}
   
-  **User:** {{{message}}}
-  
-  **JSON Output:**
-  Respond with a JSON object containing:
-  - "response": your message to the user
-  - "suggestedActions": array of {label, action, url} (optional)`,
+  **User Message:** {{{message}}}
+  `,
 });
 
 // --- Flow ---
