@@ -40,9 +40,10 @@ interface AIAssistantProps {
     hostelId?: string;
     roomId?: string;
   };
+  openByDefault?: boolean;
 }
 
-export function AIAssistant({ userContext }: AIAssistantProps) {
+export function AIAssistant({ userContext, openByDefault = false }: AIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -192,6 +193,7 @@ export function AIAssistant({ userContext }: AIAssistantProps) {
   };
 
   if (!isOpen) {
+    if (!openByDefault) return null;
     return (
       <Button
         onClick={() => setIsOpen(true)}

@@ -68,7 +68,10 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     <div className="flex min-h-full flex-col">
       {children}
       {!hideFooter && <Footer />}
-      {showChatbot && <AIAssistant userContext={userContext} />}
+      <AIAssistant
+        userContext={userContext}
+        openByDefault={showChatbot}
+      />
     </div>
   );
 }

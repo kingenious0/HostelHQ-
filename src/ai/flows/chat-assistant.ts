@@ -1,12 +1,56 @@
-'use server';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
+import { getHostels, getHostel } from '@/lib/data';
+import { HOSTELHQ_KNOWLEDGE, HOSTIE_PERSONALITY } from '@/ai/knowledge-base';
 
-/**
- * @fileOverview AI Chat Assistant for HostelHQ that helps users with hostel-related questions,
- * booking assistance, and general support.
- */
+// --- Tools ---
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+const searchHostelsTool = ai.defineTool(
+  {
+    name: 'searchHostels',
+    description: 'Search for hostels by location, price, institution, or gender.',
+    inputSchema: z.object({
+      location: z.string().optional(),
+      minPrice: z.number().optional(),
+      maxPrice: z.number().optional(),
+      institution: z.string().optional(),
+      gender: z.string().optional(),
+    }),
+    outputSchema: z.array(z.any()),
+  },
+  async (input) => {
+    console.log('[AI Tool] Searching hostels with input:', input);
+    const hostels = await getHostels({
+      location: input.location,
+      institution: input.institution,
+      gender: input.gender,
+    });
+
+    // Filter by price if provided since getHostels doesn't support it directly
+    return hostels.filter(h => {
+      const minMatch = input.minPrice ? h.priceRange.min >= input.minPrice : true;
+      const maxMatch = input.maxPrice ? h.priceRange.max <= input.maxPrice : true;
+      return minMatch && maxMatch;
+    }).slice(0, 5); // Return top 5 matches
+  }
+);
+
+const getHostelDetailsTool = ai.defineTool(
+  {
+    name: 'getHostelDetails',
+    description: 'Get detailed information about a specific hostel by its ID.',
+    inputSchema: z.object({
+      hostelId: z.string(),
+    }),
+    outputSchema: z.any(),
+  },
+  async (input) => {
+    console.log('[AI Tool] Fetching hostel details for:', input.hostelId);
+    return await getHostel(input.hostelId);
+  }
+);
+
+// --- Prompt ---
 
 const ChatAssistantInputSchema = z.object({
   message: z.string().describe('The user\'s message or question'),
@@ -17,8 +61,7 @@ const ChatAssistantInputSchema = z.object({
         content: z.string(),
       })
     )
-    .optional()
-    .describe('Previous conversation history for context'),
+    .optional(),
   userContext: z
     .object({
       isLoggedIn: z.boolean().optional(),
@@ -26,11 +69,8 @@ const ChatAssistantInputSchema = z.object({
       hostelId: z.string().optional(),
       roomId: z.string().optional(),
     })
-    .optional()
-    .describe('Current user context and page information'),
+    .optional(),
 });
-
-export type ChatAssistantInput = z.infer<typeof ChatAssistantInputSchema>;
 
 const ChatAssistantOutputSchema = z.object({
   response: z.string().describe('The AI assistant\'s response to the user'),
@@ -42,103 +82,68 @@ const ChatAssistantOutputSchema = z.object({
         url: z.string().optional(),
       })
     )
-    .optional()
-    .describe('Suggested actions the user can take'),
+    .optional(),
 });
-
-export type ChatAssistantOutput = z.infer<typeof ChatAssistantOutputSchema>;
-
-export async function chatAssistant(
-  input: ChatAssistantInput
-): Promise<ChatAssistantOutput> {
-  return chatAssistantFlow(input);
-}
 
 const prompt = ai.definePrompt({
   name: 'chatAssistantPrompt',
-  input: {schema: ChatAssistantInputSchema},
-  output: {schema: ChatAssistantOutputSchema},
-  prompt: `You are HostelHQ Assistant, a helpful AI assistant for HostelHQ - Ghana's trusted student housing platform. You help students find, book, and secure hostel accommodations.
-
-**Your Role & Personality:**
-- Friendly, knowledgeable, and supportive
-- Focused on helping Ghanaian students with accommodation needs
-- Provide clear, actionable advice
-- Always prioritize user safety and verified information
-
-**Key Information about HostelHQ:**
-- Platform for Ghanaian students to find trusted hostels
-- Serves 5+ cities, 70+ verified hostels, 20K+ students
-- Features: transparent pricing, digital tenancy, roommate matching
-- Process: Browse → Visit → Book → Secure → Move In
-- 24/7 support available
-
-**What you can help with:**
-1. **Hostel Search & Discovery**
-   - Finding hostels by location, price, amenities
-   - Explaining room types and features
-   - Comparing different options
-
-2. **Booking Process**
-   - How to book a visit
-   - Securing a room after visit
-   - Payment processes and options
-   - Required documents
-
-3. **Room & Amenities**
-   - Explaining room features and amenities
-   - Occupancy and availability
-   - Gender-specific accommodations
-
-4. **General Support**
-   - Platform navigation
-   - Account management
-   - Troubleshooting issues
-
-**Current Context:**
-{{#if userContext}}
-- User logged in: {{userContext.isLoggedIn}}
-- Current page: {{userContext.currentPage}}
-{{#if userContext.hostelId}}
-- Viewing hostel: {{userContext.hostelId}}
-{{/if}}
-{{#if userContext.roomId}}
-- Viewing room: {{userContext.roomId}}
-{{/if}}
-{{/if}}
-
-**Conversation History:**
-{{#if conversationHistory}}
-{{#each conversationHistory}}
-{{role}}: {{content}}
-{{/each}}
-{{/if}}
-
-**User Message:** {{{message}}}
-
-**Instructions:**
-- Provide helpful, accurate responses about HostelHQ and student housing
-- If asked about specific hostels/rooms, reference the current context if available
-- Suggest relevant actions when appropriate (e.g., "Book a Visit", "View Hostels")
-- For complex issues, recommend contacting support
-- Keep responses concise but informative
-- Use friendly, conversational tone
-- If you don't know something specific, be honest and suggest alternatives
-
-**Response Format:**
-- Provide a helpful response to the user's question
-- Include suggested actions when relevant (max 3 actions)
-- Actions should have clear labels and appropriate URLs when applicable`,
+  model: 'googleai/gemini-2.0-flash',
+  config: {
+    temperature: 0.5,
+  },
+  input: { schema: ChatAssistantInputSchema },
+  output: { schema: ChatAssistantOutputSchema },
+  tools: [searchHostelsTool, getHostelDetailsTool],
+  prompt: `You are Hostie, the helpful AI assistant for HostelHQ.
+  
+  **About HostelHQ:**
+  ${HOSTELHQ_KNOWLEDGE.platform.description}
+  
+  **How to help:**
+  - If they want to find hostels, use 'searchHostels'.
+  - If they want details about a hostel, use 'getHostelDetails'.
+  - Provide friendly, clear advice based on the HostelHQ Knowledge Base.
+  
+  **Context:**
+  - Current Page: {{userContext.currentPage}}
+  {{#if userContext.hostelId}} - Viewing Hostel: {{userContext.hostelId}}{{/if}}
+  
+  **History:**
+  {{#each conversationHistory}}
+  {{role}}: {{content}}
+  {{/each}}
+  
+  **User:** {{{message}}}
+  
+  **JSON Output:**
+  Respond with a JSON object containing:
+  - "response": your message to the user
+  - "suggestedActions": array of {label, action, url} (optional)`,
 });
 
-const chatAssistantFlow = ai.defineFlow(
+// --- Flow ---
+
+export const chatAssistantFlow = ai.defineFlow(
   {
     name: 'chatAssistantFlow',
     inputSchema: ChatAssistantInputSchema,
     outputSchema: ChatAssistantOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+  async (input) => {
+    try {
+      console.log('Running chatAssistantFlow with message:', input.message);
+      const { output } = await prompt(input);
+      console.log('AI Response generated successfully');
+      return output!;
+    } catch (error) {
+      console.error('Error in chatAssistantFlow:', error);
+      throw error;
+    }
   }
 );
+
+export async function chatAssistant(input: z.infer<typeof ChatAssistantInputSchema>) {
+  return await chatAssistantFlow(input);
+}
+
+
