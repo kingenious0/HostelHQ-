@@ -753,6 +753,12 @@ export default function TrackingPage() {
 
         setLoadingDirections(true);
 
+        // Show status toast so user knows it's working (especially if no permission popup appears)
+        const statusToast = toast({
+            title: 'Finding your location...',
+            description: 'Scanning GPS and WiFi signals...',
+        });
+
         // Check for secure context - Geolocation requires HTTPS or localhost
         if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
             setLoadingDirections(false);
@@ -767,6 +773,15 @@ export default function TrackingPage() {
         try {
             // Get user's current location
             if (navigator.geolocation) {
+                // Check permission status first for better diagnostics
+                let permissionState: PermissionState | 'unknown' = 'unknown';
+                try {
+                    const status = await navigator.permissions.query({ name: 'geolocation' });
+                    permissionState = status.state;
+                } catch (e) {
+                    console.log('Permission query not supported');
+                }
+
                 const getPosition = (options: PositionOptions): Promise<GeolocationPosition> => {
                     return new Promise((resolve, reject) => {
                         navigator.geolocation.getCurrentPosition(resolve, reject, options);
@@ -775,14 +790,14 @@ export default function TrackingPage() {
 
                 let position: GeolocationPosition;
                 try {
-                    // Try with high accuracy first
-                    position = await getPosition({ enableHighAccuracy: true, timeout: 8000 });
+                    // Try with high accuracy first, force fresh location (maximumAge: 0)
+                    position = await getPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
                 } catch (err: any) {
                     // Fallback to low accuracy if high accuracy fails (code 3 = TIMEOUT, code 2 = POSITION_UNAVAILABLE)
                     if (err.code === 3 || err.code === 2) {
                         console.warn('High accuracy failed (code ' + err.code + '), trying low accuracy fallback...');
                         try {
-                            position = await getPosition({ enableHighAccuracy: false, timeout: 5000 });
+                            position = await getPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 0 });
                         } catch (err2: any) {
                             console.error('Low accuracy fallback also failed:', err2);
                             throw err; // Throw the original error if fallback also fails
@@ -802,7 +817,8 @@ export default function TrackingPage() {
                     lng: hostel.lng!
                 };
 
-                console.log('🎯 Getting directions from', userLoc, 'to', hostelLocation);
+                console.log('🎯 Success! Location fix obtained:', userLoc);
+                statusToast.dismiss(); // Clean up status toast on success
                 setUserLocation(userLoc);
 
                 const routeResult = await combinedRoutingService.getDirections(
@@ -821,6 +837,7 @@ export default function TrackingPage() {
                 setLoadingDirections(false);
 
             } else {
+                statusToast.dismiss();
                 setLoadingDirections(false);
                 toast({
                     title: 'Location Not Supported',
@@ -829,21 +846,33 @@ export default function TrackingPage() {
                 });
             }
         } catch (error: any) {
+            statusToast.dismiss(); // Clean up status toast on failure
             setLoadingDirections(false);
+
+            // Check permission status again to give precise advice
+            let isAllowedInBrowser = false;
+            try {
+                const status = await navigator.permissions.query({ name: 'geolocation' });
+                isAllowedInBrowser = (status.state === 'granted');
+            } catch (e) { }
+
             let errorMessage = 'Please enable location access to get directions.';
             let errorTitle = 'Location Access Denied';
 
-            // Geolocation error codes: 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
             const code = error.code;
-            if (code === 1) {
+            if (code === 1) { // PERMISSION_DENIED
                 errorTitle = 'Location Permission Denied';
-                errorMessage = 'HostelHQ doesn\'t have permission. Please check if your computer or phone has blocked location globally in system settings.';
-            } else if (code === 2) {
-                errorTitle = 'Location Unavailable';
-                errorMessage = 'Your device couldn\'t determine its location. Ensure you have a clear view of the sky or are near a WiFi network.';
-            } else if (code === 3) {
-                errorTitle = 'Location Timeout';
-                errorMessage = 'It took too long to find your location. Please try again or check your internet connection.';
+                errorMessage = 'HostelHQ doesn\'t have permission. Please check your browser site settings.';
+            } else if (code === 2 || code === 3) { // UNAVAILABLE or TIMEOUT
+                errorTitle = isAllowedInBrowser ? 'Check Windows Location Settings' : 'Location Unavailable';
+
+                if (isAllowedInBrowser) {
+                    errorMessage = 'Browser is allowed, but Windows is blocking it. FIX: 1. Open Windows Settings 2. Privacy > Location 3. Enable "Allow apps to access location" 4. Enable "Let desktop apps access location". Also, ENSURE WiFi IS ON (even if on Ethernet) as browsers use it for location.';
+                } else {
+                    errorMessage = code === 3
+                        ? 'Search timed out. Please check your internet signal and try again.'
+                        : 'Your device couldn\'t determine its location. Is your GPS or WiFi turned on?';
+                }
             }
 
             toast({
@@ -851,7 +880,12 @@ export default function TrackingPage() {
                 description: errorMessage,
                 variant: 'destructive',
             });
-            console.error('Directions error:', { code: error.code, message: error.message, full: error });
+            console.error('Directions diagnosis:', {
+                code: error.code,
+                message: error.message,
+                browserPermission: isAllowedInBrowser ? 'granted' : 'unknown/denied',
+                isSecure: typeof window !== 'undefined' ? window.isSecureContext : 'N/A'
+            });
         }
     };
 

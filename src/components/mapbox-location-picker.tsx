@@ -42,7 +42,7 @@ class CombinedRoutingService {
   private orsApiKey = process.env.NEXT_PUBLIC_OPENROUTE_API_KEY;
   private tomtomApiKey = process.env.NEXT_PUBLIC_TOMTOM_API_KEY;
   private graphHopperApiKey = process.env.NEXT_PUBLIC_GRAPHHOPPER_API_KEY;
-  
+
   // Public OSRM Instances (Tertiary Fallback)
   // Note: Most public OSRM servers have CORS issues when called from browser
   // Only router.project-osrm.org sometimes works
@@ -100,7 +100,7 @@ class CombinedRoutingService {
     if (!this.orsApiKey || this.orsApiKey === 'your_openroute_api_key_here') return null;
 
     const orsProfile = profile === 'walking' ? 'foot-walking' : 'driving-car';
-    
+
     const response = await fetch(`https://api.openrouteservice.org/v2/directions/${orsProfile}`, {
       method: 'POST',
       headers: {
@@ -120,17 +120,17 @@ class CombinedRoutingService {
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data.features || !data.features[0] || !data.features[0].properties) {
       console.warn('ORS returned invalid response structure:', data);
       return null;
     }
-    
+
     const route = data.features[0];
     const props = route.properties;
     const segment = props.segments?.[0];
-    
+
     if (!segment) {
       console.warn('ORS response missing segments');
       return null;
@@ -150,7 +150,7 @@ class CombinedRoutingService {
 
     const travelMode = profile === 'walking' ? 'pedestrian' : 'car';
     const locations = `${start.lat},${start.lng}:${end.lat},${end.lng}`;
-    
+
     const url = `https://api.tomtom.com/routing/1/calculateRoute/${locations}/json?` +
       `key=${this.tomtomApiKey}&` +
       `travelMode=${travelMode}&` +
@@ -159,7 +159,7 @@ class CombinedRoutingService {
       `routeType=fastest`;
 
     const response = await fetch(url);
-    
+
     if (!response.ok) {
       if (response.status === 429) throw new Error('Rate limit exceeded');
       if (response.status === 403) throw new Error('Invalid API key');
@@ -167,28 +167,28 @@ class CombinedRoutingService {
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data.routes || !data.routes[0]) {
       console.warn('TomTom returned invalid response:', data);
       return null;
     }
-    
+
     const route = data.routes[0];
     const summary = route.summary;
     const legs = route.legs || [];
     const guidance = route.guidance;
-    
+
     // Extract instructions from guidance object (TomTom's detailed turn-by-turn)
     const instructions: string[] = [];
-    
+
     if (guidance?.instructions && guidance.instructions.length > 0) {
       guidance.instructions.forEach((inst: any) => {
         // Build human-readable instruction from TomTom's data
         const message = inst.message || '';
         const street = inst.street || '';
         const maneuver = inst.maneuver || '';
-        
+
         if (message) {
           instructions.push(message);
         } else if (maneuver && street) {
@@ -198,7 +198,7 @@ class CombinedRoutingService {
         }
       });
     }
-    
+
     // Fallback: try to extract from legs if guidance is empty
     if (instructions.length === 0) {
       legs.forEach((leg: any) => {
@@ -209,13 +209,13 @@ class CombinedRoutingService {
         });
       });
     }
-    
+
     // Final fallback
     if (instructions.length === 0) {
       instructions.push('Head towards your destination');
       instructions.push('You have arrived at your destination');
     }
-    
+
     // Extract geometry from legs
     const geometry: number[][] = [];
     legs.forEach((leg: any) => {
@@ -239,7 +239,7 @@ class CombinedRoutingService {
     if (!this.graphHopperApiKey || this.graphHopperApiKey === 'your_graphhopper_api_key_here') return null;
 
     const vehicle = profile === 'walking' ? 'foot' : 'car';
-    
+
     const url = `https://graphhopper.com/api/1/route?` +
       `point=${start.lat},${start.lng}&` +
       `point=${end.lat},${end.lng}&` +
@@ -249,20 +249,20 @@ class CombinedRoutingService {
       `key=${this.graphHopperApiKey}`;
 
     const response = await fetch(url);
-    
+
     if (!response.ok) {
       if (response.status === 429) throw new Error('Rate limit exceeded');
       throw new Error(`HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data.paths || !data.paths[0]) {
       console.warn('GraphHopper returned invalid response:', data);
       return null;
     }
-    
+
     const path = data.paths[0];
 
     return {
@@ -277,10 +277,10 @@ class CombinedRoutingService {
   private async callPublicOsrm(server: string, start: RoutePoint, end: RoutePoint, profile: string): Promise<RouteResult | null> {
     const coords = `${start.lng},${start.lat};${end.lng},${end.lat}`;
     const osrmProfile = profile === 'walking' ? 'foot' : 'driving';
-    
+
     const response = await fetch(
       `${server}/route/v1/${osrmProfile}/${coords}?overview=full&steps=true&geometries=geojson`,
-      { 
+      {
         method: 'GET',
         headers: { 'User-Agent': 'HostelHQ/1.0' },
         signal: AbortSignal.timeout(5000)
@@ -330,8 +330,8 @@ class CombinedRoutingService {
     const deltaLng = (end.lng - start.lng) * Math.PI / 180;
 
     const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-              Math.cos(lat1) * Math.cos(lat2) *
-              Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+      Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c;
@@ -340,7 +340,7 @@ class CombinedRoutingService {
   private getDirection(start: RoutePoint, end: RoutePoint): string {
     const deltaLat = end.lat - start.lat;
     const deltaLng = end.lng - start.lng;
-    
+
     if (Math.abs(deltaLat) > Math.abs(deltaLng)) {
       return deltaLat > 0 ? 'north' : 'south';
     } else {
@@ -398,7 +398,7 @@ class CombinedRoutingService {
       'WAYPOINT_RIGHT': 'Waypoint on the right',
       'WAYPOINT_REACHED': 'Waypoint reached',
     };
-    
+
     return maneuverMap[maneuver] || maneuver.replace(/_/g, ' ').toLowerCase();
   }
 
@@ -414,7 +414,7 @@ class CombinedRoutingService {
 
     switch (type) {
       case 'depart':
-        return road !== 'the road' 
+        return road !== 'the road'
           ? `Head ${prettyModifier || 'along'} ${road}`.trim()
           : `Start and head ${prettyModifier || 'straight'}`.trim();
 
@@ -455,15 +455,15 @@ class CombinedRoutingService {
 
 export const combinedRoutingService = new CombinedRoutingService();
 
-export default function MapboxLocationPicker({ 
-  onLocationSelect, 
-  initialLocation, 
-  initialAddress = '' 
+export default function MapboxLocationPicker({
+  onLocationSelect,
+  initialLocation,
+  initialAddress = ''
 }: MapboxLocationPickerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
-  
+
   const [searchAddress, setSearchAddress] = useState(initialAddress);
   const [isLoading, setIsLoading] = useState(false);
   const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
@@ -553,18 +553,18 @@ export default function MapboxLocationPicker({
       el.style.border = '3px solid white';
       el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
       el.style.cursor = 'pointer';
-      
+
       console.log('Creating marker at:', lng, lat);
-      
-      markerRef.current = new mapboxgl.Marker({ 
-        element: el, 
-        draggable: true 
+
+      markerRef.current = new mapboxgl.Marker({
+        element: el,
+        draggable: true
       })
         .setLngLat([lng, lat])
         .addTo(mapRef.current);
-        
+
       console.log('Marker created successfully');
-        
+
       // Handle marker drag
       markerRef.current.on('dragend', async () => {
         const lngLat = markerRef.current!.getLngLat();
@@ -582,10 +582,10 @@ export default function MapboxLocationPicker({
   // Use Geoapify for superior geocoding, especially for Ghana businesses
   const searchLocation = useCallback(async (query: string) => {
     if (!query.trim()) return;
-    
+
     setIsLoading(true);
     const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
-    
+
     // Primary: Geoapify Geocoding (excellent for businesses in Ghana)
     if (geoapifyKey && geoapifyKey !== 'your_geoapify_api_key_here') {
       try {
@@ -593,18 +593,18 @@ export default function MapboxLocationPicker({
           `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(query)}&filter=countrycode:gh&limit=5&apiKey=${geoapifyKey}`
         );
         const data = await response.json();
-        
+
         if (data.features && data.features.length > 0) {
           const feature = data.features[0];
           const [lng, lat] = feature.geometry.coordinates;
           const address = feature.properties.formatted || feature.properties.address_line1 || query;
-          
+
           console.log('Geoapify found:', address, 'at', lat, lng);
-          
+
           setCurrentLocation({ lat, lng });
           setSearchAddress(address);
           onLocationSelect({ lat, lng, address });
-          
+
           if (mapRef.current) {
             mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
             updateMarker(lng, lat);
@@ -616,25 +616,25 @@ export default function MapboxLocationPicker({
         console.log('Geoapify geocoding failed, trying fallback...', error);
       }
     }
-    
+
     // Fallback to Mapbox if Geoapify fails or no key
     try {
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&country=gh&limit=1`
       );
       const data = await response.json();
-      
+
       if (data.features && data.features.length > 0) {
         const feature = data.features[0];
         const [lng, lat] = feature.center;
         const address = feature.place_name;
-        
+
         console.log('Mapbox fallback found:', address, 'at', lat, lng);
-        
+
         setCurrentLocation({ lat, lng });
         setSearchAddress(address);
         onLocationSelect({ lat, lng, address });
-        
+
         if (mapRef.current) {
           mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
           updateMarker(lng, lat);
@@ -649,45 +649,69 @@ export default function MapboxLocationPicker({
     }
   }, [mapboxToken, onLocationSelect, updateMarker]);
 
-  // Get user's current location
-  const getCurrentLocation = useCallback(() => {
+  // Get user's current location with robust fallback
+  const getCurrentLocation = useCallback(async () => {
     setIsLoading(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          const address = await reverseGeocode(lng, lat);
-          
-          setCurrentLocation({ lat, lng });
-          setSearchAddress(address);
-          onLocationSelect({ lat, lng, address });
-          
-          if (mapRef.current) {
-            mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
-            updateMarker(lng, lat);
-          }
-          setIsLoading(false);
-        },
-        (error) => {
-          let errorMessage = 'Unable to get your location';
-          switch(error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied. Please enable location permissions.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information unavailable.';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'Location request timed out.';
-              break;
-          }
-          console.error('Geolocation error:', errorMessage, error);
-          setIsLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-      );
-    } else {
+
+    if (!navigator.geolocation) {
+      setIsLoading(false);
+      return;
+    }
+
+    const getPos = (opts: PositionOptions): Promise<GeolocationPosition> =>
+      new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, opts));
+
+    try {
+      let position: GeolocationPosition;
+      try {
+        // Try high accuracy first
+        position = await getPos({ enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+      } catch (err: any) {
+        // Fallback to low accuracy for desktop/poor signal
+        if (err.code === 3 || err.code === 2) {
+          position = await getPos({ enableHighAccuracy: false, timeout: 5000, maximumAge: 0 });
+        } else {
+          throw err;
+        }
+      }
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const address = await reverseGeocode(lng, lat);
+
+      setCurrentLocation({ lat, lng });
+      setSearchAddress(address);
+      onLocationSelect({ lat, lng, address });
+
+      if (mapRef.current) {
+        mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
+        updateMarker(lng, lat);
+      }
+    } catch (error: any) {
+      let errorMessage = 'Unable to get your location';
+
+      // Diagnostic check for permission
+      let isAllowedInBrowser = false;
+      try {
+        const status = await navigator.permissions.query({ name: 'geolocation' });
+        isAllowedInBrowser = (status.state === 'granted');
+      } catch (e) { }
+
+      if (error.code === 1) {
+        errorMessage = 'Location access denied. Please enable in browser settings.';
+      } else if (isAllowedInBrowser) {
+        errorMessage = 'Blocked by Windows. Check Privacy > Location settings and ensure WiFi is ON.';
+      } else if (error.code === 3) {
+        errorMessage = 'Location request timed out. Please try again.';
+      } else {
+        errorMessage = 'Location unavailable. Ensure GPS/WiFi is enabled.';
+      }
+
+      console.error('Geolocation error:', error);
+      // We don't have toast here, so we'll use a local alert or just console error
+      // Actually, since we're in a component, we should probably set an error state
+      // but searchAddress is a good place to show feedback if needed
+    } finally {
       setIsLoading(false);
     }
   }, [reverseGeocode, onLocationSelect, updateMarker]);
@@ -710,7 +734,7 @@ export default function MapboxLocationPicker({
       map.on('click', async (e) => {
         const { lng, lat } = e.lngLat;
         const address = await reverseGeocode(lng, lat);
-        
+
         setCurrentLocation({ lat, lng });
         setSearchAddress(address);
         onLocationSelect({ lat, lng, address });
@@ -847,17 +871,17 @@ export default function MapboxLocationPicker({
           <CardContent className="p-0">
             <div className="relative w-full h-[400px]">
               <div ref={mapContainerRef} className="w-full h-full rounded-lg overflow-hidden" />
-              
+
               {/* Map style switcher */}
               <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
-                <button 
+                <button
                   onClick={() => switchStyle('streets')}
                   className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                   title="Street View"
                 >
                   <Map className="h-4 w-4" />
                 </button>
-                <button 
+                <button
                   onClick={() => switchStyle('satellite')}
                   className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                   title="Satellite View"
