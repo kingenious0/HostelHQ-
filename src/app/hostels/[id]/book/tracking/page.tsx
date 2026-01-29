@@ -1,7 +1,7 @@
 // src/app/hostels/[id]/book/tracking/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from '@/components/header';
 import { Agent, Hostel, getAgent, AppUser, getHostel } from '@/lib/data';
 import { notFound, useParams, useSearchParams, useRouter } from 'next/navigation';
@@ -53,6 +53,7 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
     const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
 
     const mapStyles = {
@@ -60,13 +61,22 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
         satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
     };
 
-    // Helper to add markers (needs to be called on style change too)
-    const setupMarkers = (map: mapboxgl.Map) => {
-        // Clear existing user marker if any
+    // Clear markers helper
+    const clearMarkers = useCallback(() => {
+        if (hostelMarkerRef.current) {
+            hostelMarkerRef.current.remove();
+            hostelMarkerRef.current = null;
+        }
         if (userMarkerRef.current) {
             userMarkerRef.current.remove();
             userMarkerRef.current = null;
         }
+    }, []);
+
+    // Helper to add markers
+    const setupMarkers = useCallback((map: mapboxgl.Map) => {
+        if (!map || !map.getContainer()) return;
+        clearMarkers();
 
         // Add hostel marker
         const hostelEl = document.createElement('div');
@@ -75,7 +85,7 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
                 <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
             </div>
         `;
-        new mapboxgl.Marker({ element: hostelEl })
+        hostelMarkerRef.current = new mapboxgl.Marker({ element: hostelEl })
             .setLngLat([hostelLocation.lng, hostelLocation.lat])
             .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
             .addTo(map);
@@ -84,14 +94,13 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
         if (userLocation) {
             const userEl = document.createElement('div');
             userEl.innerHTML = `
-                <div style="width: 24px; height: 24px; background: #3b82f6; border-radius: 50%; border: 4px solid white; box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>
+                <div style="width: 24px; height: 24px; background: #3b82f6; border: 4px solid white; box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>
                 <style>@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }</style>
             `;
-            const marker = new mapboxgl.Marker({ element: userEl })
+            userMarkerRef.current = new mapboxgl.Marker({ element: userEl })
                 .setLngLat([userLocation.lng, userLocation.lat])
                 .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
                 .addTo(map);
-            userMarkerRef.current = marker;
 
             // Fit bounds to show both markers
             const bounds = new mapboxgl.LngLatBounds();
@@ -99,14 +108,14 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
             bounds.extend([hostelLocation.lng, hostelLocation.lat]);
             map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
         }
-    };
+    }, [hostelLocation, hostelName, userLocation, clearMarkers]);
+
 
     useEffect(() => {
         if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-        // Calculate center - if user location exists, center between both points
         const center: [number, number] = userLocation
-            ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
+            ? [userLocation.lng, userLocation.lat]
             : [hostelLocation.lng, hostelLocation.lat];
 
         const map = new mapboxgl.Map({
@@ -118,11 +127,17 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
 
         mapInstanceRef.current = map;
 
-        map.on('load', () => setupMarkers(map));
-        map.on('style.load', () => setupMarkers(map));
+        const handleLoad = () => {
+            if (map.getContainer()) setupMarkers(map);
+        };
 
-        // Add navigation controls
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.on('load', handleLoad);
+        map.on('style.load', handleLoad);
+
+        // Add navigation controls (Moved to top-left to avoid HUD overlap)
+        if (map.getContainer()) {
+            map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+        }
 
         // Add geolocate control for "find my location" button
         const geolocate = new mapboxgl.GeolocateControl({
@@ -135,10 +150,11 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
         map.addControl(geolocate, 'top-right');
 
         return () => {
+            clearMarkers();
             map.remove();
             mapInstanceRef.current = null;
         };
-    }, [hostelLocation, hostelName]); // Don't re-init on userLocation change
+    }, [hostelLocation, hostelName, clearMarkers, setupMarkers]);
 
     // Update user marker when location changes (without re-initializing map)
     useEffect(() => {
@@ -184,246 +200,148 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
 interface DirectionsMapProps {
     userLocation: { lat: number; lng: number };
     hostelLocation: { lat: number; lng: number };
-    routeGeometry: number[][]; // [lng, lat] coordinates
+    routeGeometry: number[][];
     hostelName: string;
-    onUserLocationUpdate?: (location: { lat: number; lng: number }) => void;
+    onUserLocationUpdate?: (loc: { lat: number; lng: number }) => void;
+    activeStyle: 'streets' | 'satellite';
+    mapInstanceRef: React.MutableRefObject<mapboxgl.Map | null>;
 }
 
-function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName, onUserLocationUpdate }: DirectionsMapProps) {
+// DirectionsMap Component - Premium Visual map for live navigation
+function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName, onUserLocationUpdate, activeStyle, mapInstanceRef }: DirectionsMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
     const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+    const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const watchIdRef = useRef<number | null>(null);
-    const [isTracking, setIsTracking] = useState(true);
-    const [currentUserLocation, setCurrentUserLocation] = useState(userLocation);
-    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
 
-    // Live GPS tracking
-    useEffect(() => {
-        if (!isTracking) return;
+    // Sync layers and sources
+    const syncRouteLayer = useCallback(() => {
+        const map = mapInstanceRef.current;
+        if (!map || !map.isStyleLoaded() || !routeGeometry || routeGeometry.length === 0) return;
 
-        if (navigator.geolocation) {
-            watchIdRef.current = navigator.geolocation.watchPosition(
-                (position) => {
-                    const newLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    setCurrentUserLocation(newLocation);
+        if (map.getSource('route')) {
+            (map.getSource('route') as mapboxgl.GeoJSONSource).setData({
+                type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: routeGeometry }
+            });
+        } else {
+            map.addSource('route', {
+                type: 'geojson',
+                data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: routeGeometry } }
+            });
 
-                    // Update marker position on map
-                    if (userMarkerRef.current) {
-                        userMarkerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
-                    }
+            // 1. Shadow/Outer Glow for depth
+            map.addLayer({
+                id: 'route-glow', type: 'line', source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#3b82f6', 'line-width': 14, 'line-opacity': 0.15, 'line-blur': 12 }
+            });
 
-                    // Notify parent component
-                    if (onUserLocationUpdate) {
-                        onUserLocationUpdate(newLocation);
-                    }
-                },
-                (error) => {
-                    // Silently log tracking issues - very common on desktops/Windows
-                    console.log('Live tracking status:', error.code === 1 ? 'Permission Denied' : error.code === 3 ? 'Timeout' : 'Unavailable');
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 15000,
-                    maximumAge: 10000 // Update only every 10s to be more stable
-                }
-            );
+            // 2. High Contrast White Outline (Critical for Satellite)
+            map.addLayer({
+                id: 'route-outline', type: 'line', source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.8 }
+            });
+
+            // 3. Primary Direction Line (Ultra-bright Blue)
+            map.addLayer({
+                id: 'route-line', type: 'line', source: 'route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#2563eb', 'line-width': 6 }
+            });
         }
+    }, [routeGeometry, mapInstanceRef]);
+
+    // Live Tracking Setup (Watch Position)
+    useEffect(() => {
+        if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+        watchIdRef.current = navigator.geolocation.watchPosition(
+            (pos) => {
+                const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                if (userMarkerRef.current) userMarkerRef.current.setLngLat([loc.lng, loc.lat]);
+                onUserLocationUpdate?.(loc);
+            },
+            (err) => console.warn("Tracking:", err.message),
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        );
 
         return () => {
-            if (watchIdRef.current !== null) {
-                navigator.geolocation.clearWatch(watchIdRef.current);
-            }
+            if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
         };
-    }, [isTracking, onUserLocationUpdate]);
+    }, [onUserLocationUpdate]);
 
-    // Initialize Map and handle Style changes
+    const setupMarkers = useCallback((map: mapboxgl.Map) => {
+        if (!map || !map.getContainer()) return;
+
+        // Clear old markers if they exist
+        if (userMarkerRef.current) userMarkerRef.current.remove();
+        if (hostelMarkerRef.current) hostelMarkerRef.current.remove();
+
+        const createHostelMarker = () => {
+            const el = document.createElement('div');
+            el.innerHTML = `<div style="width: 44px; height: 44px; background: #ef4444; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(0,0,0,0.3);"><span style="transform: rotate(45deg); font-size: 22px;">🏠</span></div>`;
+            return el;
+        };
+
+        const createUserMarker = () => {
+            const el = document.createElement('div');
+            el.innerHTML = `<div style="width: 28px; height: 28px; background: #3b82f6; border: 4px solid white; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.4); position: relative;"><div style="position: absolute; inset: -8px; border-radius: 50%; background: rgba(59,130,246,0.3); animation: ping 2s infinite;"></div></div><style>@keyframes ping { 75%, 100% { transform: scale(2.5); opacity: 0; } }</style>`;
+            return el;
+        };
+
+        hostelMarkerRef.current = new mapboxgl.Marker({ element: createHostelMarker() }).setLngLat([hostelLocation.lng, hostelLocation.lat]).addTo(map);
+        userMarkerRef.current = new mapboxgl.Marker({ element: createUserMarker() }).setLngLat([userLocation.lng, userLocation.lat]).addTo(map);
+    }, [hostelLocation, userLocation]);
+
+    // Map Initialization
     useEffect(() => {
-        if (!mapContainerRef.current) return;
-
-        const mapStyles = {
-            streets: 'mapbox://styles/mapbox/streets-v12',
-            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
-        };
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
 
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: mapStyles[activeStyle],
+            style: 'mapbox://styles/mapbox/satellite-streets-v12',
             center: [userLocation.lng, userLocation.lat],
-            zoom: 12,
+            zoom: 15,
+            pitch: 50,
         });
 
         mapInstanceRef.current = map;
 
-        // Add standard controls
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-        const geolocate = new mapboxgl.GeolocateControl({
-            positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true,
-            showUserHeading: true
+        map.on('load', () => {
+            syncRouteLayer();
+            setupMarkers(map);
         });
-        map.addControl(geolocate, 'top-right');
 
-        // This function adds everything that gets wiped when style changes
-        const loadMapFeatures = () => {
-            console.log('🗺️ Loading map features (Markers & Route)...');
-
-            // Add route source
-            if (map.getSource('route')) return;
-
-            map.addSource('route', {
-                type: 'geojson',
-                data: {
-                    type: 'Feature',
-                    properties: {},
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: routeGeometry
-                    }
-                }
-            });
-
-            // Route Layers
-            map.addLayer({
-                id: 'route-line-bg',
-                type: 'line',
-                source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#1d4ed8', 'line-width': 10, 'line-opacity': 0.3 }
-            });
-
-            map.addLayer({
-                id: 'route-line',
-                type: 'line',
-                source: 'route',
-                layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#3b82f6', 'line-width': 6 }
-            });
-
-            // User Marker (Custom HTML)
-            const userEl = document.createElement('div');
-            userEl.innerHTML = `
-                <div style="width: 28px; height: 28px; background: #3b82f6; border: 4px solid white; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.4); position: relative;">
-                    <div style="position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; border-radius: 50%; background: rgba(59,130,246,0.3); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-                </div>
-                <style>@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }</style>
-            `;
-            const userMarker = new mapboxgl.Marker({ element: userEl })
-                .setLngLat([userLocation.lng, userLocation.lat])
-                .addTo(map);
-            userMarkerRef.current = userMarker;
-
-            // Hostel Marker
-            const hostelEl = document.createElement('div');
-            hostelEl.innerHTML = `
-                <div style="width: 40px; height: 40px; background: #ef4444; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
-                    <span style="transform: rotate(45deg); font-size: 20px;">🏠</span>
-                </div>
-            `;
-            new mapboxgl.Marker({ element: hostelEl })
-                .setLngLat([hostelLocation.lng, hostelLocation.lat])
-                .addTo(map);
-
-            // AUTO-FIT BOUNDS - Very important to see both points
-            const bounds = new mapboxgl.LngLatBounds();
-            bounds.extend([userLocation.lng, userLocation.lat]);
-            bounds.extend([hostelLocation.lng, hostelLocation.lat]);
-
-            // Add some padding by extending invisible points
-            map.fitBounds(bounds, { padding: 100, maxZoom: 15 });
-        };
-
-        map.on('load', loadMapFeatures);
-        map.on('style.load', loadMapFeatures);
+        map.on('style.load', () => {
+            syncRouteLayer();
+            setupMarkers(map);
+        });
 
         return () => {
             map.remove();
             mapInstanceRef.current = null;
-            userMarkerRef.current = null;
         };
-    }, [activeStyle, hostelLocation, routeGeometry, userLocation]);
+    }, []);
 
-    // Center map on user when tracking
-    const centerOnUser = () => {
-        if (mapInstanceRef.current && currentUserLocation) {
-            mapInstanceRef.current.flyTo({
-                center: [currentUserLocation.lng, currentUserLocation.lat],
-                zoom: 16,
-                duration: 1000
-            });
+    // Re-sync layer when geometry changes
+    useEffect(() => {
+        syncRouteLayer();
+    }, [routeGeometry, syncRouteLayer]);
+
+    // Update style when external state changes
+    useEffect(() => {
+        if (mapInstanceRef.current) {
+            mapInstanceRef.current.setStyle(
+                activeStyle === 'streets' ? 'mapbox://styles/mapbox/streets-v12' : 'mapbox://styles/mapbox/satellite-streets-v12'
+            );
         }
-    };
+    }, [activeStyle, mapInstanceRef]);
 
-    // Switch map style
-    const switchStyle = (newStyle: 'streets' | 'satellite') => {
-        if (!mapInstanceRef.current) return;
-        setActiveStyle(newStyle);
-        const mapStyles = {
-            streets: 'mapbox://styles/mapbox/streets-v12',
-            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
-        };
-        mapInstanceRef.current.setStyle(mapStyles[newStyle]);
-    };
-
-    return (
-        <div className="relative h-full w-full">
-            {/* Map container - fills parent */}
-            <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" />
-
-            {/* Map style switcher */}
-            <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
-                <button
-                    onClick={() => switchStyle('streets')}
-                    className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    title="Street View"
-                >
-                    <Map className="h-4 w-4" />
-                </button>
-                <button
-                    onClick={() => switchStyle('satellite')}
-                    className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    title="Satellite View"
-                >
-                    <Layers className="h-4 w-4" />
-                </button>
-            </div>
-
-            {/* Legend and controls overlay */}
-            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                {/* Legend */}
-                <div className="bg-white/95 backdrop-blur-sm rounded-lg px-4 py-2 text-sm flex items-center gap-4 shadow-md">
-                    <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-sm animate-pulse"></span>
-                        <span className="font-medium">You</span>
-                    </span>
-                    <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-sm"></span>
-                        <span className="font-medium">Hostel</span>
-                    </span>
-                </div>
-
-                {/* Center on me button */}
-                <button
-                    onClick={centerOnUser}
-                    className="bg-white/95 backdrop-blur-sm rounded-lg px-4 py-2 text-sm font-medium shadow-md hover:bg-blue-50 transition-colors flex items-center gap-2"
-                >
-                    <Navigation className="h-4 w-4 text-blue-600" />
-                    Center on me
-                </button>
-            </div>
-
-            {/* Live tracking indicator */}
-            <div className="absolute top-3 left-3 bg-green-500 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2 shadow-md">
-                <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                Live Tracking
-            </div>
-        </div>
-    );
+    return <div ref={mapContainerRef} className="w-full h-full" />;
 }
+
+
 
 type OnlineAgent = {
     clientId: string;
@@ -457,8 +375,9 @@ export default function TrackingPage() {
     const [showDirections, setShowDirections] = useState(false);
     const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [travelMode, setTravelMode] = useState<'walking' | 'driving'>('driving');
-    const mapContainerRef = useRef<HTMLDivElement | null>(null);
-    const mapRef = useRef<mapboxgl.Map | null>(null);
+    const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
+    const [showInstructions, setShowInstructions] = useState(false);
+    const mapInstanceRefGlobal = useRef<mapboxgl.Map | null>(null);
 
     const isSelfVisit = visit?.visitType === 'self';
 
@@ -547,6 +466,18 @@ export default function TrackingPage() {
             unsubscribes.forEach(unsub => unsub());
         };
     }, [visitId, hostelId, router, toast, agent]);
+
+    // Stable handler for live location updates from DirectionsMap
+    const handleUserLocationUpdate = useCallback((loc: { lat: number, lng: number }) => {
+        setUserLocation(prev => {
+            if (!prev) return loc;
+            // Only update if moved more than ~1 meter to avoid jitter
+            const latDiff = Math.abs(prev.lat - loc.lat);
+            const lngDiff = Math.abs(prev.lng - loc.lng);
+            if (latDiff < 0.00001 && lngDiff < 0.00001) return prev;
+            return loc;
+        });
+    }, []);
 
     // Fetch user location on page load for self-visits (to show "You are here" marker)
     useEffect(() => {
@@ -824,144 +755,155 @@ export default function TrackingPage() {
                         <Home className="h-5 w-5 text-muted-foreground mt-1" />
                         <div>
                             <p className="text-sm text-muted-foreground">Hostel</p>
-                            <p className="font-semibold">{hostel.name}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">Location</p>
-                            <p className="font-semibold">{hostel.location}</p>
+                            <p className="font-semibold text-slate-900">{hostel.name}</p>
                         </div>
                     </div>
                 </div>
-                <Button className="w-full" onClick={getDirections} disabled={loadingDirections}>
-                    {loadingDirections ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Getting Directions...
-                        </>
-                    ) : (
-                        <>
-                            <Navigation className="mr-2 h-4 w-4" />
-                            Get Live Directions
-                        </>
-                    )}
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black h-14 rounded-2xl shadow-xl shadow-blue-500/20 active:scale-[0.98] transition-all" onClick={getDirections} disabled={loadingDirections}>
+                    {loadingDirections ? <Loader2 className="h-6 w-6 animate-spin" /> : <Navigation className="mr-2 h-5 w-5" />}
+                    GET LIVE DIRECTIONS
                 </Button>
-                <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
+                <Button variant="outline" className="w-full h-12 rounded-xl font-bold" onClick={handleStudentComplete} disabled={isCompleting}>
                     {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
-                    Mark Visit as Complete
+                    MARK VISIT DONE
                 </Button>
+            </div>
+        );
+    };
 
-                {/* Live Directions Display - Full Screen Overlay Style */}
-                {showDirections && route && userLocation && hostel && (
-                    <div className="fixed inset-0 z-50 bg-background">
-                        {/* Header */}
-                        <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
-                            <div>
-                                <h2 className="font-semibold text-lg flex items-center gap-2">
-                                    <Route className="h-5 w-5 text-green-600" />
-                                    Live Navigation
-                                </h2>
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                                    <span className="flex items-center gap-1">
-                                        <Clock className="h-4 w-4" />
-                                        {combinedRoutingService.formatDuration(route.duration)}
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <MapPin className="h-4 w-4" />
-                                        {combinedRoutingService.formatDistance(route.distance)}
-                                    </span>
-                                    <Badge variant="secondary">
-                                        {route.provider}
-                                    </Badge>
-                                </div>
-                            </div>
-                            {/* Travel mode toggle + Close */}
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center rounded-full border bg-muted/40 p-0.5 text-xs">
-                                    <button
-                                        type="button"
-                                        disabled={loadingDirections}
-                                        onClick={() => { setTravelMode('driving'); recalculateRoute('driving'); }}
-                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${travelMode === 'driving'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-muted-foreground hover:bg-white'
-                                            } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
-                                    >
-                                        🚗 Drive
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={loadingDirections}
-                                        onClick={() => { setTravelMode('walking'); recalculateRoute('walking'); }}
-                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${travelMode === 'walking'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-muted-foreground hover:bg-white'
-                                            } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
-                                    >
-                                        🚶 Walk
-                                    </button>
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowDirections(false)}
-                                >
-                                    Close
-                                </Button>
-                            </div>
-                        </div>
+    const renderNavOverlay = () => {
+        if (!showDirections || !route || !userLocation || !hostel) return null;
 
-                        {/* Main Content - Map takes most space */}
-                        <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
-                            {/* Map - Full width on mobile, 70% on desktop */}
-                            <div className="flex-1 lg:w-[70%] h-[50vh] lg:h-full">
-                                <DirectionsMap
-                                    userLocation={userLocation}
-                                    hostelLocation={{ lat: hostel.lat!, lng: hostel.lng! }}
-                                    routeGeometry={route.geometry}
-                                    hostelName={hostel.name}
-                                />
-                            </div>
+        return (
+            <div className="fixed inset-0 z-[100] bg-black flex flex-col font-sans overflow-hidden animate-in fade-in duration-300">
+                <div className="absolute inset-0 z-0">
+                    <DirectionsMap
+                        userLocation={userLocation}
+                        hostelLocation={{ lat: hostel.lat!, lng: hostel.lng! }}
+                        routeGeometry={route.geometry}
+                        hostelName={hostel.name}
+                        onUserLocationUpdate={handleUserLocationUpdate}
+                        activeStyle={activeStyle}
+                        mapInstanceRef={mapInstanceRefGlobal}
+                    />
+                </div>
 
-                            {/* Instructions Panel - Below on mobile, Right side on desktop */}
-                            <div className="lg:w-[30%] h-[50vh] lg:h-full bg-white border-t lg:border-t-0 lg:border-l overflow-hidden flex flex-col">
-                                <div className="p-4 border-b bg-muted/30">
-                                    <h3 className="font-semibold flex items-center gap-2">
-                                        <Navigation className="h-4 w-4 text-blue-600" />
-                                        Turn-by-Turn Directions
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {route.instructions.length} steps to {hostel.name}
-                                    </p>
+                {/* MAP CONTROLS (Always on top) */}
+                <div className="absolute bottom-[35%] right-4 flex flex-col gap-3 z-50 lg:bottom-10 lg:right-auto lg:left-[calc(100vw-500px)]">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={() => setActiveStyle(s => s === 'streets' ? 'satellite' : 'streets')}
+                        className="w-12 h-12 rounded-2xl shadow-2xl bg-white/95 backdrop-blur-xl border border-white/40 hover:bg-white active:scale-95 transition-all text-slate-700"
+                    >
+                        {activeStyle === 'streets' ? <Layers className="h-6 w-6" /> : <Map className="h-6 w-6" />}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={() => mapInstanceRefGlobal.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 18, pitch: 60, duration: 1500 })}
+                        className="w-12 h-12 rounded-2xl shadow-2xl bg-white/95 backdrop-blur-xl border border-white/40 hover:bg-white active:scale-95 transition-all text-blue-600"
+                    >
+                        <Navigation className="h-6 w-6" />
+                    </Button>
+                </div>
+
+                {/* PREMIUM HUD */}
+                <div className="absolute top-6 left-6 right-6 z-40 pointer-events-none">
+                    <div className="mx-auto max-w-xl pointer-events-auto">
+                        <div className="bg-white/90 backdrop-blur-3xl border border-white/50 shadow-[0_20px_60px_rgba(0,0,0,0.1)] rounded-[32px] p-5 flex items-center justify-between gap-6 transition-all hover:shadow-[0_30px_80px_rgba(0,0,0,0.15)]">
+                            <div className="flex items-center gap-5 flex-1 min-w-0">
+                                <div className="bg-blue-600/10 p-3.5 rounded-2xl hidden sm:block shrink-0">
+                                    <Route className="h-7 w-7 text-blue-600" />
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                                    {route.instructions.map((instruction, index) => (
-                                        <div key={index} className="flex gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                                            <span className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white text-sm rounded-full flex items-center justify-center font-semibold">
-                                                {index + 1}
-                                            </span>
-                                            <span className="text-sm leading-relaxed pt-1">{instruction}</span>
-                                        </div>
-                                    ))}
-                                    {/* Destination */}
-                                    <div className="flex gap-3 p-3 rounded-lg bg-green-100 border border-green-200">
-                                        <span className="flex-shrink-0 w-8 h-8 bg-green-600 text-white text-sm rounded-full flex items-center justify-center">
-                                            🏠
+                                <div className="flex flex-col min-w-0">
+                                    <h2 className="font-black text-slate-900 text-sm truncate uppercase tracking-tight">{hostel.name}</h2>
+                                    <div className="flex items-center gap-3 text-[11px] font-black text-blue-600 uppercase mt-0.5">
+                                        <span className="bg-blue-50 px-2 py-1 rounded-md border border-blue-100/30">
+                                            {combinedRoutingService.formatDuration(route.duration)}
                                         </span>
-                                        <span className="text-sm font-medium text-green-800 pt-1">
-                                            Arrive at {hostel.name}
+                                        <span className="text-slate-400 font-bold tracking-wider">
+                                            {combinedRoutingService.formatDistance(route.distance)}
                                         </span>
                                     </div>
                                 </div>
                             </div>
+
+                            <div className="flex items-center gap-2 bg-slate-50/80 p-1.5 rounded-[22px] border border-slate-100 shrink-0">
+                                <button
+                                    onClick={() => { setTravelMode('driving'); recalculateRoute('driving'); }}
+                                    className={`px-4 py-2.5 rounded-[18px] transition-all duration-300 flex items-center gap-2 text-[11px] font-black uppercase ${travelMode === 'driving' ? 'bg-white shadow-lg text-blue-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    <Navigation className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => { setTravelMode('walking'); recalculateRoute('walking'); }}
+                                    className={`px-4 py-2.5 rounded-[18px] transition-all duration-300 flex items-center gap-2 text-[11px] font-black uppercase ${travelMode === 'walking' ? 'bg-white shadow-lg text-blue-600 scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    <Route className="h-4 w-4" />
+                                </button>
+                                <Separator orientation="vertical" className="h-8 mx-1 bg-slate-200/60" />
+                                <Button variant="ghost" size="icon" onClick={() => setShowDirections(false)} className="rounded-[18px] hover:bg-red-50 hover:text-red-500 w-11 h-11 shrink-0">
+                                    <XCircle className="h-6 w-6" />
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                )}
+                </div>
+
+                {/* BOTTOM SHEET */}
+                <div className={`absolute transition-all duration-700 z-40 inset-x-6 bottom-6 lg:left-auto lg:right-6 lg:w-[440px] lg:bottom-6
+                    ${showInstructions ? 'top-1/4 lg:top-auto lg:h-[75vh]' : 'h-24 lg:h-auto'}
+                `}>
+                    <div className="bg-white/95 backdrop-blur-3xl shadow-[0_-10px_60px_rgba(0,0,0,0.12)] rounded-[40px] h-full flex flex-col border border-white/60 overflow-hidden">
+                        <div className="h-24 shrink-0 flex items-center justify-between px-10 cursor-pointer" onClick={() => setShowInstructions(!showInstructions)}>
+                            <div className="flex items-center gap-5">
+                                <div className="w-16 h-1.5 bg-slate-200/50 rounded-full absolute top-4 left-1/2 -translate-x-1/2"></div>
+                                <div className="bg-slate-900 text-white p-3 rounded-2xl shadow-xl">
+                                    <Route className="h-6 w-6" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="font-black text-slate-900 uppercase text-xs tracking-tighter">Instructions</span>
+                                    <span className="text-[10px] font-bold text-slate-400">{route.instructions.length} steps to target</span>
+                                </div>
+                            </div>
+                            <Button variant="outline" className="rounded-2xl h-11 px-6 border-slate-200 font-black text-[11px] uppercase tracking-wider hover:bg-slate-50">
+                                {showInstructions ? 'Close' : 'View Steps'}
+                            </Button>
+                        </div>
+
+                        <div className={`flex-1 overflow-y-auto p-10 pt-2 space-y-4 custom-scrollbar-nav ${!showInstructions ? 'hidden lg:block' : 'block'}`}>
+                            {route.instructions.map((step, idx) => (
+                                <div key={idx} className="flex gap-6 p-6 rounded-[32px] bg-slate-50/40 border border-slate-100/40 items-center transition-all hover:bg-white hover:shadow-xl hover:shadow-slate-200/20 group">
+                                    <div className="w-10 h-10 rounded-2xl bg-white text-blue-600 border-2 border-slate-50 flex items-center justify-center text-[13px] font-black shrink-0 transition-all group-hover:bg-blue-600 group-hover:text-white">
+                                        {idx + 1}
+                                    </div>
+                                    <p className="text-[13px] font-bold text-slate-600 leading-tight group-hover:text-slate-900">{step}</p>
+                                </div>
+                            ))}
+                            <div className="p-12 rounded-[48px] bg-slate-900 text-white text-center space-y-8 mt-10 shadow-2xl">
+                                <Home className="h-14 w-14 mx-auto text-blue-400 animate-bounce-slow" />
+                                <div className="space-y-2">
+                                    <p className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em] opacity-80">Arrival Goal</p>
+                                    <p className="font-black text-xl tracking-tighter leading-none">{hostel.name}</p>
+                                </div>
+                                <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-16 rounded-[24px] shadow-2xl shadow-blue-500/30 active:scale-95 transition-all text-sm tracking-widest uppercase" onClick={handleStudentComplete} disabled={isCompleting}>
+                                    MARK VISIT DONE
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <style jsx global>{`
+                    .custom-scrollbar-nav::-webkit-scrollbar { width: 5px; }
+                    .custom-scrollbar-nav::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+                    .animate-bounce-slow { animation: bounce 3s ease-in-out infinite; }
+                    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+                `}</style>
             </div>
-        )
-    }
+        );
+    };
 
 
     const renderAgentVisitContent = () => {
@@ -1145,26 +1087,32 @@ export default function TrackingPage() {
 
 
     return (
-        <div className="flex flex-col min-h-screen">
-            <Header />
+        <div className="flex flex-col min-h-screen bg-slate-50/50">
+            {renderNavOverlay()}
+            {!showDirections && <Header />}
             <audio ref={notificationAudioRef} src="/sounds/visit-notification.mp3" preload="auto" />
-            <main className="flex-1 grid md:grid-cols-2">
-                <div className="flex flex-col items-center justify-center p-4 md:p-8 bg-gray-50/50">
-                    <Card className="w-full max-w-md shadow-xl">
-                        <CardHeader>
-                            <CardTitle className="font-headline text-2xl flex items-center gap-2">
+
+            <main className="flex-1 grid md:grid-cols-2 overflow-hidden">
+                <div className="flex items-center justify-center p-6 md:p-12 relative z-10">
+                    <Card className="w-full max-w-md shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border-none ring-1 ring-slate-200/60 rounded-[32px] overflow-hidden">
+                        <CardHeader className="p-8 pb-4">
+                            <Badge className="w-fit mb-4 bg-blue-600 text-white font-black px-3 py-1 rounded-lg text-[10px] uppercase tracking-widest leading-none">
+                                {visit?.status || 'loading'}
+                            </Badge>
+                            <CardTitle className="text-3xl font-black text-slate-900 tracking-tight leading-none">
                                 {getCardTitle()}
                             </CardTitle>
-                            <CardDescription>
+                            <CardDescription className="text-slate-400 font-bold text-sm mt-2">
                                 {getCardDescription()}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-8 pt-4">
                             {isSelfVisit ? renderSelfVisitContent() : renderAgentVisitContent()}
                         </CardContent>
                     </Card>
                 </div>
-                <div className="relative bg-muted h-96 md:h-full">
+
+                <div className="relative h-96 md:h-full bg-slate-200">
                     {isSelfVisit && hostel?.lat && hostel?.lng ? (
                         <PreviewMap
                             hostelLocation={{ lat: hostel.lat, lng: hostel.lng }}
@@ -1174,6 +1122,14 @@ export default function TrackingPage() {
                     ) : (
                         <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
                     )}
+
+                    {/* Floating Mobile Status */}
+                    <div className="absolute top-6 left-6 md:hidden z-20">
+                        <div className="bg-white/90 backdrop-blur-xl px-4 py-2 rounded-2xl shadow-2xl border border-white/40 flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Live Tracking Active</span>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
