@@ -59,7 +59,7 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
         if (!mapContainerRef.current || mapInstanceRef.current) return;
 
         // Calculate center - if user location exists, center between both points
-        const center: [number, number] = userLocation 
+        const center: [number, number] = userLocation
             ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
             : [hostelLocation.lng, hostelLocation.lat];
 
@@ -137,7 +137,7 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
 
             // Add navigation controls
             map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-            
+
             // Add geolocate control for "find my location" button
             const geolocate = new mapboxgl.GeolocateControl({
                 positionOptions: {
@@ -158,9 +158,9 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
     // Update user marker when location changes (without re-initializing map)
     useEffect(() => {
         if (!mapInstanceRef.current || !userLocation) return;
-        
+
         const map = mapInstanceRef.current;
-        
+
         if (userMarkerRef.current) {
             userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
         } else {
@@ -201,17 +201,17 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
     return (
         <div className="relative h-full w-full">
             <div ref={mapContainerRef} className="w-full h-full" />
-            
+
             {/* Map style switcher */}
             <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
-                <button 
+                <button
                     onClick={() => switchStyle('streets')}
                     className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     title="Street View"
                 >
                     <Map className="h-4 w-4" />
                 </button>
-                <button 
+                <button
                     onClick={() => switchStyle('satellite')}
                     className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     title="Satellite View"
@@ -253,12 +253,12 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                         lng: position.coords.longitude
                     };
                     setCurrentUserLocation(newLocation);
-                    
+
                     // Update marker position on map
                     if (userMarkerRef.current) {
                         userMarkerRef.current.setLngLat([newLocation.lng, newLocation.lat]);
                     }
-                    
+
                     // Notify parent component
                     if (onUserLocationUpdate) {
                         onUserLocationUpdate(newLocation);
@@ -386,7 +386,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                 .setLngLat([userLocation.lng, userLocation.lat])
                 .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
                 .addTo(map);
-            
+
             userMarkerRef.current = userMarker;
 
             // Add hostel location marker (red pin)
@@ -417,7 +417,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
             bounds.extend([userLocation.lng, userLocation.lat]);
             bounds.extend([hostelLocation.lng, hostelLocation.lat]);
             routeGeometry.forEach(coord => bounds.extend(coord as [number, number]));
-            
+
             map.fitBounds(bounds, {
                 padding: 60,
                 maxZoom: 16
@@ -426,7 +426,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
 
         // Add navigation controls
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        
+
         // Add geolocate control for "center on me" button
         const geolocate = new mapboxgl.GeolocateControl({
             positionOptions: {
@@ -470,17 +470,17 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
         <div className="relative h-full w-full">
             {/* Map container - fills parent */}
             <div ref={mapContainerRef} className="w-full h-full min-h-[300px]" />
-            
+
             {/* Map style switcher */}
             <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
-                <button 
+                <button
                     onClick={() => switchStyle('streets')}
                     className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     title="Street View"
                 >
                     <Map className="h-4 w-4" />
                 </button>
-                <button 
+                <button
                     onClick={() => switchStyle('satellite')}
                     className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                     title="Satellite View"
@@ -488,7 +488,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                     <Layers className="h-4 w-4" />
                 </button>
             </div>
-            
+
             {/* Legend and controls overlay */}
             <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
                 {/* Legend */}
@@ -502,7 +502,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                         <span className="font-medium">Hostel</span>
                     </span>
                 </div>
-                
+
                 {/* Center on me button */}
                 <button
                     onClick={centerOnUser}
@@ -512,7 +512,7 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                     Center on me
                 </button>
             </div>
-            
+
             {/* Live tracking indicator */}
             <div className="absolute top-3 left-3 bg-green-500 text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2 shadow-md">
                 <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
@@ -552,7 +552,7 @@ export default function TrackingPage() {
     const [route, setRoute] = useState<RouteResult | null>(null);
     const [loadingDirections, setLoadingDirections] = useState(false);
     const [showDirections, setShowDirections] = useState(false);
-    const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+    const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [travelMode, setTravelMode] = useState<'walking' | 'driving'>('driving');
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -583,7 +583,7 @@ export default function TrackingPage() {
             }
         };
         fetchHostelData();
-        
+
         const visitDocRef = doc(db, 'visits', visitId as string);
 
         const setupAgentDetails = (agentId: string) => {
@@ -593,7 +593,7 @@ export default function TrackingPage() {
                 }
             });
         };
-        
+
         const unsubVisit = onSnapshot(visitDocRef, (docSnap: any) => {
             if (!docSnap.exists()) {
                 toast({ title: "Visit Not Found", description: "The visit you are looking for does not exist.", variant: "destructive" });
@@ -648,7 +648,7 @@ export default function TrackingPage() {
     // Fetch user location on page load for self-visits (to show "You are here" marker)
     useEffect(() => {
         if (!isSelfVisit || userLocation) return;
-        
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -716,18 +716,18 @@ export default function TrackingPage() {
     // Fast recalculation when switching travel modes (reuses existing location)
     const recalculateRoute = async (mode: 'driving' | 'walking') => {
         if (!userLocation || !hostel?.lat || !hostel?.lng) return;
-        
+
         setLoadingDirections(true);
         try {
             const hostelLocation = { lat: hostel.lat!, lng: hostel.lng! };
             console.log(`🔄 Recalculating route for ${mode}...`);
-            
+
             const routeResult = await combinedRoutingService.getDirections(
                 userLocation,
                 hostelLocation,
                 mode
             );
-            
+
             setRoute(routeResult);
             toast({
                 title: `${mode === 'driving' ? '🚗' : '🚶'} ${mode.charAt(0).toUpperCase() + mode.slice(1)} directions`,
@@ -752,58 +752,74 @@ export default function TrackingPage() {
         }
 
         setLoadingDirections(true);
-        
+
+        // Check for secure context - Geolocation requires HTTPS or localhost
+        if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            setLoadingDirections(false);
+            toast({
+                title: 'Insecure Connection',
+                description: 'Browser blocks location on non-HTTPS sites. Please use http://localhost:8080 instead of http://0.0.0.0:8080.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         try {
             // Get user's current location
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    try {
-                        const userLoc = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-
-                        const hostelLocation = {
-                            lat: hostel.lat!,
-                            lng: hostel.lng!
-                        };
-
-                        console.log('🎯 Getting directions from', userLoc, 'to', hostelLocation);
-                        
-                        // Save user location for map display
-                        setUserLocation(userLoc);
-                        
-                        const routeResult = await combinedRoutingService.getDirections(
-                            userLoc,
-                            hostelLocation,
-                            travelMode
-                        );
-
-                        setRoute(routeResult);
-                        setShowDirections(true);
-                        
-                        toast({
-                            title: `Directions via ${routeResult.provider}`,
-                            description: `${combinedRoutingService.formatDistance(routeResult.distance)} • ${combinedRoutingService.formatDuration(routeResult.duration)}`,
-                        });
-                    } catch (error) {
-                        console.error('Failed to get directions:', error);
-                        toast({
-                            title: 'Directions Failed',
-                            description: 'Could not calculate route. Please try again.',
-                            variant: 'destructive',
-                        });
-                    } finally {
-                        setLoadingDirections(false);
-                    }
-                }, (error) => {
-                    setLoadingDirections(false);
-                    toast({
-                        title: 'Location Access Denied',
-                        description: 'Please enable location access to get directions.',
-                        variant: 'destructive',
+                const getPosition = (options: PositionOptions): Promise<GeolocationPosition> => {
+                    return new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, options);
                     });
+                };
+
+                let position: GeolocationPosition;
+                try {
+                    // Try with high accuracy first
+                    position = await getPosition({ enableHighAccuracy: true, timeout: 8000 });
+                } catch (err: any) {
+                    // Fallback to low accuracy if high accuracy fails (code 3 = TIMEOUT, code 2 = POSITION_UNAVAILABLE)
+                    if (err.code === 3 || err.code === 2) {
+                        console.warn('High accuracy failed (code ' + err.code + '), trying low accuracy fallback...');
+                        try {
+                            position = await getPosition({ enableHighAccuracy: false, timeout: 5000 });
+                        } catch (err2: any) {
+                            console.error('Low accuracy fallback also failed:', err2);
+                            throw err; // Throw the original error if fallback also fails
+                        }
+                    } else {
+                        throw err;
+                    }
+                }
+
+                const userLoc = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                };
+
+                const hostelLocation = {
+                    lat: hostel.lat!,
+                    lng: hostel.lng!
+                };
+
+                console.log('🎯 Getting directions from', userLoc, 'to', hostelLocation);
+                setUserLocation(userLoc);
+
+                const routeResult = await combinedRoutingService.getDirections(
+                    userLoc,
+                    hostelLocation,
+                    travelMode
+                );
+
+                setRoute(routeResult);
+                setShowDirections(true);
+
+                toast({
+                    title: `Directions via ${routeResult.provider}`,
+                    description: `${combinedRoutingService.formatDistance(routeResult.distance)} • ${combinedRoutingService.formatDuration(routeResult.duration)}`,
                 });
+                setLoadingDirections(false);
+
             } else {
                 setLoadingDirections(false);
                 toast({
@@ -812,9 +828,30 @@ export default function TrackingPage() {
                     variant: 'destructive',
                 });
             }
-        } catch (error) {
+        } catch (error: any) {
             setLoadingDirections(false);
-            console.error('Directions error:', error);
+            let errorMessage = 'Please enable location access to get directions.';
+            let errorTitle = 'Location Access Denied';
+
+            // Geolocation error codes: 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
+            const code = error.code;
+            if (code === 1) {
+                errorTitle = 'Location Permission Denied';
+                errorMessage = 'HostelHQ doesn\'t have permission. Please check if your computer or phone has blocked location globally in system settings.';
+            } else if (code === 2) {
+                errorTitle = 'Location Unavailable';
+                errorMessage = 'Your device couldn\'t determine its location. Ensure you have a clear view of the sky or are near a WiFi network.';
+            } else if (code === 3) {
+                errorTitle = 'Location Timeout';
+                errorMessage = 'It took too long to find your location. Please try again or check your internet connection.';
+            }
+
+            toast({
+                title: errorTitle,
+                description: errorMessage,
+                variant: 'destructive',
+            });
+            console.error('Directions error:', { code: error.code, message: error.message, full: error });
         }
     };
 
@@ -829,9 +866,9 @@ export default function TrackingPage() {
             </div>
         )
     }
-    
+
     const agentPhoneNumber = agent?.phone || '1234567890'; // Placeholder phone
-    
+
     const renderSelfVisitContent = () => {
         if (!hostel?.lat || !hostel?.lng) {
             return (
@@ -855,14 +892,14 @@ export default function TrackingPage() {
             <div className="space-y-4">
                 <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
                     <div className="flex items-start gap-3">
-                        <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                        <Home className="h-5 w-5 text-muted-foreground mt-1" />
                         <div>
                             <p className="text-sm text-muted-foreground">Hostel</p>
                             <p className="font-semibold">{hostel.name}</p>
                         </div>
                     </div>
                     <div className="flex items-start gap-3">
-                        <MapPin className="h-5 w-5 text-muted-foreground mt-1"/>
+                        <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
                         <div>
                             <p className="text-sm text-muted-foreground">Location</p>
                             <p className="font-semibold">{hostel.location}</p>
@@ -883,10 +920,10 @@ export default function TrackingPage() {
                     )}
                 </Button>
                 <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                    {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" /> }
+                    {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
                     Mark Visit as Complete
                 </Button>
-                
+
                 {/* Live Directions Display - Full Screen Overlay Style */}
                 {showDirections && route && userLocation && hostel && (
                     <div className="fixed inset-0 z-50 bg-background">
@@ -918,11 +955,10 @@ export default function TrackingPage() {
                                         type="button"
                                         disabled={loadingDirections}
                                         onClick={() => { setTravelMode('driving'); recalculateRoute('driving'); }}
-                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
-                                            travelMode === 'driving'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'text-muted-foreground hover:bg-white'
-                                        } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
+                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${travelMode === 'driving'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-muted-foreground hover:bg-white'
+                                            } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
                                     >
                                         🚗 Drive
                                     </button>
@@ -930,17 +966,16 @@ export default function TrackingPage() {
                                         type="button"
                                         disabled={loadingDirections}
                                         onClick={() => { setTravelMode('walking'); recalculateRoute('walking'); }}
-                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${
-                                            travelMode === 'walking'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'text-muted-foreground hover:bg-white'
-                                        } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
+                                        className={`px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors ${travelMode === 'walking'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-muted-foreground hover:bg-white'
+                                            } ${loadingDirections ? 'opacity-50 cursor-wait' : ''}`}
                                     >
                                         🚶 Walk
                                     </button>
                                 </div>
-                                <Button 
-                                    variant="outline" 
+                                <Button
+                                    variant="outline"
                                     size="sm"
                                     onClick={() => setShowDirections(false)}
                                 >
@@ -948,19 +983,19 @@ export default function TrackingPage() {
                                 </Button>
                             </div>
                         </div>
-                        
+
                         {/* Main Content - Map takes most space */}
                         <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
                             {/* Map - Full width on mobile, 70% on desktop */}
                             <div className="flex-1 lg:w-[70%] h-[50vh] lg:h-full">
-                                <DirectionsMap 
+                                <DirectionsMap
                                     userLocation={userLocation}
                                     hostelLocation={{ lat: hostel.lat!, lng: hostel.lng! }}
                                     routeGeometry={route.geometry}
                                     hostelName={hostel.name}
                                 />
                             </div>
-                            
+
                             {/* Instructions Panel - Below on mobile, Right side on desktop */}
                             <div className="lg:w-[30%] h-[50vh] lg:h-full bg-white border-t lg:border-t-0 lg:border-l overflow-hidden flex flex-col">
                                 <div className="p-4 border-b bg-muted/30">
@@ -1042,14 +1077,14 @@ export default function TrackingPage() {
                     <div className="space-y-4">
                         <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
                             <div className="flex items-start gap-3">
-                                <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <Home className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Hostel</p>
                                     <p className="font-semibold">{hostel.name}</p>
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
-                                <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <UserCheck className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Your Agent</p>
                                     <p className="font-semibold">{agent.fullName}</p>
@@ -1057,14 +1092,14 @@ export default function TrackingPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex items-start gap-3">
-                                    <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
+                                    <Calendar className="h-5 w-5 text-muted-foreground mt-1" />
                                     <div>
                                         <p className="text-sm text-muted-foreground">Date</p>
                                         <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
-                                    <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
+                                    <Clock className="h-5 w-5 text-muted-foreground mt-1" />
                                     <div>
                                         <p className="text-sm text-muted-foreground">Time</p>
                                         <p className="font-semibold">{visit.visitTime}</p>
@@ -1080,7 +1115,7 @@ export default function TrackingPage() {
                         </p>
 
                         <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                            {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
+                            {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
                             Mark Visit as Complete
                         </Button>
                     </div>
@@ -1091,14 +1126,14 @@ export default function TrackingPage() {
                 <div className="space-y-4">
                     <div className="space-y-4 rounded-lg border bg-card text-card-foreground p-4">
                         <div className="flex items-start gap-3">
-                            <Home className="h-5 w-5 text-muted-foreground mt-1"/>
+                            <Home className="h-5 w-5 text-muted-foreground mt-1" />
                             <div>
                                 <p className="text-sm text-muted-foreground">Hostel</p>
                                 <p className="font-semibold">{hostel.name}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-3">
-                            <UserCheck className="h-5 w-5 text-muted-foreground mt-1"/>
+                            <UserCheck className="h-5 w-5 text-muted-foreground mt-1" />
                             <div>
                                 <p className="text-sm text-muted-foreground">Your Agent</p>
                                 <p className="font-semibold">{agent.fullName}</p>
@@ -1106,14 +1141,14 @@ export default function TrackingPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex items-start gap-3">
-                                <Calendar className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <Calendar className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Date</p>
                                     <p className="font-semibold">{format(new Date(visit.visitDate), "PPP")}</p>
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
-                                <Clock className="h-5 w-5 text-muted-foreground mt-1"/>
+                                <Clock className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Time</p>
                                     <p className="font-semibold">{visit.visitTime}</p>
@@ -1121,12 +1156,12 @@ export default function TrackingPage() {
                             </div>
                         </div>
                     </div>
-                    
+
                     <Separator />
-                    
-                    
+
+
                     <Button variant="outline" className="w-full" onClick={handleStudentComplete} disabled={isCompleting}>
-                        {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCheck className="mr-2 h-4 w-4" />}
+                        {isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCheck className="mr-2 h-4 w-4" />}
                         Mark Visit as Complete
                     </Button>
                 </div>
@@ -1142,7 +1177,7 @@ export default function TrackingPage() {
                 </div>
             );
         }
-        
+
         if (visit.status === 'cancelled') {
             return (
                 <div className="text-center py-8">
@@ -1167,7 +1202,7 @@ export default function TrackingPage() {
         if (visit.status === 'cancelled') return <span className="text-red-500">Visit Cancelled</span>;
         return "Visit Details";
     }
-    
+
     const getCardDescription = () => {
         if (isSelfVisit) return "You've opted to visit the hostel by yourself. Use the map for navigation.";
         if (!visit) return "";
@@ -1191,7 +1226,7 @@ export default function TrackingPage() {
                             <CardTitle className="font-headline text-2xl flex items-center gap-2">
                                 {getCardTitle()}
                             </CardTitle>
-                             <CardDescription>
+                            <CardDescription>
                                 {getCardDescription()}
                             </CardDescription>
                         </CardHeader>
@@ -1201,15 +1236,15 @@ export default function TrackingPage() {
                     </Card>
                 </div>
                 <div className="relative bg-muted h-96 md:h-full">
-                   {isSelfVisit && hostel?.lat && hostel?.lng ? (
-                       <PreviewMap 
-                           hostelLocation={{ lat: hostel.lat, lng: hostel.lng }}
-                           userLocation={userLocation}
-                           hostelName={hostel.name}
-                       />
-                   ) : (
-                       <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
-                   )}
+                    {isSelfVisit && hostel?.lat && hostel?.lng ? (
+                        <PreviewMap
+                            hostelLocation={{ lat: hostel.lat, lng: hostel.lng }}
+                            userLocation={userLocation}
+                            hostelName={hostel.name}
+                        />
+                    ) : (
+                        <MapboxMap agentId={visit?.agentId} hostelLocation={hostel} />
+                    )}
                 </div>
             </main>
         </div>
