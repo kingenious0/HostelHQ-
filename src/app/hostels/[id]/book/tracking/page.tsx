@@ -55,127 +55,37 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
     const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
 
-    useEffect(() => {
-        if (!mapContainerRef.current || mapInstanceRef.current) return;
+    const mapStyles = {
+        streets: 'mapbox://styles/mapbox/streets-v12',
+        satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+    };
 
-        // Calculate center - if user location exists, center between both points
-        const center: [number, number] = userLocation
-            ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
-            : [hostelLocation.lng, hostelLocation.lat];
-
-        const mapStyles = {
-            streets: 'mapbox://styles/mapbox/streets-v12',
-            satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
-        };
-
-        const map = new mapboxgl.Map({
-            container: mapContainerRef.current,
-            style: mapStyles[activeStyle],
-            center,
-            zoom: userLocation ? 10 : 14,
-        });
-
-        mapInstanceRef.current = map;
-
-        map.on('load', () => {
-            // Add hostel marker
-            const hostelEl = document.createElement('div');
-            hostelEl.innerHTML = `
-                <div style="
-                    width: 40px;
-                    height: 40px;
-                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-                    border-radius: 50% 50% 50% 0;
-                    transform: rotate(-45deg);
-                    border: 3px solid white;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                ">
-                    <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
-                </div>
-            `;
-            new mapboxgl.Marker({ element: hostelEl })
-                .setLngLat([hostelLocation.lng, hostelLocation.lat])
-                .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
-                .addTo(map);
-
-            // Add user marker if location is available
-            if (userLocation) {
-                const userEl = document.createElement('div');
-                userEl.innerHTML = `
-                    <div style="
-                        width: 24px;
-                        height: 24px;
-                        background: #3b82f6;
-                        border-radius: 50%;
-                        border: 4px solid white;
-                        box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3);
-                        animation: pulse 2s infinite;
-                    "></div>
-                    <style>
-                        @keyframes pulse {
-                            0% { box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); }
-                            50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0,0,0,0.3); }
-                            100% { box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); }
-                        }
-                    </style>
-                `;
-                const marker = new mapboxgl.Marker({ element: userEl })
-                    .setLngLat([userLocation.lng, userLocation.lat])
-                    .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
-                    .addTo(map);
-                userMarkerRef.current = marker;
-
-                // Fit bounds to show both markers
-                const bounds = new mapboxgl.LngLatBounds();
-                bounds.extend([userLocation.lng, userLocation.lat]);
-                bounds.extend([hostelLocation.lng, hostelLocation.lat]);
-                map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
-            }
-
-            // Add navigation controls
-            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-            // Add geolocate control for "find my location" button
-            const geolocate = new mapboxgl.GeolocateControl({
-                positionOptions: {
-                    enableHighAccuracy: true
-                },
-                trackUserLocation: false,
-                showUserHeading: false
-            });
-            map.addControl(geolocate, 'top-right');
-        });
-
-        return () => {
-            map.remove();
-            mapInstanceRef.current = null;
-        };
-    }, [hostelLocation, hostelName]); // Don't re-init on userLocation change
-
-    // Update user marker when location changes (without re-initializing map)
-    useEffect(() => {
-        if (!mapInstanceRef.current || !userLocation) return;
-
-        const map = mapInstanceRef.current;
-
+    // Helper to add markers (needs to be called on style change too)
+    const setupMarkers = (map: mapboxgl.Map) => {
+        // Clear existing user marker if any
         if (userMarkerRef.current) {
-            userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
-        } else {
-            // Create new marker if it doesn't exist
+            userMarkerRef.current.remove();
+            userMarkerRef.current = null;
+        }
+
+        // Add hostel marker
+        const hostelEl = document.createElement('div');
+        hostelEl.innerHTML = `
+            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
+            </div>
+        `;
+        new mapboxgl.Marker({ element: hostelEl })
+            .setLngLat([hostelLocation.lng, hostelLocation.lat])
+            .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
+            .addTo(map);
+
+        // Add user marker if location is available
+        if (userLocation) {
             const userEl = document.createElement('div');
             userEl.innerHTML = `
-                <div style="
-                    width: 24px;
-                    height: 24px;
-                    background: #3b82f6;
-                    border-radius: 50%;
-                    border: 4px solid white;
-                    box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3);
-                    animation: pulse 2s infinite;
-                "></div>
+                <div style="width: 24px; height: 24px; background: #3b82f6; border-radius: 50%; border: 4px solid white; box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>
+                <style>@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }</style>
             `;
             const marker = new mapboxgl.Marker({ element: userEl })
                 .setLngLat([userLocation.lng, userLocation.lat])
@@ -189,13 +99,60 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
             bounds.extend([hostelLocation.lng, hostelLocation.lat]);
             map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
         }
-    }, [userLocation, hostelLocation]);
+    };
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+        // Calculate center - if user location exists, center between both points
+        const center: [number, number] = userLocation
+            ? [(userLocation.lng + hostelLocation.lng) / 2, (userLocation.lat + hostelLocation.lat) / 2]
+            : [hostelLocation.lng, hostelLocation.lat];
+
+        const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: mapStyles[activeStyle],
+            center,
+            zoom: userLocation ? 10 : 14,
+        });
+
+        mapInstanceRef.current = map;
+
+        map.on('load', () => setupMarkers(map));
+        map.on('style.load', () => setupMarkers(map));
+
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+        // Add geolocate control for "find my location" button
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: true
+            },
+            trackUserLocation: false,
+            showUserHeading: false
+        });
+        map.addControl(geolocate, 'top-right');
+
+        return () => {
+            map.remove();
+            mapInstanceRef.current = null;
+        };
+    }, [hostelLocation, hostelName]); // Don't re-init on userLocation change
+
+    // Update user marker when location changes (without re-initializing map)
+    useEffect(() => {
+        if (!mapInstanceRef.current || !userLocation) return;
+        if (userMarkerRef.current) {
+            userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+        }
+    }, [userLocation]);
 
     // Switch map style
     const switchStyle = (newStyle: 'streets' | 'satellite') => {
         if (!mapInstanceRef.current) return;
         setActiveStyle(newStyle);
-        mapInstanceRef.current.setStyle(newStyle === 'streets' ? mapStyles.streets : mapStyles.satellite);
+        mapInstanceRef.current.setStyle(mapStyles[newStyle]);
     };
 
     return (
@@ -265,12 +222,13 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                     }
                 },
                 (error) => {
-                    console.error('GPS tracking error:', error);
+                    // Silently log tracking issues - very common on desktops/Windows
+                    console.log('Live tracking status:', error.code === 1 ? 'Permission Denied' : error.code === 3 ? 'Timeout' : 'Unavailable');
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 1000 // Update every second
+                    timeout: 15000,
+                    maximumAge: 10000 // Update only every 10s to be more stable
                 }
             );
         }
@@ -282,10 +240,10 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
         };
     }, [isTracking, onUserLocationUpdate]);
 
+    // Initialize Map and handle Style changes
     useEffect(() => {
-        if (!mapContainerRef.current || mapInstanceRef.current) return;
+        if (!mapContainerRef.current) return;
 
-        // Initialize map
         const mapStyles = {
             streets: 'mapbox://styles/mapbox/streets-v12',
             satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
@@ -294,17 +252,29 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: mapStyles[activeStyle],
-            center: [
-                (userLocation.lng + hostelLocation.lng) / 2,
-                (userLocation.lat + hostelLocation.lat) / 2
-            ],
-            zoom: 13,
+            center: [userLocation.lng, userLocation.lat],
+            zoom: 12,
         });
 
         mapInstanceRef.current = map;
 
-        map.on('load', () => {
-            // Add route line source
+        // Add standard controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+        const geolocate = new mapboxgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true,
+            showUserHeading: true
+        });
+        map.addControl(geolocate, 'top-right');
+
+        // This function adds everything that gets wiped when style changes
+        const loadMapFeatures = () => {
+            console.log('🗺️ Loading map features (Markers & Route)...');
+
+            // Add route source
+            if (map.getSource('route')) return;
+
             map.addSource('route', {
                 type: 'geojson',
                 data: {
@@ -317,132 +287,65 @@ function DirectionsMap({ userLocation, hostelLocation, routeGeometry, hostelName
                 }
             });
 
-            // Add route line layer (background - wider, for outline effect)
+            // Route Layers
             map.addLayer({
-                id: 'route-outline',
+                id: 'route-line-bg',
                 type: 'line',
                 source: 'route',
-                layout: {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                paint: {
-                    'line-color': '#1e40af',
-                    'line-width': 8,
-                    'line-opacity': 0.4
-                }
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#1d4ed8', 'line-width': 10, 'line-opacity': 0.3 }
             });
 
-            // Add route line layer (main line)
             map.addLayer({
                 id: 'route-line',
                 type: 'line',
                 source: 'route',
-                layout: {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                paint: {
-                    'line-color': '#3b82f6',
-                    'line-width': 5
-                }
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#3b82f6', 'line-width': 6 }
             });
 
-            // Add user location marker (blue pulsing dot)
+            // User Marker (Custom HTML)
             const userEl = document.createElement('div');
             userEl.innerHTML = `
-                <div style="position: relative;">
-                    <div style="
-                        width: 24px;
-                        height: 24px;
-                        background: #3b82f6;
-                        border: 4px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 8px rgba(59,130,246,0.5);
-                        position: relative;
-                        z-index: 2;
-                    "></div>
-                    <div style="
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        width: 40px;
-                        height: 40px;
-                        background: rgba(59,130,246,0.3);
-                        border-radius: 50%;
-                        animation: pulse 2s infinite;
-                        z-index: 1;
-                    "></div>
+                <div style="width: 28px; height: 28px; background: #3b82f6; border: 4px solid white; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.4); position: relative;">
+                    <div style="position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; border-radius: 50%; background: rgba(59,130,246,0.3); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
                 </div>
-                <style>
-                    @keyframes pulse {
-                        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-                        100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
-                    }
-                </style>
+                <style>@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }</style>
             `;
             const userMarker = new mapboxgl.Marker({ element: userEl })
                 .setLngLat([userLocation.lng, userLocation.lat])
-                .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
                 .addTo(map);
-
             userMarkerRef.current = userMarker;
 
-            // Add hostel location marker (red pin)
+            // Hostel Marker
             const hostelEl = document.createElement('div');
             hostelEl.innerHTML = `
-                <div style="
-                    width: 36px;
-                    height: 36px;
-                    background: #ef4444;
-                    border: 4px solid white;
-                    border-radius: 50% 50% 50% 0;
-                    transform: rotate(-45deg);
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                ">
-                    <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
+                <div style="width: 40px; height: 40px; background: #ef4444; border: 4px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;">
+                    <span style="transform: rotate(45deg); font-size: 20px;">🏠</span>
                 </div>
             `;
             new mapboxgl.Marker({ element: hostelEl })
                 .setLngLat([hostelLocation.lng, hostelLocation.lat])
-                .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
                 .addTo(map);
 
-            // Fit map to show entire route
+            // AUTO-FIT BOUNDS - Very important to see both points
             const bounds = new mapboxgl.LngLatBounds();
             bounds.extend([userLocation.lng, userLocation.lat]);
             bounds.extend([hostelLocation.lng, hostelLocation.lat]);
-            routeGeometry.forEach(coord => bounds.extend(coord as [number, number]));
 
-            map.fitBounds(bounds, {
-                padding: 60,
-                maxZoom: 16
-            });
-        });
+            // Add some padding by extending invisible points
+            map.fitBounds(bounds, { padding: 100, maxZoom: 15 });
+        };
 
-        // Add navigation controls
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-        // Add geolocate control for "center on me" button
-        const geolocate = new mapboxgl.GeolocateControl({
-            positionOptions: {
-                enableHighAccuracy: true
-            },
-            trackUserLocation: true,
-            showUserHeading: true
-        });
-        map.addControl(geolocate, 'top-right');
+        map.on('load', loadMapFeatures);
+        map.on('style.load', loadMapFeatures);
 
         return () => {
             map.remove();
             mapInstanceRef.current = null;
             userMarkerRef.current = null;
         };
-    }, [hostelLocation, routeGeometry, hostelName]);
+    }, [activeStyle, hostelLocation, routeGeometry, userLocation]);
 
     // Center map on user when tracking
     const centerOnUser = () => {
@@ -751,141 +654,133 @@ export default function TrackingPage() {
             return;
         }
 
+        // Show directions UI immediately - even if we don't have location yet
+        // This allows user to see the map and use the map's own geolocate button if needed
+        setShowDirections(true);
         setLoadingDirections(true);
 
-        // Show status toast so user knows it's working (especially if no permission popup appears)
         const statusToast = toast({
-            title: 'Finding your location...',
-            description: 'Scanning GPS and WiFi signals...',
+            title: 'Connecting to GPS...',
+            description: 'This may take up to 20 seconds on some devices.',
         });
 
-        // Check for secure context - Geolocation requires HTTPS or localhost
+        // Check for secure context
         if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            statusToast.dismiss();
             setLoadingDirections(false);
             toast({
                 title: 'Insecure Connection',
-                description: 'Browser blocks location on non-HTTPS sites. Please use http://localhost:8080 instead of http://0.0.0.0:8080.',
+                description: 'Browser blocks location on non-HTTPS sites. Use http://localhost:8080.',
                 variant: 'destructive',
             });
             return;
         }
 
         try {
-            // Get user's current location
             if (navigator.geolocation) {
-                // Check permission status first for better diagnostics
-                let permissionState: PermissionState | 'unknown' = 'unknown';
-                try {
-                    const status = await navigator.permissions.query({ name: 'geolocation' });
-                    permissionState = status.state;
-                } catch (e) {
-                    console.log('Permission query not supported');
-                }
-
                 const getPosition = (options: PositionOptions): Promise<GeolocationPosition> => {
                     return new Promise((resolve, reject) => {
                         navigator.geolocation.getCurrentPosition(resolve, reject, options);
                     });
                 };
 
-                let position: GeolocationPosition;
+                let position: GeolocationPosition | null = null;
                 try {
-                    // Try with high accuracy first, force fresh location (maximumAge: 0)
-                    position = await getPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+                    // Increased timeout to 15s - Windows often needs more time for a cold fix
+                    position = await getPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
                 } catch (err: any) {
-                    // Fallback to low accuracy if high accuracy fails (code 3 = TIMEOUT, code 2 = POSITION_UNAVAILABLE)
                     if (err.code === 3 || err.code === 2) {
-                        console.warn('High accuracy failed (code ' + err.code + '), trying low accuracy fallback...');
+                        console.warn('High accuracy failed/timed out, trying low accuracy fallback...');
                         try {
-                            position = await getPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 0 });
+                            position = await getPosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 0 });
                         } catch (err2: any) {
-                            console.error('Low accuracy fallback also failed:', err2);
-                            throw err; // Throw the original error if fallback also fails
+                            console.warn('Low accuracy fallback also failed.');
                         }
-                    } else {
-                        throw err;
                     }
                 }
 
-                const userLoc = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                };
+                // --- IP FALLBACK ---
+                // If browser geolocation completely failed (Denied or Timeout), try IP-based location
+                if (!position) {
+                    console.log('🌐 Browser GPS failed. Attempting IP-based location fallback...');
+                    try {
+                        const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+                        const ipResponse = await fetch(`https://api.geoapify.com/v1/ipinfo?apiKey=${geoapifyKey}`);
+                        const ipData = await ipResponse.json();
 
-                const hostelLocation = {
-                    lat: hostel.lat!,
-                    lng: hostel.lng!
-                };
+                        if (ipData.location) {
+                            console.log('📍 IP-based location fix obtained:', ipData.location);
+                            position = {
+                                coords: {
+                                    latitude: ipData.location.latitude,
+                                    longitude: ipData.location.longitude,
+                                    accuracy: 1000, // IP is approximate
+                                    altitude: null,
+                                    altitudeAccuracy: null,
+                                    heading: null,
+                                    speed: null
+                                },
+                                timestamp: Date.now()
+                            } as GeolocationPosition;
 
-                console.log('🎯 Success! Location fix obtained:', userLoc);
-                statusToast.dismiss(); // Clean up status toast on success
+                            toast({
+                                title: 'Using Network Location',
+                                description: 'GPS failed, so we used your IP address. This is less exact but works!',
+                            });
+                        }
+                    } catch (ipErr) {
+                        console.error('IP Fallback failed too:', ipErr);
+                    }
+                }
+
+                if (!position) {
+                    throw new Error('All location attempts failed');
+                }
+
+                const userLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
+                const hostelLoc = { lat: hostel.lat!, lng: hostel.lng! };
+
                 setUserLocation(userLoc);
 
-                const routeResult = await combinedRoutingService.getDirections(
-                    userLoc,
-                    hostelLocation,
-                    travelMode
-                );
-
+                const routeResult = await combinedRoutingService.getDirections(userLoc, hostelLoc, travelMode);
                 setRoute(routeResult);
-                setShowDirections(true);
 
-                toast({
-                    title: `Directions via ${routeResult.provider}`,
-                    description: `${combinedRoutingService.formatDistance(routeResult.distance)} • ${combinedRoutingService.formatDuration(routeResult.duration)}`,
-                });
+                statusToast.dismiss();
                 setLoadingDirections(false);
 
             } else {
-                statusToast.dismiss();
-                setLoadingDirections(false);
-                toast({
-                    title: 'Location Not Supported',
-                    description: 'Your browser does not support location services.',
-                    variant: 'destructive',
-                });
+                throw new Error('Geolocation not supported');
             }
         } catch (error: any) {
-            statusToast.dismiss(); // Clean up status toast on failure
+            statusToast.dismiss();
             setLoadingDirections(false);
 
-            // Check permission status again to give precise advice
+            // Explicitly extract properties because Error objects log as {}
+            const errCode = error.code || 0;
+            const errMsg = error.message || 'Unknown error';
+
             let isAllowedInBrowser = false;
             try {
                 const status = await navigator.permissions.query({ name: 'geolocation' });
                 isAllowedInBrowser = (status.state === 'granted');
             } catch (e) { }
 
-            let errorMessage = 'Please enable location access to get directions.';
-            let errorTitle = 'Location Access Denied';
+            let errorTitle = 'Location Error';
+            let detail = 'Please ensure location is enabled and you have a clear GPS or WiFi signal.';
 
-            const code = error.code;
-            if (code === 1) { // PERMISSION_DENIED
-                errorTitle = 'Location Permission Denied';
-                errorMessage = 'HostelHQ doesn\'t have permission. Please check your browser site settings.';
-            } else if (code === 2 || code === 3) { // UNAVAILABLE or TIMEOUT
-                errorTitle = isAllowedInBrowser ? 'Check Windows Location Settings' : 'Location Unavailable';
-
-                if (isAllowedInBrowser) {
-                    errorMessage = 'Browser is allowed, but Windows is blocking it. FIX: 1. Open Windows Settings 2. Privacy > Location 3. Enable "Allow apps to access location" 4. Enable "Let desktop apps access location". Also, ENSURE WiFi IS ON (even if on Ethernet) as browsers use it for location.';
-                } else {
-                    errorMessage = code === 3
-                        ? 'Search timed out. Please check your internet signal and try again.'
-                        : 'Your device couldn\'t determine its location. Is your GPS or WiFi turned on?';
-                }
+            if (errCode === 1) {
+                errorTitle = 'Permission Denied';
+                detail = 'Please click the padlock in your browser address bar and set Location to "Allow".';
+            } else if (isAllowedInBrowser) {
+                errorTitle = 'Windows is Blocking Access';
+                detail = 'Browser is allowed, but Windows is blocking it. FIX: Settings > Privacy > Location > Enable "Allow apps to access location".';
+            } else if (errCode === 3) {
+                errorTitle = 'Connection Timeout';
+                detail = 'It took too long to find you. Try moving near a window or turning on WiFi (even on Ethernet).';
             }
 
-            toast({
-                title: errorTitle,
-                description: errorMessage,
-                variant: 'destructive',
-            });
-            console.error('Directions diagnosis:', {
-                code: error.code,
-                message: error.message,
-                browserPermission: isAllowedInBrowser ? 'granted' : 'unknown/denied',
-                isSecure: typeof window !== 'undefined' ? window.isSecureContext : 'N/A'
-            });
+            toast({ title: errorTitle, description: detail, variant: 'destructive' });
+            console.error('Directions diagnosis:', { code: errCode, message: errMsg, allowed: isAllowedInBrowser });
         }
     };
 
