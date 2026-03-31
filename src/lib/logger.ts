@@ -3,19 +3,21 @@ import { Logtail } from "@logtail/edge";
 /**
  * Better Stack (Logtail) Logger
  * 
- * This logger will be used to send critical security and system logs
- * to a centralized "Black Box" (Better Stack) for active monitoring.
+ * This logger sends critical security and system logs to a centralized 
+ * "Black Box" (Better Stack) for active monitoring.
  * 
- * Note: @logtail/edge is used for App Router compatibility.
+ * Note: Logs only fire if the BETTER_STACK_SOURCE_TOKEN is provided.
  */
-const token = process.env.BETTER_STACK_SOURCE_TOKEN || "";
+const token = process.env.BETTER_STACK_SOURCE_TOKEN;
 
-export const logger = new Logtail(token);
+// Only instantiate Logtail if we have a valid token to avoid build-time errors
+export const logger = token ? new Logtail(token) : null;
 
 export const logSecurityEvent = (event: string, details: any) => {
+  // Always log to local console for immediate debugging visibility
   console.log(`[SECURITY] ${event}`, details);
   
-  if (token) {
+  if (logger) {
     logger.info(event, {
       ...details,
       service: "hostelhq-security-monitor",
@@ -27,9 +29,10 @@ export const logSecurityEvent = (event: string, details: any) => {
 };
 
 export const logError = (error: Error, context?: any) => {
+  // Always log to local console for immediate debugging visibility
   console.error(`[ERROR] ${error.message}`, context);
   
-  if (token) {
+  if (logger) {
     logger.error(error.message, {
       ...context,
       stack: error.stack,
