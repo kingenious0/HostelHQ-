@@ -156,6 +156,9 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                 callback_url: callback_url.toString(),
                 reference: `SECURE_${Date.now()}`, // Generate a reference for secure hostel booking
                 metadata: {
+                    booking_type: 'secure',
+                    student_id: (payload as any).studentId, // Ensure ID is passed for webhook processing
+                    hostel_id: payload.hostelId,
                     custom_fields: [
                         {
                             display_name: "Student Name",

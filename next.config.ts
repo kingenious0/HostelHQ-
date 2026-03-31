@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -8,7 +9,8 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  webpack: (config, { isServer }) => {
+  outputFileTracingRoot: __dirname,
+  webpack: (config: any, { isServer }: { isServer: boolean }) => {
     // Fix for face-api.js trying to import 'fs' in browser
     if (!isServer) {
       config.resolve.fallback = {
@@ -107,4 +109,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// @ts-ignore
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  org: "kingenious-creative-studio",
+  project: "hostel-hq",
+}, {
+  widenClientFileUpload: true,
+  transpileClientSDK: false,
+  tunnelRoute: "/monitoring",
+  hideSourceMaps: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});

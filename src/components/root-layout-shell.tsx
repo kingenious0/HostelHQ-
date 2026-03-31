@@ -28,6 +28,8 @@ interface RootLayoutShellProps {
   children: React.ReactNode;
 }
 
+import { MaintenanceGuard } from "@/components/maintenance-guard";
+
 export function RootLayoutShell({ children }: RootLayoutShellProps) {
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -65,13 +67,15 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
   }, [pathname, isLoggedIn]);
 
   return (
-    <div className="flex min-h-full flex-col">
-      {children}
-      {!hideFooter && <Footer />}
-      <AIAssistant
-        userContext={userContext}
-        openByDefault={showChatbot}
-      />
-    </div>
+    <MaintenanceGuard>
+      <div className="flex min-h-full flex-col">
+        {children}
+        {!hideFooter && <Footer />}
+        <AIAssistant
+          userContext={userContext}
+          openByDefault={showChatbot}
+        />
+      </div>
+    </MaintenanceGuard>
   );
 }
