@@ -19,15 +19,14 @@ export async function POST(req: NextRequest) {
     const isAndroidWebView = userAgent.includes('wv') || userAgent.includes('Android');
     
     // Handle different environments
+    // RP ID must be a domain, no port
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    const cleanHost = host.split(':')[0]; // Strip port
+
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
       rpID = 'localhost';
-    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
-      rpID = 'hostelhq.vercel.app'; // Production domain
-    } else if (host.includes('vercel.app')) {
-      rpID = host; // Preview/staging domains
     } else {
-      rpID = host; // Fallback to full domain
+      rpID = cleanHost;
     }
     
     const origin = `${protocol}://${host}`;
@@ -63,7 +62,7 @@ export async function POST(req: NextRequest) {
       excludeCredentials: [],
       authenticatorSelection: {
         residentKey: 'discouraged',
-        userVerification: 'required',
+        userVerification: 'preferred',
         // No authenticatorAttachment restriction - allows any authenticator (Android compatible)
       },
       supportedAlgorithmIDs: [-7, -257], // ES256 and RS256

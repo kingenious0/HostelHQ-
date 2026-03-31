@@ -14,3 +14,5 @@ export function register() {
     ],
   });
 }
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

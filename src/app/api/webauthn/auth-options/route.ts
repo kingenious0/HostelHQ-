@@ -14,15 +14,14 @@ export async function POST(req: NextRequest) {
     const host = req.headers.get('host') || 'localhost:8080';
     
     // Handle different environments
+    // RP ID must be a domain, no port
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
-      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
-    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
-      rpID = 'hostelhq.vercel.app'; // Production domain
-    } else if (host.includes('vercel.app')) {
-      rpID = host; // Preview/staging domains (use full domain)
+    const cleanHost = host.split(':')[0]; // Strip port
+
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
+      rpID = 'localhost';
     } else {
-      rpID = host; // Fallback to full domain
+      rpID = cleanHost;
     }
     
     console.log('WebAuthn Auth Options Config:', { rpID, host, environment: process.env.NODE_ENV });
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
     const opts: GenerateAuthenticationOptionsOpts = {
       timeout: 60000,
       allowCredentials,
-      userVerification: 'required',
+      userVerification: 'preferred',
       rpID,
     };
 

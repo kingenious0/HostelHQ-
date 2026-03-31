@@ -1,10 +1,12 @@
-import { Logtail } from "@logtail/next";
+import { Logtail } from "@logtail/edge";
 
 /**
  * Better Stack (Logtail) Logger
  * 
  * This logger will be used to send critical security and system logs
  * to a centralized "Black Box" (Better Stack) for active monitoring.
+ * 
+ * Note: @logtail/edge is used for App Router compatibility.
  */
 const token = process.env.BETTER_STACK_SOURCE_TOKEN || "";
 
