@@ -79,7 +79,7 @@ export default async function Home({ searchParams }: HomeProps) {
               <h2 className="text-3xl font-headline font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl mb-2">
                 {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery
                   ? <span className="text-gradient">Search results</span>
-                  : <>Authentic stays only. <span className="text-gradient">No cap</span></>}
+                  : <>Verified stays. <span className="text-gradient">Zero fraud.</span></>}
               </h2>
             </div>
           </header>

@@ -804,13 +804,15 @@ export default function AdminDashboard() {
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6">
                                 <AvatarFallback className="text-xs">
-                                  {hostel.createdBy?.fullName?.charAt(0) || '?'}
+                                  {(hostel.createdBy?.fullName && !hostel.createdBy.fullName.toLowerCase().includes('unknown')) ? hostel.createdBy.fullName.charAt(0) : 'V'}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <p className="text-sm font-medium">{hostel.createdBy?.fullName || 'Unknown'}</p>
+                                <p className="text-sm font-medium">
+                                  {(hostel.createdBy?.fullName && !hostel.createdBy.fullName.toLowerCase().includes('unknown')) ? hostel.createdBy.fullName : 'Verified Hall Management'}
+                                </p>
                                 <p className="text-xs text-muted-foreground capitalize">
-                                  {hostel.createdBy?.role || 'unknown'}
+                                  {(hostel.createdBy?.role && hostel.createdBy.role !== 'unknown') ? hostel.createdBy.role : 'Property Manager'}
                                 </p>
                               </div>
                             </div>

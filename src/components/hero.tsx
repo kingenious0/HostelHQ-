@@ -60,7 +60,7 @@ export function Hero() {
                         <span className="text-accent underline decoration-primary/30 underline-offset-8">verified</span> & <span className="text-white/90">secure.</span>
                     </h1>
                     <p className="max-w-xl text-lg leading-relaxed text-slate-300 sm:text-xl mb-12">
-                        HostelHQ is Ghana's most trusted platform for student housing. Find verified hostels with transparent pricing and instant booking.
+                        Safe, verified student housing near your campus. Find verified hostels with transparent pricing, guided physical visits, and instant booking.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center gap-5">

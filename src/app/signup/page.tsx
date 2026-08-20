@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -10,21 +10,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff, Fingerprint } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff, ShieldCheck, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { tenancyAgreementText } from '@/lib/legal';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
-import { FaceCaptureDialog } from '@/components/FaceCaptureDialog';
-import { BiometricCaptureDialog } from '@/components/BiometricCaptureDialog';
-import { detectFaceDescriptor, descriptorToArray } from '@/lib/faceDetection';
 
-type UserRole = 'student' | 'agent' | 'hostel_manager' | null;
+type UserRole = 'student' | 'agent' | 'hostel_manager';
 
 const facultyDepartments: Record<string, string[]> = {
     'Faculty of Technical Education (FTE)': [
@@ -56,1266 +51,570 @@ const facultyDepartments: Record<string, string[]> = {
 };
 
 export default function SignupPage() {
-    const [selectedRole, setSelectedRole] = useState<UserRole>(null);
+    const [selectedRole, setSelectedRole] = useState<UserRole>('student');
     const [fullName, setFullName] = useState('');
-    const [firstName, setFirstName] = useState('');
-    const [middleName, setMiddleName] = useState('');
-    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [countryCode, setCountryCode] = useState('+233');
-    const [otp, setOtp] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSendingOTP, setIsSendingOTP] = useState(false);
-    const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
-    const [otpSent, setOtpSent] = useState(false);
-    const [otpVerified, setOtpVerified] = useState(false);
-    const [resendCooldown, setResendCooldown] = useState(0);
+    const [studentIndexNumber, setStudentIndexNumber] = useState('');
     const [faculty, setFaculty] = useState('');
     const [department, setDepartment] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(true);
+    
+    // Manager specific state
     const [managerHostels, setManagerHostels] = useState<{ id: string; name?: string; location?: string; managerId?: string }[]>([]);
     const [loadingManagerHostels, setLoadingManagerHostels] = useState(false);
     const [selectedManagerHostelId, setSelectedManagerHostelId] = useState('');
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
     const { toast } = useToast();
     const router = useRouter();
 
-    // State for multi-step form
-    const [step, setStep] = useState(1); // 1: Role selection, 2: Basic info, 3: OTP, 4: Face capture, 5: Manager hostel selection
-    const [termsAccepted, setTermsAccepted] = useState(false);
-    const [isFaceCaptureOpen, setIsFaceCaptureOpen] = useState(false);
-    const [isBiometricCaptureOpen, setIsBiometricCaptureOpen] = useState(false);
-    const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
-    const [biometricCredential, setBiometricCredential] = useState<any>(null);
-    const [isProcessingBiometric, setIsProcessingBiometric] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-    // Build the exact role-based auth email that will be used at account creation
-    // This ensures WebAuthn uses a stable identifier (no temp IDs)
-    const getUserId = () => {
-        try {
-            if (selectedRole === 'student') {
-                // Students: STU-XXXNNN from firstName + phone last 3
-                if (firstName && phoneNumber && countryCode) {
-                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                    const cc = countryCode.replace(/\D/g, '');
-                    const combined = cc + cleanedNumber;
-                    const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                    const lastThree = combined.slice(-3);
-                    const studentId = `STU-${firstThree}${lastThree}`;
-                    return `${studentId.toLowerCase()}@hostelhq.com`;
+    // Load available hostels for manager signup
+    useEffect(() => {
+        if (selectedRole === 'hostel_manager') {
+            const loadHostels = async () => {
+                setLoadingManagerHostels(true);
+                try {
+                    const snap = await getDocs(collection(db, 'hostels'));
+                    const list = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
+                    const filtered = list.filter((h: any) => !h.managerId);
+                    setManagerHostels(filtered);
+                } catch (err) {
+                    console.error('Error loading hostels:', err);
+                } finally {
+                    setLoadingManagerHostels(false);
                 }
-                // fallback to typed email if present during early steps
-                if (email) return email;
-            } else if (selectedRole === 'agent') {
-                // Agents: AGNT-XXXNNN from first word of name + phone last 3
-                if (fullName && phoneNumber && countryCode) {
-                    const namePart = (fullName || '').trim().split(/\s+/)[0] || 'AGENT';
-                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                    const cc = countryCode.replace(/\D/g, '');
-                    const combined = cc + cleanedNumber;
-                    const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                    const lastThree = combined.slice(-3);
-                    const agentId = `AGNT-${firstThree}${lastThree}`;
-                    return `${agentId.toLowerCase()}@hostelhq.com`;
-                }
-            } else if (selectedRole === 'hostel_manager') {
-                // Managers: MNG-XXXNNN from first word of name + phone last 3 (deterministic)
-                if (fullName && phoneNumber && countryCode) {
-                    const namePart = (fullName || '').trim().split(/\s+/)[0] || 'MGR';
-                    const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                    const cc = countryCode.replace(/\D/g, '');
-                    const combined = cc + cleanedNumber;
-                    const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                    const lastThree = combined.slice(-3);
-                    const managerId = `MNG-${firstThree}${lastThree}`;
-                    return `${managerId.toLowerCase()}@hostelhq.com`;
-                }
-            }
-            // Generic fallbacks (no temp IDs)
-            if (email) return email;
-            if (phoneNumber && countryCode) {
-                const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                const cc = countryCode.replace(/\D/g, '');
-                return `${cc}${cleanedNumber}`;
-            }
-        } catch (_) {}
-        // As a last resort, return empty string (will be rejected upstream rather than using temp)
-        return '';
-    };
-
-    // Validate email format
-    const isValidEmail = (email: string): boolean => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
-    };
-
-    // Load available hostels (without a manager) for manager signup step
-    const loadManagerHostels = async () => {
-        setLoadingManagerHostels(true);
-        try {
-            const snap = await getDocs(collection(db, 'hostels'));
-            const list = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
-            const filtered = list.filter((h: any) => !h.managerId);
-            setManagerHostels(filtered);
-        } catch (error) {
-            console.error('Error loading hostels for manager signup:', error);
-        } finally {
-            setLoadingManagerHostels(false);
+            };
+            loadHostels();
         }
+    }, [selectedRole]);
+
+    const isValidEmail = (email: string): boolean => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     };
 
-    // Validate Ghana phone number
     const isValidPhoneNumber = (phone: string): boolean => {
-        // Remove all non-digit characters
         const cleaned = phone.replace(/\D/g, '');
-        // Ghana numbers: 10 digits (0XXXXXXXXX) or 9 digits after country code
         return cleaned.length >= 9 && cleaned.length <= 10;
     };
 
-    // Handle role selection
-    const handleRoleSelect = (role: UserRole) => {
-        setSelectedRole(role);
-        // Immediately move to the next step so users don't have to press Continue again
-        setStep(2);
+    // Google Single Sign-On for 1-Click Fast Student Signup (PRD 3.1)
+    const handleGoogleSignup = async () => {
+        setIsGoogleSubmitting(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (!userDocSnap.exists()) {
+                await setDoc(userDocRef, {
+                    uid: user.uid,
+                    email: user.email,
+                    fullName: user.displayName || 'Student',
+                    role: 'student',
+                    createdAt: new Date().toISOString(),
+                    profileImage: user.photoURL || '',
+                    authProvider: 'google',
+                    verificationStatus: 'verified_email',
+                });
+            }
+
+            toast({
+                title: 'Account Created Successfully!',
+                description: `Welcome to HostelHQ, ${user.displayName || 'Student'}!`,
+            });
+
+            router.push('/my-bookings?welcome=true');
+        } catch (error: any) {
+            console.error('Google signup error:', error);
+            toast({
+                title: 'Google Sign-Up Failed',
+                description: error.message || 'Could not complete Google Sign-Up.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsGoogleSubmitting(false);
+        }
     };
 
-    // Handle next step from role selection
-    const handleRoleSelectionNext = () => {
-        if (!selectedRole) {
-            toast({ title: "Please select a role", variant: "destructive" });
+    // Frictionless 30-Second Student & Partner Registration
+    const handleSignup = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!fullName.trim()) {
+            toast({ title: 'Full Name Required', description: 'Please enter your full name.', variant: 'destructive' });
             return;
         }
-        setStep(2);
-    };
 
-    // Handle next step from basic info
-    const handleBasicInfoNext = () => {
-        if (!selectedRole) {
-            toast({ title: "Missing Role", description: "Please select an account type.", variant: "destructive" });
+        if (!email.trim() || !isValidEmail(email)) {
+            toast({ title: 'Invalid Email', description: 'Please enter a valid personal email address.', variant: 'destructive' });
+            return;
+        }
+
+        if (!phoneNumber || !isValidPhoneNumber(phoneNumber)) {
+            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid 9 or 10-digit Ghana phone number.', variant: 'destructive' });
             return;
         }
 
         if (password.length < 6) {
-            toast({ title: "Weak Password", description: "Password must be at least 6 characters.", variant: "destructive" });
+            toast({ title: 'Weak Password', description: 'Password must be at least 6 characters.', variant: 'destructive' });
             return;
         }
 
-        // Student-specific validation
-        if (selectedRole === 'student') {
-            if (!firstName || !lastName || !phoneNumber || !faculty || !department) {
-                toast({ title: "Missing Fields", description: "Please fill in all required details for student signup.", variant: "destructive" });
-                return;
-            }
-
-            if (!isValidPhoneNumber(phoneNumber)) {
-                toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
-                return;
-            }
-
-            setStep(3);
-            handleSendOTP();
+        if (!termsAccepted) {
+            toast({ title: 'Terms Required', description: 'Please accept the terms of service.', variant: 'destructive' });
             return;
         }
 
-        // Agent validation (uses phone + OTP, no email field shown)
-        if (selectedRole === 'agent') {
-            if (!fullName) {
-                toast({ title: "Missing Fields", description: "Please enter your full name.", variant: "destructive" });
-                return;
-            }
-
-            if (!phoneNumber) {
-                toast({ title: "Phone Number Required", description: "Please enter your phone number.", variant: "destructive" });
-                return;
-            }
-            if (!isValidPhoneNumber(phoneNumber)) {
-                toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
-                return;
-            }
-
-            setStep(3);
-            handleSendOTP();
-            return;
-        }
-
-        // Hostel managers: full name + phone + OTP (same pattern as agents, no email field)
-        if (selectedRole === 'hostel_manager') {
-            if (!fullName) {
-                toast({ title: "Missing Fields", description: "Please enter your full name.", variant: "destructive" });
-                return;
-            }
-
-            if (!phoneNumber) {
-                toast({ title: "Phone Number Required", description: "Please enter your phone number.", variant: "destructive" });
-                return;
-            }
-            if (!isValidPhoneNumber(phoneNumber)) {
-                toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number.", variant: "destructive" });
-                return;
-            }
-
-            setStep(3);
-            handleSendOTP();
-        }
-    };
-
-    // Send OTP to agent's phone
-    const handleSendOTP = async () => {
-        if (!phoneNumber || !isValidPhoneNumber(phoneNumber)) {
-            toast({ title: "Invalid Phone Number", description: "Please enter a valid phone number.", variant: "destructive" });
-            return;
-        }
-
-        setIsSendingOTP(true);
-        try {
-            const fullPhone = countryCode + phoneNumber.replace(/\D/g, '');
-            const response = await fetch('/api/sms/send-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: fullPhone }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setOtpSent(true);
-                setResendCooldown(60); // 60 second cooldown
-                toast({ title: "OTP Sent", description: "Please check your phone for the verification code." });
-                
-                // Start cooldown timer
-                const timer = setInterval(() => {
-                    setResendCooldown((prev) => {
-                        if (prev <= 1) {
-                            clearInterval(timer);
-                            return 0;
-                        }
-                        return prev - 1;
-                    });
-                }, 1000);
-            } else {
-                // Show detailed error message
-                const errorMessage = data.error || "Failed to send OTP. Please try again.";
-                const hint = data.hint ? `\n\nHint: ${data.hint}` : '';
-                toast({ 
-                    title: "Failed to Send OTP", 
-                    description: errorMessage + hint, 
-                    variant: "destructive" 
-                });
-            }
-        } catch (error: any) {
-            console.error("Error sending OTP:", error);
-            toast({ 
-                title: "Network Error", 
-                description: "Failed to connect to the server. Please check your internet connection and try again.", 
-                variant: "destructive" 
-            });
-        } finally {
-            setIsSendingOTP(false);
-        }
-    };
-
-    // Verify OTP
-    const handleVerifyOTP = async () => {
-        if (!otp || otp.length !== 6) {
-            toast({ title: "Invalid OTP", description: "Please enter a 6-digit OTP.", variant: "destructive" });
-            return;
-        }
-
-        setIsVerifyingOTP(true);
-        try {
-            const fullPhone = countryCode + phoneNumber.replace(/\D/g, '');
-            const response = await fetch('/api/sms/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: fullPhone, otp }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setOtpVerified(true);
-                toast({ title: "OTP Verified", description: "Phone number verified successfully!" });
-
-                // MANDATORY: Go to biometric capture step for ALL users
-                setStep(4);
-                setIsBiometricCaptureOpen(true);
-            } else {
-                toast({ title: "Invalid OTP", description: data.error || "Please check your OTP and try again.", variant: "destructive" });
-            }
-        } catch (error: any) {
-            console.error("Error verifying OTP:", error);
-            toast({ title: "Error", description: "Failed to verify OTP. Please try again.", variant: "destructive" });
-        } finally {
-            setIsVerifyingOTP(false);
-        }
-    };
-
-    // Handle biometric capture (MANDATORY - Primary method)
-    const handleBiometricCapture = async (credential: any) => {
-        setIsProcessingBiometric(true);
-        
-        try {
-            setBiometricCredential(credential);
-            setIsBiometricCaptureOpen(false);
-            
-            toast({
-                title: '✅ Biometric Setup Complete!',
-                description: 'Your biometric authentication has been registered successfully.',
-            });
-
-            // For managers, proceed to hostel selection
-            if (selectedRole === 'hostel_manager') {
-                setIsProcessingBiometric(false);
-                setStep(5);
-                loadManagerHostels();
-            } else {
-                // For students/agents, biometric setup is the final step - proceed to complete signup
-                console.log('Biometric setup complete for', selectedRole, '- proceeding to signup');
-                // Don't set isProcessingBiometric(false) here - let handleSignup manage the loading state
-                await handleSignup(credential);
-            }
-        } catch (error: any) {
-            console.error('Biometric processing error:', error);
-            toast({
-                title: '❌ Biometric Setup Failed',
-                description: error.message || 'Please try again.',
-                variant: 'destructive'
-            });
-            setIsProcessingBiometric(false);
-            setIsBiometricCaptureOpen(true); // Reopen to try again
-        }
-    };
-
-    // Handle face capture (MANDATORY - Fallback method)
-    const handleFaceCapture = async (capturedImageBase64: string) => {
-        setIsProcessingBiometric(true);
-        
-        try {
-            // Create image element from base64 for face detection
-            const img = document.createElement('img');
-            img.src = capturedImageBase64;
-            
-            await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => reject(new Error('Failed to load image'));
-            });
-            
-            // Extract face descriptor from captured image
-            const descriptor = await detectFaceDescriptor(img);
-            
-            if (!descriptor) {
-                toast({
-                    title: 'No Face Detected',
-                    description: 'Please ensure your face is clearly visible and try again.',
-                    variant: 'destructive'
-                });
-                setIsProcessingBiometric(false);
-                setIsFaceCaptureOpen(true); // Reopen to try again
-                return;
-            }
-
-            // Convert descriptor to array for storage
-            const descriptorArray = descriptorToArray(descriptor);
-            setFaceDescriptor(descriptorArray);
-
-            toast({
-                title: '✅ Face Captured!',
-                description: 'Your face has been registered successfully.',
-            });
-
-            setIsProcessingBiometric(false);
-
-            // For managers, go to hostel selection; others complete signup
-            if (selectedRole === 'hostel_manager') {
-                setStep(5);
-                await loadManagerHostels();
-            } else {
-                await handleSignup(undefined, descriptorArray);
-            }
-        } catch (error: any) {
-            console.error('Face capture error:', error);
-            toast({
-                title: 'Face Capture Failed',
-                description: error.message || 'Could not capture face. Please try again.',
-                variant: 'destructive'
-            });
-            setIsProcessingBiometric(false);
-            setIsFaceCaptureOpen(true); // Reopen to try again
-        }
-    };
-
-    // Handle final signup
-    const handleSignup = async (passedBiometricCredential?: any, passedFaceDescriptor?: number[]) => {
-        console.log('🚀 handleSignup called for role:', selectedRole);
-        
-        // Use passed credentials or state credentials
-        const currentBiometricCredential = passedBiometricCredential || biometricCredential;
-        const currentFaceDescriptor = passedFaceDescriptor || faceDescriptor;
-        
-        console.log('🔍 Debug state - otpVerified:', otpVerified, 'biometricCredential:', !!currentBiometricCredential, 'faceDescriptor:', !!currentFaceDescriptor);
-        
-        if (!selectedRole) {
-            toast({ title: "Error", description: "Please select a role.", variant: "destructive" });
-            return;
-        }
-
-        if ((selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && !otpVerified) {
-            console.log('❌ OTP verification failed - otpVerified is:', otpVerified);
-            toast({ title: "OTP Required", description: "Please verify your phone number first.", variant: "destructive" });
-            return;
-        }
-
-        // MANDATORY: Biometric or face verification must be completed
-        if (!currentBiometricCredential && !currentFaceDescriptor) {
-            toast({ title: "Security Verification Required", description: "Please complete biometric or face verification to continue.", variant: "destructive" });
-            setStep(4);
-            setIsBiometricCaptureOpen(true);
-            return;
-        }
-
-        // Managers must choose a hostel on Step 5 before completing signup
         if (selectedRole === 'hostel_manager' && !selectedManagerHostelId) {
-            toast({ title: "Select Hostel", description: "Please choose the hostel you manage before finishing signup.", variant: "destructive" });
-            setStep(5);
+            toast({ title: 'Hostel Assignment Required', description: 'Please select the hostel you manage.', variant: 'destructive' });
             return;
         }
-        
-        console.log('✅ All validations passed, starting signup process...');
+
         setIsSubmitting(true);
         try {
-            console.log('📧 Building auth email for role:', selectedRole);
-            let authEmail = email;
-
-            // Build synthetic auth emails so users can log in with role-based IDs (deterministic)
-            if (selectedRole === 'student') {
-                // Students: STU-XXXNNN based on firstName + phone
-                const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                const countryCodeDigits = countryCode.replace(/\D/g, '');
-                const combinedPhone = countryCodeDigits + cleanedNumber;
-
-                const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                const lastThree = combinedPhone.slice(-3);
-                const studentId = `STU-${firstThree}${lastThree}`;
-
-                // Students will log in using this unique ID email, e.g. std-ell205@hostelhq.com
-                authEmail = `${studentId.toLowerCase()}@hostelhq.com`;
-            } else if (selectedRole === 'agent') {
-                // Agents: AGNT-XXXNNN based on first word of fullName + phone
-                const namePart = (fullName || '').trim().split(/\s+/)[0] || 'AGENT';
-                const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                const countryCodeDigits = countryCode.replace(/\D/g, '');
-                const combinedPhone = countryCodeDigits + cleanedNumber;
-                const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                const lastThree = combinedPhone.slice(-3);
-                const agentId = `AGNT-${firstThree}${lastThree}`;
-
-                authEmail = `${agentId.toLowerCase()}@hostelhq.com`;
-            } else if (selectedRole === 'hostel_manager') {
-                // Managers: MNG-XXXNNN based on first word of fullName + phone last 3 (deterministic)
-                const namePart = (fullName || '').trim().split(/\s+/)[0] || 'MGR';
-                const cleanedNumber = phoneNumber.replace(/\D/g, '');
-                const countryCodeDigits = countryCode.replace(/\D/g, '');
-                const combinedPhone = countryCodeDigits + cleanedNumber;
-                const firstThree = namePart.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                const lastThree = combinedPhone.slice(-3);
-                const managerId = `MNG-${firstThree}${lastThree}`;
-
-                authEmail = `${managerId.toLowerCase()}@hostelhq.com`;
-            }
-
-            // Derive a local full name string for storage
-            const derivedStudentFullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
-            const localFullName = selectedRole === 'student' ? derivedStudentFullName : fullName;
-
-            console.log('🔐 Creating user with email:', authEmail);
-            const userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
+            // 1. Create Firebase Auth user
+            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
             const user = userCredential.user;
-            console.log('✅ User created successfully:', user.uid);
 
-            let userData: any = {
+            // 2. Format phone number (E.164 without plus)
+            let cleanedPhone = phoneNumber.replace(/\D/g, '');
+            if (cleanedPhone.startsWith('0')) {
+                cleanedPhone = cleanedPhone.substring(1);
+            }
+            const fullPhone = countryCode.replace(/\D/g, '') + cleanedPhone;
+
+            // 3. Build unified user profile
+            const userData: any = {
                 uid: user.uid,
-                email: authEmail,
+                email: email.trim().toLowerCase(),
+                fullName: fullName.trim(),
+                phone: fullPhone,
+                phoneNumber: fullPhone,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
-                // Store biometric data (preferred) or face data (fallback)
-                ...(currentBiometricCredential && {
-                    biometricCredential: currentBiometricCredential,
-                    biometricSetupDate: new Date().toISOString(),
-                    hasBiometric: true,
-                }),
-                ...(currentFaceDescriptor && {
-                    faceDescriptor: currentFaceDescriptor,
-                    faceSetupDate: new Date().toISOString(),
-                }),
+                verificationStatus: 'progressive_pending', // Deferred until booking confirmation per PRD 3.1
             };
 
-            if (localFullName) {
-                userData.fullName = localFullName;
-            }
-            if (firstName) {
-                userData.firstName = firstName;
-            }
-            if (middleName) {
-                userData.middleName = middleName;
-            }
-            if (lastName) {
-                userData.lastName = lastName;
-            }
-
-            // Add phone number for agents, students, and managers (store in numeric E.164-like format)
-            if ((selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && phoneNumber) {
-                // Remove all non-digits
-                let cleanedNumber = phoneNumber.replace(/\D/g, '');
-                // Remove leading 0 if present (Ghana numbers start with 0)
-                if (cleanedNumber.startsWith('0')) {
-                    cleanedNumber = cleanedNumber.substring(1);
+            if (selectedRole === 'student') {
+                if (studentIndexNumber.trim()) {
+                    userData.studentIndexNumber = studentIndexNumber.trim();
                 }
-                // Remove + from country code and combine
-                const countryCodeDigits = countryCode.replace(/\D/g, '');
-                const combined = countryCodeDigits + cleanedNumber;
-                userData.phoneNumber = combined;
-
-                if (selectedRole === 'student') {
-                    const firstThree = firstName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
-                    const lastThree = combined.slice(-3);
-                    const studentId = `STU-${firstThree}${lastThree}`;
-                    userData.studentId = studentId;
-                    userData.faculty = faculty;
-                    userData.department = department;
-                    userData.authEmail = authEmail;
-                }
+                if (faculty) userData.faculty = faculty;
+                if (department) userData.department = department;
             }
 
-            // Store authEmail and role-based IDs for agents and managers
-            if (selectedRole === 'agent') {
-                userData.authEmail = authEmail;
-                // Extract agent ID prefix from authEmail if possible (before @)
-                const emailLocal = authEmail.split('@')[0];
-                if (emailLocal.toUpperCase().startsWith('AGNT-')) {
-                    userData.agentId = emailLocal.toUpperCase();
-                }
-            } else if (selectedRole === 'hostel_manager') {
-                userData.authEmail = authEmail;
-                const emailLocal = authEmail.split('@')[0];
-                if (emailLocal.toUpperCase().startsWith('MNG-')) {
-                    userData.managerId = emailLocal.toUpperCase();
-                }
+            if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
+                userData.managedHostelId = selectedManagerHostelId;
             }
 
-            // (Optional) additional metadata for managers could be added here later
+            // 4. Save to Firestore
+            await setDoc(doc(db, 'users', user.uid), userData);
 
-            // Convert biometricCredential to a serializable format for Firestore
-            const firestoreUserData = { ...userData };
-            if (firestoreUserData.biometricCredential) {
-                // Store only the serializable parts of the credential
-                firestoreUserData.biometricCredentialId = firestoreUserData.biometricCredential.id;
-                firestoreUserData.biometricCredentialData = {
-                    id: firestoreUserData.biometricCredential.id,
-                    publicKey: firestoreUserData.biometricCredential.publicKey || '',
-                    counter: firestoreUserData.biometricCredential.counter || 0,
-                    deviceType: firestoreUserData.biometricCredential.deviceType || 'platform',
-                    transports: firestoreUserData.biometricCredential.transports || ['internal'],
-                };
-                // Store password for biometric login (encrypted with user's password)
-                firestoreUserData.biometricPassword = password;
-                delete firestoreUserData.biometricCredential; // Remove the raw WebAuthn object
-                
-                // Store user ID in localStorage for quick biometric login
-                if (typeof window !== 'undefined') {
-                    const storage = typeof window.localStorage !== 'undefined' ? window.localStorage : null;
-                    if (storage && typeof storage.setItem === 'function') {
-                        storage.setItem('lastBiometricUserId', user.uid);
-                        console.log('✅ Stored biometric user ID for quick login');
-                    }
-                }
-            }
-            
-            // Create user document (no more pendingUsers for agents)
-            console.log('💾 Saving user document to Firestore...');
-            await setDoc(doc(db, "users", user.uid), firestoreUserData);
-            console.log('✅ User document saved successfully');
-
-            // If this is a manager and they selected a hostel, assign that hostel to the new manager
+            // 5. If manager, link to hostel document
             if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
                 try {
                     await updateDoc(doc(db, 'hostels', selectedManagerHostelId), {
                         managerId: user.uid,
                     });
-                } catch (assignError) {
-                    console.error('Failed to assign hostel to manager during signup:', assignError);
+                } catch (assignErr) {
+                    console.error('Error assigning manager to hostel:', assignErr);
                 }
             }
 
-            // After successful signup, send SMS with unique login ID email (best-effort, non-blocking)
-            if (userData.phoneNumber) {
-                try {
-                    let messageRole = 'user';
-                    if (selectedRole === 'student') messageRole = 'student';
-                    else if (selectedRole === 'agent') messageRole = 'agent';
-                    else if (selectedRole === 'hostel_manager') messageRole = 'manager';
+            // 6. Send welcome SMS notification (best-effort non-blocking)
+            try {
+                const welcomeMsg = `Welcome to HostelHQ, ${fullName}! Your ${selectedRole} account is active. Log in anytime with ${email}. Safe & verified stays!`;
+                fetch('/api/sms/send-notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: fullPhone, message: welcomeMsg }),
+                }).catch(() => {});
+            } catch (_) {}
 
-                    const message = `Hello ${localFullName || messageRole}, this is your HostelHQ ${messageRole} login ID: ${authEmail}. Please use this ID to log into the app anytime and keep it safe. Thank you.`;
-
-                    await fetch('/api/sms/send-notification', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ phoneNumber: userData.phoneNumber, message }),
-                    });
-                } catch (smsError) {
-                    console.error('Failed to send login ID SMS:', smsError);
-                }
-            }
-
-            toast({ title: 'Account Created Successfully!', description: 'Welcome to HostelHQ!' });
+            toast({
+                title: 'Account Created Successfully!',
+                description: 'Welcome to HostelHQ!',
+            });
 
             // Redirect based on role
-            console.log('🔄 Redirecting user based on role:', selectedRole);
             if (selectedRole === 'hostel_manager') {
-                console.log('➡️ Redirecting to /manager/dashboard');
                 router.push('/manager/dashboard');
             } else if (selectedRole === 'agent') {
-                console.log('➡️ Redirecting to /agent/dashboard');
                 router.push('/agent/dashboard');
-            } else if (selectedRole === 'student') {
-                console.log('➡️ Redirecting to /my-bookings');
-                router.push('/my-bookings?welcome=true');
             } else {
-                console.log('➡️ Redirecting to /');
-                router.push('/');
+                router.push('/my-bookings?welcome=true');
             }
-
         } catch (error: any) {
-            console.error("❌ Signup error:", error);
-            console.error("Error code:", error.code);
-            console.error("Error message:", error.message);
-            let errorMessage = "An unknown error occurred.";
+            console.error('Signup error:', error);
+            let message = 'An unexpected error occurred during signup.';
             if (error.code === 'auth/email-already-in-use') {
-                errorMessage = "This email is already registered. Please log in.";
+                message = 'This email is already registered. Please sign in instead.';
             } else if (error.code === 'auth/weak-password') {
-                errorMessage = "Password should be at least 6 characters.";
+                message = 'Password should be at least 6 characters long.';
             } else if (error.code === 'auth/invalid-email') {
-                errorMessage = "Please enter a valid email address.";
+                message = 'Please enter a valid email address.';
             }
-            
             toast({
                 title: 'Sign Up Failed',
-                description: errorMessage,
+                description: message,
                 variant: 'destructive',
             });
         } finally {
-            console.log('🏁 Signup process completed, resetting loading states');
             setIsSubmitting(false);
-            setIsProcessingBiometric(false);
         }
     };
 
-    // Role selection cards
-    const roleCards = [
+    const roles = [
         {
-            role: 'student' as UserRole,
-            icon: <GraduationCap className="h-8 w-8" />,
+            id: 'student' as UserRole,
             title: 'Student',
-            description: "I'm looking for a hostel to rent",
-            color: 'text-blue-600',
+            description: 'Find, visit & secure verified rooms near campus',
+            icon: <GraduationCap className="h-5 w-5" />,
+            badge: 'Fast 30s',
         },
         {
-            role: 'agent' as UserRole,
-            icon: <UserCheck className="h-8 w-8" />,
-            title: 'Agent',
-            description: 'I want to list hostels and help students find rooms',
-            color: 'text-green-600',
+            id: 'agent' as UserRole,
+            title: 'Field Agent',
+            description: 'List hostels, guide student visits & earn commission',
+            icon: <UserCheck className="h-5 w-5" />,
+            badge: 'Partner',
         },
         {
-            role: 'hostel_manager' as UserRole,
-            icon: <Building className="h-8 w-8" />,
+            id: 'hostel_manager' as UserRole,
             title: 'Hostel Manager',
-            description: 'I manage hostel properties and oversee operations',
-            color: 'text-purple-600',
+            description: 'Manage room inventory, bookings & wallet payouts',
+            icon: <Building className="h-5 w-5" />,
+            badge: 'Landlord',
         },
     ];
 
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="relative flex-1 bg-slate-900">
+            <main className="relative flex-1 bg-slate-900 flex items-center justify-center py-12 px-4">
                 <div className="absolute inset-0">
                     <Image
                         src="https://images.pexels.com/photos/3755761/pexels-photo-3755761.jpeg?auto=compress&cs=tinysrgb&w=2000"
-                        alt="Students walking through a campus hostel corridor"
+                        alt="Campus hostel background"
                         fill
                         priority
-                        className="object-cover brightness-[0.55]"
+                        className="object-cover brightness-[0.45]"
                     />
                 </div>
 
-                <div className="relative flex h-full items-center justify-center py-10 px-4">
-                    <Card className="w-full max-w-3xl border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl">
-                        <CardHeader>
-                            <CardTitle className="text-2xl font-headline text-slate-50">Create an Account</CardTitle>
-                            <CardDescription className="text-slate-100/80">
-                                {step === 1 && 'Choose your account type to get started'}
-                                {step === 2 && 'Enter your account information'}
-                                {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && 'Verify your phone number'}
-                                {step === 4 && '🔒 Secure your account with biometric verification'}
-                                {step === 5 && selectedRole === 'hostel_manager' && 'Select the hostel you manage'}
+                <div className="relative z-10 w-full max-w-xl">
+                    <Card className="border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl rounded-[2.5rem] overflow-hidden">
+                        <CardHeader className="text-center pt-8 pb-4">
+                            <div className="inline-flex items-center gap-2 mx-auto mb-3 rounded-full border border-primary/40 bg-primary/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-accent backdrop-blur-md">
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Frictionless Student Onboarding
+                            </div>
+                            <CardTitle className="text-3xl font-headline font-extrabold tracking-tight text-white">Create Your Account</CardTitle>
+                            <CardDescription className="text-slate-200/80 text-sm mt-1">
+                                Safe, verified student accommodation across Ghana
                             </CardDescription>
-                            
-                            {/* Progress Indicator */}
-                            {step > 1 && (
-                                <div className="mt-4 space-y-2">
-                                    <div className="flex items-center justify-between text-xs text-slate-100/60">
-                                        <span>Step {step} of {selectedRole === 'hostel_manager' ? '5' : '4'}</span>
-                                        <span>{Math.round((step / (selectedRole === 'hostel_manager' ? 5 : 4)) * 100)}% Complete</span>
-                                    </div>
-                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 ease-out"
-                                            style={{ width: `${(step / (selectedRole === 'hostel_manager' ? 5 : 4)) * 100}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            )}
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            {/* Step 1: Role Selection */}
-                            {step === 1 && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {roleCards.map((card) => (
+
+                        <CardContent className="space-y-6 px-6 sm:px-10">
+                            {/* Role Switcher */}
+                            <div className="space-y-2">
+                                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                                    I am joining as:
+                                </Label>
+                                <div className="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-black/40 border border-white/10">
+                                    {roles.map((r) => (
                                         <button
-                                            key={card.role}
-                                            onClick={() => handleRoleSelect(card.role)}
+                                            key={r.id}
+                                            type="button"
+                                            onClick={() => setSelectedRole(r.id)}
                                             className={cn(
-                                                "p-6 border-2 rounded-lg text-left transition-all hover:shadow-md",
-                                                selectedRole === card.role
-                                                    ? "border-primary bg-primary/10"
-                                                    : "border-border hover:border-primary/50"
+                                                "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200 text-center relative",
+                                                selectedRole === r.id
+                                                    ? "bg-primary text-white shadow-lg font-bold"
+                                                    : "text-slate-300 hover:text-white hover:bg-white/5 font-medium"
                                             )}
                                         >
-                                            <div className={cn("mb-4", card.color)}>{card.icon}</div>
-                                            <h3 className="font-semibold text-lg mb-2">{card.title}</h3>
-                                            <p className="text-sm text-slate-100/80">{card.description}</p>
+                                            <div className="mb-1">{r.icon}</div>
+                                            <span className="text-xs">{r.title}</span>
                                         </button>
                                     ))}
                                 </div>
-                            )}
+                            </div>
 
-                            {/* Step 4: Biometric Verification (MANDATORY) */}
-                            {step === 4 && (
-                                <div className="space-y-4">
-                                    <Alert className="bg-blue-50/10 border-blue-500/50">
-                                        <Info className="h-4 w-4" />
-                                        <AlertTitle>🔒 Biometric Verification Required</AlertTitle>
-                                        <AlertDescription className="text-slate-100/80">
-                                            For maximum security, we require biometric verification during signup. Use your fingerprint, Face ID, or camera as fallback.
-                                        </AlertDescription>
-                                    </Alert>
-                                    
-                                    <div className="text-center space-y-4 py-6">
-                                        {!biometricCredential && !faceDescriptor ? (
-                                            <>
-                                                <div className="text-6xl mb-4">🔐</div>
-                                                <h3 className="text-xl font-semibold">Secure Your Account</h3>
-                                                <p className="text-slate-100/80 max-w-md mx-auto">
-                                                    Use your device's biometric sensor (fingerprint, Face ID) or camera to verify your identity.
-                                                </p>
-                                                <Button
-                                                    onClick={() => setIsBiometricCaptureOpen(true)}
-                                                    size="lg"
-                                                    className="mt-4"
-                                                    disabled={isProcessingBiometric}
-                                                >
-                                                    {isProcessingBiometric ? (
-                                                        <>
-                                                            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                                                            Processing...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Fingerprint className="h-5 w-5 mr-2" />
-                                                            Set Up Biometric Security
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </>
+                            {/* Google Sign-In Button for Students */}
+                            {selectedRole === 'student' && (
+                                <div className="space-y-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleGoogleSignup}
+                                        disabled={isGoogleSubmitting || isSubmitting}
+                                        className="w-full h-12 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border-white/20 font-semibold shadow-md flex items-center justify-center gap-3 transition-all duration-200 hover:scale-[1.01]"
+                                    >
+                                        {isGoogleSubmitting ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
                                         ) : (
-                                            <>
-                                                <div className="text-6xl mb-4">✅</div>
-                                                <h3 className="text-xl font-semibold text-green-400">
-                                                    {biometricCredential ? 'Biometric Setup Complete!' : 'Face Captured Successfully!'}
-                                                </h3>
-                                                <p className="text-slate-100/80">
-                                                    {isSubmitting || isProcessingBiometric
-                                                        ? 'Your identity verification has been completed. Proceeding to complete signup...'
-                                                        : 'Your identity verification is complete.'}
-                                                </p>
-                                                {(isSubmitting || isProcessingBiometric) && (
-                                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
-                                                )}
-                                            </>
+                                            <svg className="h-5 w-5" viewBox="0 0 24 24">
+                                                <path
+                                                    fill="#4285F4"
+                                                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                                />
+                                                <path
+                                                    fill="#34A853"
+                                                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                                />
+                                                <path
+                                                    fill="#FBBC05"
+                                                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                                                />
+                                                <path
+                                                    fill="#EA4335"
+                                                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                                                />
+                                            </svg>
                                         )}
+                                        <span>Sign up with Google</span>
+                                    </Button>
+
+                                    <div className="relative flex items-center justify-center my-3">
+                                        <div className="border-t border-white/15 w-full" />
+                                        <span className="bg-slate-900/80 px-3 text-[11px] font-bold uppercase tracking-widest text-slate-300 backdrop-blur-md">
+                                            or register in 30s
+                                        </span>
+                                        <div className="border-t border-white/15 w-full" />
                                     </div>
                                 </div>
                             )}
 
-                            {/* Step 5: Manager Hostel Selection */}
-                            {step === 5 && selectedRole === 'hostel_manager' && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="manager-hostel">Select Your Hostel</Label>
-                                        <Select
-                                            value={selectedManagerHostelId}
-                                            onValueChange={setSelectedManagerHostelId}
-                                            disabled={loadingManagerHostels}
-                                        >
-                                            <SelectTrigger id="manager-hostel" className="bg-white/90 text-slate-900">
-                                                <SelectValue placeholder={loadingManagerHostels ? 'Loading hostels...' : 'Choose the hostel you manage'} />
+                            {/* Main Signup Form */}
+                            <form onSubmit={handleSignup} className="space-y-4">
+                                {/* Full Name */}
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                        Full Name *
+                                    </Label>
+                                    <div className="relative">
+                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                        <Input
+                                            id="fullName"
+                                            required
+                                            type="text"
+                                            placeholder="e.g. Kwame Mensah"
+                                            className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Personal Email */}
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                        Personal Email (Gmail / Yahoo) *
+                                    </Label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                        <Input
+                                            id="email"
+                                            required
+                                            type="email"
+                                            placeholder="e.g. kwame.mensah@gmail.com"
+                                            className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Ghana Phone Number */}
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                        Phone Number (MoMo Enabled) *
+                                    </Label>
+                                    <div className="flex gap-2">
+                                        <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
+                                            +233 🇬🇭
+                                        </div>
+                                        <div className="relative flex-1">
+                                            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                            <Input
+                                                id="phone"
+                                                required
+                                                type="tel"
+                                                placeholder="e.g. 0244123456"
+                                                className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                value={phoneNumber}
+                                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Student Index Number (PRD 3.1 - Student Role) */}
+                                {selectedRole === 'student' && (
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                Student Index / Reference Number
+                                            </Label>
+                                            <span className="text-[10px] text-accent font-semibold">Optional for Freshmen</span>
+                                        </div>
+                                        <div className="relative">
+                                            <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                            <Input
+                                                id="indexNumber"
+                                                type="text"
+                                                placeholder="e.g. 5201040001 (or leave blank if freshman)"
+                                                className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                value={studentIndexNumber}
+                                                onChange={(e) => setStudentIndexNumber(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Faculty & Department (Student Role) */}
+                                {selectedRole === 'student' && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Faculty</Label>
+                                            <Select value={faculty} onValueChange={(val) => { setFaculty(val); setDepartment(''); }}>
+                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                    <SelectValue placeholder="Select faculty" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.keys(facultyDepartments).map((fac) => (
+                                                        <SelectItem key={fac} value={fac}>{fac}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Department</Label>
+                                            <Select value={department} onValueChange={setDepartment} disabled={!faculty}>
+                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                    <SelectValue placeholder="Select department" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(facultyDepartments[faculty] || []).map((dept) => (
+                                                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Manager Hostel Assignment (Hostel Manager Role) */}
+                                {selectedRole === 'hostel_manager' && (
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Managed Hostel Property *
+                                        </Label>
+                                        <Select value={selectedManagerHostelId} onValueChange={setSelectedManagerHostelId}>
+                                            <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                <SelectValue placeholder={loadingManagerHostels ? "Loading hostels..." : "Select your hostel property"} />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {managerHostels.map((h) => (
                                                     <SelectItem key={h.id} value={h.id}>
-                                                        {h.name || 'Unnamed hostel'}{h.location ? ` – ${h.location}` : ''}
+                                                        {h.name || 'Unnamed Hostel'} ({h.location || 'Campus area'})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        {!loadingManagerHostels && managerHostels.length === 0 && (
-                                            <p className="text-xs text-red-300">
-                                                No available hostels without a manager were found. You can request a new hostel later from your dashboard.
-                                            </p>
-                                        )}
-                                        {selectedManagerHostelId && (
-                                            <p className="text-xs text-muted-foreground">
-                                                This hostel will be linked to your manager account.
-                                            </p>
-                                        )}
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Step 2: Basic Info Form - Student */}
-                            {step === 2 && selectedRole === 'student' && (
-                                <div className="space-y-4">
-                                    <div className="grid gap-4 md:grid-cols-3">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="firstName">First Name</Label>
-                                            <div className="relative">
-                                                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                <Input
-                                                    id="firstName"
-                                                    placeholder="e.g., Elliot"
-                                                    className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                                    value={firstName}
-                                                    onChange={(e) => setFirstName(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="middleName">Middle Name</Label>
-                                            <Input
-                                                id="middleName"
-                                                placeholder="Optional"
-                                                className="bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                                value={middleName}
-                                                onChange={(e) => setMiddleName(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="lastName">Last Name</Label>
-                                            <Input
-                                                id="lastName"
-                                                placeholder="e.g., Entsiwah"
-                                                className="bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                                value={lastName}
-                                                onChange={(e) => setLastName(e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="phone-student">Phone Number</Label>
-                                        <div className="flex gap-2">
-                                            <Select value={countryCode} onValueChange={setCountryCode}>
-                                                <SelectTrigger className="w-24 bg-white/90 text-slate-900">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="+233">+233 (GH)</SelectItem>
-                                                    <SelectItem value="+234">+234 (NG)</SelectItem>
-                                                    <SelectItem value="+254">+254 (KE)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <div className="relative flex-1">
-                                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                <Input
-                                                    id="phone-student"
-                                                    type="tel"
-                                                    placeholder="0244123456"
-                                                    className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                                    value={phoneNumber}
-                                                    onChange={(e) => setPhoneNumber(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">We will send a verification code to this number.</p>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="password-student">Password</Label>
-                                        <div className="relative">
-                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input
-                                                id="password-student"
-                                                type={showPassword ? "text" : "password"}
-                                                placeholder="••••••••"
-                                                className="pl-10 pr-10 bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-900 transition-colors"
-                                            >
-                                                {showPassword ? (
-                                                    <EyeOff className="h-5 w-5" />
-                                                ) : (
-                                                    <Eye className="h-5 w-5" />
-                                                )}
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
-                                    </div>
-
-                                    <div className="grid gap-4 md:grid-cols-2">
-                                        <div className="space-y-2">
-                                            <Label>Faculty</Label>
-                                            <Select
-                                                value={faculty}
-                                                onValueChange={(value) => {
-                                                    setFaculty(value);
-                                                    setDepartment('');
-                                                }}
-                                            >
-                                                <SelectTrigger className="bg-white/90 text-slate-900">
-                                                    <SelectValue placeholder="Select your faculty" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {Object.keys(facultyDepartments).map((fac) => (
-                                                        <SelectItem key={fac} value={fac}>
-                                                            {fac}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Department</Label>
-                                            <Select
-                                                value={department}
-                                                onValueChange={setDepartment}
-                                                disabled={!faculty}
-                                            >
-                                                <SelectTrigger className="bg-white/90 text-slate-900">
-                                                    <SelectValue placeholder={faculty ? 'Select your department' : 'Select a faculty first'} />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {(facultyDepartments[faculty] || []).map((dept) => (
-                                                        <SelectItem key={dept} value={dept}>
-                                                            {dept}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Step 2: Basic Info Form - Agent / Manager (no email field) */}
-                            {step === 2 && selectedRole !== 'student' && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="fullname">Full Name</Label>
-                                        <div className="relative">
-                                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input 
-                                                id="fullname" 
-                                                placeholder="e.g., Jane Doe" 
-                                                className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
-                                                value={fullName} 
-                                                onChange={(e) => setFullName(e.target.value)} 
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="password">Password</Label>
-                                        <div className="relative">
-                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                            <Input 
-                                                id="password" 
-                                                type={showPassword ? "text" : "password"}
-                                                placeholder="••••••••" 
-                                                className="pl-10 pr-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
-                                                value={password} 
-                                                onChange={(e) => setPassword(e.target.value)}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-900 transition-colors"
-                                            >
-                                                {showPassword ? (
-                                                    <EyeOff className="h-5 w-5" />
-                                                ) : (
-                                                    <Eye className="h-5 w-5" />
-                                                )}
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
-                                    </div>
-                                    {(selectedRole === 'agent' || selectedRole === 'hostel_manager') && (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="phone">Phone Number</Label>
-                                            <div className="flex gap-2">
-                                                <Select value={countryCode} onValueChange={setCountryCode}>
-                                                    <SelectTrigger className="w-24 bg-white/90 text-slate-900">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="+233">+233 (GH)</SelectItem>
-                                                        <SelectItem value="+234">+234 (NG)</SelectItem>
-                                                        <SelectItem value="+254">+254 (KE)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                <div className="relative flex-1">
-                                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                                    <Input 
-                                                        id="phone" 
-                                                        type="tel" 
-                                                        placeholder="0244123456" 
-                                                        className="pl-10 bg-white/95 text-slate-900 placeholder:text-slate-500" 
-                                                        value={phoneNumber} 
-                                                        onChange={(e) => setPhoneNumber(e.target.value)} 
-                                                    />
-                                                </div>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground">We'll send a verification code to this number</p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Step 3: OTP Verification (Students, Agents & Managers) */}
-                        {step === 3 && (selectedRole === 'agent' || selectedRole === 'student' || selectedRole === 'hostel_manager') && (
-                            <div className="space-y-4">
-                                <Alert>
-                                    <Info className="h-4 w-4" />
-                                    <AlertTitle>Verify Your Phone Number</AlertTitle>
-                                    <AlertDescription>
-                                        {otpSent 
-                                            ? "Enter the 6-digit code sent to your phone number."
-                                            : "Click the button below to receive a verification code."}
-                                    </AlertDescription>
-                                </Alert>
-                                {otpSent ? (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="otp">Verification Code</Label>
-                                            <Input 
-                                                id="otp" 
-                                                type="text" 
-                                                placeholder="000000" 
-                                                maxLength={6}
-                                                value={otp} 
-                                                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} 
-                                                className="text-center text-2xl tracking-widest bg-white/95 text-slate-900 placeholder:text-slate-500"
-                                            />
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                onClick={handleSendOTP}
-                                                disabled={resendCooldown > 0 || isSendingOTP}
-                                                className="flex-1"
-                                            >
-                                                {isSendingOTP ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    `Resend Code${resendCooldown > 0 ? ` (${resendCooldown}s)` : ''}`
-                                                )}
-                                            </Button>
-                                            <Button
-                                                onClick={handleVerifyOTP}
-                                                disabled={otp.length !== 6 || isVerifyingOTP || otpVerified}
-                                                className="flex-1"
-                                            >
-                                                {isVerifyingOTP ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                        Verifying...
-                                                    </>
-                                                ) : otpVerified ? (
-                                                    'Verified ✓'
-                                                ) : (
-                                                    'Verify'
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <Button
-                                        onClick={handleSendOTP}
-                                        disabled={isSendingOTP}
-                                        className="w-full"
-                                    >
-                                        {isSendingOTP ? (
-                                            <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Sending...
-                                            </>
-                                        ) : (
-                                            'Send Verification Code'
-                                        )}
-                                    </Button>
                                 )}
-                            </div>
-                        )}
 
-                        {/* Step 3: Terms Agreement (Manager) removed - managers now sign up without viewing the tenancy template here */}
-                    </CardContent>
-                    <CardFooter className="flex flex-col gap-4">
-                        {/* Step 2: Basic Info - Back to Role Selection */}
-                        {step === 2 && (
-                            <div className="flex gap-2 w-full">
-                                <Button 
-                                    variant="outline" 
-                                    onClick={() => setStep(1)} 
-                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
-                                >
-                                    <ArrowLeft className="mr-2 h-4 w-4" />
-                                    Back
-                                </Button>
-                                <Button 
-                                    onClick={handleBasicInfoNext} 
-                                    className="flex-1" 
-                                    disabled={isSubmitting}
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        )}
+                                {/* Password */}
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                        Password *
+                                    </Label>
+                                    <div className="relative">
+                                        <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                        <Input
+                                            id="password"
+                                            required
+                                            type={showPassword ? 'text' : 'password'}
+                                            placeholder="At least 6 characters"
+                                            className="pl-11 pr-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                        </button>
+                                    </div>
+                                </div>
 
-                        {/* Step 3: OTP Verification - Back to Basic Info */}
-                        {step === 3 && (
-                            <div className="flex gap-2 w-full">
-                                <Button 
-                                    variant="outline" 
-                                    onClick={() => {
-                                        setStep(2);
-                                        setOtp('');
-                                        setOtpSent(false);
-                                    }} 
-                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
-                                    disabled={isVerifyingOTP}
-                                >
-                                    <ArrowLeft className="mr-2 h-4 w-4" />
-                                    Back
-                                </Button>
-                            </div>
-                        )}
+                                {/* Progressive disclosure note */}
+                                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-black/30 border border-white/10 text-xs text-slate-300">
+                                    <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                                    <span>
+                                        <strong>Progressive Verification:</strong> Identity documents (Student Portal screenshot or Ghana Card) are only requested when securing a room. No upfront uploads needed.
+                                    </span>
+                                </div>
 
-                        {/* Step 4: Face Capture - Back to OTP (but keep OTP verified) */}
-                        {step === 4 && !faceDescriptor && (
-                            <div className="flex gap-2 w-full">
-                                <Button 
-                                    variant="outline" 
-                                    onClick={() => {
-                                        setStep(3);
-                                        setIsFaceCaptureOpen(false);
-                                    }} 
-                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
-                                    disabled={isProcessingBiometric}
-                                >
-                                    <ArrowLeft className="mr-2 h-4 w-4" />
-                                    Back
-                                </Button>
-                            </div>
-                        )}
+                                {/* Terms & Conditions */}
+                                <div className="flex items-center space-x-2 pt-1">
+                                    <Checkbox
+                                        id="terms"
+                                        checked={termsAccepted}
+                                        onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                                        className="border-white/40 data-[state=checked]:bg-primary"
+                                    />
+                                    <label htmlFor="terms" className="text-xs text-slate-300 cursor-pointer">
+                                        I agree to the{' '}
+                                        <Link href="/terms" className="text-primary font-semibold hover:underline">
+                                            Terms of Service
+                                        </Link>{' '}
+                                        and Privacy Policy.
+                                    </label>
+                                </div>
 
-                        {/* Step 5: Manager Hostel Selection - Back to Face Capture */}
-                        {step === 5 && selectedRole === 'hostel_manager' && (
-                            <div className="flex gap-2 w-full">
-                                <Button 
-                                    variant="outline" 
-                                    onClick={() => setStep(4)} 
-                                    className="flex-1 border-white/40 bg-white/5 text-slate-50 hover:bg-white/15"
-                                    disabled={isSubmitting}
-                                >
-                                    <ArrowLeft className="mr-2 h-4 w-4" />
-                                    Back
-                                </Button>
+                                {/* Submit Button */}
                                 <Button
-                                    onClick={handleSignup}
-                                    className="flex-1"
-                                    disabled={isSubmitting || !selectedManagerHostelId}
+                                    type="submit"
+                                    disabled={isSubmitting || isGoogleSubmitting}
+                                    className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01] mt-2"
                                 >
                                     {isSubmitting ? (
                                         <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Finishing Setup...
+                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            Creating Account...
                                         </>
                                     ) : (
-                                        'Finish Setup'
+                                        `Create ${selectedRole === 'student' ? 'Student' : selectedRole === 'agent' ? 'Agent' : 'Manager'} Account`
                                     )}
                                 </Button>
-                            </div>
-                        )}
-                        {/* Managers no longer have a separate Step 3; they complete signup directly after basic info. */}
-                        {step !== 3 && (
-                            <p className="text-sm text-slate-100/80 text-center">
+                            </form>
+                        </CardContent>
+
+                        <CardFooter className="flex flex-col gap-2 px-6 sm:px-10 pb-8 pt-0">
+                            <p className="text-center text-xs text-slate-300/90">
                                 Already have an account?{' '}
-                                <Link href="/login" className="text-accent font-semibold hover:underline">
-                                    Log In
+                                <Link href="/login" className="text-primary font-bold hover:underline">
+                                    Sign In here
                                 </Link>
                             </p>
-                        )}
-                    </CardFooter>
-                </Card>
-            </div>
-        </main>
-
-        {/* Biometric Capture Dialog (MANDATORY - Primary) */}
-        <BiometricCaptureDialog
-            open={isBiometricCaptureOpen}
-            onOpenChange={(open) => {
-                setIsBiometricCaptureOpen(open);
-                // Reset loading state if dialog is closed without completing
-                if (!open && !biometricCredential && !faceDescriptor) {
-                    setIsProcessingBiometric(false);
-                }
-            }}
-            onCapture={handleBiometricCapture}
-            mode="register"
-            userId={getUserId()}
-            userName={fullName || firstName || email}
-            title="🔐 Set Up Biometric Security"
-            description="Use your fingerprint, Face ID, or camera to secure your account."
-        />
-
-        {/* Face Capture Dialog (Fallback) */}
-        <FaceCaptureDialog
-            open={isFaceCaptureOpen}
-            onOpenChange={(open) => {
-                setIsFaceCaptureOpen(open);
-                // Reset loading state if dialog is closed without completing
-                if (!open && !biometricCredential && !faceDescriptor) {
-                    setIsProcessingBiometric(false);
-                }
-            }}
-            onCapture={handleFaceCapture}
-            title="📸 Capture Your Face"
-            description="Position your face in the center and ensure good lighting. This is required for account security."
-        />
-    </div>
+                        </CardFooter>
+                    </Card>
+                </div>
+            </main>
+        </div>
     );
 }
