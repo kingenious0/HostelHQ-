@@ -1,22 +1,28 @@
-
 import { Realtime } from 'ably';
-
-// The client doesn't use the API key directly.
-// It will use a URL to fetch a token from our own server.
-// We use a root-relative path to ensure it always points to the correct endpoint.
-const authUrl = '/api/ably-token';
 
 let ablyInstance: Realtime | null = null;
 
 // Function to get a singleton instance of Ably
-function getAblyClient() {
-    if (!ablyInstance) {
-            ablyInstance = new Realtime({ authUrl });
-                }
-                    return ablyInstance;
-                    }
+export function getAblyClient(): Realtime {
+  if (!ablyInstance) {
+    if (typeof window === 'undefined') {
+      // Server-side (SSG/SSR/Build): use ABLY_SERVER_KEY if available or absolute URL with autoConnect disabled
+      const key = process.env.ABLY_SERVER_KEY;
+      if (key) {
+        ablyInstance = new Realtime({ key, autoConnect: false });
+      } else {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        ablyInstance = new Realtime({
+          authUrl: `${baseUrl}/api/ably-token`,
+          autoConnect: false,
+        });
+      }
+    } else {
+      // Client-side browser: safe to fetch token from root-relative endpoint
+      ablyInstance = new Realtime({ authUrl: '/api/ably-token' });
+    }
+  }
+  return ablyInstance;
+}
 
-                    // We initialize Ably without a clientId here.
-                    // The clientId will be set dynamically in the Header component after user authentication.
-                    export const ably = getAblyClient();
-                    
+export const ably = getAblyClient();
