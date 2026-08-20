@@ -22,7 +22,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { ably } from '@/lib/ably';
-import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { RoomType, Review } from '@/lib/data';
 import { cn } from '@/lib/utils';
@@ -144,7 +143,7 @@ export default function AdminDashboard() {
 
     // Ably presence for online agents
     const presenceChannel = ably.channels.get('agents:live');
-    const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
+    const updateOnlineAgents = (agents: any[]) => {
       setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
     };
     const setupPresenceListener = async () => {
@@ -383,7 +382,7 @@ export default function AdminDashboard() {
             ...hostelSnap.data(),
             id: hostelSnap.id,
             roomTypes: fetchedRoomTypes
-        } as PendingHostel;
+        } as unknown as PendingHostel;
 
         setSelectedHostel(fullHostelData);
         setIsHostelDialogOpen(true);
@@ -561,15 +560,19 @@ export default function AdminDashboard() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Hostel Name</TableHead>
+                                <TableHead>Managed By</TableHead>
                                 <TableHead>Availability</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {approvedHostels.length > 0 ? (
-                                approvedHostels.map(hostel => (
+                                approvedHostels.map(hostel => {
+                                    const managerName = users.find(u => u.id === hostel.agentId)?.fullName || hostel.agentName || 'Verified Hall Management';
+                                    return (
                                     <TableRow key={hostel.id}>
                                         <TableCell className="font-medium">{hostel.name}</TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">{managerName}</TableCell>
                                         <TableCell>
                                             <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
                                                 {hostel.availability || 'N/A'}
@@ -610,10 +613,11 @@ export default function AdminDashboard() {
                                             </Button>
                                         </TableCell>
                                     </TableRow>
-                                ))
+                                    );
+                                })
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center h-24">
+                                    <TableCell colSpan={4} className="text-center h-24">
                                         No approved hostels.
                                     </TableCell>
                                 </TableRow>
@@ -785,7 +789,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl">Review: {selectedHostel.name}</DialogTitle>
               <DialogDescription>
-                Location: {selectedHostel.location} | Submitted by Agent: {selectedHostel.agentId.substring(0, 8)}...
+                Location: {selectedHostel.location} | Submitted by: {users.find(u => u.id === selectedHostel.agentId)?.fullName || selectedHostel.agentName || 'Verified Hall Management'}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
@@ -793,7 +797,7 @@ export default function AdminDashboard() {
                   <h3 className="font-semibold text-lg">Images</h3>
                   <Carousel className="w-full">
                     <CarouselContent>
-                      {selectedHostel.images.map((img, index) => (
+                      {selectedHostel.images.map((img: string, index: number) => (
                         <CarouselItem key={index}>
                           <div className="relative h-64 w-full rounded-md overflow-hidden">
                             <Image src={img} alt={`Hostel image ${index + 1}`} fill style={{ objectFit: 'cover' }} />

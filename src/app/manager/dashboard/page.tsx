@@ -57,7 +57,7 @@ export default function ManagerDashboard() {
             const fetchedHostels = await Promise.all(snapshot.docs.map(async (doc) => {
                 const roomTypesSnap = await getDocs(collection(doc.ref, 'roomTypes'));
                 const roomTypes = roomTypesSnap.docs.map(rtDoc => rtDoc.data() as RoomType);
-                return { id: doc.id, ...doc.data(), roomTypes } as ManagerHostel;
+                return { id: doc.id, ...doc.data(), roomTypes } as unknown as ManagerHostel;
             }));
             
             setHostels(fetchedHostels);

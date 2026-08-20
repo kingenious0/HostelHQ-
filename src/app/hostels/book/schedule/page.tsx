@@ -8,7 +8,6 @@ import { Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { ably } from '@/lib/ably';
-import { Types } from 'ably';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -42,29 +41,38 @@ function useAgentPresence(): { agents: Agent[], loading: boolean } {
         const presenceChannel = ably.channels.get('agents:live');
 
         const updatePresence = async () => {
-            const allAgentsSnapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'agent')));
-            const allAgents = allAgentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as {id: string, fullName: string, email: string}));
-            
-            const presentMembers = await presenceChannel.presence.get();
-            const presentAgentIds = new Set(presentMembers.map(m => (m.data as OnlineAgentData).id));
+            try {
+                const allAgentsSnapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'agent')));
+                const allAgents = allAgentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as {id: string, fullName: string, email: string}));
+                
+                const presentMembers = await presenceChannel.presence.get();
+                const presentAgentIds = new Set(presentMembers.map(m => (m.data as OnlineAgentData)?.id));
 
-            const agentsWithStatus = allAgents
-                .filter(agent => agent.email !== 'admin@hostelhq.com') // Exclude admin
-                .map(agent => ({
-                ...agent,
-                status: presentAgentIds.has(agent.id) ? 'Online' : 'Offline'
-            } as Agent));
-            
-            setAgents(agentsWithStatus.sort((a, b) => (a.status === 'Online' ? -1 : 1)));
-            setLoading(false);
+                const agentsWithStatus = allAgents
+                    .filter(agent => agent.email !== 'admin@hostelhq.com') // Exclude admin
+                    .map(agent => ({
+                    ...agent,
+                    status: presentAgentIds.has(agent.id) ? 'Online' : 'Offline'
+                } as Agent));
+                
+                setAgents(agentsWithStatus.sort((a, b) => (a.status === 'Online' ? -1 : 1)));
+            } catch (e) {
+                console.error("Presence error:", e);
+            } finally {
+                setLoading(false);
+            }
         };
         
         updatePresence(); // Initial fetch
         
-        const subscription = presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence);
+        try {
+            presenceChannel.presence.subscribe(['enter', 'leave'], updatePresence);
+        } catch (e) {}
 
         return () => {
-           subscription.then(sub => sub.unsubscribe());
+            try {
+                presenceChannel.presence.unsubscribe();
+            } catch (e) {}
         };
 
     }, []);

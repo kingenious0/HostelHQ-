@@ -13,7 +13,6 @@ import { db, auth } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 import { MapboxMap } from '@/components/map';
 import { ably } from '@/lib/ably';
-import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';

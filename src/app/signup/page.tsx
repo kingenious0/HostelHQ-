@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, User, KeyRound, Mail, Info, FileText } from 'lucide-react';
+import { Loader2, User, KeyRound, Mail, Phone, GraduationCap, ShieldCheck, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -23,6 +23,9 @@ export default function SignupPage() {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [studentIndex, setStudentIndex] = useState('');
+    const [selectedRole, setSelectedRole] = useState<'student' | 'agent' | 'hostel_manager'>('student');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
@@ -31,29 +34,24 @@ export default function SignupPage() {
     const [step, setStep] = useState(1);
     const [termsAccepted, setTermsAccepted] = useState(false);
 
-    const getRoleFromEmail = (email: string): 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager' | 'invalid' => {
-        const lowerCaseEmail = email.toLowerCase();
+    const getResolvedRole = (email: string, chosenRole: string): 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager' => {
+        const lowerCaseEmail = email.toLowerCase().trim();
         if (lowerCaseEmail === 'admin@hostelhq.com') return 'admin';
-        if (lowerCaseEmail.endsWith('@student.hostelhq.com')) return 'student';
-        if (lowerCaseEmail.endsWith('@agent.hostelhq.com')) return 'pending_agent';
-        if (lowerCaseEmail.endsWith('@manager.hostelhq.com')) return 'hostel_manager';
-        return 'invalid';
+        if (chosenRole === 'agent' || lowerCaseEmail.endsWith('@agent.hostelhq.com')) return 'pending_agent';
+        if (chosenRole === 'hostel_manager' || lowerCaseEmail.endsWith('@manager.hostelhq.com')) return 'hostel_manager';
+        return 'student';
     }
 
-    const role = getRoleFromEmail(email);
+    const role = getResolvedRole(email, selectedRole);
     const isManagerSignup = role === 'hostel_manager';
 
     const handleNextStep = () => {
-        if (!fullName || !email || !password) {
-            toast({ title: "Missing Fields", description: "Please fill out all fields.", variant: "destructive" });
+        if (!fullName.trim() || !email.trim() || !password) {
+            toast({ title: "Missing Fields", description: "Please fill out your name, email, and password.", variant: "destructive" });
             return;
         }
-        if (role === 'invalid') {
-            toast({
-                title: "Invalid Email Format",
-                description: "Use a valid email ending: @student.hostelhq.com, @agent.hostelhq.com, or @manager.hostelhq.com.",
-                variant: "destructive"
-            });
+        if (password.length < 6) {
+            toast({ title: "Password Too Short", description: "Password must be at least 6 characters.", variant: "destructive" });
             return;
         }
         if (isManagerSignup) {
@@ -71,25 +69,29 @@ export default function SignupPage() {
         
         setIsSubmitting(true);
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
             const user = userCredential.user;
 
             let userData: any = {
                 uid: user.uid,
-                fullName: fullName,
-                email: email,
+                fullName: fullName.trim(),
+                email: email.trim().toLowerCase(),
+                phoneNumber: phoneNumber.trim() || '',
                 role: role,
                 createdAt: new Date().toISOString(),
             };
+
+            if (selectedRole === 'student' && studentIndex.trim()) {
+                userData.studentIndexNumber = studentIndex.trim();
+            }
             
             if (isManagerSignup) {
                 userData.termsAcceptedAt = new Date().toISOString();
             }
 
-
             if (role === 'pending_agent') {
                 await setDoc(doc(db, "pendingUsers", user.uid), userData);
-                toast({ title: 'Application Submitted!', description: 'Your agent account has been submitted for admin approval.' });
+                toast({ title: 'Application Submitted!', description: 'Your agent application has been submitted for admin approval.' });
                 await auth.signOut(); 
                 router.push('/login');
             } else {
@@ -130,28 +132,59 @@ export default function SignupPage() {
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                <Card className="w-full max-w-md shadow-lg">
+                <Card className="w-full max-w-lg shadow-lg">
                     <CardHeader>
                         <CardTitle className="text-2xl font-headline">Create an Account</CardTitle>
                         <CardDescription>
-                            {step === 1 ? 'Join HostelHQ to find or list student rooms.' : 'Hostel Manager Agreement'}
+                            {step === 1 ? 'Join HostelHQ for safe, verified student accommodation.' : 'Hostel Manager Tenancy Agreement'}
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-5">
                         {step === 1 && (
                             <>
-                                <Alert>
-                                    <Info className="h-4 w-4" />
-                                    <AlertTitle>Email Requirement</AlertTitle>
-                                    <AlertDescription>
-                                        Use a specific email format for your role:
-                                        <ul className="list-disc list-inside text-xs mt-2">
-                                            <li><b>Student:</b> <code className="font-mono text-xs">...@student.hostelhq.com</code></li>
-                                            <li><b>Agent:</b> <code className="font-mono text-xs">...@agent.hostelhq.com</code></li>
-                                            <li><b>Manager:</b> <code className="font-mono text-xs">...@manager.hostelhq.com</code></li>
-                                        </ul>
-                                    </AlertDescription>
-                                </Alert>
+                                {/* Role Selection Tabs */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">I am joining as</Label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedRole('student')}
+                                            className={`p-3 text-xs font-semibold rounded-lg border flex flex-col items-center gap-1.5 transition-all ${
+                                                selectedRole === 'student'
+                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                    : 'bg-card text-foreground hover:bg-muted/50 border-border'
+                                            }`}
+                                        >
+                                            <GraduationCap className="h-4 w-4" />
+                                            <span>Student</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedRole('agent')}
+                                            className={`p-3 text-xs font-semibold rounded-lg border flex flex-col items-center gap-1.5 transition-all ${
+                                                selectedRole === 'agent'
+                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                    : 'bg-card text-foreground hover:bg-muted/50 border-border'
+                                            }`}
+                                        >
+                                            <ShieldCheck className="h-4 w-4" />
+                                            <span>Campus Agent</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedRole('hostel_manager')}
+                                            className={`p-3 text-xs font-semibold rounded-lg border flex flex-col items-center gap-1.5 transition-all ${
+                                                selectedRole === 'hostel_manager'
+                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                    : 'bg-card text-foreground hover:bg-muted/50 border-border'
+                                            }`}
+                                        >
+                                            <Building className="h-4 w-4" />
+                                            <span>Manager</span>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2">
                                     <Label htmlFor="fullname">Full Name</Label>
                                     <div className="relative">
@@ -159,18 +192,40 @@ export default function SignupPage() {
                                         <Input id="fullname" placeholder="e.g., Jane Doe" className="pl-10" value={fullName} onChange={(e) => setFullName(e.target.value)} />
                                     </div>
                                 </div>
+
                                 <div className="space-y-2">
                                     <Label htmlFor="email">Email Address</Label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input id="email" type="email" placeholder="you@role.hostelhq.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} />
+                                        <Input id="email" type="email" placeholder="you@example.com (Gmail, Yahoo, or Uni email)" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} />
                                     </div>
                                 </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="phone">Phone Number (MoMo)</Label>
+                                        <div className="relative">
+                                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                            <Input id="phone" type="tel" placeholder="054XXXXXXX" className="pl-10" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+                                        </div>
+                                    </div>
+
+                                    {selectedRole === 'student' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="studentIndex">Student Index No. (Optional)</Label>
+                                            <div className="relative">
+                                                <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                                <Input id="studentIndex" placeholder="e.g., 10892345" className="pl-10" value={studentIndex} onChange={(e) => setStudentIndex(e.target.value)} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="space-y-2">
                                     <Label htmlFor="password">Password</Label>
                                     <div className="relative">
                                         <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                                        <Input id="password" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                        <Input id="password" type="password" placeholder="•••••••• (Min. 6 chars)" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} />
                                     </div>
                                 </div>
                             </>

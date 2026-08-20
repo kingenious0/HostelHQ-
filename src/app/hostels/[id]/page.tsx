@@ -245,11 +245,11 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <h3 className="text-xl font-semibold font-headline mb-4">Amenities</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {hostel.amenities.map((amenity: string) => (
-                            <div key={amenity} className="flex items-center gap-3">
-                               <div className="p-2 bg-secondary rounded-md">
+                            <div key={amenity} className="flex items-center gap-3 p-3 bg-secondary/70 border border-border/60 rounded-lg shadow-sm">
+                               <div className="p-2 bg-primary/10 text-primary rounded-md">
                                  {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <div className="h-5 w-5" />}
                                </div>
-                               <span className="text-sm font-medium capitalize">{amenity}</span>
+                               <span className="text-sm font-semibold capitalize text-foreground">{amenity}</span>
                             </div>
                             ))}
                         </div>
@@ -287,7 +287,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
                 </div>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col lg:sticky lg:top-24 lg:self-start">
                 <Badge 
                     variant="outline"
                     className={cn("text-base p-2 capitalize flex items-center gap-2 w-fit mb-4", currentAvailability.className)}

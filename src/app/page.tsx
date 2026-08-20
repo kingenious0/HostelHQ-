@@ -8,15 +8,16 @@ import Image from 'next/image';
 export const dynamic = 'force-dynamic';
 
 type HomeProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     search?: string;
     location?: string;
-  };
+  }>;
 };
 
 export default async function Home({ searchParams }: HomeProps) {
-  const searchQuery = searchParams?.search || '';
-  const locationQuery = searchParams?.location || '';
+  const resolvedSearchParams = await searchParams;
+  const searchQuery = resolvedSearchParams?.search || '';
+  const locationQuery = resolvedSearchParams?.location || '';
 
   const allHostels = await getHostels({ search: searchQuery, location: locationQuery });
   const featuredHostels = await getHostels({ featured: true });
@@ -39,19 +40,32 @@ export default async function Home({ searchParams }: HomeProps) {
                 data-ai-hint="student accommodation building"
             />
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white p-4">
-                <h1 className="text-4xl md:text-5xl font-bold font-headline">Find Your Perfect Student Home</h1>
-                <p className="mt-2 text-lg md:text-xl max-w-2xl">
-                    Discover the best student hostels in Ghana. Comfortable, affordable, and close to campus.
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/80 backdrop-blur-sm text-xs font-semibold uppercase tracking-wider mb-3 text-white">
+                  <span>🛡️</span> Verified Stays. Zero Fraud.
+                </div>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold font-headline tracking-tight max-w-3xl">
+                    Find Your Perfect Student Home
+                </h1>
+                <p className="mt-3 text-base md:text-lg max-w-2xl text-white/90 leading-relaxed">
+                    Safe, verified student housing near your campus. Book guided physical inspections, lock down rooms, and pay securely via Mobile Money.
                 </p>
-                <div className="mt-8 w-full max-w-3xl">
+                <div className="mt-6 w-full max-w-3xl">
                    <SearchForm />
+                </div>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs font-medium text-white/80">
+                   <span className="flex items-center gap-1.5"><span className="text-green-400">✓</span> 100% Physical Inspection First</span>
+                   <span className="flex items-center gap-1.5"><span className="text-green-400">✓</span> Instant MoMo & Card Payments</span>
+                   <span className="flex items-center gap-1.5"><span className="text-green-400">✓</span> Official Tenancy Agreements</span>
                 </div>
             </div>
         </section>
 
         {showFeatured && featuredHostels.length > 0 && (
           <section className="container mx-auto px-4 md:px-6 py-16">
-            <h2 className="text-3xl font-bold mb-8 text-center font-headline">Featured Hostels</h2>
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <h2 className="text-3xl font-bold font-headline">Featured Hostels</h2>
+              <p className="text-muted-foreground text-sm mt-1">Handpicked, verified student accommodations near top campuses</p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
               {featuredHostels.map((hostel) => (
                 <HostelCard key={hostel.id} hostel={hostel} />

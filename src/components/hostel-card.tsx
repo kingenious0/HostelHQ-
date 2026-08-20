@@ -84,7 +84,7 @@ export function HostelCard({ hostel }: HostelCardProps) {
                     <Star key={i} className={`h-5 w-5 ${i < Math.round(hostel.rating) ? 'fill-current' : ''}`} />
                 ))}
                 </div>
-                <span className="ml-2 text-sm text-muted-foreground">({hostel.reviews} reviews)</span>
+                <span className="ml-2 text-sm text-muted-foreground">({hostel.reviews?.length || 0} reviews)</span>
             </div>
             </CardContent>
         </Link>

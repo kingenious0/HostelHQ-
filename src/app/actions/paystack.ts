@@ -34,7 +34,7 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
-    const headersList = headers();
+    const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     
@@ -100,7 +100,7 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
 
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
-    const headersList = headers();
+    const headersList = await headers();
     const host = headersList.get('host') || 'localhost:9002';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     

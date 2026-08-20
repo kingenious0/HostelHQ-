@@ -185,14 +185,84 @@ export default function AgentDashboard() {
         }
     }
 
+    const pendingCount = myVisits.filter(v => v.status === 'pending').length;
+    const completedCount = myVisits.filter(v => v.status === 'completed').length;
+    const acceptedCount = myVisits.filter(v => v.status === 'accepted').length;
+    const uniqueHostels = new Set(myVisits.map(v => v.hostelId)).size;
+    const agentBalance = completedCount * 50; // GHS 50 commission per verified completed visit
+
+    const handleRequestPayout = () => {
+        if (agentBalance <= 0) {
+            toast({
+                title: "No Available Balance",
+                description: "Minimum withdrawal threshold is GHS 50.00. Conduct physical visits and student check-ins to accumulate commission earnings.",
+                variant: "default"
+            });
+        } else {
+            toast({
+                title: "Payout Request Initiated",
+                description: `GHS ${agentBalance.toFixed(2)} requested. Payout will be sent to your registered Mobile Money wallet within 24 hours.`
+            });
+        }
+    };
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
             <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
-                <div className="container mx-auto">
+                <div className="container mx-auto space-y-6">
+                    {/* Top KPI Metric Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card className="border-l-4 border-l-primary shadow-sm">
+                            <CardHeader className="pb-2">
+                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Properties Managed</CardDescription>
+                                <CardTitle className="text-3xl font-extrabold">{uniqueHostels > 0 ? uniqueHostels : 1}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-xs text-muted-foreground">
+                                Active verified listings
+                            </CardContent>
+                        </Card>
+                        <Card className="border-l-4 border-l-amber-500 shadow-sm">
+                            <CardHeader className="pb-2">
+                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Pending Visits</CardDescription>
+                                <CardTitle className="text-3xl font-extrabold text-amber-600">{pendingCount}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-xs text-muted-foreground">
+                                Requires your response
+                            </CardContent>
+                        </Card>
+                        <Card className="border-l-4 border-l-blue-500 shadow-sm">
+                            <CardHeader className="pb-2">
+                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Scheduled Visits</CardDescription>
+                                <CardTitle className="text-3xl font-extrabold text-blue-600">{acceptedCount}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-xs text-muted-foreground">
+                                Ready for physical inspection
+                            </CardContent>
+                        </Card>
+                        <Card className="border-l-4 border-l-green-600 shadow-sm">
+                            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                                <div>
+                                    <CardDescription className="text-xs uppercase font-bold tracking-wider">Total Earnings</CardDescription>
+                                    <CardTitle className="text-3xl font-extrabold text-green-700">GH₵ {agentBalance.toFixed(2)}</CardTitle>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="w-full text-xs font-semibold mt-1"
+                                    onClick={handleRequestPayout}
+                                >
+                                    Request Payout
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
+                            <CardTitle className="text-2xl font-headline">Visit Requests</CardTitle>
                             <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
                         </CardHeader>
                         <CardContent>

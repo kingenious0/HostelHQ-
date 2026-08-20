@@ -19,7 +19,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { ably } from '@/lib/ably';
-import { Types } from 'ably';
 import { Badge } from '@/components/ui/badge';
 
 type AppUser = {
@@ -36,15 +35,16 @@ export function Header() {
   const { toast } = useToast();
   const router = useRouter();
   const locationWatcherId = useRef<number | null>(null);
-  const agentPresenceChannel = useRef<Types.RealtimeChannelPromise | null>(null);
+  const agentPresenceChannel = useRef<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        if (!ably.auth.options) {
-          (ably.auth.options as any) = {};
+        if (ably && (ably.auth as any)) {
+          try {
+            (ably.auth as any).clientId = user.uid;
+          } catch (e) {}
         }
-        ably.auth.options.clientId = user.uid;
 
         // Check 'users' collection first
         let userDocRef = doc(db, "users", user.uid);
@@ -77,8 +77,10 @@ export function Header() {
         }
 
       } else {
-        if (ably.auth && ably.auth.options) {
-          ably.auth.options.clientId = undefined;
+        if (ably && (ably.auth as any)) {
+          try {
+            (ably.auth as any).clientId = undefined;
+          } catch (e) {}
         }
         setAppUser(null);
       }
