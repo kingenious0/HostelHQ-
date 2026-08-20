@@ -1,0 +1,511 @@
+"use client";
+
+import { useState, useEffect } from 'react';
+import { Header } from '@/components/header';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { Shield, Phone, Save, Loader2, MessageSquare, Bell, CreditCard, RefreshCw } from 'lucide-react';
+import { getPaystackSettings, updatePaystackSettings, type PaystackSettings } from '@/app/actions/settings';
+import { Switch } from '@/components/ui/switch';
+
+export default function AdminSettingsPage() {
+    const { toast } = useToast();
+    const [user, setUser] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    // Admin profile data
+    const [fullName, setFullName] = useState('');
+    const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
+    const [smsNotifications, setSmsNotifications] = useState(true);
+
+    // Paystack Settings
+    const [paystackSettings, setPaystackSettings] = useState<PaystackSettings>({
+        mode: 'test',
+        testPublicKey: '',
+        testSecretKey: '',
+        livePublicKey: '',
+        liveSecretKey: ''
+    });
+    const [loadingPaystack, setLoadingPaystack] = useState(true);
+    const [savingPaystack, setSavingPaystack] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+            setUser(user);
+            if (user) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        setFullName(userData.fullName || user.displayName || '');
+                        setEmail(userData.email || user.email || '');
+                        setPhone(userData.phone || '');
+                        setSmsNotifications(userData.smsNotifications !== false); // Default to true
+                    }
+                } catch (error) {
+                    console.error('Error fetching admin data:', error);
+                }
+            }
+            setLoading(false);
+        });
+
+
+        const fetchPaystackSettings = async () => {
+            try {
+                const settings = await getPaystackSettings();
+                if (settings) {
+                    setPaystackSettings(settings);
+                }
+            } catch (error) {
+                console.error('Error fetching paystack settings:', error);
+            } finally {
+                setLoadingPaystack(false);
+            }
+        };
+
+        fetchPaystackSettings();
+
+        return () => unsubscribe();
+    }, []);
+
+    const handleSaveProfile = async () => {
+        if (!user) return;
+
+        setSaving(true);
+        try {
+            await updateDoc(doc(db, 'users', user.uid), {
+                fullName,
+                email,
+                phone,
+                smsNotifications,
+                updatedAt: new Date().toISOString()
+            });
+
+            toast({
+                title: "Settings Updated",
+                description: "Your admin settings have been saved successfully."
+            });
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            toast({
+                title: "Error",
+                description: "Failed to save settings. Please try again.",
+                variant: 'destructive'
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSavePaystack = async () => {
+        setSavingPaystack(true);
+        try {
+            const result = await updatePaystackSettings(paystackSettings);
+            if (result.success) {
+                toast({
+                    title: "Paystack Settings Saved",
+                    description: `API keys for ${paystackSettings.mode} mode are now active.`
+                });
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            console.error('Error saving Paystack settings:', error);
+            toast({
+                title: "Error",
+                description: "Failed to save Paystack settings.",
+                variant: 'destructive'
+            });
+        } finally {
+            setSavingPaystack(false);
+        }
+    };
+
+    const handleTestSMS = async () => {
+        if (!phone) {
+            toast({
+                title: "Phone Number Required",
+                description: "Please add your phone number first.",
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        try {
+            const message = `🧪 HOSTELHQ: Test SMS notification\n\nThis is a test message from HostelHQ admin panel. Your SMS notifications are working correctly!\n\nAdmin: ${fullName}`;
+
+            const response = await fetch('/api/sms/send-test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone: phone,
+                    message: message,
+                    adminName: fullName
+                })
+            });
+
+            // Check if response is HTML (error page) instead of JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Received HTML instead of JSON:', text.substring(0, 200));
+                toast({
+                    title: "API Error",
+                    description: "Server returned HTML instead of JSON. Please refresh and try again.",
+                    variant: 'destructive'
+                });
+                return;
+            }
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                console.error('JSON parsing error:', jsonError);
+                const text = await response.text();
+                console.error('Response text:', text.substring(0, 200));
+                toast({
+                    title: "API Response Error",
+                    description: "Invalid response from server. Please refresh and try again.",
+                    variant: 'destructive'
+                });
+                return;
+            }
+
+            if (data.success) {
+                if (data.devMode) {
+                    toast({
+                        title: "SMS Test Successful (Development Mode)",
+                        description: "SMS will be sent when deployed to production. Check console for details."
+                    });
+                } else {
+                    toast({
+                        title: "Test SMS Sent via Wigal",
+                        description: "Check your phone for the test message from HostelHQ."
+                    });
+                }
+            } else {
+                toast({
+                    title: "SMS Failed",
+                    description: data.error || "Failed to send test SMS via Wigal.",
+                    variant: 'destructive'
+                });
+            }
+        } catch (error) {
+            console.error('Error sending test SMS:', error);
+            toast({
+                title: "Error",
+                description: "Failed to send test SMS. Check Wigal configuration.",
+                variant: 'destructive'
+            });
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background">
+                <Header />
+                <div className="container mx-auto py-8">
+                    <div className="flex items-center justify-center h-64">
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-background">
+            <Header />
+            <div className="container mx-auto py-8 space-y-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <Shield className="h-6 w-6" />
+                    <h1 className="text-3xl font-bold">Admin Settings</h1>
+                </div>
+
+                {/* Paystack API Settings */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <CreditCard className="h-5 w-5" />
+                            Paystack API Configuration
+                        </CardTitle>
+                        <CardDescription>
+                            Switch between Test and Live modes and manage your API keys
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                            <div className="space-y-0.5">
+                                <Label className="text-base font-semibold">Active Mode</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Current environment: <span className={`font-bold uppercase ${paystackSettings.mode === 'live' ? 'text-red-600' : 'text-blue-600'}`}>{paystackSettings.mode}</span>
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-sm font-medium ${paystackSettings.mode === 'test' ? 'text-blue-600' : 'text-muted-foreground'}`}>Test</span>
+                                <Switch
+                                    checked={paystackSettings.mode === 'live'}
+                                    onCheckedChange={(checked) => setPaystackSettings(prev => ({ ...prev, mode: checked ? 'live' : 'test' }))}
+                                />
+                                <span className={`text-sm font-medium ${paystackSettings.mode === 'live' ? 'text-red-600' : 'text-muted-foreground'}`}>Live</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Test Keys */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-blue-50/10">
+                                <h3 className="font-semibold text-blue-700 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                    Test Keys
+                                </h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="testPublicKey">Public Key</Label>
+                                    <Input
+                                        id="testPublicKey"
+                                        value={paystackSettings.testPublicKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, testPublicKey: e.target.value }))}
+                                        placeholder="pk_test_..."
+                                        type="password"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="testSecretKey">Secret Key</Label>
+                                    <Input
+                                        id="testSecretKey"
+                                        value={paystackSettings.testSecretKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, testSecretKey: e.target.value }))}
+                                        placeholder="sk_test_..."
+                                        type="password"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Live Keys */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-red-50/10">
+                                <h3 className="font-semibold text-red-700 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-red-500" />
+                                    Live Keys
+                                </h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="livePublicKey">Public Key</Label>
+                                    <Input
+                                        id="livePublicKey"
+                                        value={paystackSettings.livePublicKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, livePublicKey: e.target.value }))}
+                                        placeholder="pk_live_..."
+                                        type="password"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="liveSecretKey">Secret Key</Label>
+                                    <Input
+                                        id="liveSecretKey"
+                                        value={paystackSettings.liveSecretKey}
+                                        onChange={(e) => setPaystackSettings(prev => ({ ...prev, liveSecretKey: e.target.value }))}
+                                        placeholder="sk_live_..."
+                                        type="password"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <Button
+                                onClick={handleSavePaystack}
+                                disabled={savingPaystack}
+                                className={paystackSettings.mode === 'live' ? 'bg-red-600 hover:bg-red-700' : ''}
+                            >
+                                {savingPaystack ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Saving Keys...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="h-4 w-4 mr-2" />
+                                        Save & Switch to {paystackSettings.mode.toUpperCase()}
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* SMS Notification Settings */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Profile Information</CardTitle>
+                        <CardDescription>
+                            Update your admin profile information
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="fullName">Full Name</Label>
+                                <Input
+                                    id="fullName"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="Enter your full name"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email</Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="Enter your email"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="phone">
+                                <Phone className="h-4 w-4 inline mr-1" />
+                                Phone Number (for SMS notifications)
+                            </Label>
+                            <Input
+                                id="phone"
+                                type="tel"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                placeholder="+233XXXXXXXXXX"
+                            />
+                            <p className="text-sm text-muted-foreground">
+                                Include country code (e.g., +233 for Ghana). This number will receive SMS notifications
+                                when agents submit new hostels for approval.
+                            </p>
+                        </div>
+
+                        <Button
+                            onClick={handleSaveProfile}
+                            disabled={saving}
+                            className="w-full md:w-auto"
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-2" />
+                                    Save Profile
+                                </>
+                            )}
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* SMS Notification Settings */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>
+                            <MessageSquare className="h-5 w-5 inline mr-2" />
+                            SMS Notifications
+                        </CardTitle>
+                        <CardDescription>
+                            Configure SMS notifications for admin alerts
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                                <h4 className="font-medium">New Hostel Submissions</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    Receive SMS via Wigal FROG when agents/manager submit hostels for approval
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${phone ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {phone ? 'Phone Set' : 'No Phone'}
+                                </span>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${smsNotifications ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                    {smsNotifications ? 'Enabled' : 'Disabled'}
+                                </span>
+                                <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                    Wigal Active
+                                </span>
+                            </div>
+                        </div>
+
+                        {phone && (
+                            <Button
+                                onClick={handleTestSMS}
+                                variant="outline"
+                                className="w-full md:w-auto"
+                            >
+                                <Bell className="h-4 w-4 mr-2" />
+                                Send Test SMS
+                            </Button>
+                        )}
+
+                        {!phone && (
+                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    ⚠️ Phone number is required to receive SMS notifications.
+                                    Please add your phone number above.
+                                </p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* SMS Service Info */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>SMS Service Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        <div className="text-sm space-y-2">
+                            <p>
+                                <strong>🔧 Status:</strong> SMS notifications configured for production deployment.
+                            </p>
+                            <p>
+                                <strong>Service Provider:</strong> Wigal FROG SMS (Ghana's reliable SMS gateway)
+                            </p>
+                            <p>
+                                <strong>Development Mode:</strong> SMS is bypassed locally, will work when deployed.
+                            </p>
+                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-sm text-yellow-800">
+                                    📧 SMS notifications are configured and will work in production!
+                                    In development mode, SMS is simulated to avoid costs and local API issues.
+                                </p>
+                            </div>
+                            <p>
+                                <strong>Environment Variables (Configured ✅):</strong>
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
+                                <li><code>WIGAL_API_KEY</code> - Your Wigal API key</li>
+                                <li><code>WIGAL_USERNAME</code> - Your Wigal username</li>
+                                <li><code>WIGAL_SENDER_ID</code> - "HostelHQ" (default)</li>
+                            </ul>
+                            <p>
+                                <strong>When Deployed:</strong>
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
+                                <li>Admins receive SMS when agents submit hostels</li>
+                                <li>Creators get SMS for approval/rejection status</li>
+                                <li>Test SMS works for verification</li>
+                            </ul>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
+}

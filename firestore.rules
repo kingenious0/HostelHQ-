@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isManager() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager';
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Hostels collection
+    match /hostels/{hostelId} {
+      allow read: if true; // Publicly viewable
+      allow create: if isManager() || isAdmin();
+      allow update, delete: if isAdmin() || (isManager() && resource.data.managerId == request.auth.uid);
+      
+      // Rooms subcollection
+      match /rooms/{roomId} {
+        allow read: if true;
+        allow write: if isAdmin() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
+      }
+      
+      // RoomTypes subcollection
+      match /roomTypes/{typeId} {
+        allow read: if true;
+        allow write: if isAdmin() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
+      }
+      
+       // Reviews subcollection
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        // Only author or admin can edit/delete
+        allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      }
+    }
+
+    // Bookings collection
+    match /bookings/{bookingId} {
+      allow read: if isAdmin() || 
+        (isAuthenticated() && (resource.data.studentId == request.auth.uid || 
+        get(/databases/$(database)/documents/hostels/$(resource.data.hostelId)).data.managerId == request.auth.uid));
+      
+      // Server-side logic handles creation, but we allow students to see their own
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isAdmin();
+    }
+
+    // Visitations/Visits collection
+    match /visits/{visitId} {
+      allow read: if isAdmin() || 
+        (isAuthenticated() && (resource.data.studentId == request.auth.uid || 
+        resource.data.agentId == request.auth.uid ||
+        get(/databases/$(database)/documents/hostels/$(resource.data.hostelId)).data.managerId == request.auth.uid));
+      
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || 
+        (isAuthenticated() && (resource.data.studentId == request.auth.uid || resource.data.agentId == request.auth.uid));
+    }
+
+    // System Settings (Maintenance Mode, Paystack keys, etc.)
+    match /system_settings/{settingId} {
+      allow read: if isAuthenticated(); // Many parts of the app need to check maintenance mode
+      allow write: if isAdmin();
+    }
+
+    // Security Logs
+    match /security_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Immutable logs
+    }
+  }
+}

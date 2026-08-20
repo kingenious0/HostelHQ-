@@ -1,0 +1,554 @@
+
+"use server";
+
+import { db } from "@/lib/firebase";
+import {
+    createTransferRecipient,
+    initiateTransfer,
+    checkPaystackBalance,
+    initiateBulkTransfer
+} from "@/lib/paystack-payouts";
+import { doc, getDoc, updateDoc, addDoc, collection, query, where, getDocs, Timestamp, runTransaction, writeBatch, setDoc } from "firebase/firestore";
+import { revalidatePath } from "next/cache";
+
+// TYPES
+
+export type PayoutRequest = {
+    id: string;
+    userId: string;
+    userName: string;
+    amount: number; // In pesewas
+    phonenumber: string;
+    network: string; // 'MTN', 'VOD', 'ATL'
+    recipientCode: string;
+    status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed';
+    requestedAt: string;
+    processedAt?: string;
+    reference?: string;
+    transferCode?: string;
+    adminNote?: string;
+};
+
+// ACTIONS
+
+/**
+ * Register a user as a Paystack Transfer Recipient.
+ * Call this when a Manager/Agent sets up their payout details.
+ */
+export async function registerPaystackRecipient(userId: string, name: string, accountNumber: string, bankCode: string) {
+    try {
+        // 1. Create Recipient on Paystack
+        const recipientData = await createTransferRecipient({
+            type: 'mobile_money',
+            name: name,
+            account_number: accountNumber,
+            bank_code: bankCode,
+            currency: 'GHS',
+            metadata: {
+                user_id: userId
+            }
+        });
+
+        // 2. Save recipient_code to User Profile
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
+            paystackRecipientCode: recipientData.recipient_code,
+            momoNumber: accountNumber, // Store for display
+            momoProviderName: recipientData.details.bank_name // Store bank name for display
+        });
+
+        return { success: true, message: "Payout method linked successfully!", recipientCode: recipientData.recipient_code };
+
+    } catch (error: any) {
+        console.error("Register Paystack Recipient Failed:", error);
+        return { success: false, message: error.message || "Failed to link payout method." };
+    }
+}
+
+/**
+ * Get the current wallet balance for a user.
+ * Assumes 'walletBalance' field exists on user doc (in pesewas).
+ */
+export async function getUserWalletBalance(userId: string) {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+            throw new Error("User not found");
+        }
+
+        const data = userSnap.data();
+        return {
+            balance: data.walletBalance || 0, // in pesewas
+            currency: 'GHS',
+            recipientCode: data.paystackRecipientCode,
+            momoNumber: data.momoNumber,
+            momoProviderName: data.momoProviderName
+        };
+
+    } catch (error: any) {
+        console.error("Get Wallet Balance Failed:", error);
+        return { balance: 0, currency: 'GHS', error: error.message };
+    }
+}
+
+/**
+ * System Settings Actions
+ */
+export async function getSystemSettings() {
+    try {
+        const docRef = doc(db, 'system_settings', 'payouts');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data();
+        }
+        return { autoApprove: true }; // Default to Instant Payouts
+    } catch (error) {
+        console.error("Get Settings Failed:", error);
+        return { autoApprove: true };
+    }
+}
+
+export async function setPayoutAutoApprove(enabled: boolean) {
+    try {
+        const docRef = doc(db, 'system_settings', 'payouts');
+        await setDoc(docRef, { autoApprove: enabled }, { merge: true });
+        revalidatePath('/admin/payouts');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Set Settings Failed:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+
+/**
+ * Request a Payout (Withdrawal).
+ * Deducts (holds) balance conceptually (or checks it), creates a request.
+ */
+export async function requestWithdrawal(userId: string, amount: number, paymentDetails?: { network: string, number: string }) {
+    try {
+        // 1. Check Auto-Approve Setting
+        const settings = await getSystemSettings();
+        const autoApprove = settings?.autoApprove || false;
+
+        const userRef = doc(db, 'users', userId);
+        const newRequestRef = doc(collection(db, 'payout_requests'));
+        let requestData: any = {};
+
+        // 1b. Handle New Payment Details (Create Recipient if needed)
+        let recipientCodeToUse = '';
+
+        // We need to fetch user data first to check balance and existing codes
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) throw new Error("User does not exist!");
+        let userData = userSnap.data();
+
+        if (paymentDetails) {
+            // Create new recipient
+            const bankCode = paymentDetails.network; // 'MTN', 'VOD', 'ATL'
+            const accNum = paymentDetails.number;
+
+            // Validate
+            if (!['MTN', 'VOD', 'ATL'].includes(bankCode)) {
+                throw new Error("Invalid Network Selected");
+            }
+
+            try {
+                const recipientData = await createTransferRecipient({
+                    type: 'mobile_money',
+                    name: userData.fullName || "User", // Use user's name or fetch from lookup if we implemented that
+                    account_number: accNum,
+                    bank_code: bankCode,
+                    currency: 'GHS',
+                    metadata: {
+                        user_id: userId
+                    }
+                });
+
+                recipientCodeToUse = recipientData.recipient_code;
+
+                // Update user profile with latest used details
+                await updateDoc(userRef, {
+                    paystackRecipientCode: recipientCodeToUse,
+                    momoNumber: accNum,
+                    momoProviderName: recipientData.details.bank_name
+                });
+
+                // Refresh local data copy for the transaction block
+                userData = { ...userData, paystackRecipientCode: recipientCodeToUse, momoNumber: accNum };
+
+            } catch (err: any) {
+                console.error("Error creating recipient during withdraw:", err);
+                throw new Error("Failed to verify mobile money details: " + err.message);
+            }
+        } else {
+            // Use existing
+            recipientCodeToUse = userData.paystackRecipientCode;
+        }
+
+        if (!recipientCodeToUse) {
+            throw new Error("No payout method provided. Please enter your MoMo number.");
+        }
+
+
+        // 2. Initial Transaction: Deduct Balance & Create Pending Request
+        await runTransaction(db, async (transaction) => {
+            // Re-read user to be safe in transaction
+            const tUserDoc = await transaction.get(userRef);
+            if (!tUserDoc.exists()) throw new Error("User does not exist!");
+            const tUserData = tUserDoc.data();
+
+            const currentBalance = tUserData.walletBalance || 0;
+
+            if (currentBalance < amount) {
+                throw new Error("Insufficient funds in wallet.");
+            }
+
+            // Deduct from wallet immediately
+            transaction.update(userRef, {
+                walletBalance: currentBalance - amount,
+                frozenBalance: (tUserData.frozenBalance || 0) + amount
+            });
+
+            // Create Payout Request
+            requestData = {
+                userId,
+                userName: tUserData.fullName || "User",
+                amount,
+                phonenumber: paymentDetails?.number || tUserData.momoNumber || "N/A",
+                network: paymentDetails?.network || "N/A",
+                recipientCode: recipientCodeToUse,
+                status: 'pending', // Initially pending
+                requestedAt: new Date().toISOString(),
+            };
+
+            transaction.set(newRequestRef, requestData);
+        });
+
+        // 3. Auto-Approve Logic (Post-Transaction)
+        if (autoApprove) {
+            try {
+                // Check Admin Balance
+                const balances = await checkPaystackBalance();
+                const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+
+                if (ghsBalance && ghsBalance.balance >= amount) {
+                    // Initiate Transfer
+                    const transferResult = await initiateTransfer({
+                        source: 'balance',
+                        amount: amount,
+                        recipient: requestData.recipientCode,
+                        reason: "HostelHQ Payout (Auto)"
+                    });
+
+                    // Update Request to Approved
+                    await updateDoc(newRequestRef, {
+                        status: 'approved',
+                        processedAt: new Date().toISOString(),
+                        transferCode: transferResult.transfer_code,
+                        reference: transferResult.reference,
+                        adminNote: 'Auto-approved by system'
+                    });
+
+                    revalidatePath('/manager/dashboard');
+                    return { success: true, message: "Withdrawal processed instantly!" };
+                } else {
+                    console.warn("Auto-approve failed due to insufficient admin balance. Leaving as pending.");
+                    // Leave as pending, let admin handle it manually.
+                }
+
+            } catch (transferError: any) {
+                console.error("Auto-approve transfer failed:", transferError);
+                // Update with error note but keep as pending/failed so admin knows
+                await updateDoc(newRequestRef, {
+                    adminNote: `Auto-approve failed: ${transferError.message || 'Unknown error'}`
+                });
+            }
+        }
+
+        revalidatePath('/manager/dashboard');
+        return { success: true, message: "Withdrawal request submitted successfully!" };
+
+    } catch (error: any) {
+        console.error("Request Withdrawal Failed:", error);
+        return { success: false, message: error.message || "Failed to request withdrawal." };
+    }
+}
+
+// ADMIN ACTIONS
+
+/**
+ * ADMIN: Get all pending withdrawal requests.
+ */
+export async function getPendingWithdrawals() {
+    try {
+        const q = query(
+            collection(db, 'payout_requests'),
+            where('status', '==', 'pending')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayoutRequest));
+    } catch (error) {
+        console.error("Fetch Pending Withdrawals Failed:", error);
+        return [];
+    }
+}
+
+/**
+ * ADMIN: Process (Approve & Pay) a single withdrawal.
+ */
+export async function processWithdrawalAction(requestId: string) {
+    try {
+        // 1. Fetch Request
+        const requestRef = doc(db, 'payout_requests', requestId);
+        const requestSnap = await getDoc(requestRef);
+
+        if (!requestSnap.exists()) return { success: false, message: "Request not found" };
+        const requestData = requestSnap.data() as PayoutRequest;
+
+        if (requestData.status !== 'pending') {
+            return { success: false, message: "Request is not pending." };
+        }
+
+        // 2. Check Admin's Paystack Balance
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+
+        if (!ghsBalance || ghsBalance.balance < requestData.amount) {
+            return { success: false, message: `Insufficient Admin Playstack Balance. Available: ${ghsBalance?.balance / 100} GHS` };
+        }
+
+        // 3. Init Transfer
+        const transferResult = await initiateTransfer({
+            source: 'balance',
+            amount: requestData.amount,
+            recipient: requestData.recipientCode,
+            reason: "HostelHQ Payout"
+        });
+
+        // 4. Update Request Status
+        await updateDoc(requestRef, {
+            status: 'approved', // Or 'processed' - initially 'success' means queued at Paystack
+            processedAt: new Date().toISOString(),
+            transferCode: transferResult.transfer_code,
+            reference: transferResult.reference
+        });
+
+        // Note: You should listen to webhooks for final 'success'/'failed' status of the transfer
+        // But for this PRD, "Approve & Release" is the step.
+
+        revalidatePath('/admin/payouts');
+        return { success: true, message: "Funds released successfully!" };
+
+    } catch (error: any) {
+        console.error("Process Withdrawal Failed:", error);
+        return { success: false, message: error.message || "Failed to process payout." };
+    }
+}
+
+/**
+ * ADMIN: Reject a withdrawal request.
+ * Refunds the money back to user wallet.
+ */
+export async function rejectWithdrawalAction(requestId: string, reason: string) {
+    try {
+        await runTransaction(db, async (transaction) => {
+            const requestRef = doc(db, 'payout_requests', requestId);
+            const requestDoc = await transaction.get(requestRef);
+
+            if (!requestDoc.exists()) throw new Error("Request not found");
+            const requestData = requestDoc.data() as PayoutRequest;
+
+            if (requestData.status !== 'pending') throw new Error("Request is not pending");
+
+            const userRef = doc(db, 'users', requestData.userId);
+            const userDoc = await transaction.get(userRef);
+
+            if (!userDoc.exists()) throw new Error("User not found");
+            const userData = userDoc.data();
+
+            // Refund logic
+            transaction.update(userRef, {
+                walletBalance: (userData.walletBalance || 0) + requestData.amount,
+                frozenBalance: Math.max(0, (userData.frozenBalance || 0) - requestData.amount)
+            });
+
+            transaction.update(requestRef, {
+                status: 'rejected',
+                adminNote: reason,
+                processedAt: new Date().toISOString()
+            });
+        });
+
+        revalidatePath('/admin/payouts');
+        return { success: true, message: "Request rejected and funds refunded." };
+
+    } catch (error: any) {
+        console.error("Reject Withdrawal Failed:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+/**
+ * ADMIN: Process Bulk Withdrawal (Pay all pending).
+ */
+export async function processBulkWithdrawalAction(requestIds: string[]) {
+    try {
+        if (!requestIds.length) return { success: false, message: "No requests selected" };
+
+        const validRequestIds = [];
+        const transfersToProcess = [];
+
+        // 1. Check balance first
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+        let totalAmount = 0;
+
+        for (const id of requestIds) {
+            const requestRef = doc(db, 'payout_requests', id);
+            const requestSnap = await getDoc(requestRef);
+            if (requestSnap.exists()) {
+                const data = requestSnap.data() as PayoutRequest;
+                if (data.status === 'pending') {
+                    transfersToProcess.push({ ...data, id });
+                    totalAmount += data.amount;
+                }
+            }
+        }
+
+        if (transfersToProcess.length === 0) return { success: false, message: "No valid pending requests found." };
+
+        if (!ghsBalance || ghsBalance.balance < totalAmount) {
+            return {
+                success: false,
+                message: `Insufficient Admin Playstack Balance. Needed: ${totalAmount / 100}, Available: ${ghsBalance?.balance / 100} GHS`
+            };
+        }
+
+        // 2. Process Transfers One-by-One (Loop Mode)
+        // This bypasses the "Bulk Transfer requires OTP off" restriction
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const req of transfersToProcess) {
+            try {
+                // Initiate Single Transfer
+                const transferResult = await initiateTransfer({
+                    source: 'balance',
+                    amount: req.amount,
+                    recipient: req.recipientCode,
+                    reason: "HostelHQ Payout"
+                });
+
+                // Update Request Status
+                const ref = doc(db, 'payout_requests', req.id);
+                await updateDoc(ref, {
+                    status: 'approved',
+                    processedAt: new Date().toISOString(),
+                    transferCode: transferResult.transfer_code,
+                    reference: transferResult.reference,
+                    adminNote: 'Processed via Serial Bulk Action'
+                });
+
+                successCount++;
+
+                // Small delay to be gentle on the API
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+            } catch (err: any) {
+                console.error(`Transfer failed for ${req.id}:`, err);
+                failCount++;
+                // Update with error note
+                const ref = doc(db, 'payout_requests', req.id);
+                await updateDoc(ref, {
+                    adminNote: `Failed: ${err.message || 'Unknown error'}`
+                });
+            }
+        }
+
+        revalidatePath('/admin/payouts');
+
+        if (failCount > 0) {
+            return { success: true, message: `Processed ${successCount} payouts. ${failCount} failed (check notes).` };
+        }
+
+        return { success: true, message: `Successfully initiated ${successCount} transfers!` };
+
+    } catch (error: any) {
+        console.error("Bulk Process Failed:", error);
+        return { success: false, message: error.message || "Failed to process bulk payout." };
+    }
+}
+
+
+/**
+ * ADMIN: Check Paystack Balance.
+ * Returns the balance of the integration currency (usually GHS).
+ */
+export async function getAdminPaystackBalance() {
+    try {
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+        return {
+            success: true,
+            balance: ghsBalance ? ghsBalance.balance : 0,
+            currency: 'GHS'
+        };
+    } catch (error: any) {
+        console.error("Get Admin Balance Failed:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+/**
+ * ADMIN: Direct Withdrawal (Self-Pay).
+ * Allows admin to withdraw funds directly from Paystack to a specific number.
+ */
+export async function processAdminWithdrawal(amount: number, paymentDetails: { network: string, number: string }) {
+    try {
+        // 1. Validate Input
+        if (amount <= 0) throw new Error("Invalid amount");
+        if (!paymentDetails.number || !paymentDetails.network) throw new Error("Missing payment details");
+
+        // 2. Check Balance
+        const balances = await checkPaystackBalance();
+        const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
+
+        if (!ghsBalance || ghsBalance.balance < amount) {
+            return {
+                success: false,
+                message: `Insufficient Balance. Available: ${(ghsBalance?.balance || 0) / 100} GHS`
+            };
+        }
+
+        // 3. Create/Get Recipient
+        const recipientData = await createTransferRecipient({
+            type: 'mobile_money',
+            name: "Admin Withdrawal",
+            account_number: paymentDetails.number,
+            bank_code: paymentDetails.network,
+            currency: 'GHS'
+        });
+
+        // 4. Initiate Transfer
+        const transferResult = await initiateTransfer({
+            source: 'balance',
+            amount: amount,
+            recipient: recipientData.recipient_code,
+            reason: "HostelHQ Admin Withdrawal"
+        });
+
+        revalidatePath('/admin/payouts');
+        return {
+            success: true,
+            message: "Withdrawal initiated successfully!",
+            reference: transferResult.reference
+        };
+
+    } catch (error: any) {
+        console.error("Admin Withdrawal Failed:", error);
+        return { success: false, message: error.message || "Withdrawal failed" };
+    }
+}

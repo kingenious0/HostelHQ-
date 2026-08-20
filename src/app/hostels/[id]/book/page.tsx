@@ -21,13 +21,52 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 
 type VisitType = 'agent' | 'self';
 
+// Helper function to detect mobile money provider from phone number
+const detectProvider = (phoneNumber: string): string => {
+    if (!phoneNumber) return '';
+    
+    // Remove any spaces, dashes, or other non-digit characters except +
+    let cleaned = phoneNumber.replace(/[\s\-()]/g, '');
+    
+    // Convert +233 to 0 format for consistent prefix detection
+    if (cleaned.startsWith('+233')) {
+        cleaned = '0' + cleaned.substring(4);
+    } else if (cleaned.startsWith('233')) {
+        cleaned = '0' + cleaned.substring(3);
+    }
+    
+    // Now get the first 3 digits (should be 0XX format)
+    const prefix = cleaned.substring(0, 3);
+    
+    // Telecel (formerly Vodafone): 020, 050
+    if (prefix === '020' || prefix === '050') {
+        return 'vod';
+    }
+    
+    // MTN: 024, 025, 053, 054, 055, 059
+    if (['024', '025', '053', '054', '055', '059'].includes(prefix)) {
+        return 'mtn';
+    }
+    
+    // AirtelTigo: 026, 027, 056, 057
+    if (['026', '027', '056', '057'].includes(prefix)) {
+        return 'tgo';
+    }
+    
+    return ''; // Unknown provider
+};
+
 const visitOptions = {
     agent: {
-        price: 12,
+        price: 1,
         title: "Visit with an Agent",
         description: "An agent will guide you to the hostel and show you the room.",
         icon: <User className="h-5 w-5" />
@@ -50,7 +89,8 @@ export default function BookingPage() {
     const [visitType, setVisitType] = useState<VisitType>('agent');
     const [phone, setPhone] = useState('');
     const [provider, setProvider] = useState('');
-    const [email, setEmail] = useState('student@test.com'); // Default email
+    const [email, setEmail] = useState('');
+    const [studentName, setStudentName] = useState('');
     const [visitDate, setVisitDate] = useState<Date>();
     const [visitTime, setVisitTime] = useState('');
 
@@ -61,6 +101,50 @@ export default function BookingPage() {
     const { toast } = useToast();
     const id = params.id as string;
     const roomTypeId = searchParams.get('roomTypeId');
+
+    // Fetch user data and prefill form
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    // Get user document from Firestore
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        
+                        // Prefill email
+                        if (userData.email) {
+                            setEmail(userData.email);
+                        } else if (user.email) {
+                            setEmail(user.email);
+                        }
+                        
+                        // Prefill student name
+                        if (userData.fullName) {
+                            setStudentName(userData.fullName);
+                        }
+                        
+                        // Prefill phone number
+                        if (userData.phoneNumber) {
+                            setPhone(userData.phoneNumber);
+                            // Auto-detect provider
+                            const detectedProvider = detectProvider(userData.phoneNumber);
+                            if (detectedProvider) {
+                                setProvider(detectedProvider);
+                            }
+                        }
+                    } else if (user.email) {
+                        // Fallback to auth email if no Firestore doc
+                        setEmail(user.email);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                }
+            }
+        });
+        
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         const fetchHostelData = async () => {
@@ -74,11 +158,37 @@ export default function BookingPage() {
         fetchHostelData();
     }, [id]);
 
+    // Auto-detect provider when phone number changes
+    useEffect(() => {
+        if (phone) {
+            const detectedProvider = detectProvider(phone);
+            if (detectedProvider && detectedProvider !== provider) {
+                setProvider(detectedProvider);
+            }
+        }
+    }, [phone]);
+
     const handlePayment = async () => {
         const isAgentVisit = visitType === 'agent';
         if (!hostel || !phone || !provider || !email || (isAgentVisit && (!visitDate || !visitTime))) {
             toast({ title: "Missing Information", description: "Please fill all required fields for your chosen visit type.", variant: "destructive" });
             return;
+        }
+
+        if (isAgentVisit && visitDate && visitTime) {
+            const [hours, minutes] = visitTime.split(':').map(Number);
+            if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+                const scheduled = new Date(visitDate);
+                scheduled.setHours(hours, minutes, 0, 0);
+                if (scheduled.getTime() < Date.now()) {
+                    toast({
+                        title: "Invalid date or time",
+                        description: "Please choose a visit date and time in the future.",
+                        variant: "destructive",
+                    });
+                    return;
+                }
+            }
         }
 
         setIsPaying(true);
@@ -95,6 +205,7 @@ export default function BookingPage() {
                 visitDate: isAgentVisit && visitDate ? visitDate.toISOString() : new Date().toISOString(), // Use current date for self-visit
                 visitTime: isAgentVisit ? visitTime : '',
                 visitType: visitType,
+                studentName: studentName, // Pass student name for payment reference generation
             });
 
             if (result.status && result.authorization_url) {
@@ -131,13 +242,16 @@ export default function BookingPage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-1 flex items-center justify-center py-12 px-4">
-                <Card className="w-full max-w-2xl shadow-xl">
-                    <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Book a Visit to {hostel.name}</CardTitle>
-                        <CardDescription>Secure your spot to visit this hostel. Choose your preferred method.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+            <main className="flex-1 py-12">
+                <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-[1.1fr_0.9fr] md:px-6">
+                    <Card className="shadow-xl border border-border/40">
+                        <CardHeader>
+                            <CardTitle className="text-3xl font-headline">Book a Visit to {hostel.name}</CardTitle>
+                            <CardDescription>
+                                Choose your visit preference, pay securely with mobile money, and we’ll reserve the slot instantly.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
                          <RadioGroup defaultValue="agent" onValueChange={(value: VisitType) => setVisitType(value)} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                            {Object.entries(visitOptions).map(([key, option]) => (
                                 <Label key={key} htmlFor={key} className={cn("flex flex-col items-start rounded-lg border p-4 cursor-pointer transition-all hover:bg-accent/10", visitType === key && "ring-2 ring-primary bg-primary/5")}>
@@ -178,6 +292,7 @@ export default function BookingPage() {
                                                     mode="single"
                                                     selected={visitDate}
                                                     onSelect={setVisitDate}
+                                                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                                                     initialFocus
                                                 />
                                             </PopoverContent>
@@ -217,13 +332,70 @@ export default function BookingPage() {
                         </div>
 
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="flex flex-col gap-4 border-t bg-muted/20 py-6">
+                        <div className="flex w-full items-center justify-between text-sm text-muted-foreground">
+                            <span>Total Visit Fee</span>
+                            <span className="font-semibold text-lg text-foreground">GH₵{visitOptions[visitType].price.toFixed(2)}</span>
+                        </div>
                         <Button className="w-full h-12 text-lg bg-accent hover:bg-accent/90 text-accent-foreground" onClick={handlePayment} disabled={isPaying}>
                             {isPaying ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
                              Pay GH₵{visitOptions[visitType].price.toFixed(2)}
                         </Button>
                     </CardFooter>
-                </Card>
+                    </Card>
+                    <Card className="border border-border/40 bg-background/70 shadow-lg">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-xl font-headline">Visit Summary</CardTitle>
+                            <CardDescription>Quick insights about this hostel before your visit.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="relative h-48 w-full overflow-hidden rounded-xl">
+                                <Image
+                                    src={hostel.images?.[0] ?? '/placeholder.jpg'}
+                                    alt={hostel.name}
+                                    fill
+                                    className="object-cover"
+                                />
+                                <span className="absolute bottom-3 right-3 rounded-full bg-black/60 px-3 py-1 text-xs uppercase tracking-widest text-white">
+                                    {hostel.location}
+                                </span>
+                            </div>
+                            <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-5 text-sm">
+                                <p className="font-semibold text-primary uppercase tracking-[0.2em]">Why students love it</p>
+                                <p className="mt-2 text-muted-foreground leading-relaxed">
+                                    {hostel.description ? `${hostel.description.slice(0, 180)}...` : 'Verified amenities, responsive management, and easy access to campus facilities.'}
+                                </p>
+                            </div>
+                            <div className="grid gap-3 text-sm">
+                                <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Price Range</p>
+                                        <p className="text-lg font-semibold text-foreground">
+                                            GH₵{hostel.priceRange?.min?.toLocaleString() ?? hostel.price?.toLocaleString() ?? 'N/A'}{' '}
+                                            {hostel.priceRange?.max ? `- GH₵${hostel.priceRange.max.toLocaleString()}` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Room Types</p>
+                                        <p className="text-lg font-semibold text-foreground">{hostel.roomTypes.length}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Average Rating</p>
+                                        <p className="text-lg font-semibold text-foreground">{hostel.rating.toFixed(1)} / 5</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">
+                                <p className="font-semibold text-foreground">Need help before booking?</p>
+                                <p className="mt-1">Call our student success line on <span className="font-semibold text-primary">+233597626090</span>.</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </main>
         </div>
     );

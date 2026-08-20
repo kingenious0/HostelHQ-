@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import { ManagerWalletCard as WalletCard } from '@/components/manager/manager-wallet-card';
 
 type Visit = {
     id: string;
@@ -26,6 +27,8 @@ type Visit = {
     status: 'pending' | 'accepted' | 'completed' | 'cancelled';
     visitDate: string;
     visitTime: string;
+    studentCompleted?: boolean;
+    agentCompleted?: boolean;
 };
 
 type EnrichedVisit = Visit & {
@@ -38,16 +41,37 @@ export default function AgentDashboard() {
     const [myVisits, setMyVisits] = useState<EnrichedVisit[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [selectedVisit, setSelectedVisit] = useState<EnrichedVisit | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const { toast } = useToast();
+    const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+    const previousCompletionRef = useRef<Record<string, { studentCompleted?: boolean; agentCompleted?: boolean }>>({});
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
+            if (user) {
+                // Fetch user role from Firestore
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        const userData = userDocSnap.data();
+                        setUserRole(userData.role || null);
+                    } else {
+                        setUserRole(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user role:", error);
+                    setUserRole(null);
+                }
+            } else {
+                setUserRole(null);
+            }
             setLoadingAuth(false);
             if (!user) {
                 setLoading(false);
@@ -62,7 +86,7 @@ export default function AgentDashboard() {
         setLoading(true);
 
         const visitsQuery = query(
-            collection(db, "visits"), 
+            collection(db, "visits"),
             where("agentId", "==", currentUser.uid)
         );
 
@@ -79,7 +103,7 @@ export default function AgentDashboard() {
                     const hostelSnap = await getDoc(hostelRef);
                     if (hostelSnap.exists()) hostelName = hostelSnap.data().name;
                 } catch (e) { console.error("Error fetching hostel", e); }
-                
+
                 try {
                     const studentRef = doc(db, 'users', visit.studentId);
                     const studentSnap = await getDoc(studentRef);
@@ -91,9 +115,8 @@ export default function AgentDashboard() {
 
                 return { ...visit, hostelName, studentName, studentPhone };
             }));
-            
-            // Sort by pending first, then by date
-            const sortedVisits = enrichedVisits.sort((a,b) => {
+
+            const sortedVisits = enrichedVisits.sort((a, b) => {
                 if (a.status === 'pending' && b.status !== 'pending') return -1;
                 if (a.status !== 'pending' && b.status === 'pending') return 1;
                 if (a.status === 'accepted' && b.status !== 'accepted') return -1;
@@ -101,39 +124,86 @@ export default function AgentDashboard() {
                 return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime();
             });
 
+            const previousState = previousCompletionRef.current || {};
+            const newState: Record<string, { studentCompleted?: boolean; agentCompleted?: boolean }> = { ...previousState };
+
+            sortedVisits.forEach(v => {
+                const currentStudentCompleted = (v as any).studentCompleted;
+                const currentAgentCompleted = (v as any).agentCompleted;
+
+                const prev = previousState[v.id];
+                const prevStudentCompleted = prev?.studentCompleted ?? false;
+
+                const storageKey = `visit_studentCompleted_notified_${v.id}`;
+                const alreadyNotified = typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === '1';
+
+                const justCompletedByStudent = !alreadyNotified && !prevStudentCompleted && !!currentStudentCompleted && !currentAgentCompleted;
+
+                if (justCompletedByStudent) {
+                    if (notificationAudioRef.current) {
+                        console.log('Playing visit notification sound (agent dashboard)');
+                        notificationAudioRef.current.play().catch((err) => {
+                            console.error('Audio play failed:', err);
+                        });
+                    }
+                    toast({
+                        title: 'Student confirmed visit completion',
+                        description: 'Please review and confirm if this visit is truly completed.',
+                    });
+
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.setItem(storageKey, '1');
+                    }
+                }
+
+                newState[v.id] = {
+                    studentCompleted: !!currentStudentCompleted,
+                    agentCompleted: !!currentAgentCompleted,
+                };
+            });
+
+            previousCompletionRef.current = newState;
+
             setMyVisits(sortedVisits);
             setLoading(false);
         });
 
         return () => unsubscribeVisits();
     }, [currentUser]);
-    
+
     const handleUpdateRequest = async (visitId: string, newStatus: 'accepted' | 'cancelled' | 'completed') => {
         setProcessingId(visitId);
         try {
             const visitRef = doc(db, 'visits', visitId);
-            await updateDoc(visitRef, { status: newStatus });
-            
-            let title = '';
-            if (newStatus === 'accepted') title = 'Request Accepted';
-            else if (newStatus === 'cancelled') title = 'Request Declined';
-            else if (newStatus === 'completed') title = 'Visit Marked as Complete';
-            
-            toast({
-                title: title,
-                description: "The student has been notified."
-            });
 
-            // Close dialog only if rejecting or completing a visit
-            if(newStatus === 'cancelled' || newStatus === 'completed'){
-                setIsDetailsOpen(false);
-                setSelectedVisit(null);
+            if (newStatus === 'completed') {
+                const visitSnap = await getDoc(visitRef);
+                const data = visitSnap.data() as any | undefined;
+                const studentCompleted = data?.studentCompleted;
+                const updatePayload: Record<string, any> = { agentCompleted: true };
+                if (studentCompleted) {
+                    updatePayload.status = 'completed';
+                }
+                await updateDoc(visitRef, updatePayload);
+
+                toast({
+                    title: studentCompleted ? 'Visit Marked as Complete' : 'Awaiting student confirmation',
+                    description: studentCompleted
+                        ? 'Both you and the student have confirmed this visit.'
+                        : 'The student has been asked to confirm if this visit was truly completed.',
+                });
             } else {
-                // If accepting, just update the state locally to reflect the change
-                setSelectedVisit(prev => prev ? {...prev, status: 'accepted'} : null);
-                setMyVisits(prev => prev.map(v => v.id === visitId ? {...v, status: 'accepted'} : v));
-            }
+                await updateDoc(visitRef, { status: newStatus });
 
+                let title = '';
+                if (newStatus === 'accepted') title = 'Request Accepted';
+                else if (newStatus === 'cancelled') title = 'Request Declined';
+
+                toast({
+                    title: title,
+                    description: 'The student has been notified.',
+                });
+            }
         } catch (error) {
             toast({ title: "Update Failed", description: "Could not update the request.", variant: "destructive" });
             console.error("Error updating visit status:", error);
@@ -141,7 +211,7 @@ export default function AgentDashboard() {
             setProcessingId(null);
         }
     }
-    
+
     const openDetailsDialog = (visit: EnrichedVisit) => {
         setSelectedVisit(visit);
         setIsDetailsOpen(true);
@@ -149,7 +219,7 @@ export default function AgentDashboard() {
 
     if (loadingAuth) {
         return (
-             <div className="flex flex-col min-h-screen">
+            <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center">
                     <Loader2 className="h-16 w-16 animate-spin text-muted-foreground" />
@@ -158,12 +228,12 @@ export default function AgentDashboard() {
         );
     }
 
-    if (!currentUser || !currentUser.email?.endsWith('@agent.hostelhq.com')) {
+    if (!currentUser || userRole !== 'agent') {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
                 <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
-                     <Alert variant="destructive" className="max-w-lg">
+                    <Alert variant="destructive" className="max-w-lg">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertTitle>Access Denied</AlertTitle>
                         <AlertDescription>
@@ -174,9 +244,9 @@ export default function AgentDashboard() {
             </div>
         )
     }
-    
+
     const getStatusVariant = (status: Visit['status']): 'default' | 'secondary' | 'outline' | 'destructive' => {
-        switch(status) {
+        switch (status) {
             case 'completed': return 'default';
             case 'accepted': return 'secondary';
             case 'pending': return 'outline';
@@ -185,85 +255,40 @@ export default function AgentDashboard() {
         }
     }
 
-    const pendingCount = myVisits.filter(v => v.status === 'pending').length;
-    const completedCount = myVisits.filter(v => v.status === 'completed').length;
-    const acceptedCount = myVisits.filter(v => v.status === 'accepted').length;
-    const uniqueHostels = new Set(myVisits.map(v => v.hostelId)).size;
-    const agentBalance = completedCount * 50; // GHS 50 commission per verified completed visit
-
-    const handleRequestPayout = () => {
-        if (agentBalance <= 0) {
-            toast({
-                title: "No Available Balance",
-                description: "Minimum withdrawal threshold is GHS 50.00. Conduct physical visits and student check-ins to accumulate commission earnings.",
-                variant: "default"
-            });
-        } else {
-            toast({
-                title: "Payout Request Initiated",
-                description: `GHS ${agentBalance.toFixed(2)} requested. Payout will be sent to your registered Mobile Money wallet within 24 hours.`
-            });
-        }
-    };
+    const pendingVisitsCount = myVisits.filter(v => v.status === 'pending').length;
 
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
+            <audio ref={notificationAudioRef} src="/sounds/visit-notification.mp3" preload="auto" />
             <main className="flex-1 bg-gray-50/50 p-4 md:p-8">
-                <div className="container mx-auto space-y-6">
-                    {/* Top KPI Metric Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card className="border-l-4 border-l-primary shadow-sm">
-                            <CardHeader className="pb-2">
-                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Properties Managed</CardDescription>
-                                <CardTitle className="text-3xl font-extrabold">{uniqueHostels > 0 ? uniqueHostels : 1}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-xs text-muted-foreground">
-                                Active verified listings
-                            </CardContent>
-                        </Card>
-                        <Card className="border-l-4 border-l-amber-500 shadow-sm">
-                            <CardHeader className="pb-2">
-                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Pending Visits</CardDescription>
-                                <CardTitle className="text-3xl font-extrabold text-amber-600">{pendingCount}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-xs text-muted-foreground">
-                                Requires your response
-                            </CardContent>
-                        </Card>
-                        <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                            <CardHeader className="pb-2">
-                                <CardDescription className="text-xs uppercase font-bold tracking-wider">Scheduled Visits</CardDescription>
-                                <CardTitle className="text-3xl font-extrabold text-blue-600">{acceptedCount}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-xs text-muted-foreground">
-                                Ready for physical inspection
-                            </CardContent>
-                        </Card>
-                        <Card className="border-l-4 border-l-green-600 shadow-sm">
-                            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                                <div>
-                                    <CardDescription className="text-xs uppercase font-bold tracking-wider">Total Earnings</CardDescription>
-                                    <CardTitle className="text-3xl font-extrabold text-green-700">GH₵ {agentBalance.toFixed(2)}</CardTitle>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="pt-0">
-                                <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    className="w-full text-xs font-semibold mt-1"
-                                    onClick={handleRequestPayout}
-                                >
-                                    Request Payout
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
+                <div className="container mx-auto">
+
+                    {currentUser && (
+                        <div className="mb-8 max-w-md">
+                            <WalletCard userId={currentUser.uid} />
+                        </div>
+                    )}
 
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-2xl font-headline">Visit Requests</CardTitle>
-                            <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <CardTitle className="text-2xl font-headline">Agent Dashboard</CardTitle>
+                                    <CardDescription>Manage your incoming and scheduled visit requests from students.</CardDescription>
+                                </div>
+                                <div className="flex flex-col items-end gap-2">
+                                    {pendingVisitsCount > 0 && (
+                                        <Alert className="border-blue-500 bg-blue-50">
+                                            <AlertTriangle className="h-4 w-4 text-blue-600" />
+                                            <AlertTitle className="text-blue-800">{pendingVisitsCount} New Request{pendingVisitsCount > 1 ? 's' : ''}</AlertTitle>
+                                            <AlertDescription className="text-blue-700">
+                                                You have {pendingVisitsCount} pending visit request{pendingVisitsCount > 1 ? 's' : ''} requiring your attention.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {loading ? (
@@ -320,7 +345,7 @@ export default function AgentDashboard() {
                     </Card>
                 </div>
             </main>
-            
+
             {selectedVisit && (
                 <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
                     <DialogContent className="sm:max-w-md">
@@ -349,7 +374,7 @@ export default function AgentDashboard() {
                                     </div>
                                 </div>
                             )}
-                             <div className="flex items-center gap-4 p-3 border rounded-lg">
+                            <div className="flex items-center gap-4 p-3 border rounded-lg">
                                 <Home className="h-6 w-6 text-muted-foreground" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Hostel</p>
@@ -368,41 +393,41 @@ export default function AgentDashboard() {
                         <DialogFooter className="pt-4 border-t">
                             {selectedVisit.status === 'pending' && (
                                 <div className="flex w-full gap-2">
-                                    <Button 
-                                        variant="outline" 
+                                    <Button
+                                        variant="outline"
                                         className="flex-1"
                                         onClick={() => handleUpdateRequest(selectedVisit.id, 'cancelled')}
                                         disabled={processingId === selectedVisit.id}
                                     >
-                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <X className="mr-1 h-4 w-4" />}
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="mr-1 h-4 w-4" />}
                                         Decline
                                     </Button>
-                                    <Button 
+                                    <Button
                                         className="flex-1"
                                         onClick={() => handleUpdateRequest(selectedVisit.id, 'accepted')}
                                         disabled={processingId === selectedVisit.id}
                                     >
-                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="mr-1 h-4 w-4" />}
+                                        {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
                                         Accept
                                     </Button>
                                 </div>
                             )}
                             {selectedVisit.status === 'accepted' && (
-                                <Button 
+                                <Button
                                     className="w-full bg-green-600 hover:bg-green-700"
                                     onClick={() => handleUpdateRequest(selectedVisit.id, 'completed')}
                                     disabled={processingId === selectedVisit.id}
                                 >
-                                    {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <CheckCheck className="mr-1 h-4 w-4" />}
+                                    {processingId === selectedVisit.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="mr-1 h-4 w-4" />}
                                     Mark as Complete
                                 </Button>
                             )}
-                             {selectedVisit.status === 'completed' && (
+                            {selectedVisit.status === 'completed' && (
                                 <div className="text-center w-full text-sm text-muted-foreground">
                                     This visit has been completed.
                                 </div>
                             )}
-                             {selectedVisit.status === 'cancelled' && (
+                            {selectedVisit.status === 'cancelled' && (
                                 <div className="text-center w-full text-sm text-muted-foreground">
                                     This visit was declined.
                                 </div>

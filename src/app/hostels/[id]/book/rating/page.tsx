@@ -10,9 +10,28 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Star, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { notifyAdminFlaggedReview } from '@/lib/notification-service';
 import { db, auth } from '@/lib/firebase';
-import { doc, updateDoc, increment, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, increment, addDoc, collection, serverTimestamp, getDoc, query, where, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { BackButton } from '@/components/ui/back-button';
+
+// Profanity filter - bad words that trigger admin review
+const BAD_WORDS = [
+    'fuck', 'shit', 'damn', 'bitch', 'ass', 'bastard', 'crap', 'piss',
+    'dick', 'cock', 'pussy', 'whore', 'slut', 'fag', 'nigger', 'retard',
+    'disgusting', 'terrible', 'horrible', 'worst', 'scam', 'fraud', 'cheat',
+    'dirty', 'filthy', 'nasty', 'trash', 'garbage', 'sucks', 'awful'
+];
+
+const containsProfanity = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return BAD_WORDS.some(word => {
+        // Check for exact word match with word boundaries
+        const regex = new RegExp(`\\b${word}\\b`, 'i');
+        return regex.test(lowerText);
+    });
+};
 
 export default function RatingPage() {
     const router = useRouter();
@@ -54,23 +73,79 @@ export default function RatingPage() {
         toast({ title: "Submitting your review..." });
         
         try {
-            // Save the review to a 'reviews' subcollection for moderation
+            // Check for profanity in the comment
+            const hasBadWords = containsProfanity(comment);
+            const reviewStatus = hasBadWords ? 'pending' : 'approved';
+
+            // Get student details for flagged reviews
+            let studentEmail = currentUser.email || 'unknown';
+            let studentPhone = 'unknown';
+            if (hasBadWords) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        studentEmail = userData.email || studentEmail;
+                        studentPhone = userData.phone || studentPhone;
+                    }
+                } catch (err) {
+                    console.error('Error fetching user details:', err);
+                }
+            }
+
+            // Save the review with status
             const reviewsRef = collection(db, 'reviews');
             await addDoc(reviewsRef, {
                 hostelId: hostelId,
                 studentId: currentUser.uid,
-                studentName: currentUser.displayName || 'Anonymous Student', // Fallback
+                studentName: currentUser.displayName || 'Anonymous Student',
+                studentEmail: studentEmail,
+                studentPhone: studentPhone,
                 rating: rating,
                 comment: comment,
+                status: reviewStatus,
+                flaggedForProfanity: hasBadWords,
                 createdAt: serverTimestamp(),
-                status: 'pending', // for moderation
                 visitId: visitId || null,
             });
 
-            toast({
-                title: "Review Submitted!",
-                description: "Thank you for your feedback. Your review is pending approval.",
-            });
+            if (hasBadWords) {
+                // Get hostel name
+                const hostelDoc = await getDoc(doc(db, 'hostels', hostelId as string));
+                const hostelName = hostelDoc.exists() ? hostelDoc.data().name : 'Unknown Hostel';
+
+                // Notify all admins about flagged review
+                try {
+                    const adminsQuery = query(
+                        collection(db, 'users'),
+                        where('role', '==', 'admin')
+                    );
+                    const adminsSnapshot = await getDocs(adminsQuery);
+                    
+                    const notificationPromises = adminsSnapshot.docs.map(adminDoc =>
+                        notifyAdminFlaggedReview(
+                            adminDoc.id,
+                            currentUser.displayName || 'A student',
+                            hostelName
+                        ).catch(err => console.error('Failed to notify admin:', err))
+                    );
+                    
+                    await Promise.all(notificationPromises);
+                } catch (err) {
+                    console.error('Error notifying admins:', err);
+                }
+
+                toast({
+                    title: "Review Submitted for Review",
+                    description: "Your review contains content that requires admin approval. You'll be notified once it's reviewed.",
+                    variant: "default",
+                });
+            } else {
+                toast({
+                    title: "Review Submitted!",
+                    description: "Thank you for your feedback. Your review is now live.",
+                });
+            }
 
             router.push(`/hostels/${hostelId}`);
 
@@ -88,7 +163,11 @@ export default function RatingPage() {
             <main className="flex-1 flex items-center justify-center py-12 px-4 bg-gray-50/50">
                 <Card className="w-full max-w-lg shadow-xl">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-headline">Rate Your Visit Experience</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <BackButton fallbackHref={`/hostels/${hostelId}`} />
+                            <CardTitle className="text-2xl font-headline">Rate Your Visit Experience</CardTitle>
+                            <div className="w-10">{/* Placeholder to balance the layout */}</div>
+                        </div>
                         <CardDescription>How was the agent and the hostel tour? Your feedback helps other students.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">

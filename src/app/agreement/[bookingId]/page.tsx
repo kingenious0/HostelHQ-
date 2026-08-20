@@ -1,29 +1,37 @@
 // src/app/agreement/[bookingId]/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Download, Printer } from 'lucide-react';
+import { Loader2, Download, Calendar, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { Hostel, RoomType } from '@/lib/data';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import { tenancyAgreementText } from '@/lib/legal';
+import { Hostel } from '@/lib/data';
+import { BackButton } from '@/components/ui/back-button';
 
 type Booking = {
     id: string;
     studentId: string;
-    studentDetails: any;
+    studentDetails: {
+      fullName: string;
+      indexNumber?: string;
+      phoneNumber?: string;
+      email: string;
+      program?: string;
+      ghanaCard?: string;
+      address?: string;
+    };
     hostelId: string;
     bookingDate: string;
     status: string;
+    roomTypeId?: string;
+    paymentDeadline?: { seconds: number; nanoseconds: number; };
 };
 
 type Manager = {
@@ -41,14 +49,14 @@ export default function AgreementPage() {
     const [hostel, setHostel] = useState<Hostel | null>(null);
     const [manager, setManager] = useState<Manager | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isDownloading, setIsDownloading] = useState(false);
-    
-    const printRef = useRef<HTMLDivElement>(null);
+    const [downloadCompleted, setDownloadCompleted] = useState(false);
+
+    const staticAgreementPath = encodeURI('/Hostel_Tenancy_Agreement_static new.pdf');
 
     useEffect(() => {
         if (!bookingId) {
             toast({ title: "Error", description: "No booking ID provided.", variant: "destructive" });
-            router.push('/');
+            router.push('/my-bookings'); // Redirect to my bookings if no ID
             return;
         }
 
@@ -72,18 +80,10 @@ export default function AgreementPage() {
                 if (hostelData.agentId) {
                     const managerQuery = query(
                         collection(db, 'users'),
-                        where('role', '==', 'hostel_manager')
-                        // This logic assumes an agent is linked to a manager.
-                        // A more direct link from hostel -> manager would be better.
-                        // For now, let's find ANY manager for demo purposes.
-                    );
-                    const managerSnapshot = await getDocs(
-                        query(
-                            collection(db, 'users'), 
-                            where('role', '==', 'hostel_manager'), 
+                        where('uid', '==', hostelData.agentId), // Assuming agentId is the manager's uid for now
                             limit(1)
-                        )
                     );
+                    const managerSnapshot = await getDocs(managerQuery);
                     
                     if (!managerSnapshot.empty) {
                         const managerData = managerSnapshot.docs[0].data();
@@ -99,7 +99,7 @@ export default function AgreementPage() {
             } catch (error: any) {
                 console.error("Failed to fetch agreement data:", error);
                 toast({ title: "Failed to load agreement", description: error.message, variant: "destructive" });
-                router.push('/my-visits');
+                router.push('/my-bookings');
             } finally {
                 setLoading(false);
             }
@@ -109,82 +109,34 @@ export default function AgreementPage() {
     }, [bookingId, router, toast]);
 
     const handleDownload = async () => {
-        if (!printRef.current) return;
-        setIsDownloading(true);
+        if (!booking || !hostel || !manager) return;
+        
         toast({ title: "Generating PDF..."});
 
         try {
-            const canvas = await html2canvas(printRef.current, {
-                scale: 2, // Higher scale for better quality
-                useCORS: true,
-            });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'pt',
-                format: 'a4'
-            });
+            const filename = `tenancy-agreement-${hostel.name.replace(/\s/g, '-')}-${booking.id.slice(-4)}.pdf`;
+            const link = document.createElement('a');
+            link.href = staticAgreementPath;
+            link.download = filename;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
             
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const ratio = canvasWidth / pdfWidth;
-            const finalHeight = canvasHeight / ratio;
-            
-            let position = 0;
-            let heightLeft = finalHeight;
-
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft > 0) {
-                position = heightLeft - finalHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, finalHeight);
-                heightLeft -= pdfHeight;
-            }
-
-            pdf.save(`tenancy-agreement-${hostel?.name?.replace(/\s/g, '-')}.pdf`);
             toast({ title: "Download started", description: "Your PDF is being downloaded."});
+            setDownloadCompleted(true);
 
         } catch (error) {
             console.error(error);
-            toast({ title: "Download Failed", description: "Could not generate the PDF.", variant: "destructive"});
-        } finally {
-            setIsDownloading(false);
+            toast({ 
+                title: "Download Failed", 
+                description: "Could not generate the PDF. Please try again.", 
+                variant: "destructive"
+            });
+            setDownloadCompleted(false);
         }
     };
-    
-    const getFilledTemplate = () => {
-        if (!booking || !hostel || !manager) return "";
-        let content = tenancyAgreementText;
-        
-        const studentDetails = booking.studentDetails;
-        const room = hostel.roomTypes.find(rt => rt.id === (booking as any).roomTypeId) || hostel.roomTypes[0];
-
-        const replacements = {
-            '{{studentName}}': studentDetails?.fullName || 'N/A',
-            '{{studentID}}': studentDetails?.indexNumber || 'N/A',
-            '{{studentPhone}}': studentDetails?.phoneNumber || 'N/A',
-            '{{studentEmail}}': studentDetails?.email || 'N/A',
-            '{{hostelName}}': hostel.name,
-            '{{hostelAddress}}': hostel.location,
-            '{{roomNumber}}': 'To be assigned',
-            '{{roomType}}': room?.name || 'N/A',
-            '{{rentAmount}}': room?.price.toLocaleString() || 'N/A',
-            '{{startDate}}': new Date().toLocaleDateString(),
-            '{{endDate}}': new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toLocaleDateString(),
-            '{{managerName}}': manager.fullName,
-            // Add other placeholders as needed
-        };
-
-        for (const [key, value] of Object.entries(replacements)) {
-            content = content.replace(new RegExp(key, 'g'), value);
-        }
-
-        return content;
-    }
 
     if (loading) {
         return (
@@ -211,7 +163,6 @@ export default function AgreementPage() {
         );
     }
 
-
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -224,36 +175,51 @@ export default function AgreementPage() {
                                     <CardTitle className="text-2xl font-headline">Your Tenancy Agreement</CardTitle>
                                     <CardDescription>This is your official agreement for your room at {hostel.name}.</CardDescription>
                                 </div>
-                                <Button onClick={handleDownload} disabled={isDownloading}>
-                                    {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4"/>}
-                                    Download PDF
-                                </Button>
+                                <div className="flex gap-2">
+                                    <BackButton fallbackHref="/my-bookings" />
+                                    <Button onClick={handleDownload}>
+                                        <Download className="mr-2 h-4 w-4"/>
+                                        Download PDF
+                                    </Button>
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div ref={printRef} className="p-8 border rounded-lg bg-white shadow-sm text-sm text-gray-800">
-                                <h1 className="text-xl font-bold text-center mb-6">TENANCY AGREEMENT</h1>
-                                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                                    {getFilledTemplate()}
-                                </pre>
-                                 <div className="mt-16 grid grid-cols-2 gap-16">
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Student Signature</p>
-                                            <p className="text-xs">({booking.studentDetails.fullName})</p>
+                            <div className="flex flex-col items-center justify-center gap-6 rounded-lg border border-dashed border-muted-foreground/40 bg-muted/30 py-20 px-6 text-center">
+                                <FileText className="h-20 w-20 text-primary" />
+                                <div className="space-y-2">
+                                    <h2 className="text-xl font-semibold">Professional Hostel Tenancy Agreement</h2>
+                                    <p className="text-muted-foreground max-w-md mx-auto">
+                                        Your tenancy agreement is ready. Download the PDF, fill it out manually, sign, and submit it to the hostel management.
+                                    </p>
                                         </div>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <Button asChild variant="secondary">
+                                        <a href={staticAgreementPath} target="_blank" rel="noopener">
+                                            <FileText className="mr-2 h-4 w-4" />
+                                            Open in new tab
+                                        </a>
+                                    </Button>
+                                    <Button onClick={handleDownload}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download PDF
+                                    </Button>
                                     </div>
-                                    <div>
-                                        <div className="border-t pt-2">
-                                            <p className="font-semibold">Manager Signature</p>
-                                            <p className="text-xs">({manager.fullName})</p>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </CardContent>
-                         <CardFooter>
-                            <p className="text-xs text-muted-foreground">
+                         <CardFooter className="flex flex-col gap-4">
+                            {downloadCompleted && (
+                                <Button 
+                                    onClick={() => router.push('/my-bookings')} 
+                                    variant="default"
+                                    size="lg"
+                                    className="w-full"
+                                >
+                                    <Calendar className="mr-2 h-4 w-4"/>
+                                    Go to your bookings
+                                </Button>
+                            )}
+                            <p className="text-xs text-muted-foreground text-center">
                                 Please keep a copy of this agreement for your records. You can access this page anytime from your "My Bookings" section.
                             </p>
                         </CardFooter>

@@ -6,18 +6,21 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment, getDocs, query, where } from 'firebase/firestore';
+import { notifyBookingConfirmed, notifyManagerNewBooking, notifyAdminNewBooking } from "@/lib/notification-service-onesignal";
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import { verifyAndProcessBooking } from '@/app/actions/paystack';
 
 function ConfirmationContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    
+
     const hostelId = searchParams.get('hostelId');
-    const reference = searchParams.get('reference'); // For visit payments
-    const trxref = searchParams.get('trxref'); // For room security payments
+    const reference = searchParams.get('reference');
+    const trxref = searchParams.get('trxref');
+    const bookingType = searchParams.get('bookingType');
     const visitDate = searchParams.get('visitDate');
     const visitTime = searchParams.get('visitTime');
     const visitTypeParam = searchParams.get('visitType');
@@ -38,11 +41,11 @@ function ConfirmationContent() {
         if (loadingAuth || hasProcessed) {
             return;
         }
-        
+
         if (!currentUser) {
-            if(!loadingAuth) {
-                 toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive'});
-                 router.push('/login');
+            if (!loadingAuth) {
+                toast({ title: "Authentication Error", description: "You must be logged in to confirm a booking.", variant: 'destructive' });
+                router.push('/login');
             }
             return;
         }
@@ -55,31 +58,103 @@ function ConfirmationContent() {
                 router.push('/');
                 return;
             }
-            
-            // This is a room security payment
-            if (trxref && hostelId) {
-                try {
-                     const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-                     if(!userDoc.exists()) throw new Error("Student user record not found.");
 
-                    const bookingRef = await addDoc(collection(db, 'bookings'), {
-                        studentId: currentUser.uid,
-                        studentDetails: userDoc.data(), // Store a snapshot of user details
-                        hostelId: hostelId,
-                        paymentReference: trxref,
-                        bookingDate: serverTimestamp(),
-                        status: 'paid'
-                    });
+            // This is a secure hostel payment (has bookingType=secure OR trxref parameter)
+            if ((bookingType === 'secure' || trxref) && hostelId && !visitTypeParam) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    if (!userDoc.exists()) throw new Error("Student user record not found.");
+
+                    // Retrieve booking data from sessionStorage
+                    const bookingDataStr = sessionStorage.getItem('pendingBookingData');
+                    const bookingData = bookingDataStr ? JSON.parse(bookingDataStr) : {};
+
+                    // Clear the sessionStorage after retrieving
+                    sessionStorage.removeItem('pendingBookingData');
+
+
+                    // Use Server Action to securely verify transaction, create booking, and update manager wallet
+                    const result = await verifyAndProcessBooking(
+                        trxref || reference || '',
+                        bookingData,
+                        hostelId,
+                        currentUser.uid
+                    );
+
+                    if (!result.success) {
+                        throw new Error(result.message);
+                    }
+
+                    const bookingId = result.bookingId;
+
+                    // Re-construct basic data for notifications (client-side)
+                    // Note: We don't have the full bookingRef object here, but we have the ID.
+
+                    // ... Occupancy updates are handled by server action now ...
+
+
+
+                    // Get hostel name for notification
+                    const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
+                    const hostelData = hostelDoc.exists() ? hostelDoc.data() as any : null;
+                    const hostelName = hostelData?.name || 'your hostel';
+                    const managerId = hostelData?.managerId as string | undefined;
+
+                    // Send notification to student
+                    console.log('[Booking] Sending notification to student:', currentUser.uid);
+                    try {
+                        await notifyBookingConfirmed(
+                            currentUser.uid,
+                            hostelName,
+                            bookingId
+                        );
+                        console.log('[Booking] Student notification sent successfully');
+                    } catch (err) {
+                        console.error('[Booking] Failed to send student notification:', err);
+                    }
+
+                    // Send notification to manager if hostel has one
+                    if (managerId) {
+                        console.log('[Booking] Sending notification to manager:', managerId);
+                        try {
+                            await notifyManagerNewBooking(
+                                managerId,
+                                hostelName,
+                                bookingId
+                            );
+                            console.log('[Booking] Manager notification sent successfully');
+                        } catch (err) {
+                            console.error('[Booking] Failed to send manager notification:', err);
+                        }
+                    }
+
+                    // Send notification to all admins about the new booking
+                    try {
+                        const adminsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'admin')));
+                        await Promise.all(
+                            adminsSnap.docs.map((adminDoc) =>
+                                notifyAdminNewBooking(
+                                    adminDoc.id,
+                                    hostelName,
+                                    bookingId
+                                ).catch((err) => {
+                                    console.error('[Booking] Failed to send admin booking notification:', err);
+                                })
+                            )
+                        );
+                    } catch (err) {
+                        console.error('[Booking] Failed to query admins for booking notification:', err);
+                    }
 
                     toast({
                         title: "Room Secured!",
-                        description: "Your payment was successful. Generating your tenancy agreement...",
+                        description: "Your payment was successful. Redirecting to your invoice...",
                     });
-                     router.push(`/agreement/${bookingRef.id}`);
+                    router.push(`/hostels/book/success/${bookingId}`);
 
                 } catch (error) {
                     console.error("Error creating booking record:", error);
-                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive'});
+                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive' });
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
@@ -88,28 +163,39 @@ function ConfirmationContent() {
             // This is a visit-only payment
             if (reference && hostelId && visitTypeParam) {
                 try {
-                     const visitRef = await addDoc(collection(db, 'visits'), {
+                    // Fetch student details for the visit record
+                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                    const userData = userDoc.exists() ? userDoc.data() : {};
+
+                    const visitRef = await addDoc(collection(db, 'visits'), {
                         studentId: currentUser.uid,
+                        studentDetails: {
+                            fullName: userData.fullName || '',
+                            email: userData.email || currentUser.email || '',
+                            phoneNumber: userData.phoneNumber || userData.phone || '',
+                        },
                         hostelId: hostelId,
                         agentId: null,
                         status: visitTypeParam === 'self' ? 'accepted' : 'scheduling',
-                        paymentReference: reference,
+                        paymentReference: reference, // This is the professional reference from Paystack
                         createdAt: serverTimestamp(),
                         visitDate: visitDate || new Date().toISOString(),
                         visitTime: visitTime || new Date().toLocaleTimeString(),
                         visitType: visitTypeParam as 'agent' | 'self',
                         studentCompleted: false,
+                        amountPaid: visitTypeParam === 'agent' ? 1 : 15, // Store the amount paid
+                        bookingType: 'visit', // Mark as visit booking
                     });
-                    
+
                     const redirectUrl = visitTypeParam === 'self'
                         ? `/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`
                         : `/hostels/book/schedule?visitId=${visitRef.id}`;
-                    
+
                     router.push(redirectUrl);
 
                 } catch (error) {
                     console.error("Error creating visit record:", error);
-                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive'});
+                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive' });
                     router.push(`/hostels/${hostelId}`);
                 }
                 return;
@@ -122,7 +208,7 @@ function ConfirmationContent() {
 
         handleConfirmation();
 
-    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, toast, visitDate, visitTime, visitTypeParam]);
+    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, toast, visitDate, visitTime, visitTypeParam]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">
