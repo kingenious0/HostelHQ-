@@ -9,10 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, User, KeyRound, Mail, Info, FileText, GraduationCap, UserCheck, Building, Phone, ArrowLeft, Eye, EyeOff, ShieldCheck, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Loader2, User, KeyRound, Mail, GraduationCap, UserCheck, Building, Phone, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -103,7 +102,7 @@ export default function SignupPage() {
         return cleaned.length >= 9 && cleaned.length <= 10;
     };
 
-    // Google Single Sign-On for 1-Click Fast Student Signup (PRD 3.1)
+    // Google Single Sign-On for Student Signup
     const handleGoogleSignup = async () => {
         setIsGoogleSubmitting(true);
         try {
@@ -128,11 +127,11 @@ export default function SignupPage() {
             }
 
             toast({
-                title: 'Account Created Successfully!',
+                title: 'Account Created Successfully',
                 description: `Welcome to HostelHQ, ${user.displayName || 'Student'}!`,
             });
 
-            router.push('/my-bookings?welcome=true');
+            router.push('/my-bookings');
         } catch (error: any) {
             console.error('Google signup error:', error);
             toast({
@@ -145,7 +144,6 @@ export default function SignupPage() {
         }
     };
 
-    // Frictionless 30-Second Student & Partner Registration
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -155,12 +153,12 @@ export default function SignupPage() {
         }
 
         if (!email.trim() || !isValidEmail(email)) {
-            toast({ title: 'Invalid Email', description: 'Please enter a valid personal email address.', variant: 'destructive' });
+            toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
             return;
         }
 
         if (!phoneNumber || !isValidPhoneNumber(phoneNumber)) {
-            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid 9 or 10-digit Ghana phone number.', variant: 'destructive' });
+            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid Ghana phone number.', variant: 'destructive' });
             return;
         }
 
@@ -201,7 +199,7 @@ export default function SignupPage() {
                 phoneNumber: fullPhone,
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
-                verificationStatus: 'progressive_pending', // Deferred until booking confirmation per PRD 3.1
+                verificationStatus: 'pending',
             };
 
             if (selectedRole === 'student') {
@@ -232,7 +230,7 @@ export default function SignupPage() {
 
             // 6. Send welcome SMS notification (best-effort non-blocking)
             try {
-                const welcomeMsg = `Welcome to HostelHQ, ${fullName}! Your ${selectedRole} account is active. Log in anytime with ${email}. Safe & verified stays!`;
+                const welcomeMsg = `Welcome to HostelHQ, ${fullName}! Your ${selectedRole} account is active. Log in anytime with ${email}.`;
                 fetch('/api/sms/send-notification', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -241,7 +239,7 @@ export default function SignupPage() {
             } catch (_) {}
 
             toast({
-                title: 'Account Created Successfully!',
+                title: 'Account Created Successfully',
                 description: 'Welcome to HostelHQ!',
             });
 
@@ -251,7 +249,7 @@ export default function SignupPage() {
             } else if (selectedRole === 'agent') {
                 router.push('/agent/dashboard');
             } else {
-                router.push('/my-bookings?welcome=true');
+                router.push('/my-bookings');
             }
         } catch (error: any) {
             console.error('Signup error:', error);
@@ -279,21 +277,18 @@ export default function SignupPage() {
             title: 'Student',
             description: 'Find, visit & secure verified rooms near campus',
             icon: <GraduationCap className="h-5 w-5" />,
-            badge: 'Fast 30s',
         },
         {
             id: 'agent' as UserRole,
             title: 'Field Agent',
             description: 'List hostels, guide student visits & earn commission',
             icon: <UserCheck className="h-5 w-5" />,
-            badge: 'Partner',
         },
         {
             id: 'hostel_manager' as UserRole,
             title: 'Hostel Manager',
             description: 'Manage room inventory, bookings & wallet payouts',
             icon: <Building className="h-5 w-5" />,
-            badge: 'Landlord',
         },
     ];
 
@@ -314,10 +309,6 @@ export default function SignupPage() {
                 <div className="relative z-10 w-full max-w-xl">
                     <Card className="border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl rounded-[2.5rem] overflow-hidden">
                         <CardHeader className="text-center pt-8 pb-4">
-                            <div className="inline-flex items-center gap-2 mx-auto mb-3 rounded-full border border-primary/40 bg-primary/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-accent backdrop-blur-md">
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Frictionless Student Onboarding
-                            </div>
                             <CardTitle className="text-3xl font-headline font-extrabold tracking-tight text-white">Create Your Account</CardTitle>
                             <CardDescription className="text-slate-200/80 text-sm mt-1">
                                 Safe, verified student accommodation across Ghana
@@ -387,8 +378,8 @@ export default function SignupPage() {
 
                                     <div className="relative flex items-center justify-center my-3">
                                         <div className="border-t border-white/15 w-full" />
-                                        <span className="bg-slate-900/80 px-3 text-[11px] font-bold uppercase tracking-widest text-slate-300 backdrop-blur-md">
-                                            or register in 30s
+                                        <span className="bg-slate-900/80 px-3 text-xs uppercase tracking-wider text-slate-300 backdrop-blur-md">
+                                            or
                                         </span>
                                         <div className="border-t border-white/15 w-full" />
                                     </div>
@@ -419,7 +410,7 @@ export default function SignupPage() {
                                 {/* Personal Email */}
                                 <div className="space-y-1.5">
                                     <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                        Personal Email (Gmail / Yahoo) *
+                                        Email Address *
                                     </Label>
                                     <div className="relative">
                                         <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -438,7 +429,7 @@ export default function SignupPage() {
                                 {/* Ghana Phone Number */}
                                 <div className="space-y-1.5">
                                     <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                        Phone Number (MoMo Enabled) *
+                                        Phone Number *
                                     </Label>
                                     <div className="flex gap-2">
                                         <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
@@ -459,21 +450,21 @@ export default function SignupPage() {
                                     </div>
                                 </div>
 
-                                {/* Student Index Number (PRD 3.1 - Student Role) */}
+                                {/* Student Index Number */}
                                 {selectedRole === 'student' && (
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
                                                 Student Index / Reference Number
                                             </Label>
-                                            <span className="text-[10px] text-accent font-semibold">Optional for Freshmen</span>
+                                            <span className="text-[10px] text-accent font-semibold">Optional</span>
                                         </div>
                                         <div className="relative">
                                             <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                                             <Input
                                                 id="indexNumber"
                                                 type="text"
-                                                placeholder="e.g. 5201040001 (or leave blank if freshman)"
+                                                placeholder="e.g. 5201040001"
                                                 className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
                                                 value={studentIndexNumber}
                                                 onChange={(e) => setStudentIndexNumber(e.target.value)}
@@ -559,14 +550,6 @@ export default function SignupPage() {
                                             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                         </button>
                                     </div>
-                                </div>
-
-                                {/* Progressive disclosure note */}
-                                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-black/30 border border-white/10 text-xs text-slate-300">
-                                    <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                                    <span>
-                                        <strong>Progressive Verification:</strong> Identity documents (Student Portal screenshot or Ghana Card) are only requested when securing a room. No upfront uploads needed.
-                                    </span>
                                 </div>
 
                                 {/* Terms & Conditions */}

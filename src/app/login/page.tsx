@@ -298,8 +298,8 @@ function LoginPageInner() {
 
                             <div className="relative flex items-center justify-center my-4">
                                 <div className="border-t border-white/15 w-full" />
-                                <span className="bg-slate-900/80 px-3 text-[11px] font-bold uppercase tracking-widest text-slate-300 backdrop-blur-md">
-                                    or sign in with email
+                                <span className="bg-slate-900/80 px-3 text-xs uppercase tracking-wider text-slate-300 backdrop-blur-md">
+                                    or
                                 </span>
                                 <div className="border-t border-white/15 w-full" />
                             </div>
@@ -378,7 +378,7 @@ function LoginPageInner() {
                             <p className="text-center text-xs text-slate-300/90 pt-2">
                                 Don't have an account?{' '}
                                 <Link href="/signup" className="text-primary font-bold hover:underline">
-                                    Create one in 30s
+                                    Sign up here
                                 </Link>
                             </p>
                         </CardFooter>
