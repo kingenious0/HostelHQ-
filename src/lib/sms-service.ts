@@ -58,9 +58,9 @@ export async function sendAdminSMSNotification(data: SMSNotificationData) {
     } else {
       return { success: false, error: 'Failed to send SMS to any admin' };
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error sending SMS notification:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error?.message || 'An error occurred' };
   }
 }
 
@@ -73,8 +73,8 @@ export async function getAdminUsers() {
     const q = query(usersRef, where('role', '==', 'admin'));
     const querySnapshot = await getDocs(q);
 
-    const admins = [];
-    querySnapshot.forEach((doc) => {
+    const admins: { id: string; fullName?: string; email?: string; phone?: string }[] = [];
+    querySnapshot.forEach((doc: any) => {
       const userData = doc.data();
       if (userData.phone) {
         admins.push({
@@ -136,9 +136,9 @@ Login: https://hostel-hq.vercel.app/admin/dashboard`;
     }
 
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error notifying admins of new hostel submission:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error?.message || 'An error occurred' };
   }
 }
 
@@ -182,8 +182,8 @@ Your hostel ${actionText}`;
 
     const result = await response.json();
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error notifying creator of hostel status:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error?.message || 'An error occurred' };
   }
 }

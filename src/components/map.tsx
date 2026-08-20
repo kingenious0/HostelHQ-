@@ -130,7 +130,7 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
     }, [mapLoaded, hostelLocation]);
 
     useEffect(() => {
-        if (!mapLoaded || !mapRef.current || !agentId) {
+        if (!mapLoaded || !mapRef.current || !agentId || !ably) {
             return;
         }
 

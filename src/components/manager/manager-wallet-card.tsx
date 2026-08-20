@@ -30,7 +30,7 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
         setLoading(true);
         const userRef = doc(db, 'users', userId);
 
-        const unsubscribe = onSnapshot(userRef, (docSnap) => {
+        const unsubscribe = onSnapshot(userRef, (docSnap: any) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setBalanceData({
@@ -42,7 +42,7 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
                 });
             }
             setLoading(false);
-        }, (error) => {
+        }, (error: any) => {
             console.error("Error fetching wallet balance:", error);
             setLoading(false);
         });

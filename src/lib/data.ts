@@ -1,6 +1,7 @@
 import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy, or } from "firebase/firestore";
 import { ably } from './ably';
+import { getHostelById, listHostels, getAgentById } from './dynamodb-service';
 
 export type RoomType = {
   id?: string;
@@ -273,6 +274,7 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
         clearInterval(simulationInterval);
     }
     
+    if (!ably) return;
     const channel = ably.channels.get(`agent:${agentId}:gps`);
 
     const agentRef = doc(db, 'users', agentId);
@@ -307,6 +309,11 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
+        const dynamoAgent = await getAgentById(agentId);
+        if (dynamoAgent) return dynamoAgent;
+    } catch (e) {}
+
+    try {
         const agentDocRef = doc(db, 'users', agentId);
         const agentDoc = await getDoc(agentDocRef);
         if (agentDoc.exists() && agentDoc.data().role === 'agent') {
@@ -314,7 +321,7 @@ export async function getAgent(agentId: string): Promise<Agent | null> {
         }
         return null;
     } catch (e) {
-        console.error("Error fetching agent from firestore: ", e);
+        console.error("Error fetching agent: ", e);
         return null;
     }
 }
@@ -340,6 +347,11 @@ const convertTimestamps = (data: any) => {
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
     try {
+        const dynamoHostel = await getHostelById(hostelId);
+        if (dynamoHostel) return dynamoHostel;
+    } catch (e) {}
+
+    try {
         const hostelDocRef = doc(db, 'hostels', hostelId);
         const hostelDoc = await getDoc(hostelDocRef);
 
@@ -349,12 +361,12 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             // Fetch room types from subcollection
             const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
-            const roomTypes = roomTypesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoomType));
+            const roomTypes = roomTypesSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as RoomType));
 
             // Fetch physical numbered rooms from subcollection (if any)
             const roomsCollectionRef = collection(db, 'hostels', hostelId, 'rooms');
             const roomsSnapshot = await getDocs(roomsCollectionRef);
-            const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+            const rooms = roomsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Room));
             
              // Fetch all reviews for the hostel (no status filter)
             const reviewsQuery = query(
@@ -363,7 +375,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
                 orderBy('createdAt', 'desc') // Order by most recent
             );
             const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviewsDataPromises = reviewsSnapshot.docs.map(async docSnapshot => {
+            const reviewsDataPromises = reviewsSnapshot.docs.map(async (docSnapshot: any) => {
                 const reviewData = convertTimestamps({ id: docSnapshot.id, ...docSnapshot.data() }) as Review;
                 // Fetch reviewer's profile image and name
                 const userDoc = await getDoc(doc(db, "users", reviewData.studentId));
@@ -374,7 +386,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             let reviewsWithUserData = await Promise.all(reviewsDataPromises);
 
             // Calculate price range
-            const prices = roomTypes.map(rt => rt.price);
+            const prices = roomTypes.map((rt: any) => rt.price);
             const priceRange = {
                 min: prices.length > 0 ? Math.min(...prices) : 0,
                 max: prices.length > 0 ? Math.max(...prices) : 0,
@@ -411,7 +423,6 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
     console.log("Falling back to static hostel data for hostelId: ", hostelId);
     const staticHostel = staticHostels.find(h => h.id === hostelId);
-    // Add numberOfReviews and empty reviews array for static data fallback
     if (staticHostel) {
         return { ...staticHostel, numberOfReviews: 0, reviews: [] };
     }
@@ -420,7 +431,19 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
 
 export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
-     try {
+    try {
+        const dynamoHostels = await listHostels({
+            featuredOnly: options.featured,
+            search: options.search,
+            location: options.location,
+        });
+        if (dynamoHostels && dynamoHostels.length > 0) {
+            const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+            if (filtered.length > 0) return filtered;
+        }
+    } catch (e) {}
+
+    try {
         let hostelsQuery = query(collection(db, 'hostels'));
 
         const conditions = [];
@@ -443,15 +466,15 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
 
         const querySnapshot = await getDocs(hostelsQuery);
 
-        const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (doc) => {
+        const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (doc: any) => {
             const data = doc.data();
             const roomTypesCollectionRef = collection(db, 'hostels', doc.id, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
-            const roomTypes = roomTypesSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
+            const roomTypes = roomTypesSnapshot.docs.map((roomDoc: any) => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
             
             let availability = data.availability as Hostel['availability'] || 'Full';
 
-            const prices = roomTypes.map(rt => rt.price);
+            const prices = roomTypes.map((rt: any) => rt.price);
             const priceRange = {
                 min: prices.length > 0 ? Math.min(...prices) : 0,
                 max: prices.length > 0 ? Math.max(...prices) : 0,
@@ -460,10 +483,10 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
             const reviewsQuery = query(collection(db, 'reviews'), where('hostelId', '==', doc.id), where('status', '==', 'approved'));
             const reviewsSnapshot = await getDocs(reviewsQuery);
             const reviewsCount = reviewsSnapshot.size;
-            const totalRating = reviewsSnapshot.docs.reduce((acc, doc) => acc + doc.data().rating, 0);
+            const totalRating = reviewsSnapshot.docs.reduce((acc: number, doc: any) => acc + doc.data().rating, 0);
             const averageRating = reviewsCount > 0 ? totalRating / reviewsCount : 0;
 
-            const roomTypeTags = data.roomTypeTags ?? roomTypes.map(rt => rt.name);
+            const roomTypeTags = data.roomTypeTags ?? roomTypes.map((rt: any) => rt.name);
 
             return convertTimestamps({ 
                 id: doc.id, 
@@ -484,8 +507,6 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
         }
     } catch (e: any) {
         console.error("\n--- FIRESTORE FETCH FAILED (DEV) ---");
-        console.error("Could not fetch hostels from Firestore. This is likely due to missing or incorrect Firebase credentials in your local `.env` file.");
-        console.error("Please ensure your `.env` file has the correct NEXT_PUBLIC_FIREBASE_... variables for your project.");
         console.error("Falling back to static data. Original error:", e.message);
         console.error("--------------------------------------\n");
     }

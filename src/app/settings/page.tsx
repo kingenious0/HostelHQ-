@@ -7,6 +7,7 @@ import { Header } from '@/components/header';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, updateProfile, type User as FirebaseUser } from 'firebase/auth';
@@ -75,7 +76,7 @@ export default function SettingsPage() {
       }
 
       const userDocRef = doc(db, "users", u.uid);
-      const unsubFirestore = onSnapshot(userDocRef, (docSnap) => {
+      const unsubFirestore = onSnapshot(userDocRef, (docSnap: any) => {
         if (docSnap.exists()) {
           const userData = docSnap.data();
           setAppUser({

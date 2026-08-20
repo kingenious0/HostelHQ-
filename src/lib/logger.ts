@@ -22,7 +22,7 @@ export const logSecurityEvent = (event: string, details: any) => {
       ...details,
       service: "hostelhq-security-monitor",
       timestamp: new Date().toISOString(),
-    }).catch(err => {
+    }).catch((err: any) => {
       console.error("Failed to send log to Better Stack:", err);
     });
   }
@@ -37,7 +37,7 @@ export const logError = (error: Error, context?: any) => {
       ...context,
       stack: error.stack,
       service: "hostelhq-error-monitor",
-    }).catch(err => {
+    }).catch((err: any) => {
       console.error("Failed to send error log to Better Stack:", err);
     });
   }

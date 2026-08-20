@@ -67,8 +67,8 @@ export function NotificationBell() {
 
     const unsub = onSnapshot(
       q,
-      (snap) => {
-        const list: AppNotification[] = snap.docs.map((d) => {
+      (snap: any) => {
+        const list: AppNotification[] = snap.docs.map((d: any) => {
           const data = d.data() as any;
           return {
             id: d.id,
@@ -82,7 +82,7 @@ export function NotificationBell() {
         setNotifications(list);
         setLoading(false);
       },
-      (err) => {
+      (err: any) => {
         console.error("Error loading notifications", err);
         setLoading(false);
       }
@@ -170,7 +170,7 @@ export function NotificationBell() {
                   updateDoc(
                     doc(db, "users", user.uid, "notifications", n.id),
                     { read: true }
-                  ).catch((e) =>
+                  ).catch((e: any) =>
                     console.error("Failed to mark single notification read", e)
                   );
                 }

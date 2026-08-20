@@ -75,6 +75,7 @@ type AppUser = {
   role: 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager';
   profileImage?: string;
   phone?: string;
+  phoneNumber?: string;
   address?: string;
   bio?: string;
   authEmail?: string; // Original Firebase Auth email for password verification
@@ -419,9 +420,9 @@ export function Header() {
         areEqual: profileData.phone === originalPhone,
         currentType: typeof profileData.phone,
         originalType: typeof originalPhone,
-        normalizedCurrent: normalizePhone(profileData.phone),
-        normalizedOriginal: normalizePhone(originalPhone),
-        normalizedEqual: normalizePhone(profileData.phone) === normalizePhone(originalPhone)
+        normalizedCurrent: normalizePhone(profileData.phone || ''),
+        normalizedOriginal: normalizePhone(originalPhone || ''),
+        normalizedEqual: normalizePhone(profileData.phone || '') === normalizePhone(originalPhone || '')
       }
     });
 
@@ -705,7 +706,7 @@ export function Header() {
       // Update profileData and original values
       setProfileData(prev => ({ ...prev, phone: newPhone, email: newEmail }));
       setOriginalPhone(newPhone);
-      setOriginalName(profileData.fullName);
+      setOriginalName(profileData.fullName || '');
 
       toast({
         title: 'Profile Updated Successfully!',

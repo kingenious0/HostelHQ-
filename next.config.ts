@@ -1,5 +1,4 @@
 import type { NextConfig } from 'next';
-import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -109,16 +108,27 @@ const nextConfig: NextConfig = {
   },
 };
 
-// @ts-ignore
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  org: "kingenious-creative-studio",
-  project: "hostel-hq",
-}, {
-  widenClientFileUpload: true,
-  transpileClientSDK: false,
-  tunnelRoute: "/monitoring",
-  hideSourceMaps: true,
-  disableLogger: true,
-  automaticVercelMonitors: true,
-});
+let exportedConfig: any = nextConfig;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { withSentryConfig } = require("@sentry/nextjs");
+  if (withSentryConfig) {
+    exportedConfig = withSentryConfig(nextConfig, {
+      silent: true,
+      org: "kingenious-creative-studio",
+      project: "hostel-hq",
+    }, {
+      widenClientFileUpload: true,
+      transpileClientSDK: false,
+      tunnelRoute: "/monitoring",
+      hideSourceMaps: true,
+      disableLogger: true,
+      automaticVercelMonitors: true,
+    });
+  }
+} catch {
+  // Sentry not present or optional in this environment
+}
+
+export default exportedConfig;

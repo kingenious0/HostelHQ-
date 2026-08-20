@@ -31,7 +31,8 @@ import {
     Phone,
     Lock,
     ShieldCheck,
-    Building2
+    Building2,
+    ArrowRight
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -41,6 +42,25 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 type RoommateContactMode = 'phone' | 'whatsapp' | 'basic';
+
+interface PrivacySettings {
+    showProfile?: boolean;
+    showEmailAddress?: boolean;
+    showPicture?: boolean;
+    showPhoneNumber?: boolean;
+    showProgrammeOfStudy?: boolean;
+    roommateContactMode?: RoommateContactMode;
+    whatsappNumber?: string;
+}
+
+interface AppUser {
+    uid?: string;
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    profileImage?: string;
+    privacySettings?: PrivacySettings;
+}
 
 interface Roommate {
     uid: string;

@@ -48,9 +48,9 @@ interface Payment {
     currency: string;
     type: string;
     status: 'pending' | 'completed' | 'failed';
-    deadline: Timestamp | null;
+    deadline: any;
     damageMoney?: number;
-    paymentDate?: Timestamp | null;
+    paymentDate?: any;
     reference?: string;
 }
 
@@ -63,7 +63,7 @@ interface Booking {
     status: 'confirmed' | 'pending' | 'cancelled';
     amountPaid?: number;
     paymentReference?: string;
-    bookingDate?: Timestamp | string;
+    bookingDate?: any;
     roomTypeId?: string;
 }
 
@@ -108,7 +108,7 @@ export default function PaymentsPage() {
         if (!currentUser) return;
 
         const userDocRef = doc(db, "users", currentUser.uid);
-        const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap) => {
+        const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap: any) => {
             if (docSnap.exists()) {
                 const userData = docSnap.data() as AppUser;
                 setAppUser({
@@ -126,7 +126,7 @@ export default function PaymentsPage() {
         const fetchPaymentsAndBookings = async () => {
             setLoading(true);
             const bookingsQuery = query(collection(db, "bookings"), where("studentId", "==", currentUser.uid));
-            const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
+            const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot: any) => {
                 const fetchedBookings: Booking[] = [];
                 const fetchedPayments: Payment[] = [];
 
@@ -176,7 +176,7 @@ export default function PaymentsPage() {
                 setBookings(fetchedBookings);
                 setPayments(fetchedPayments);
                 setLoading(false);
-            }, (error) => {
+            }, (error: any) => {
                 toast({ title: "Error fetching payments", variant: 'destructive' });
                 setLoading(false);
             });

@@ -12,7 +12,7 @@ const getHeaders = async () => {
     };
 };
 
-const handleNetworkError = (error: any, context: string) => {
+const handleNetworkError = (error: any, context: string): never => {
     console.error(`Error in ${context}:`, error);
     if (error instanceof TypeError && error.message === 'fetch failed') {
         const cause = (error as any).cause;
