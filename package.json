@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1114.0",
+    "@aws-sdk/lib-dynamodb": "^3.1114.0",
     "@genkit-ai/googleai": "^1.14.1",
     "@genkit-ai/next": "^1.14.1",
     "@googlemaps/js-api-loader": "^1.16.6",
@@ -39,8 +41,8 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "ably": "^2.0.10",
     "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
     "cloudinary": "^2.5.0",
+    "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "dotenv": "^16.5.0",
     "embla-carousel-react": "^8.6.0",
