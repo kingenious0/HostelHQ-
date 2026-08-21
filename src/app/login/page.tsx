@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,25 +9,47 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, KeyRound, Mail, Fingerprint, Lock } from 'lucide-react';
+import { Loader2, KeyRound, Mail, Fingerprint, Lock, Phone, ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithCustomToken } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { isPlatformAuthenticatorAvailable, verifyBiometric } from '@/lib/webauthn';
+import { cn } from '@/lib/utils';
 
 function LoginPageInner() {
-    const [identifier, setIdentifier] = useState(''); // email or phone
+    const [loginMethod, setLoginMethod] = useState<'password' | 'phone_otp'>('password');
+    const [identifier, setIdentifier] = useState(''); // email or phone for password login
     const [password, setPassword] = useState('');
+    const [otpPhone, setOtpPhone] = useState('');
+    const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone');
+    const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+    const [isSendingOtp, setIsSendingOtp] = useState(false);
+    const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+    const [resendTimer, setResendTimer] = useState(60);
+    const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
     const [biometricAvailable, setBiometricAvailable] = useState(false);
     const [biometricLoading, setBiometricLoading] = useState(false);
+    
     const { toast } = useToast();
     const router = useRouter();
     const searchParams = useSearchParams();
     const redirectParam = searchParams.get('redirect');
     const safeRedirect = redirectParam && redirectParam.startsWith('/') ? redirectParam : null;
+
+    // Resend countdown timer
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (otpStep === 'code' && resendTimer > 0) {
+            interval = setInterval(() => {
+                setResendTimer((prev) => prev - 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [otpStep, resendTimer]);
 
     // Check if biometric authentication is available on device
     useEffect(() => {
@@ -50,6 +72,17 @@ function LoginPageInner() {
         return '/my-bookings';
     };
 
+    const formatPhone = (phone: string) => {
+        let cleaned = phone.replace(/\D/g, '');
+        if (cleaned.startsWith('0')) {
+            cleaned = cleaned.substring(1);
+        }
+        if (cleaned.startsWith('233')) {
+            return cleaned;
+        }
+        return '233' + cleaned;
+    };
+
     const handleGoogleLogin = async () => {
         setIsGoogleSubmitting(true);
         try {
@@ -57,7 +90,6 @@ function LoginPageInner() {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            // Check if user profile exists
             const userDocRef = doc(db, 'users', user.uid);
             const userDocSnap = await getDoc(userDocRef);
 
@@ -92,7 +124,7 @@ function LoginPageInner() {
         }
     };
 
-    const handleLogin = async () => {
+    const handlePasswordLogin = async () => {
         if (!identifier.trim() || !password) {
             toast({
                 title: "Missing Fields",
@@ -107,20 +139,10 @@ function LoginPageInner() {
             let loginEmail = identifier.trim();
             const isEmailLike = loginEmail.includes('@');
 
-            // If identifier is a phone number, resolve it to the stored authEmail/email
             if (!isEmailLike) {
-                const cleaned = loginEmail.replace(/\D/g, '');
-                if (!cleaned) {
-                    throw new Error('invalid-phone');
-                }
-
-                let normalized = cleaned;
-                if (normalized.startsWith('0') && normalized.length === 10) {
-                    normalized = '233' + normalized.substring(1);
-                }
-
+                const formatted = formatPhone(loginEmail);
                 const usersRef = collection(db, 'users');
-                const q = query(usersRef, where('phoneNumber', '==', normalized));
+                const q = query(usersRef, where('phoneNumber', '==', formatted));
                 const snap = await getDocs(q);
 
                 if (snap.empty) {
@@ -138,7 +160,6 @@ function LoginPageInner() {
             const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password);
             const user = userCredential.user;
 
-            // Check user role and redirect accordingly
             const userDocRef = doc(db, 'users', user.uid);
             const userDocSnap = await getDoc(userDocRef);
 
@@ -156,12 +177,12 @@ function LoginPageInner() {
                 router.push(destination);
             } else {
                 toast({ title: 'Login Successful!' });
-                router.push(safeRedirect ?? '/');
+                router.push(safeRedirect ?? '/my-bookings');
             }
 
         } catch (error: any) {
             console.error("Login error:", error);
-            let errorMessage = "An unknown error occurred.";
+            let errorMessage = "Invalid email/phone or password. Please try again.";
             if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.message === 'user-not-found') {
                 errorMessage = "Invalid credentials. Please check your email/phone and password.";
             } else if (error.message === 'invalid-phone') {
@@ -177,7 +198,156 @@ function LoginPageInner() {
         }
     };
 
-    // Handle biometric / passkey login
+    // Send OTP for SMS Login
+    const handleSendLoginOtp = async () => {
+        const cleaned = otpPhone.replace(/\D/g, '');
+        if (cleaned.length < 9) {
+            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid Ghana phone number.', variant: 'destructive' });
+            return;
+        }
+
+        const formatted = formatPhone(otpPhone);
+        setIsSendingOtp(true);
+
+        try {
+            // Check if user exists with this phone
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('phoneNumber', '==', formatted));
+            const snap = await getDocs(q);
+
+            if (snap.empty) {
+                toast({
+                    title: 'Account Not Found',
+                    description: 'No account found with this phone number. Please sign up first.',
+                    variant: 'destructive',
+                });
+                setIsSendingOtp(false);
+                return;
+            }
+
+            const res = await fetch('/api/sms/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: formatted }),
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to send SMS code');
+            }
+
+            toast({
+                title: 'Verification Code Sent',
+                description: `A 6-digit code has been sent to +${formatted}`,
+            });
+
+            setOtpStep('code');
+            setResendTimer(60);
+            setOtpCode(['', '', '', '', '', '']);
+            setTimeout(() => {
+                otpInputRefs.current[0]?.focus();
+            }, 100);
+        } catch (error: any) {
+            console.error('Error sending login OTP:', error);
+            toast({
+                title: 'Failed to Send Code',
+                description: error.message || 'Please check your connection and try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSendingOtp(false);
+        }
+    };
+
+    // Verify OTP for SMS Login
+    const handleVerifyLoginOtp = async () => {
+        const fullCode = otpCode.join('');
+        if (fullCode.length !== 6) {
+            toast({ title: 'Invalid Code', description: 'Please enter all 6 digits.', variant: 'destructive' });
+            return;
+        }
+
+        const formatted = formatPhone(otpPhone);
+        setIsVerifyingOtp(true);
+
+        try {
+            const verifyRes = await fetch('/api/sms/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: formatted, otp: fullCode }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) {
+                throw new Error(verifyData.error || 'Invalid or expired verification code');
+            }
+
+            // Find user doc to get login credentials
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('phoneNumber', '==', formatted));
+            const snap = await getDocs(q);
+
+            if (snap.empty) {
+                throw new Error('User account not found');
+            }
+
+            const userData = snap.docs[0].data() as any;
+            const userEmail = userData.authEmail || userData.email;
+            const role = userData.role as string | undefined;
+            const displayName = userData.fullName || userData.firstName || 'User';
+
+            // If user has email stored
+            if (userEmail && userData.biometricPassword) {
+                await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+            }
+
+            toast({ title: `Welcome back, ${displayName}!` });
+            const destination = safeRedirect && (!role || role === 'student')
+                ? safeRedirect
+                : getRouteForRole(role);
+            router.push(destination);
+
+        } catch (error: any) {
+            console.error('OTP login error:', error);
+            toast({
+                title: 'Verification Failed',
+                description: error.message || 'Invalid verification code.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsVerifyingOtp(false);
+        }
+    };
+
+    const handleOtpChange = (index: number, value: string) => {
+        if (!/^\d*$/.test(value)) return;
+        const newOtp = [...otpCode];
+        newOtp[index] = value.substring(value.length - 1);
+        setOtpCode(newOtp);
+        if (value && index < 5) {
+            otpInputRefs.current[index + 1]?.focus();
+        }
+    };
+
+    const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+            otpInputRefs.current[index - 1]?.focus();
+        }
+    };
+
+    const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+        if (!pastedData) return;
+        const newOtp = [...otpCode];
+        for (let i = 0; i < pastedData.length; i++) {
+            newOtp[i] = pastedData[i];
+        }
+        setOtpCode(newOtp);
+        const nextIndex = Math.min(pastedData.length, 5);
+        otpInputRefs.current[nextIndex]?.focus();
+    };
+
     const handleBiometricLogin = async () => {
         setBiometricLoading(true);
         try {
@@ -268,7 +438,7 @@ function LoginPageInner() {
                                 type="button"
                                 variant="outline"
                                 onClick={handleGoogleLogin}
-                                disabled={isGoogleSubmitting || isSubmitting}
+                                disabled={isGoogleSubmitting || isSubmitting || isSendingOtp || isVerifyingOtp}
                                 className="w-full h-12 rounded-xl bg-white hover:bg-slate-100 text-slate-900 border-white/20 font-semibold shadow-md flex items-center justify-center gap-3 transition-all duration-200 hover:scale-[1.01]"
                             >
                                 {isGoogleSubmitting ? (
@@ -304,64 +474,206 @@ function LoginPageInner() {
                                 <div className="border-t border-white/15 w-full" />
                             </div>
 
-                            {/* Email or Phone Input */}
-                            <div className="space-y-2">
-                                <Label htmlFor="identifier" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                    Email or Phone Number
-                                </Label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                    <Input
-                                        id="identifier"
-                                        type="text"
-                                        placeholder="e.g. name@gmail.com or 0244123456"
-                                        className="pl-11 h-12 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 focus:ring-2 focus:ring-primary font-medium"
-                                        value={identifier}
-                                        onChange={(e) => setIdentifier(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleLogin();
-                                        }}
-                                    />
-                                </div>
+                            {/* Method Switcher */}
+                            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-black/40 border border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setLoginMethod('password')}
+                                    className={cn(
+                                        "py-2 text-xs font-semibold rounded-lg transition-all",
+                                        loginMethod === 'password'
+                                            ? "bg-primary text-white shadow-md"
+                                            : "text-slate-300 hover:text-white"
+                                    )}
+                                >
+                                    Password
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setLoginMethod('phone_otp')}
+                                    className={cn(
+                                        "py-2 text-xs font-semibold rounded-lg transition-all",
+                                        loginMethod === 'phone_otp'
+                                            ? "bg-primary text-white shadow-md"
+                                            : "text-slate-300 hover:text-white"
+                                    )}
+                                >
+                                    SMS Code
+                                </button>
                             </div>
 
-                            {/* Password Input */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                        Password
-                                    </Label>
-                                    <Link href="/forgot-password" className="text-xs text-primary font-medium hover:underline">
-                                        Forgot?
-                                    </Link>
+                            {/* Password Sign In View */}
+                            {loginMethod === 'password' && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="identifier" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Email or Phone Number
+                                        </Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                            <Input
+                                                id="identifier"
+                                                type="text"
+                                                placeholder="e.g. name@gmail.com or 0244123456"
+                                                className="pl-11 h-12 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 focus:ring-2 focus:ring-primary font-medium"
+                                                value={identifier}
+                                                onChange={(e) => setIdentifier(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handlePasswordLogin();
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                Password
+                                            </Label>
+                                            <Link href="/forgot-password" className="text-xs text-primary font-medium hover:underline">
+                                                Forgot?
+                                            </Link>
+                                        </div>
+                                        <div className="relative">
+                                            <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                placeholder="••••••••"
+                                                className="pl-11 h-12 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 focus:ring-2 focus:ring-primary font-medium"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handlePasswordLogin();
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <Button 
+                                        onClick={handlePasswordLogin} 
+                                        className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.01]" 
+                                        disabled={isSubmitting || isGoogleSubmitting}
+                                    >
+                                        {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                        Sign In
+                                    </Button>
                                 </div>
-                                <div className="relative">
-                                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                    <Input
-                                        id="password"
-                                        type="password"
-                                        placeholder="••••••••"
-                                        className="pl-11 h-12 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 focus:ring-2 focus:ring-primary font-medium"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleLogin();
-                                        }}
-                                    />
+                            )}
+
+                            {/* SMS Code Sign In View */}
+                            {loginMethod === 'phone_otp' && (
+                                <div className="space-y-4">
+                                    {otpStep === 'phone' ? (
+                                        <>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="otpPhone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Phone Number
+                                                </Label>
+                                                <div className="flex gap-2">
+                                                    <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
+                                                        +233 🇬🇭
+                                                    </div>
+                                                    <div className="relative flex-1">
+                                                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                                        <Input
+                                                            id="otpPhone"
+                                                            type="tel"
+                                                            placeholder="e.g. 0244123456"
+                                                            className="pl-11 h-12 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                            value={otpPhone}
+                                                            onChange={(e) => setOtpPhone(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') handleSendLoginOtp();
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <Button 
+                                                onClick={handleSendLoginOtp} 
+                                                className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.01]" 
+                                                disabled={isSendingOtp}
+                                            >
+                                                {isSendingOtp ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                        Sending Code...
+                                                    </>
+                                                ) : (
+                                                    'Send Verification Code'
+                                                )}
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="text-center space-y-1">
+                                                <p className="text-xs text-slate-300">
+                                                    Enter the 6-digit code sent to <span className="text-white font-semibold">+{formatPhone(otpPhone)}</span>
+                                                </p>
+                                            </div>
+
+                                            <div className="flex justify-center gap-2 py-2">
+                                                {otpCode.map((digit, idx) => (
+                                                    <input
+                                                        key={idx}
+                                                        ref={(el) => { otpInputRefs.current[idx] = el; }}
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        maxLength={1}
+                                                        value={digit}
+                                                        onChange={(e) => handleOtpChange(idx, e.target.value)}
+                                                        onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                                                        onPaste={handleOtpPaste}
+                                                        className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl font-bold bg-white text-slate-900 rounded-xl border border-white/20 shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                                                    />
+                                                ))}
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs text-slate-300">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setOtpStep('phone')}
+                                                    className="text-slate-400 hover:text-white"
+                                                >
+                                                    Change number
+                                                </button>
+                                                {resendTimer > 0 ? (
+                                                    <span className="text-slate-400">Resend in {resendTimer}s</span>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSendLoginOtp}
+                                                        disabled={isSendingOtp}
+                                                        className="text-primary font-bold hover:underline"
+                                                    >
+                                                        Resend Code
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <Button 
+                                                onClick={handleVerifyLoginOtp} 
+                                                className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.01]" 
+                                                disabled={isVerifyingOtp || otpCode.join('').length !== 6}
+                                            >
+                                                {isVerifyingOtp ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                        Verifying...
+                                                    </>
+                                                ) : (
+                                                    'Verify & Sign In'
+                                                )}
+                                            </Button>
+                                        </>
+                                    )}
                                 </div>
-                            </div>
+                            )}
                         </CardContent>
                         
                         <CardFooter className="flex flex-col gap-4 px-6 sm:px-8 pb-8 pt-2">
-                            <Button 
-                                onClick={handleLogin} 
-                                className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-lg shadow-primary/30 transition-all duration-200 hover:scale-[1.01]" 
-                                disabled={isSubmitting || isGoogleSubmitting}
-                            >
-                                {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                Sign In
-                            </Button>
-                            
                             {biometricAvailable && (
                                 <Button
                                     type="button"
