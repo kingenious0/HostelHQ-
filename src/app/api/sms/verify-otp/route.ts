@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
+import { adminAuth } from '@/lib/firebase-admin';
 import { collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { verifyOTP, formatPhoneNumber } from '@/lib/wigal';
 
@@ -27,47 +28,45 @@ export async function POST(req: NextRequest) {
     );
     const otpDocs = await getDocs(otpQuery);
 
+    let isVerified = false;
+
     if (isDevelopment) {
       console.log('🔧 DEVELOPMENT MODE: Verifying OTP');
       console.log('📱 Phone:', formattedPhone);
       console.log('🔑 Entered OTP:', otp);
       
-      // Check if dev OTP exists in Firestore
       const devOtpDoc = otpDocs.docs.find((doc: any) => doc.data().isDev === true);
       
       if (devOtpDoc) {
         const storedOtp = devOtpDoc.data().otp;
-        console.log('✅ Found dev OTP:', storedOtp);
-        
-        if (otp === storedOtp) {
-          // Mark as verified
+        if (otp === storedOtp || otp === '123456') {
           await updateDoc(devOtpDoc.ref, {
             verified: true,
             verifiedAt: Timestamp.now(),
           });
-          
-          return NextResponse.json({
-            success: true,
-            message: 'OTP verified successfully (DEV MODE)',
-            devMode: true,
-          });
+          isVerified = true;
         } else {
           return NextResponse.json(
             { success: false, error: 'Invalid OTP. Use 123456 in dev mode.' },
             { status: 400 }
           );
         }
+      } else if (otp === '123456') {
+        isVerified = true;
       }
     }
 
-    // 🚀 PRODUCTION MODE: Verify OTP via Wigal FROG API
-    const verifyResult = await verifyOTP(formattedPhone, otp);
+    if (!isVerified) {
+      // 🚀 PRODUCTION MODE: Verify OTP via Wigal FROG API
+      const verifyResult = await verifyOTP(formattedPhone, otp);
 
-    if (!verifyResult.success) {
-      return NextResponse.json(
-        { success: false, error: verifyResult.error || 'Invalid or expired OTP. Please try again.' },
-        { status: 400 }
-      );
+      if (!verifyResult.success) {
+        return NextResponse.json(
+          { success: false, error: verifyResult.error || 'Invalid or expired OTP. Please try again.' },
+          { status: 400 }
+        );
+      }
+      isVerified = true;
     }
 
     // Update all unverified records for this phone number
@@ -79,9 +78,39 @@ export async function POST(req: NextRequest) {
     );
     await Promise.all(updatePromises);
 
+    // Find corresponding user in Firestore if they exist
+    let customToken: string | null = null;
+    let userProfile: any = null;
+
+    try {
+      const usersRef = collection(db, 'users');
+      const userQ = query(usersRef, where('phoneNumber', '==', formattedPhone));
+      const userSnap = await getDocs(userQ);
+
+      if (!userSnap.empty) {
+        const userDoc = userSnap.docs[0];
+        const userData = userDoc.data();
+        userProfile = {
+          uid: userDoc.id,
+          email: userData.email,
+          role: userData.role || 'student',
+          fullName: userData.fullName || userData.firstName || 'User',
+        };
+
+        // Create Firebase custom auth token
+        customToken = await adminAuth.createCustomToken(userDoc.id, {
+          role: userData.role || 'student',
+        });
+      }
+    } catch (authError) {
+      console.error('Error generating custom token in verify-otp:', authError);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'OTP verified successfully',
+      customToken,
+      user: userProfile,
     });
   } catch (error: any) {
     console.error('Error in verify-otp route:', error);
@@ -91,4 +120,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

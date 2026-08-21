@@ -282,23 +282,30 @@ function LoginPageInner() {
                 throw new Error(verifyData.error || 'Invalid or expired verification code');
             }
 
-            // Find user doc to get login credentials
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('phoneNumber', '==', formatted));
-            const snap = await getDocs(q);
-
-            if (snap.empty) {
-                throw new Error('User account not found');
+            // 1. Authenticate with Firebase Auth via Custom Token
+            if (verifyData.customToken) {
+                await signInWithCustomToken(auth, verifyData.customToken);
             }
 
-            const userData = snap.docs[0].data() as any;
-            const userEmail = userData.authEmail || userData.email;
-            const role = userData.role as string | undefined;
-            const displayName = userData.fullName || userData.firstName || 'User';
+            // 2. Fetch user role and name for proper redirection
+            let role = verifyData.user?.role || 'student';
+            let displayName = verifyData.user?.fullName || 'User';
 
-            // If user has email stored
-            if (userEmail && userData.biometricPassword) {
-                await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+            if (!verifyData.user) {
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where('phoneNumber', '==', formatted));
+                const snap = await getDocs(q);
+
+                if (!snap.empty) {
+                    const userData = snap.docs[0].data() as any;
+                    role = userData.role || 'student';
+                    displayName = userData.fullName || userData.firstName || 'User';
+                    
+                    const userEmail = userData.authEmail || userData.email;
+                    if (!verifyData.customToken && userEmail && userData.biometricPassword) {
+                        await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+                    }
+                }
             }
 
             toast({ title: `Welcome back, ${displayName}!` });
