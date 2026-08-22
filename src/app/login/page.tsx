@@ -16,6 +16,7 @@ import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signIn
 import { doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { isPlatformAuthenticatorAvailable, verifyBiometric } from '@/lib/webauthn';
 import { cn } from '@/lib/utils';
+import { AppLoader } from '@/components/ui/app-loader';
 
 function LoginPageInner() {
     const [loginMethod, setLoginMethod] = useState<'password' | 'phone_otp'>('password');
@@ -537,8 +538,8 @@ function LoginPageInner() {
                                             <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
                                                 Password
                                             </Label>
-                                            <Link href="/forgot-password" className="text-xs text-primary font-medium hover:underline">
-                                                Forgot?
+                                            <Link href="/forgot-password" className="text-xs text-amber-400 hover:text-amber-300 font-semibold hover:underline transition-colors">
+                                                Forgot Password?
                                             </Link>
                                         </div>
                                         <div className="relative">
@@ -653,7 +654,7 @@ function LoginPageInner() {
                                                         type="button"
                                                         onClick={handleSendLoginOtp}
                                                         disabled={isSendingOtp}
-                                                        className="text-primary font-bold hover:underline"
+                                                        className="text-amber-400 hover:text-amber-300 font-bold hover:underline"
                                                     >
                                                         Resend Code
                                                     </button>
@@ -696,7 +697,7 @@ function LoginPageInner() {
 
                             <p className="text-center text-xs text-slate-300/90 pt-2">
                                 Don't have an account?{' '}
-                                <Link href="/signup" className="text-primary font-bold hover:underline">
+                                <Link href="/signup" className="text-amber-400 hover:text-amber-300 font-bold hover:underline transition-colors">
                                     Sign up here
                                 </Link>
                             </p>
@@ -710,11 +711,7 @@ function LoginPageInner() {
 
 export default function LoginPage() {
     return (
-        <Suspense fallback={
-            <div className="flex h-screen w-full items-center justify-center bg-slate-900">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        }>
+        <Suspense fallback={<AppLoader message="Loading HostelHQ Login..." />}>
             <LoginPageInner />
         </Suspense>
     );

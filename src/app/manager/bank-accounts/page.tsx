@@ -364,21 +364,20 @@ export default function ManagerBankAccountsPage() {
                 <div className="max-w-6xl mx-auto">
                     <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payment Accounts</h1>
-                            <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money for your hostels</p>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payout & Settlement Accounts</h1>
+                            <p className="text-sm text-muted-foreground">Manage your bank accounts and Mobile Money wallets for receiving rental revenue disbursements</p>
                         </div>
                         <Button onClick={() => setAddDialogOpen(true)}>
                             <PlusCircle className="h-4 w-4 mr-2" />
-                            Add Account
+                            Add Payout Account
                         </Button>
                     </div>
 
-                    <Alert className="mb-6">
-                        <Banknote className="h-4 w-4" />
-                        <AlertTitle>Payment Information</AlertTitle>
-                        <AlertDescription>
-                            These bank accounts and mobile money numbers will be displayed to students for making payments. 
-                            Make sure to keep them updated and mark one as primary for each hostel.
+                    <Alert className="mb-6 bg-amber-50 border-amber-200 text-amber-900">
+                        <Banknote className="h-4 w-4 text-amber-700" />
+                        <AlertTitle className="font-semibold text-amber-900">Platform Payout & Escrow Settlements</AlertTitle>
+                        <AlertDescription className="text-amber-800 text-xs sm:text-sm mt-1">
+                            Student rent payments are processed securely through HostelHQ&apos;s Paystack Escrow. Your primary linked account below is where approved rental disbursements and manager withdrawals are deposited.
                         </AlertDescription>
                     </Alert>
 
@@ -389,9 +388,9 @@ export default function ManagerBankAccountsPage() {
                     ) : (
                         <Card>
                             <CardHeader>
-                                <CardTitle>Your Payment Accounts</CardTitle>
+                                <CardTitle>Your Payout Accounts</CardTitle>
                                 <CardDescription>
-                                    Bank accounts and mobile money numbers for receiving payments
+                                    Bank accounts and Mobile Money wallets configured to receive rental revenue payouts.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -432,22 +431,17 @@ export default function ManagerBankAccountsPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                                                            <span className="text-sm">
-                                                                {account.hostelName || 'All Hostels'}
-                                                            </span>
-                                                        </div>
+                                                        {account.hostelName || 'All Hostels'}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {account.isPrimary && (
-                                                            <Badge className="bg-green-100 text-green-800 border-green-200">
-                                                                Primary
-                                                            </Badge>
+                                                        {account.isPrimary ? (
+                                                            <Badge className="bg-green-600">Primary Payout</Badge>
+                                                        ) : (
+                                                            <Badge variant="outline">Secondary</Badge>
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-2">
+                                                        <div className="flex justify-end space-x-2">
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
@@ -456,10 +450,9 @@ export default function ManagerBankAccountsPage() {
                                                                 <Edit className="h-4 w-4" />
                                                             </Button>
                                                             <Button
-                                                                variant="outline"
+                                                                variant="destructive"
                                                                 size="sm"
                                                                 onClick={() => handleDeleteAccount(account)}
-                                                                className="text-red-600 hover:text-red-700"
                                                             >
                                                                 <Trash2 className="h-4 w-4" />
                                                             </Button>
@@ -472,13 +465,13 @@ export default function ManagerBankAccountsPage() {
                                 ) : (
                                     <div className="text-center py-16">
                                         <Banknote className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                                        <p className="text-lg text-muted-foreground">No payment accounts found.</p>
+                                        <p className="text-lg font-medium text-gray-900">No payout accounts linked yet.</p>
                                         <p className="text-sm text-muted-foreground mb-4">
-                                            Add your first bank account or mobile money number to start receiving payments.
+                                            Link a Ghana bank account or Mobile Money number to receive your rental income disbursements.
                                         </p>
                                         <Button onClick={() => setAddDialogOpen(true)}>
                                             <PlusCircle className="h-4 w-4 mr-2" />
-                                            Add Your First Account
+                                            Link Payout Account
                                         </Button>
                                     </div>
                                 )}
@@ -491,9 +484,9 @@ export default function ManagerBankAccountsPage() {
                 <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader>
-                            <DialogTitle>Add Payment Account</DialogTitle>
+                            <DialogTitle>Add Payout Account</DialogTitle>
                             <DialogDescription>
-                                Add a new bank account or mobile money number for receiving payments.
+                                Add a bank account or Mobile Money number for receiving rental revenue settlements.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -620,9 +613,9 @@ export default function ManagerBankAccountsPage() {
                 <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader>
-                            <DialogTitle>Edit Payment Account</DialogTitle>
+                            <DialogTitle>Edit Payout Account</DialogTitle>
                             <DialogDescription>
-                                Update the bank account or mobile money details.
+                                Update your bank account or Mobile Money payout details.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
