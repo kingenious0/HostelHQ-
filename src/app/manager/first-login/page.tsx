@@ -12,6 +12,7 @@ import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, updatePassword } from "firebase/auth";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { AppLoader } from "@/components/ui/app-loader";
 
 function FirstLoginContent() {
   const router = useRouter();
@@ -191,7 +192,7 @@ function FirstLoginContent() {
 
 export default function ManagerFirstLoginPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<AppLoader message="Loading portal setup..." />}>
       <FirstLoginContent />
     </Suspense>
   );

@@ -6,6 +6,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { Hammer, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppLoader } from "@/components/ui/app-loader";
 
 /**
  * Maintenance Guard
@@ -49,7 +50,7 @@ export function MaintenanceGuard({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">Loading...</div>;
+  if (loading) return <AppLoader message="Connecting to HostelHQ..." subMessage="Loading verified campus accommodations" />;
 
   // If maintenance is ON and user is NOT an admin, lock the door
   if (maintenanceMode && !isAdmin) {

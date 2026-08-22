@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { AppLoader } from '@/components/ui/app-loader';
 
 type Visit = {
     id: string;
@@ -1060,7 +1061,7 @@ export default function TrackingPage() {
             );
         }
 
-        return <div className="text-center py-8"><p>Loading...</p></div>;
+        return <AppLoader fullScreen={false} message="Loading visit details..." subMessage="Syncing your inspection status" />;
     }
 
     const getCardTitle = () => {
