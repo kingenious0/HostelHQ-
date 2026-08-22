@@ -436,9 +436,11 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     // Mobile Sticky Container
     const renderMobileStickyCTA = () => {
+        const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
+
         return (
             <div className="fixed bottom-20 left-0 z-40 w-full p-4 md:hidden animate-in fade-in slide-in-from-bottom-5 duration-500">
-                <div className="glass-premium rounded-[2.5rem] p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/80">
+                <div className="glass-premium rounded-[2.5rem] p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/80 dark:border-white/10">
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Starting from</span>
                         <div className="flex items-baseline gap-1 text-primary">
@@ -454,6 +456,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             className="rounded-2xl px-8 bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-600/20"
                         >
                             Secured
+                        </Button>
+                    ) : canSecure ? (
+                        <Button
+                            onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
+                            className="rounded-2xl px-8 bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-lg shadow-accent/20"
+                        >
+                            Secure Room
                         </Button>
                     ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
                         <Button

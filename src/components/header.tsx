@@ -37,6 +37,7 @@ import {
   Search,
   Home as HomeIcon,
   Compass,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -885,6 +886,12 @@ export function Header() {
         : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
     );
 
+  // Auth Route Isolation Guard: Hide Header & Bottom Nav on auth pages
+  const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify'];
+  if (AUTH_ROUTES.some(r => pathname === r || pathname.startsWith(r + '/'))) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-50 transition-all duration-300">
       <div className="border-b border-border/40 transition-all bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
@@ -896,117 +903,203 @@ export function Header() {
                   <Menu className="h-6 w-6" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-[280px] sm:w-[320px]">
-                <SheetHeader>
-                  <SheetTitle className="flex items-center gap-2 text-lg">
-                    <div className="relative h-14 w-[180px]">
+              <SheetContent side="left" className="w-[300px] sm:w-[340px] p-0 flex flex-col max-h-screen">
+                <SheetHeader className="p-4 border-b border-border/40 bg-muted/20">
+                  <SheetTitle className="flex items-center justify-between">
+                    <div className="relative h-10 w-[140px]">
                       <Image
                         src="/HostelHQ Web App Logo.png"
                         alt="HostelHQ"
                         fill
-                        sizes="180px"
+                        sizes="140px"
                         className="object-contain object-left"
                         priority
                       />
                     </div>
                   </SheetTitle>
-                  <SheetDescription className="text-left mt-2">Find your next home with confidence.</SheetDescription>
-                </SheetHeader>
-                <nav className="mt-6 flex flex-col gap-2">
-                  {baseNavLinks.map((link) => (
-                    <SheetClose asChild key={`${link.href}-${link.label}`}>
-                      <Link
-                        href={link.href}
-                        onClick={() => setIsNavOpen(false)}
-                        className={cn(
-                          'rounded-lg px-3 py-2 text-sm font-medium transition',
-                          pathname === link.href
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-primary/5 hover:text-primary'
-                        )}
-                      >
-                        {link.label}
-                      </Link>
-                    </SheetClose>
-                  ))}
-                </nav>
+                  <SheetDescription className="sr-only">Mobile navigation and quick settings</SheetDescription>
 
-                <div className="mt-auto pb-6 space-y-4">
-                  {/* Notification Toggle in Mobile Sidebar */}
-                  {appUser && (
-                    <div className="mt-4">
-                      <NotificationToggle />
+                  {/* SECTION 1: User Mini-Profile Card */}
+                  {appUser ? (
+                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border/60 shadow-sm mt-3 text-left">
+                      <Avatar className="h-11 w-11 border border-primary/20">
+                        {appUser?.profileImage ? (
+                          <AvatarImage src={appUser.profileImage} alt="Profile" />
+                        ) : (
+                          <AvatarFallback className="font-bold text-sm bg-primary/10 text-primary">
+                            {appUser?.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold truncate text-foreground">{appUser.fullName || 'User'}</p>
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
+                        <div className="mt-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary capitalize">
+                            {appUser.role === 'hostel_manager' ? 'Hostel Manager' : appUser.role === 'pending_agent' ? 'Pending Agent' : appUser.role === 'agent' ? 'Field Agent' : appUser.role}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-sm mt-3 text-left">
+                      <p className="text-xs font-semibold text-foreground">Welcome to HostelHQ</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Verified campus housing across Ghana</p>
+                      <div className="flex gap-2 mt-3">
+                        <SheetClose asChild>
+                          <Button asChild size="sm" variant="outline" className="flex-1 text-xs rounded-xl">
+                            <Link href="/login">Login</Link>
+                          </Button>
+                        </SheetClose>
+                        <SheetClose asChild>
+                          <Button asChild size="sm" className="flex-1 text-xs rounded-xl">
+                            <Link href="/signup">Sign Up</Link>
+                          </Button>
+                        </SheetClose>
+                      </div>
                     </div>
                   )}
+                </SheetHeader>
 
-                  <div className="space-y-3">
-                    <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="h-4 w-4 text-primary" />
-                      233 (0) 597626090 / 233 (0) 536 282 694
-                    </Link>
-                    <Link href="mailto:hostelhqghana@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Mail className="h-4 w-4 text-primary" />
-                      hostelhqghana@gmail.com
-                    </Link>
-                  </div>
-                </div>
-
-                {/* UI Scale Slider in Mobile Sidebar */}
-                <div className="mt-6 border-t pt-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">UI Scale ({uiScale}%)</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">A</span>
-                    <Slider
-                      value={[uiScale]}
-                      onValueChange={(values) => setUiScale(values[0])}
-                      min={70}
-                      max={130}
-                      step={5}
-                      className="flex-1"
-                    />
-                    <span className="text-sm font-medium text-muted-foreground">A</span>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[10px] text-muted-foreground">Smaller</span>
-                    <button
-                      onClick={() => setUiScale(100)}
-                      className="text-[10px] text-primary hover:underline"
-                    >
-                      Reset
-                    </button>
-                    <span className="text-[10px] text-muted-foreground">Larger</span>
-                  </div>
-                </div>
-
-                {/* Notification Toggle in Mobile Sidebar */}
-                {appUser && (
-                  <div className="mt-4">
-                    <NotificationToggle />
-                  </div>
-                )}
-
-                <div className="mt-4 space-y-3">
-                  <Link href="tel:+233201234567" className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone className="h-4 w-4 text-primary" />
-                    233 (0) 597626090 / 233 (0) 536 282 694
-                  </Link>
-                  <Link href="mailto:hostelhqghana@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Mail className="h-4 w-4 text-primary" />
-                    hostelhqghana@gmail.com
-                  </Link>
-                  {!appUser && !loading && (
-                    <div className="flex gap-2 pt-2">
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  {/* SECTION 2: Secondary Support & Campus Safety Links (No duplicate bottom bar links) */}
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Campus Safety & Help</p>
+                    <div className="space-y-1">
                       <SheetClose asChild>
-                        <Button asChild variant="outline" className="flex-1">
-                          <Link href="/login">Login</Link>
-                        </Button>
+                        <Link
+                          href="/faq"
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/5 transition"
+                        >
+                          <HelpCircle className="h-4 w-4 text-primary" />
+                          <span>Campus Housing Guidelines</span>
+                        </Link>
+                      </SheetClose>
+                      <a
+                        href="https://wa.me/233597626090"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-muted-foreground hover:text-green-600 hover:bg-green-500/5 transition"
+                      >
+                        <MessageSquare className="h-4 w-4 text-green-600" />
+                        <span>24/7 WhatsApp Hotline</span>
+                      </a>
+                      <SheetClose asChild>
+                        <Link
+                          href="/contact"
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/5 transition"
+                        >
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span>Report a Dispute & Contact</span>
+                        </Link>
                       </SheetClose>
                       <SheetClose asChild>
-                        <Button asChild className="flex-1">
-                          <Link href="/signup">Sign Up</Link>
-                        </Button>
+                        <Link
+                          href="/about"
+                          className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/5 transition"
+                        >
+                          <Compass className="h-4 w-4 text-primary" />
+                          <span>About HostelHQ</span>
+                        </Link>
                       </SheetClose>
+                      <button
+                        onClick={() => {
+                          setIsNavOpen(false);
+                          window.dispatchEvent(new CustomEvent('openHostie'));
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/5 transition text-left"
+                      >
+                        <MessageSquare className="h-4 w-4 text-primary" />
+                        <span>Chat with Hostie AI</span>
+                      </button>
                     </div>
+                  </div>
+
+                  {/* SECTION 3: System Controls */}
+                  <div className="pt-2 border-t border-border/40">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3">System Controls</p>
+                    
+                    {/* Theme */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-4">
+                      {themeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setThemeMode(option.value)}
+                          className={cn(
+                            "flex flex-col items-center justify-center gap-1 rounded-xl py-2 transition-all text-xs font-medium",
+                            themeMode === option.value
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          {option.icon}
+                          <span className="text-[10px]">{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* UI Scale */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-semibold text-muted-foreground">UI Scale ({uiScale}%)</span>
+                        <button
+                          onClick={() => setUiScale(100)}
+                          className="text-[10px] font-semibold text-primary hover:underline"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">70%</span>
+                        <Slider
+                          value={[uiScale]}
+                          onValueChange={(values) => setUiScale(values[0])}
+                          min={70}
+                          max={130}
+                          step={5}
+                          className="flex-1"
+                        />
+                        <span className="text-[10px] text-muted-foreground">130%</span>
+                      </div>
+                    </div>
+
+                    {/* Notification Toggle */}
+                    {appUser && (
+                      <div className="mt-4 pt-3 border-t border-border/30">
+                        <NotificationToggle />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION 4: Consolidated Support Contact Block & Logout Button */}
+                <div className="p-4 border-t border-border/40 bg-muted/20 space-y-3 mt-auto">
+                  <div className="space-y-1 text-[11px] text-muted-foreground">
+                    <Link href="tel:+233597626090" className="flex items-center gap-2 hover:text-primary transition">
+                      <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>+233 (0) 59 762 6090</span>
+                    </Link>
+                    <Link href="mailto:hostelhqghana@gmail.com" className="flex items-center gap-2 hover:text-primary transition">
+                      <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="truncate">hostelhqghana@gmail.com</span>
+                    </Link>
+                  </div>
+
+                  {appUser && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleLogout}
+                      disabled={authAction}
+                      className="w-full text-xs rounded-xl font-medium"
+                    >
+                      <LogOut className="h-3.5 w-3.5 mr-1.5" />
+                      Logout
+                    </Button>
                   )}
                 </div>
               </SheetContent>
@@ -1342,40 +1435,77 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation - 95% of users */}
+      {/* Role-Based 5-Tab Sticky Bottom Navigation Bar */}
       <div className="fixed bottom-0 left-0 z-50 w-full h-16 md:hidden">
         <div className="grid h-full max-w-lg grid-cols-5 mx-auto mobile-nav-blur border-t px-1">
-          <Link href="/" className={cn("inline-flex flex-col items-center justify-center group", pathname === '/' ? 'text-primary' : 'text-muted-foreground')}>
-            <HomeIcon className={cn("w-5 h-5 mb-1 transition-transform group-active:scale-90", pathname === '/' && "animate-pulse")} />
-            <span className="text-[10px] font-medium">Home</span>
-          </Link>
-          <Link href={appUser ? "/my-bookings" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/my-bookings' ? 'text-primary' : 'text-muted-foreground')}>
-            <Briefcase className="w-5 h-5 mb-1 group-active:scale-90" />
-            <span className="text-[10px] font-medium">Bookings</span>
-          </Link>
-          <Link href={appUser ? "/payments" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/payments' ? 'text-primary' : 'text-muted-foreground')}>
-            <CreditCard className="w-5 h-5 mb-1 group-active:scale-90" />
-            <span className="text-[10px] font-medium">Payments</span>
-          </Link>
-          <Link href={appUser ? "/my-roommates" : "/login"} className={cn("inline-flex flex-col items-center justify-center group", pathname === '/my-roommates' ? 'text-primary' : 'text-muted-foreground')}>
-            <Users className="w-5 h-5 mb-1 group-active:scale-90" />
-            <span className="text-[10px] font-medium">Roommates</span>
-          </Link>
-          <Link
-            href={appUser ? "/profile" : "/login"}
-            className={cn("inline-flex flex-col items-center justify-center group", pathname === '/profile' ? 'text-primary' : 'text-muted-foreground')}
-          >
-            <div className="relative mb-1">
-              <Avatar className="h-5 w-5 border border-primary/20 transition-transform group-active:scale-90">
-                {appUser?.profileImage ? (
-                  <AvatarImage src={appUser.profileImage} />
-                ) : (
-                  <AvatarFallback className="text-[8px] font-bold">{appUser?.fullName?.charAt(0) || 'U'}</AvatarFallback>
-                )}
-              </Avatar>
-            </div>
-            <span className="text-[10px] font-medium">Profile</span>
-          </Link>
+          {(() => {
+            const tabs = isManager
+              ? [
+                  { href: '/manager/dashboard', icon: LayoutDashboard, label: 'Overview' },
+                  { href: '/manager/dashboard#rooms', icon: Building, label: 'Rooms' },
+                  { href: '/manager/dashboard#bookings', icon: Briefcase, label: 'Bookings' },
+                  { href: '/manager/bank-accounts', icon: Banknote, label: 'Wallet' },
+                  { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
+                ]
+              : isAgent
+              ? [
+                  { href: '/agent/dashboard', icon: LayoutDashboard, label: 'Visits' },
+                  { href: '/agent/listings', icon: ListPlus, label: 'Listings' },
+                  { href: '/agent/upload', icon: Building, label: 'Add' },
+                  { href: '/agent/create-manager', icon: Users, label: 'Managers' },
+                  { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
+                ]
+              : isAdmin
+              ? [
+                  { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Overview' },
+                  { href: '/admin/listings', icon: Building, label: 'Hostels' },
+                  { href: '/admin/hostel-requests', icon: FileText, label: 'Requests' },
+                  { href: '/admin/payouts', icon: Banknote, label: 'Payouts' },
+                  { href: '/admin/settings', icon: Settings, label: 'Settings' },
+                ]
+              : [
+                  { href: '/', icon: HomeIcon, label: 'Home' },
+                  { href: appUser ? '/my-bookings' : '/login', icon: Briefcase, label: 'Bookings' },
+                  { href: appUser ? '/payments' : '/login', icon: CreditCard, label: 'Payments' },
+                  { href: appUser ? '/my-roommates' : '/login', icon: Users, label: 'Roommates' },
+                  { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
+                ];
+
+            return tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = tab.href.includes('#')
+                ? pathname === tab.href.split('#')[0]
+                : pathname === tab.href;
+
+              return (
+                <Link
+                  key={`${tab.href}-${tab.label}`}
+                  href={tab.href}
+                  className={cn(
+                    "inline-flex flex-col items-center justify-center group py-1",
+                    isActive ? "text-primary font-bold" : "text-muted-foreground"
+                  )}
+                >
+                  {tab.isAvatar && appUser ? (
+                    <div className="relative mb-1">
+                      <Avatar className="h-5 w-5 border border-primary/20 transition-transform group-active:scale-90">
+                        {appUser?.profileImage ? (
+                          <AvatarImage src={appUser.profileImage} />
+                        ) : (
+                          <AvatarFallback className="text-[8px] font-bold">
+                            {appUser?.fullName?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                    </div>
+                  ) : (
+                    <Icon className={cn("w-5 h-5 mb-1 transition-transform group-active:scale-90", isActive && "text-primary")} />
+                  )}
+                  <span className="text-[10px] font-medium leading-none">{tab.label}</span>
+                </Link>
+              );
+            });
+          })()}
         </div>
       </div>
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
