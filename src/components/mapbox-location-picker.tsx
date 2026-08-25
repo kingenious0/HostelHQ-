@@ -455,7 +455,7 @@ class CombinedRoutingService {
 
 export const combinedRoutingService = new CombinedRoutingService();
 
-export default function MapboxLocationPicker({
+export default React.memo(function MapboxLocationPicker({
   onLocationSelect,
   initialLocation,
   initialAddress = ''
@@ -468,6 +468,11 @@ export default function MapboxLocationPicker({
   const [isLoading, setIsLoading] = useState(false);
   const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(initialLocation || null);
+
+  const onLocationSelectRef = useRef(onLocationSelect);
+  useEffect(() => {
+    onLocationSelectRef.current = onLocationSelect;
+  }, [onLocationSelect]);
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
 
@@ -501,11 +506,11 @@ export default function MapboxLocationPicker({
                   const lat = parseFloat(coordMatch[1]);
                   const lng = parseFloat(coordMatch[2]);
                   if (!isNaN(lat) && !isNaN(lng)) {
-                    onLocationSelect({ lat, lng, address });
+                    onLocationSelectRef.current({ lat, lng, address });
                     return;
                   }
                 }
-                onLocationSelect({ lat: 0, lng: 0, address });
+                onLocationSelectRef.current({ lat: 0, lng: 0, address });
               }}
             />
           </div>
@@ -572,12 +577,12 @@ export default function MapboxLocationPicker({
         const address = await reverseGeocode(lngLat.lng, lngLat.lat);
         setSearchAddress(address);
         setCurrentLocation({ lat: lngLat.lat, lng: lngLat.lng });
-        onLocationSelect({ lat: lngLat.lat, lng: lngLat.lng, address });
+        onLocationSelectRef.current({ lat: lngLat.lat, lng: lngLat.lng, address });
       });
     } catch (error) {
       console.error('Error creating marker:', error);
     }
-  }, [reverseGeocode, onLocationSelect]);
+  }, [reverseGeocode]);
 
   // Use Geoapify for superior geocoding, especially for Ghana businesses
   const searchLocation = useCallback(async (query: string) => {
@@ -603,7 +608,7 @@ export default function MapboxLocationPicker({
 
           setCurrentLocation({ lat, lng });
           setSearchAddress(address);
-          onLocationSelect({ lat, lng, address });
+          onLocationSelectRef.current({ lat, lng, address });
 
           if (mapRef.current) {
             mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
@@ -633,7 +638,7 @@ export default function MapboxLocationPicker({
 
         setCurrentLocation({ lat, lng });
         setSearchAddress(address);
-        onLocationSelect({ lat, lng, address });
+        onLocationSelectRef.current({ lat, lng, address });
 
         if (mapRef.current) {
           mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
@@ -647,7 +652,7 @@ export default function MapboxLocationPicker({
     } finally {
       setIsLoading(false);
     }
-  }, [mapboxToken, onLocationSelect, updateMarker]);
+  }, [mapboxToken, updateMarker]);
 
   // Get user's current location with robust fallback
   const getCurrentLocation = useCallback(async () => {
@@ -681,7 +686,7 @@ export default function MapboxLocationPicker({
 
       setCurrentLocation({ lat, lng });
       setSearchAddress(address);
-      onLocationSelect({ lat, lng, address });
+      onLocationSelectRef.current({ lat, lng, address });
 
       if (mapRef.current) {
         mapRef.current.flyTo({ center: [lng, lat], zoom: 16 });
@@ -708,23 +713,40 @@ export default function MapboxLocationPicker({
       }
 
       console.error('Geolocation error:', error);
-      // We don't have toast here, so we'll use a local alert or just console error
-      // Actually, since we're in a component, we should probably set an error state
-      // but searchAddress is a good place to show feedback if needed
     } finally {
       setIsLoading(false);
     }
-  }, [reverseGeocode, onLocationSelect, updateMarker]);
+  }, [reverseGeocode, updateMarker]);
 
-  // Initialize map
+  // Sync external initialLocation updates smoothly
+  const initialLat = initialLocation?.lat;
+  const initialLng = initialLocation?.lng;
+  useEffect(() => {
+    if (initialLat !== undefined && initialLng !== undefined && !isNaN(initialLat) && !isNaN(initialLng)) {
+      setCurrentLocation(prev => {
+        if (prev?.lat === initialLat && prev?.lng === initialLng) return prev;
+        return { lat: initialLat, lng: initialLng };
+      });
+      if (mapRef.current) {
+        mapRef.current.flyTo({ center: [initialLng, initialLat], zoom: 16 });
+        updateMarker(initialLng, initialLat);
+      }
+    }
+  }, [initialLat, initialLng, updateMarker]);
+
+  // Initialize map once on mount
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) return;
+
+    const initialCenter: [number, number] = (initialLocation && initialLocation.lng && initialLocation.lat)
+      ? [initialLocation.lng, initialLocation.lat]
+      : [-0.1870, 5.6037]; // Default to Accra
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: mapStyles[activeStyle],
-      center: currentLocation ? [currentLocation.lng, currentLocation.lat] : [-0.1870, 5.6037], // Default to Accra
-      zoom: currentLocation ? 16 : 12
+      center: initialCenter,
+      zoom: initialLocation ? 16 : 12
     });
 
     mapRef.current = map;
@@ -737,24 +759,25 @@ export default function MapboxLocationPicker({
 
         setCurrentLocation({ lat, lng });
         setSearchAddress(address);
-        onLocationSelect({ lat, lng, address });
+        onLocationSelectRef.current({ lat, lng, address });
         updateMarker(lng, lat);
       });
 
       // Initialize marker if we have a location
-      if (currentLocation) {
-        updateMarker(currentLocation.lng, currentLocation.lat);
+      if (initialLocation && initialLocation.lng && initialLocation.lat) {
+        updateMarker(initialLocation.lng, initialLocation.lat);
       }
     });
 
     return () => {
       if (markerRef.current) {
         markerRef.current.remove();
+        markerRef.current = null;
       }
       map.remove();
       mapRef.current = null;
     };
-  }, [activeStyle, currentLocation, reverseGeocode, onLocationSelect, updateMarker]);
+  }, []); // Run only ONCE on mount
 
   // Switch map style
   const switchStyle = (newStyle: 'streets' | 'satellite') => {
@@ -928,4 +951,4 @@ export default function MapboxLocationPicker({
       )}
     </div>
   );
-}
+});

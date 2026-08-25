@@ -155,15 +155,53 @@ function PreviewMap({ hostelLocation, userLocation, hostelName }: PreviewMapProp
             map.remove();
             mapInstanceRef.current = null;
         };
-    }, [hostelLocation, hostelName, clearMarkers, setupMarkers]);
+    }, []); // Run once on mount
+
+    // Setup / update hostel marker
+    useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map || !hostelLocation?.lat || !hostelLocation?.lng) return;
+        if (hostelMarkerRef.current) {
+            hostelMarkerRef.current.setLngLat([hostelLocation.lng, hostelLocation.lat]);
+        } else {
+            const hostelEl = document.createElement('div');
+            hostelEl.innerHTML = `
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                    <span style="transform: rotate(45deg); color: white; font-size: 16px;">🏠</span>
+                </div>
+            `;
+            hostelMarkerRef.current = new mapboxgl.Marker({ element: hostelEl })
+                .setLngLat([hostelLocation.lng, hostelLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML(`<strong>🏠 ${hostelName}</strong>`))
+                .addTo(map);
+        }
+    }, [hostelLocation?.lat, hostelLocation?.lng, hostelName]);
 
     // Update user marker when location changes (without re-initializing map)
     useEffect(() => {
-        if (!mapInstanceRef.current || !userLocation) return;
+        const map = mapInstanceRef.current;
+        if (!map || !userLocation?.lat || !userLocation?.lng) return;
         if (userMarkerRef.current) {
             userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+        } else {
+            const userEl = document.createElement('div');
+            userEl.innerHTML = `
+                <div style="width: 24px; height: 24px; background: #3b82f6; border: 4px solid white; box-shadow: 0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>
+                <style>@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }</style>
+            `;
+            userMarkerRef.current = new mapboxgl.Marker({ element: userEl })
+                .setLngLat([userLocation.lng, userLocation.lat])
+                .setPopup(new mapboxgl.Popup().setHTML('<strong>📍 You are here</strong>'))
+                .addTo(map);
+
+            if (hostelLocation?.lat && hostelLocation?.lng) {
+                const bounds = new mapboxgl.LngLatBounds();
+                bounds.extend([userLocation.lng, userLocation.lat]);
+                bounds.extend([hostelLocation.lng, hostelLocation.lat]);
+                map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+            }
         }
-    }, [userLocation]);
+    }, [userLocation?.lat, userLocation?.lng, hostelLocation?.lat, hostelLocation?.lng]);
 
     // Switch map style
     const switchStyle = (newStyle: 'streets' | 'satellite') => {

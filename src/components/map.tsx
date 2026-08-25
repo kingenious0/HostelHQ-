@@ -20,7 +20,7 @@ const mapStyles = {
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || '';
 
-export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
+export const MapboxMap = React.memo(function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
     const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -109,7 +109,7 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
             map.remove();
             mapRef.current = null;
         };
-    }, [styleUrl, hostelLocation, mapboxToken, agentLocation]);
+    }, []);
 
     useEffect(() => {
         if (!mapLoaded || !mapRef.current) return;
@@ -127,7 +127,7 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
             }
         }
         
-    }, [mapLoaded, hostelLocation]);
+    }, [mapLoaded, hostelLocation?.lat, hostelLocation?.lng]);
 
     useEffect(() => {
         if (!mapLoaded || !mapRef.current || !agentId || !ably) {
@@ -168,6 +168,7 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
         if (!mapRef.current) return;
         setActiveStyle(newStyle);
         setStyleUrl(mapStyles[newStyle]);
+        mapRef.current.setStyle(mapStyles[newStyle]);
     };
     
     if (!mapboxToken || mapboxToken === "YOUR_MAPBOX_API_KEY_HERE") {
@@ -201,4 +202,4 @@ export function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
             </div>
         </div>
     );
-}
+});

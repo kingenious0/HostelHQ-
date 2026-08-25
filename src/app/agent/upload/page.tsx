@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
@@ -97,6 +97,17 @@ export default function AgentUploadPage() {
 
     const totalSteps = 5;
     const progress = (step / totalSteps) * 100;
+
+    const handleLocationSelect = useCallback((location: { lat: number; lng: number; address: string }) => {
+        setLatitude(location.lat);
+        setLongitude(location.lng);
+        setFullAddress(location.address);
+        setGpsLocation(`${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`);
+    }, []);
+
+    const initialMapLocation = useMemo(() => {
+        return latitude && longitude ? { lat: latitude, lng: longitude } : undefined;
+    }, [latitude, longitude]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -840,13 +851,8 @@ export default function AgentUploadPage() {
                                     <div className="space-y-2">
                                         <Label>Hostel Location</Label>
                                         <MapboxLocationPicker
-                                            onLocationSelect={(location) => {
-                                                setLatitude(location.lat);
-                                                setLongitude(location.lng);
-                                                setFullAddress(location.address);
-                                                setGpsLocation(`${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`);
-                                            }}
-                                            initialLocation={latitude && longitude ? { lat: latitude, lng: longitude } : undefined}
+                                            onLocationSelect={handleLocationSelect}
+                                            initialLocation={initialMapLocation}
                                             initialAddress={fullAddress}
                                         />
                                     </div>
