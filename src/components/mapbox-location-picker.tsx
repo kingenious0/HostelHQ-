@@ -542,37 +542,26 @@ export default React.memo(function MapboxLocationPicker({
       return;
     }
 
-    // Remove existing marker
+    // If marker already exists, simply move it
     if (markerRef.current) {
-      markerRef.current.remove();
-      markerRef.current = null;
+      markerRef.current.setLngLat([lng, lat]);
+      return;
     }
 
     try {
-      // Create a simple red marker element
-      const el = document.createElement('div');
-      el.style.width = '20px';
-      el.style.height = '20px';
-      el.style.borderRadius = '50%';
-      el.style.backgroundColor = '#ef4444'; // red-500
-      el.style.border = '3px solid white';
-      el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-      el.style.cursor = 'pointer';
-
-      console.log('Creating marker at:', lng, lat);
-
-      markerRef.current = new mapboxgl.Marker({
-        element: el,
+      // Create high-visibility draggable Mapbox SVG red pin
+      const marker = new mapboxgl.Marker({
+        color: '#ef4444',
         draggable: true
       })
         .setLngLat([lng, lat])
         .addTo(mapRef.current);
 
-      console.log('Marker created successfully');
+      markerRef.current = marker;
 
       // Handle marker drag
-      markerRef.current.on('dragend', async () => {
-        const lngLat = markerRef.current!.getLngLat();
+      marker.on('dragend', async () => {
+        const lngLat = marker.getLngLat();
         console.log('Marker dragged to:', lngLat.lng, lngLat.lat);
         const address = await reverseGeocode(lngLat.lng, lngLat.lat);
         setSearchAddress(address);
@@ -738,35 +727,51 @@ export default React.memo(function MapboxLocationPicker({
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) return;
 
-    const initialCenter: [number, number] = (initialLocation && initialLocation.lng && initialLocation.lat)
-      ? [initialLocation.lng, initialLocation.lat]
-      : [-0.1870, 5.6037]; // Default to Accra
+    const defaultCenter: [number, number] = [-0.1870, 5.6037]; // Default to Accra, Ghana
+    const hasInitial = initialLocation && typeof initialLocation.lat === 'number' && typeof initialLocation.lng === 'number' && !isNaN(initialLocation.lat) && !isNaN(initialLocation.lng) && (initialLocation.lat !== 0 || initialLocation.lng !== 0);
+    const initialCenter: [number, number] = hasInitial
+      ? [initialLocation!.lng, initialLocation!.lat]
+      : defaultCenter;
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: mapStyles[activeStyle],
       center: initialCenter,
-      zoom: initialLocation ? 16 : 12
+      zoom: hasInitial ? 16 : 13
     });
 
     mapRef.current = map;
 
-    map.on('load', () => {
-      // Add click handler for map
-      map.on('click', async (e) => {
-        const { lng, lat } = e.lngLat;
-        const address = await reverseGeocode(lng, lat);
+    const setupMap = () => {
+      // Place marker at initial or default position so pin is immediately visible & draggable
+      const pinLng = initialCenter[0];
+      const pinLat = initialCenter[1];
+      updateMarker(pinLng, pinLat);
+      setCurrentLocation({ lat: pinLat, lng: pinLng });
 
-        setCurrentLocation({ lat, lng });
-        setSearchAddress(address);
-        onLocationSelectRef.current({ lat, lng, address });
-        updateMarker(lng, lat);
-      });
-
-      // Initialize marker if we have a location
-      if (initialLocation && initialLocation.lng && initialLocation.lat) {
-        updateMarker(initialLocation.lng, initialLocation.lat);
+      if (!hasInitial) {
+        reverseGeocode(pinLng, pinLat).then(addr => {
+          setSearchAddress(addr);
+          onLocationSelectRef.current({ lat: pinLat, lng: pinLng, address: addr });
+        });
       }
+    };
+
+    if (map.loaded()) {
+      setupMap();
+    } else {
+      map.on('load', setupMap);
+    }
+
+    // Add click handler for map
+    map.on('click', async (e) => {
+      const { lng, lat } = e.lngLat;
+      const address = await reverseGeocode(lng, lat);
+
+      setCurrentLocation({ lat, lng });
+      setSearchAddress(address);
+      onLocationSelectRef.current({ lat, lng, address });
+      updateMarker(lng, lat);
     });
 
     return () => {
@@ -788,32 +793,19 @@ export default React.memo(function MapboxLocationPicker({
 
   return (
     <div className="space-y-4">
-      <Card className="bg-green-50 border-green-200">
-        <CardContent className="p-4">
-          <h4 className="font-medium text-green-900 mb-2">🚀 Enhanced Business Search with Geoapify</h4>
-          <div className="text-sm text-green-800 space-y-2">
-            <p><strong>Now using Geoapify:</strong> Much better at finding specific businesses like "Tanoso Pizza Man Chicken Man"!</p>
-            <div className="bg-green-100 p-3 rounded-md">
-              <p className="font-medium mb-1">🎯 Try searching for:</p>
-              <ul className="list-disc list-inside space-y-1 text-xs">
-                <li><strong>"Pizza Man Chicken Man Tanoso"</strong> - Should find the exact business</li>
-                <li><strong>"PureFM Patasi"</strong> - Radio station locations</li>
-                <li><strong>"University of Ghana Legon"</strong> - Educational institutions</li>
-                <li><strong>"Accra Mall"</strong> - Shopping centers</li>
-              </ul>
-            </div>
-            <p className="text-xs"><strong>Backup:</strong> If search doesn't find exact location, drag the red pin to fine-tune position</p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Clean, intuitive HCI instruction */}
+      <p className="text-sm text-muted-foreground">
+        Search for your hostel or landmark, click anywhere on the map, or drag the red pin to set the exact location.
+      </p>
+
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Search Address</Label>
+          <Label>Search Address / Landmark</Label>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Try: Pizza Man Chicken Man Tanoso, PureFM Patasi, University of Ghana, etc."
+                placeholder="Search hostel name, landmark, or area (e.g., Ayeduase Gate, Legon Hall)..."
                 value={searchAddress}
                 onChange={(e) => setSearchAddress(e.target.value)}
                 onKeyPress={(e) => {
@@ -843,9 +835,6 @@ export default React.memo(function MapboxLocationPicker({
               <Crosshair className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            🎯 Geoapify can find specific businesses! Try "Pizza Man Chicken Man Tanoso" or "PureFM Patasi" for exact locations.
-          </p>
         </div>
 
         <div className="space-y-2">
@@ -853,12 +842,13 @@ export default React.memo(function MapboxLocationPicker({
           <div className="flex gap-2">
             <Input
               placeholder="Latitude (e.g., 5.6037)"
+              value={currentLocation?.lat !== undefined ? currentLocation.lat.toFixed(6) : ''}
               onChange={(e) => {
                 const lat = parseFloat(e.target.value);
-                if (!isNaN(lat) && currentLocation?.lng) {
+                if (!isNaN(lat) && currentLocation?.lng !== undefined) {
                   const location = { lat, lng: currentLocation.lng };
                   setCurrentLocation(location);
-                  onLocationSelect({ ...location, address: `${lat}, ${currentLocation.lng}` });
+                  onLocationSelectRef.current({ ...location, address: `${lat}, ${currentLocation.lng}` });
                   if (mapRef.current) {
                     mapRef.current.flyTo({ center: [currentLocation.lng, lat], zoom: 16 });
                     updateMarker(currentLocation.lng, lat);
@@ -868,12 +858,13 @@ export default React.memo(function MapboxLocationPicker({
             />
             <Input
               placeholder="Longitude (e.g., -0.1870)"
+              value={currentLocation?.lng !== undefined ? currentLocation.lng.toFixed(6) : ''}
               onChange={(e) => {
                 const lng = parseFloat(e.target.value);
-                if (!isNaN(lng) && currentLocation?.lat) {
+                if (!isNaN(lng) && currentLocation?.lat !== undefined) {
                   const location = { lat: currentLocation.lat, lng };
                   setCurrentLocation(location);
-                  onLocationSelect({ ...location, address: `${currentLocation.lat}, ${lng}` });
+                  onLocationSelectRef.current({ ...location, address: `${currentLocation.lat}, ${lng}` });
                   if (mapRef.current) {
                     mapRef.current.flyTo({ center: [lng, currentLocation.lat], zoom: 16 });
                     updateMarker(lng, currentLocation.lat);
@@ -882,31 +873,30 @@ export default React.memo(function MapboxLocationPicker({
               }}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            📍 You can get coordinates from Google Maps: Right-click → "What's here?" → Copy coordinates
-          </p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Location on Map</Label>
+        <Label>Interactive Map Pin</Label>
         <Card>
           <CardContent className="p-0">
             <div className="relative w-full h-[400px]">
               <div ref={mapContainerRef} className="w-full h-full rounded-lg overflow-hidden" />
 
               {/* Map style switcher */}
-              <div className="absolute top-4 right-4 bg-background p-1 rounded-lg shadow-md flex gap-1">
+              <div className="absolute top-4 right-4 bg-background/90 backdrop-blur p-1 rounded-lg shadow-md flex gap-1 z-10">
                 <button
+                  type="button"
                   onClick={() => switchStyle('streets')}
-                  className={`p-2 rounded-md ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  className={`p-2 rounded-md transition-colors ${activeStyle === 'streets' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'}`}
                   title="Street View"
                 >
                   <Map className="h-4 w-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => switchStyle('satellite')}
-                  className={`p-2 rounded-md ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  className={`p-2 rounded-md transition-colors ${activeStyle === 'satellite' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'}`}
                   title="Satellite View"
                 >
                   <Layers className="h-4 w-4" />
@@ -915,35 +905,35 @@ export default React.memo(function MapboxLocationPicker({
             </div>
           </CardContent>
         </Card>
-        <div className="flex items-center justify-between text-xs">
-          <p className="text-muted-foreground flex items-center gap-1">
-            <MapPin className="h-3 w-3" />
-            Click on the map or drag the red pin to set the exact hostel location
+        <div className="flex items-center justify-between text-xs pt-1">
+          <p className="text-muted-foreground flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-red-500 shrink-0" />
+            Click anywhere on the map or drag the red pin to set the exact hostel location
           </p>
           {currentLocation ? (
-            <div className="flex items-center gap-1 text-green-600">
-              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-              <span>Pin placed</span>
+            <div className="flex items-center gap-1 text-green-600 font-medium shrink-0">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <span>Pin active</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1 text-amber-600">
+            <div className="flex items-center gap-1 text-amber-600 shrink-0">
               <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-              <span>No pin yet</span>
+              <span>No pin</span>
             </div>
           )}
         </div>
       </div>
 
       {currentLocation && (
-        <Card className="bg-muted/50">
+        <Card className="bg-muted/40 border-dashed">
           <CardContent className="p-3">
             <div className="text-sm">
               <p className="font-medium">Selected Location:</p>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-xs mt-0.5">
                 Latitude: {currentLocation.lat.toFixed(6)}, Longitude: {currentLocation.lng.toFixed(6)}
               </p>
               {searchAddress && (
-                <p className="text-muted-foreground mt-1">{searchAddress}</p>
+                <p className="text-muted-foreground text-xs mt-1 font-sans">{searchAddress}</p>
               )}
             </div>
           </CardContent>
