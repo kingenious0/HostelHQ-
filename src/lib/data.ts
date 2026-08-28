@@ -222,45 +222,50 @@ export const staticHostels: Hostel[] = [
 ];
 
 
-const normalizeText = (value?: string) => (value ?? '').toString().trim().toLowerCase();
-const normalizeRoomTypeTag = (value?: string) => normalizeText(value).replace(/\s+/g, ' ');
+const normalizeText = (value?: string) => (value ?? '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeRoomTypeTag = (value?: string) => (value ?? '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 
 const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
   const normalizedInstitution = normalizeText(options.institution);
-  const normalizedGender = normalizeText(options.gender);
+  const normalizedGender = (options.gender ?? '').toString().trim().toLowerCase();
   const normalizedRoomType = normalizeRoomTypeTag(options.roomType);
-  const normalizedSearch = normalizeText(options.search);
-  const normalizedLocation = normalizeText(options.location);
+  const normalizedSearch = (options.search ?? '').toString().trim().toLowerCase();
+  const normalizedLocation = (options.location ?? '').toString().trim().toLowerCase();
 
   const hostelInstitution = normalizeText(hostel.institution);
-  const hostelGender = normalizeText(hostel.gender);
+  const hostelGender = (hostel.gender ?? '').toString().trim().toLowerCase();
   const hostelRoomTypeTags =
     (hostel.roomTypeTags ?? []).map((tag) => normalizeRoomTypeTag(tag)).filter(Boolean);
   const derivedRoomTypeTags =
     (hostel.roomTypes ?? []).map((rt) => normalizeRoomTypeTag(rt.name)).filter(Boolean);
   const allRoomTypeTags = hostelRoomTypeTags.length ? hostelRoomTypeTags : derivedRoomTypeTags;
 
-  // Debug logging for room type filtering
-  if (options.roomType) {
-    console.log('[HostelHQ Room Type Filter]', {
-      hostelName: hostel.name,
-      filterRoomType: options.roomType,
-      normalizedFilter: normalizedRoomType,
-      hostelRoomTypeTags: allRoomTypeTags,
-      matches: allRoomTypeTags.includes(normalizedRoomType)
-    });
-  }
+  const matchesInstitution =
+    !options.institution ||
+    !hostelInstitution ||
+    hostelInstitution === normalizedInstitution ||
+    hostelInstitution.includes(normalizedInstitution) ||
+    normalizedInstitution.includes(hostelInstitution);
 
-  const matchesInstitution = !options.institution || hostelInstitution === normalizedInstitution;
-  // Use substring match for gender to be more forgiving (e.g., 'mixed hostel' should match 'Mixed' filter)
-  const matchesGender = !options.gender || hostelGender.includes(normalizedGender);
+  const matchesGender =
+    !options.gender ||
+    hostelGender.includes(normalizedGender) ||
+    hostelGender === 'mixed' ||
+    normalizedGender === 'mixed';
+
   const matchesRoomType =
     !options.roomType ||
     allRoomTypeTags.includes(normalizedRoomType);
+
   const matchesSearch =
-    !options.search || normalizeText(hostel.name).includes(normalizedSearch);
+    !options.search ||
+    (hostel.name ?? '').toLowerCase().includes(normalizedSearch) ||
+    (hostel.location ?? '').toLowerCase().includes(normalizedSearch);
+
   const matchesLocation =
-    !options.location || normalizeText(hostel.location).includes(normalizedLocation);
+    !options.location ||
+    (hostel.location ?? '').toLowerCase().includes(normalizedLocation) ||
+    (hostel.nearbyLandmarks ?? '').toLowerCase().includes(normalizedLocation);
 
   return matchesInstitution && matchesGender && matchesRoomType && matchesSearch && matchesLocation;
 };
@@ -309,21 +314,21 @@ const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, 
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
     try {
-        const dynamoAgent = await getAgentById(agentId);
-        if (dynamoAgent) return dynamoAgent;
-    } catch (e) {}
-
-    try {
         const agentDocRef = doc(db, 'users', agentId);
         const agentDoc = await getDoc(agentDocRef);
         if (agentDoc.exists() && agentDoc.data().role === 'agent') {
             return { id: agentDoc.id, ...agentDoc.data() } as Agent;
         }
-        return null;
     } catch (e) {
         console.error("Error fetching agent: ", e);
-        return null;
     }
+
+    try {
+        const dynamoAgent = await getAgentById(agentId);
+        if (dynamoAgent) return dynamoAgent;
+    } catch (e) {}
+
+    return null;
 }
 
 // Function to convert Firestore Timestamps to strings
@@ -347,11 +352,6 @@ const convertTimestamps = (data: any) => {
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
     try {
-        const dynamoHostel = await getHostelById(hostelId);
-        if (dynamoHostel) return dynamoHostel;
-    } catch (e) {}
-
-    try {
         const hostelDocRef = doc(db, 'hostels', hostelId);
         const hostelDoc = await getDoc(hostelDocRef);
 
@@ -361,42 +361,47 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             // Fetch room types from subcollection
             const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
-            const roomTypes = roomTypesSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as RoomType));
+            let roomTypes = roomTypesSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as RoomType));
+
+            if (roomTypes.length === 0 && Array.isArray(data.roomTypes)) {
+                roomTypes = data.roomTypes;
+            }
 
             // Fetch physical numbered rooms from subcollection (if any)
             const roomsCollectionRef = collection(db, 'hostels', hostelId, 'rooms');
             const roomsSnapshot = await getDocs(roomsCollectionRef);
-            const rooms = roomsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Room));
+            const rooms = roomsSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as Room));
             
-             // Fetch all reviews for the hostel (no status filter)
-            const reviewsQuery = query(
-                collection(db, 'reviews'), 
-                where('hostelId', '==', hostelId),
-                orderBy('createdAt', 'desc') // Order by most recent
-            );
-            const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviewsDataPromises = reviewsSnapshot.docs.map(async (docSnapshot: any) => {
-                const reviewData = convertTimestamps({ id: docSnapshot.id, ...docSnapshot.data() }) as Review;
-                // Fetch reviewer's profile image and name
-                const userDoc = await getDoc(doc(db, "users", reviewData.studentId));
-                const userProfileImage = userDoc.exists() ? (userDoc.data() as AppUser).profileImage : '';
-                const userName = userDoc.exists() ? (userDoc.data() as AppUser).fullName : reviewData.studentName; // Fallback to submitted name
-                return { ...reviewData, studentName: userName, userProfileImage };
-            });
-            let reviewsWithUserData = await Promise.all(reviewsDataPromises);
+            // Fetch all reviews for the hostel
+            let reviewsWithUserData: any[] = [];
+            try {
+                const reviewsQuery = query(
+                    collection(db, 'reviews'), 
+                    where('hostelId', '==', hostelId),
+                    orderBy('createdAt', 'desc')
+                );
+                const reviewsSnapshot = await getDocs(reviewsQuery);
+                const reviewsDataPromises = reviewsSnapshot.docs.map(async (docSnapshot: any) => {
+                    const reviewData = convertTimestamps({ id: docSnapshot.id, ...docSnapshot.data() }) as Review;
+                    const userDoc = await getDoc(doc(db, "users", reviewData.studentId));
+                    const userProfileImage = userDoc.exists() ? (userDoc.data() as AppUser).profileImage : '';
+                    const userName = userDoc.exists() ? (userDoc.data() as AppUser).fullName : reviewData.studentName;
+                    return { ...reviewData, studentName: userName, userProfileImage };
+                });
+                reviewsWithUserData = await Promise.all(reviewsDataPromises);
+            } catch (err) {
+                console.warn("Reviews fetch fallback:", err);
+            }
 
-            // Calculate price range
-            const prices = roomTypes.map((rt: any) => rt.price);
+            const prices = roomTypes.map((rt: any) => rt.price).filter((p: any) => typeof p === 'number' && !isNaN(p));
             const priceRange = {
-                min: prices.length > 0 ? Math.min(...prices) : 0,
-                max: prices.length > 0 ? Math.max(...prices) : 0,
+                min: prices.length > 0 ? Math.min(...prices) : (data.priceRange?.min || 0),
+                max: prices.length > 0 ? Math.max(...prices) : (data.priceRange?.max || 0),
             };
 
-            // Calculate average rating and number of reviews
-            const totalRating = reviewsWithUserData.reduce((acc, review) => acc + review.rating, 0);
-            const averageRating = reviewsWithUserData.length > 0 ? totalRating / reviewsWithUserData.length : 0;
+            const totalRating = reviewsWithUserData.reduce((acc, review) => acc + (review.rating || 0), 0);
+            const averageRating = reviewsWithUserData.length > 0 ? totalRating / reviewsWithUserData.length : (data.rating || 0);
 
-            // Get lat/lng from either top-level fields or nested coordinates object
             const hostelLat = typeof data.lat === 'number' 
                 ? data.lat 
                 : (typeof data.coordinates?.lat === 'number' ? data.coordinates.lat : null);
@@ -421,6 +426,11 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         console.error("Error fetching hostel from firestore: ", e);
     }
 
+    try {
+        const dynamoHostel = await getHostelById(hostelId);
+        if (dynamoHostel) return dynamoHostel;
+    } catch (e) {}
+
     console.log("Falling back to static hostel data for hostelId: ", hostelId);
     const staticHostel = staticHostels.find(h => h.id === hostelId);
     if (staticHostel) {
@@ -431,6 +441,81 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
 
 export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
+    // 1. PRIMARY: Fetch from Firestore (live database with all uploaded hostels)
+    try {
+        const querySnapshot = await getDocs(collection(db, 'hostels'));
+
+        if (!querySnapshot.empty) {
+            const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (docSnap: any) => {
+                const data = docSnap.data();
+                let roomTypes: RoomType[] = [];
+                try {
+                    const roomTypesCollectionRef = collection(db, 'hostels', docSnap.id, 'roomTypes');
+                    const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
+                    roomTypes = roomTypesSnapshot.docs.map((roomDoc: any) => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
+                } catch (err) {
+                    console.warn(`Could not load roomTypes for hostel ${docSnap.id}:`, err);
+                }
+
+                // If roomTypes were saved directly on the doc as array:
+                if (roomTypes.length === 0 && Array.isArray(data.roomTypes)) {
+                    roomTypes = data.roomTypes;
+                }
+                
+                let availability = (data.availability as Hostel['availability']) || (roomTypes.some(r => r.availability === 'Available' || r.availability === 'Limited') ? 'Available' : 'Available');
+
+                const prices = roomTypes.map((rt: any) => rt.price).filter((p: any) => typeof p === 'number' && !isNaN(p));
+                const priceRange = {
+                    min: prices.length > 0 ? Math.min(...prices) : (data.priceRange?.min || 0),
+                    max: prices.length > 0 ? Math.max(...prices) : (data.priceRange?.max || 0),
+                };
+
+                let reviewsCount = data.reviews ?? 0;
+                let averageRating = data.rating ?? 0;
+
+                try {
+                    const reviewsQuery = query(collection(db, 'reviews'), where('hostelId', '==', docSnap.id), where('status', '==', 'approved'));
+                    const reviewsSnapshot = await getDocs(reviewsQuery);
+                    if (!reviewsSnapshot.empty) {
+                        reviewsCount = reviewsSnapshot.size;
+                        const totalRating = reviewsSnapshot.docs.reduce((acc: number, d: any) => acc + (d.data().rating || 0), 0);
+                        averageRating = reviewsCount > 0 ? totalRating / reviewsCount : 0;
+                    }
+                } catch (_) {}
+
+                const roomTypeTags = data.roomTypeTags ?? roomTypes.map((rt: any) => rt.name);
+
+                const hostelLat = typeof data.lat === 'number' 
+                    ? data.lat 
+                    : (typeof data.coordinates?.lat === 'number' ? data.coordinates.lat : null);
+                const hostelLng = typeof data.lng === 'number' 
+                    ? data.lng 
+                    : (typeof data.coordinates?.lng === 'number' ? data.coordinates.lng : null);
+
+                return convertTimestamps({ 
+                    id: docSnap.id, 
+                    ...data, 
+                    lat: hostelLat ?? staticHostels[0].lat,
+                    lng: hostelLng ?? staticHostels[0].lng,
+                    roomTypes, 
+                    roomTypeTags,
+                    availability, 
+                    priceRange,
+                    reviews: reviewsCount,
+                    rating: averageRating,
+                }) as Hostel;
+            }));
+
+            const filteredFirestore = firestoreHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+            if (filteredFirestore.length > 0) {
+                return filteredFirestore;
+            }
+        }
+    } catch (e: any) {
+        console.error("Error fetching hostels from Firestore: ", e);
+    }
+
+    // 2. SECONDARY: DynamoDB fallback
     try {
         const dynamoHostels = await listHostels({
             featuredOnly: options.featured,
@@ -443,74 +528,8 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
         }
     } catch (e) {}
 
-    try {
-        let hostelsQuery = query(collection(db, 'hostels'));
-
-        const conditions = [];
-        if (options.featured) {
-            conditions.push(where("isFeatured", "==", true));
-        }
-        if (options.institution) {
-            conditions.push(where("institution", "==", options.institution));
-        }
-        if (options.gender) {
-            conditions.push(where("gender", "==", options.gender));
-        }
-        if (options.roomType) {
-            conditions.push(where("roomTypeTags", "array-contains", options.roomType));
-        }
-
-        if (conditions.length > 0) {
-            hostelsQuery = query(collection(db, 'hostels'), ...conditions);
-        }
-
-        const querySnapshot = await getDocs(hostelsQuery);
-
-        const firestoreHostels = await Promise.all(querySnapshot.docs.map(async (doc: any) => {
-            const data = doc.data();
-            const roomTypesCollectionRef = collection(db, 'hostels', doc.id, 'roomTypes');
-            const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
-            const roomTypes = roomTypesSnapshot.docs.map((roomDoc: any) => ({ id: roomDoc.id, ...roomDoc.data() } as RoomType));
-            
-            let availability = data.availability as Hostel['availability'] || 'Full';
-
-            const prices = roomTypes.map((rt: any) => rt.price);
-            const priceRange = {
-                min: prices.length > 0 ? Math.min(...prices) : 0,
-                max: prices.length > 0 ? Math.max(...prices) : 0,
-            };
-
-            const reviewsQuery = query(collection(db, 'reviews'), where('hostelId', '==', doc.id), where('status', '==', 'approved'));
-            const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviewsCount = reviewsSnapshot.size;
-            const totalRating = reviewsSnapshot.docs.reduce((acc: number, doc: any) => acc + doc.data().rating, 0);
-            const averageRating = reviewsCount > 0 ? totalRating / reviewsCount : 0;
-
-            const roomTypeTags = data.roomTypeTags ?? roomTypes.map((rt: any) => rt.name);
-
-            return convertTimestamps({ 
-                id: doc.id, 
-                ...data, 
-                roomTypes, 
-                roomTypeTags,
-                availability, 
-                priceRange,
-                reviews: reviewsCount,
-                rating: averageRating,
-            }) as Hostel;
-        }));
-
-        const filteredHostels = firestoreHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-
-        if (filteredHostels.length > 0 || Object.values(options).some(Boolean)) {
-            return filteredHostels;
-        }
-    } catch (e: any) {
-        console.error("\n--- FIRESTORE FETCH FAILED (DEV) ---");
-        console.error("Falling back to static data. Original error:", e.message);
-        console.error("--------------------------------------\n");
-    }
-    
+    // 3. TERTIARY: Static fallback
     const fallbackHostels = staticHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
     return fallbackHostels;
 }
+

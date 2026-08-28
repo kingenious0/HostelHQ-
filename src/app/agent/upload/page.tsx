@@ -80,6 +80,7 @@ export default function AgentUploadPage() {
     const [fullAddress, setFullAddress] = useState('');
     const [description, setDescription] = useState('');
     const [gender, setGender] = useState<string>('Mixed');
+    const [institution, setInstitution] = useState<string>('KNUST KUMASI CAMPUS');
     const [roomTypes, setRoomTypes] = useState<Partial<RoomType>[]>([
         { name: '', price: 0, availability: 'Available', capacity: 0, occupancy: 0, roomAmenities: [] }
     ]);
@@ -298,12 +299,23 @@ export default function AgentUploadPage() {
                 .replace(/^-|-$/g, '')
                 .substring(0, 50);
 
+            const validPrices = roomTypes.map(rt => Number(rt.price) || 0).filter(p => p > 0);
+            const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 0;
+            const maxPrice = validPrices.length > 0 ? Math.max(...validPrices) : 0;
+            const calculatedPriceRange = minPrice > 0 ? (minPrice === maxPrice ? `GH₵ ${minPrice}` : `GH₵ ${minPrice} - ${maxPrice}`) : '';
+            const calculatedRoomTypeTags = roomTypes.map(rt => rt.name).filter(Boolean);
+
             batch.set(hostelRef, {
                 name: hostelName,
                 slug, // Readable identifier for developers
                 location: fullAddress || gpsLocation,
                 coordinates: latitude && longitude ? { lat: latitude, lng: longitude } : null,
+                lat: latitude || undefined,
+                lng: longitude || undefined,
                 nearbyLandmarks,
+                institution: institution || 'KNUST KUMASI CAMPUS',
+                priceRange: calculatedPriceRange,
+                roomTypeTags: calculatedRoomTypeTags,
                 rating: 0,
                 reviews: 0,
                 amenities: selectedAmenities,
@@ -551,12 +563,27 @@ export default function AgentUploadPage() {
                                         <Input id="hostel-name" placeholder="e.g., Pioneer Hall" value={hostelName} onChange={(e) => setHostelName(e.target.value)} />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="landmarks">Nearby Landmarks</Label>
-                                        <Input id="landmarks" placeholder="e.g., Accra Mall, University of Ghana" value={nearbyLandmarks} onChange={(e) => setNearbyLandmarks(e.target.value)} />
+                                        <Label htmlFor="institution">Institution / Campus *</Label>
+                                        <Select value={institution} onValueChange={setInstitution}>
+                                            <SelectTrigger id="institution">
+                                                <SelectValue placeholder="Select Institution" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="KNUST KUMASI CAMPUS">KNUST KUMASI CAMPUS</SelectItem>
+                                                <SelectItem value="KNUST OBUASI CAMPUS">KNUST OBUASI CAMPUS</SelectItem>
+                                                <SelectItem value="KUMASI TECHNICAL UNIVERSITY (KSTU)">KUMASI TECHNICAL UNIVERSITY (KSTU)</SelectItem>
+                                                <SelectItem value="UNIVERSITY OF GHANA (UG)">UNIVERSITY OF GHANA (UG)</SelectItem>
+                                                <SelectItem value="A A M U S T E D">A A M U S T E D</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="distance">Distance to AAMUSTED University</Label>
-                                        <Input id="distance" placeholder="e.g., 10mins" value={distanceToUni} onChange={(e) => setDistanceToUni(e.target.value)} />
+                                        <Label htmlFor="landmarks">Nearby Landmarks</Label>
+                                        <Input id="landmarks" placeholder="e.g., Commercial Area, Post Office, Main Gate" value={nearbyLandmarks} onChange={(e) => setNearbyLandmarks(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="distance">Distance to Campus</Label>
+                                        <Input id="distance" placeholder="e.g., 5 mins walk / 10 mins drive" value={distanceToUni} onChange={(e) => setDistanceToUni(e.target.value)} />
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="gender">Gender</Label>

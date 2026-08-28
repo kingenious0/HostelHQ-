@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Footer } from "@/components/footer";
-import { AIAssistant } from "@/components/AIAssistant";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
@@ -36,17 +35,13 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
 
   // Settings for visibility
   const isRoomDetailsPage = /^\/hostels\/[^\/]+\/rooms\/[^\/]+$/.test(pathname);
-  const isHostelDetailPage = /^\/hostels\/[^\/]+$/.test(pathname);
-  const CHATBOT_VISIBLE_PATHS = ["/faq", "/help-center", "/contact"];
 
   const hideFooter =
     FOOTER_HIDDEN_PATHS.includes(pathname) ||
     FOOTER_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
     isRoomDetailsPage;
 
-  const showChatbot = CHATBOT_VISIBLE_PATHS.includes(pathname) || isHostelDetailPage;
-
-  // Track user authentication status for AI context
+  // Track user authentication status
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsLoggedIn(!!user);
@@ -54,28 +49,13 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     return () => unsubscribe();
   }, []);
 
-  // Extract context from current path
-  const userContext = React.useMemo(() => {
-    const hostelMatch = pathname.match(/^\/hostels\/([^\/]+)/);
-    const roomMatch = pathname.match(/^\/hostels\/[^\/]+\/rooms\/([^\/]+)/);
-
-    return {
-      isLoggedIn,
-      hostelId: hostelMatch?.[1],
-      roomId: roomMatch?.[1],
-    };
-  }, [pathname, isLoggedIn]);
-
   return (
     <MaintenanceGuard>
       <div className="flex min-h-full flex-col">
         {children}
         {!hideFooter && <Footer />}
-        <AIAssistant
-          userContext={userContext}
-          openByDefault={showChatbot}
-        />
       </div>
     </MaintenanceGuard>
   );
 }
+
