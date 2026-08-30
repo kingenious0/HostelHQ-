@@ -154,7 +154,7 @@ export default function BookingVisitPage() {
     if (verificationStatus === 'pending') {
       toast({
         title: "Account Under Review",
-        description: "Your student credentials are currently undergoing authentication by the Dean of Students office. You can browse hostels in preview mode while your verification is in progress.",
+        description: "Your student credentials are currently undergoing authentication by the HostelHQ Administration. You can browse hostels in preview mode while your verification is in progress.",
         variant: "destructive",
       });
       return;

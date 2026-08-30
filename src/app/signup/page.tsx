@@ -287,7 +287,7 @@ export default function SignupPage() {
                 setIsVerifyingOtp(false);
                 toast({
                     title: 'Phone Verified! 📱',
-                    description: 'Now please upload your Student ID Card or Admission Letter for Dean verification.',
+                    description: 'Now please upload your Student ID Card or Admission Letter for account verification.',
                 });
                 setStep('document');
                 return;
@@ -449,14 +449,14 @@ export default function SignupPage() {
                 console.warn('Could not queue verification in DynamoDB:', dynamoErr);
             }
 
-            // 6. Send alert SMS to Dean / System Admin
+            // 6. Send alert SMS to System Admin
             try {
                 fetch('/api/sms/send-notification', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         phoneNumber: '+233597626090',
-                        message: `HostelHQ Alert: New student verification pending review for ${fullName.trim()} (${studentIndexNumber.trim()}, ${faculty || 'USTED'}). Review at /dean/dashboard.`,
+                        message: `HostelHQ Alert: New student verification pending review for ${fullName.trim()} (${studentIndexNumber.trim()}, ${faculty || 'USTED'}). Review at /admin/dashboard.`,
                     }),
                 }).catch(() => {});
             } catch (_) {}
@@ -468,14 +468,14 @@ export default function SignupPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         phoneNumber: formattedPhone,
-                        message: `HostelHQ: Your registration and credentials have been received! The Dean of Students is reviewing your submission. You will receive an SMS confirmation once verified.`,
+                        message: `HostelHQ: Your registration and credentials have been received! The Administration is reviewing your submission. You will receive an SMS confirmation once verified.`,
                     }),
                 }).catch(() => {});
             } catch (_) {}
 
             toast({
                 title: 'Credentials Submitted! 🎓',
-                description: 'Your account is under review by the Dean of Students.',
+                description: 'Your account is under review by the Administration.',
             });
 
             setStep('pending_confirmation');
@@ -1048,7 +1048,7 @@ export default function SignupPage() {
                                     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
                                         <ShieldCheck className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
                                         <span>
-                                            Your document is safely encrypted and accessed exclusively by the USTED Dean of Students office to authenticate student enrollment.
+                                            Your document is safely encrypted and accessed exclusively by the HostelHQ Administration to authenticate student enrollment.
                                         </span>
                                     </div>
 
@@ -1097,7 +1097,7 @@ export default function SignupPage() {
                                         Registration Submitted!
                                     </CardTitle>
                                     <CardDescription className="text-slate-200/90 text-sm mt-1.5 max-w-md mx-auto">
-                                        Thank you, <span className="font-semibold text-white">{fullName}</span>. Your student profile and admission documents are now queued for review by the USTED Dean of Students office.
+                                        Thank you, <span className="font-semibold text-white">{fullName}</span>. Your student profile and admission documents are now queued for review by the HostelHQ Administration.
                                     </CardDescription>
                                 </CardHeader>
 
@@ -1118,7 +1118,7 @@ export default function SignupPage() {
                                         </div>
                                         <div className="flex justify-between items-center text-xs">
                                             <span className="text-slate-400">Reviewing Authority:</span>
-                                            <span className="text-primary font-semibold">Dean of Students Office</span>
+                                            <span className="text-primary font-semibold">HostelHQ Administration</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs pt-2 border-t border-white/10">
                                             <span className="text-slate-400">Expected Approval:</span>
@@ -1135,7 +1135,7 @@ export default function SignupPage() {
                                         <ul className="text-xs text-slate-300/90 space-y-1.5 pl-1">
                                             <li className="flex items-start gap-2">
                                                 <span className="text-primary font-bold">1.</span>
-                                                <span>The Dean's office cross-references your uploaded document with the institutional student register.</span>
+                                                <span>The administration cross-references your uploaded document with the institutional student register.</span>
                                             </li>
                                             <li className="flex items-start gap-2">
                                                 <span className="text-primary font-bold">2.</span>

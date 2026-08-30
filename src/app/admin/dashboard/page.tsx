@@ -7,7 +7,14 @@ import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat, UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield, Settings, Building, ShieldCheck } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat,
+  UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield,
+  Settings, Building, ShieldCheck, GraduationCap, Eye, ExternalLink, FileCheck,
+  AlertCircle, Filter, Search, AlertTriangle, Clock, CheckCircle2
+} from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -25,12 +32,12 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { ably } from '@/lib/ably';
 import { Types } from 'ably';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { RoomType, Review } from '@/lib/data';
+import { RoomType, Review, StudentVerification } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/app/actions/sms';
 import { getAdminPaystackBalance } from '@/app/actions/payouts';
-import { saveHostelAction } from '@/app/actions/db';
+import { saveHostelAction, fetchStudentVerificationsAction, updateStudentVerificationStatusAction } from '@/app/actions/db';
 
 type Hostel = {
   id: string;
@@ -61,6 +68,18 @@ type User = {
   fullName: string;
   email: string;
   role: 'student' | 'admin' | 'hostel_manager' | 'manager' | 'dean' | 'hostel_coordinator' | 'pro_vc' | 'vc';
+  phoneNumber?: string;
+  studentIndexNumber?: string;
+  faculty?: string;
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  verificationDocUrl?: string;
+  verificationDocType?: 'student_id' | 'admission_letter';
+  verificationReviewedAt?: string;
+  verificationReviewedBy?: string;
+  verificationRejectionReason?: string;
+  rejectionReason?: string;
+  createdAt?: string;
+  [key: string]: any;
 }
 
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
@@ -87,6 +106,15 @@ export default function AdminDashboard() {
   const [isHostelDialogOpen, setIsHostelDialogOpen] = useState(false);
   const [adminBalance, setAdminBalance] = useState<{ balance: number, currency: string } | null>(null);
   const { toast } = useToast();
+
+  // Student Account Verifications State
+  const [verifications, setVerifications] = useState<StudentVerification[]>([]);
+  const [selectedVerification, setSelectedVerification] = useState<StudentVerification | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [verifActionLoading, setVerifActionLoading] = useState(false);
+  const [verificationFilter, setVerificationFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const [verificationSearch, setVerificationSearch] = useState('');
 
   useEffect(() => {
     // Real-time pending hostels
@@ -146,6 +174,19 @@ export default function AdminDashboard() {
       }
     };
     fetchBalance();
+
+    // Fetch Student Verifications
+    const loadVerifications = async () => {
+      try {
+        const res = await fetchStudentVerificationsAction();
+        if (res.success && res.data) {
+          setVerifications(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to load student verifications:", err);
+      }
+    };
+    loadVerifications();
 
     return () => {
       unsubPending();
@@ -452,6 +493,156 @@ export default function AdminDashboard() {
   const institutionalStaff = users.filter(u => ['dean', 'hostel_coordinator', 'pro_vc', 'vc'].includes(u.role));
   const totalPending = pendingHostels.length + pendingReviews.length;
 
+  // Combine DynamoDB verifications with Firestore student users
+  const mergedVerifications = React.useMemo(() => {
+    const list: StudentVerification[] = [...verifications];
+
+    students.forEach((stu: any) => {
+      const existingIdx = list.findIndex(
+        v => v.userId === stu.id || (stu.studentIndexNumber && v.studentIdNumber === stu.studentIndexNumber)
+      );
+      if (existingIdx >= 0) {
+        list[existingIdx] = {
+          ...list[existingIdx],
+          status: (stu.verificationStatus as any) || list[existingIdx].status,
+          rejectionReason: stu.verificationRejectionReason || stu.rejectionReason || list[existingIdx].rejectionReason,
+          admissionLetterUrl: stu.verificationDocType === 'admission_letter'
+            ? stu.verificationDocUrl
+            : (list[existingIdx].admissionLetterUrl || (stu.verificationDocUrl && !list[existingIdx].admissionLetterUrl ? stu.verificationDocUrl : undefined)),
+          studentIdCardUrl: stu.verificationDocType === 'student_id'
+            ? stu.verificationDocUrl
+            : (list[existingIdx].studentIdCardUrl || undefined),
+          phone: stu.phoneNumber || list[existingIdx].phone,
+          fullName: stu.fullName || list[existingIdx].fullName,
+        };
+      } else if (stu.verificationStatus || stu.verificationDocUrl || stu.studentIndexNumber) {
+        list.push({
+          id: `stu_verif_${stu.id}`,
+          userId: stu.id,
+          fullName: stu.fullName || 'Student',
+          email: stu.email || '',
+          phone: stu.phoneNumber || '',
+          studentIdNumber: stu.studentIndexNumber || 'N/A',
+          institution: stu.faculty || 'USTED',
+          admissionLetterUrl: stu.verificationDocType === 'admission_letter' ? stu.verificationDocUrl : undefined,
+          studentIdCardUrl: stu.verificationDocType === 'student_id' ? stu.verificationDocUrl : (!stu.verificationDocType && stu.verificationDocUrl ? stu.verificationDocUrl : undefined),
+          status: (stu.verificationStatus as any) || 'pending',
+          rejectionReason: stu.verificationRejectionReason || stu.rejectionReason,
+          submittedAt: stu.createdAt || new Date().toISOString(),
+          reviewedAt: stu.verificationReviewedAt,
+          reviewedBy: stu.verificationReviewedBy,
+        });
+      }
+    });
+
+    return list;
+  }, [verifications, students]);
+
+  const pendingVerificationsCount = mergedVerifications.filter(v => v.status === 'pending').length;
+  const verifiedCount = mergedVerifications.filter(v => v.status === 'verified').length;
+  const rejectedCount = mergedVerifications.filter(v => v.status === 'rejected').length;
+
+  const filteredVerifications = mergedVerifications.filter((item) => {
+    const matchesFilter = verificationFilter === 'all' || item.status === verificationFilter;
+    const q = verificationSearch.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      item.fullName.toLowerCase().includes(q) ||
+      (item.email && item.email.toLowerCase().includes(q)) ||
+      (item.phone && item.phone.toLowerCase().includes(q)) ||
+      (item.studentIdNumber && item.studentIdNumber.toLowerCase().includes(q)) ||
+      (item.institution && item.institution.toLowerCase().includes(q));
+    return matchesFilter && matchesSearch;
+  });
+
+  const handleVerifyStudent = async (verificationId: string, status: "verified" | "rejected", reason?: string) => {
+    setVerifActionLoading(true);
+    try {
+      const adminName = auth.currentUser?.displayName || "HostelHQ Administration";
+      const verif = mergedVerifications.find((v) => v.id === verificationId) || selectedVerification;
+      const targetUserId = verif?.userId;
+      const targetPhone = verif?.phone || (verif as any)?.phoneNumber;
+      const targetName = verif?.fullName || (verif as any)?.studentName;
+
+      const res = await updateStudentVerificationStatusAction(
+        verificationId,
+        status,
+        reason,
+        adminName,
+        targetPhone,
+        targetName
+      );
+
+      if (res.success) {
+        // Sync Firestore user document
+        if (targetUserId) {
+          try {
+            await updateDoc(doc(db, "users", targetUserId), {
+              verificationStatus: status,
+              verificationReviewedAt: new Date().toISOString(),
+              verificationReviewedBy: adminName,
+              ...(reason ? { verificationRejectionReason: reason, rejectionReason: reason } : { verificationRejectionReason: null, rejectionReason: null }),
+            });
+          } catch (fsErr) {
+            console.warn("Could not sync verificationStatus to Firestore user:", fsErr);
+          }
+        }
+
+        setVerifications((prev) => {
+          const exists = prev.some(v => v.id === verificationId || (targetUserId && v.userId === targetUserId));
+          if (exists) {
+            return prev.map((v) =>
+              v.id === verificationId || (targetUserId && v.userId === targetUserId)
+                ? {
+                    ...v,
+                    status,
+                    rejectionReason: reason,
+                    reviewedAt: new Date().toISOString(),
+                    reviewedBy: adminName,
+                  }
+                : v
+            );
+          } else if (verif) {
+            return [
+              ...prev,
+              {
+                ...verif,
+                status,
+                rejectionReason: reason,
+                reviewedAt: new Date().toISOString(),
+                reviewedBy: adminName,
+              }
+            ];
+          }
+          return prev;
+        });
+
+        toast({
+          title: status === "verified" ? "Student Account Approved! 🎓" : "Verification Rejected",
+          description: `${targetName || "Student"} credentials marked as ${status}. Notification SMS dispatched.`,
+        });
+
+        setSelectedVerification(null);
+        setRejectDialogOpen(false);
+        setRejectionReason("");
+      } else {
+        toast({
+          title: "Action Failed",
+          description: res.error || "Could not update verification status.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setVerifActionLoading(false);
+    }
+  };
+
   const userRoleData = [
     { role: 'Students', count: students.length },
     { role: 'Managers', count: managers.length },
@@ -544,6 +735,21 @@ export default function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">Hostels & Reviews</p>
               </CardContent>
             </Card>
+            <Card className={cn(pendingVerificationsCount > 0 && "border-amber-500/50 bg-amber-50/20")}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Student Verifications</CardTitle>
+                <GraduationCap className={cn("h-4 w-4", pendingVerificationsCount > 0 ? "text-amber-600" : "text-muted-foreground")} />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-bold">{pendingVerificationsCount}</div>
+                  {pendingVerificationsCount > 0 && (
+                    <Badge className="bg-amber-500 text-white text-[10px] px-1.5 py-0">Needs Review</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">{mergedVerifications.length} total submitted</p>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-2 mb-8">
@@ -603,7 +809,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Security & Management */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-8">
             <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-3 opacity-10">
                 <DollarSign className="h-24 w-24 text-primary" />
@@ -689,6 +895,283 @@ export default function AdminDashboard() {
                     View Requests
                   </Link>
                 </Button>
+              </CardContent>
+            </Card>
+            <Card className={cn(pendingVerificationsCount > 0 && "border-amber-500/30 bg-amber-50/10")}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Student Verification</CardTitle>
+                <FileCheck className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Approve admission letters & student IDs for room booking privileges.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const el = document.getElementById('student-verifications-section');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    Verify Students
+                  </Button>
+                  {pendingVerificationsCount > 0 && (
+                    <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-semibold">
+                      {pendingVerificationsCount} pending
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* STUDENT ACCOUNT VERIFICATION QUEUE */}
+          <div id="student-verifications-section" className="mb-8">
+            <Card className="border-border/70 shadow-sm">
+              <CardHeader className="border-b bg-slate-50/60 pb-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <GraduationCap className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-xl font-bold font-headline">
+                        Student Account Verification Queue
+                      </CardTitle>
+                      {pendingVerificationsCount > 0 && (
+                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-2">
+                          {pendingVerificationsCount} Pending Approval
+                        </Badge>
+                      )}
+                    </div>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Inspect uploaded institutional credentials (Admission Letter or Student ID Card) to authorize student bookings and account verification.
+                    </CardDescription>
+                  </div>
+
+                  {/* Filters & Search */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative">
+                      <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search student name, index no, email..."
+                        value={verificationSearch}
+                        onChange={(e) => setVerificationSearch(e.target.value)}
+                        className="h-8 pl-8 text-xs w-full sm:w-64 bg-white"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg border text-xs">
+                      <Button
+                        size="sm"
+                        variant={verificationFilter === 'all' ? 'default' : 'ghost'}
+                        onClick={() => setVerificationFilter('all')}
+                        className="h-7 text-xs px-2.5"
+                      >
+                        All ({mergedVerifications.length})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={verificationFilter === 'pending' ? 'default' : 'ghost'}
+                        onClick={() => setVerificationFilter('pending')}
+                        className="h-7 text-xs px-2.5"
+                      >
+                        Pending ({pendingVerificationsCount})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={verificationFilter === 'verified' ? 'default' : 'ghost'}
+                        onClick={() => setVerificationFilter('verified')}
+                        className="h-7 text-xs px-2.5"
+                      >
+                        Verified ({verifiedCount})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={verificationFilter === 'rejected' ? 'default' : 'ghost'}
+                        onClick={() => setVerificationFilter('rejected')}
+                        className="h-7 text-xs px-2.5"
+                      >
+                        Rejected ({rejectedCount})
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-0">
+                {filteredVerifications.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
+                    <UserCheck className="h-8 w-8 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-foreground">No student verifications found</p>
+                    <p className="text-xs">
+                      {verificationFilter === 'pending'
+                        ? 'All student admission submissions have been processed!'
+                        : 'No records match the current filter or search criteria.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-100/70">
+                        <TableRow>
+                          <TableHead className="w-56">Student Details</TableHead>
+                          <TableHead className="w-48">Institution & Index No.</TableHead>
+                          <TableHead>Admission Letter</TableHead>
+                          <TableHead>Student ID Card</TableHead>
+                          <TableHead className="w-36">Status</TableHead>
+                          <TableHead className="text-right w-44">Verification Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredVerifications.map((item) => (
+                          <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="h-8 w-8 shrink-0">
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary font-bold">
+                                    {item.fullName ? item.fullName.charAt(0).toUpperCase() : 'S'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-semibold text-foreground text-sm line-clamp-1">{item.fullName}</p>
+                                  <p className="text-xs text-muted-foreground line-clamp-1">{item.email}</p>
+                                  <p className="text-[11px] text-muted-foreground font-mono">{item.phone || 'No phone'}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <p className="font-semibold text-foreground text-xs">{item.institution || 'AAMUSTED'}</p>
+                              <Badge variant="outline" className="font-mono text-[11px] mt-1 bg-white">
+                                {item.studentIdNumber || 'Index pending'}
+                              </Badge>
+                              {item.submittedAt && (
+                                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {new Date(item.submittedAt).toLocaleDateString()}
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {item.admissionLetterUrl ? (
+                                <a
+                                  href={item.admissionLetterUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-xs text-blue-700 font-semibold hover:bg-blue-100 transition-colors"
+                                >
+                                  <Eye className="h-3.5 w-3.5" /> View Letter
+                                  <ExternalLink className="h-3 w-3 opacity-60" />
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">Not uploaded</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {item.studentIdCardUrl ? (
+                                <a
+                                  href={item.studentIdCardUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 border border-purple-200 text-xs text-purple-700 font-semibold hover:bg-purple-100 transition-colors"
+                                >
+                                  <Eye className="h-3.5 w-3.5" /> View ID Card
+                                  <ExternalLink className="h-3 w-3 opacity-60" />
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">Not uploaded</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {item.status === 'pending' && (
+                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1 w-fit">
+                                  <Clock className="h-3 w-3" /> Pending Review
+                                </Badge>
+                              )}
+                              {item.status === 'verified' && (
+                                <div className="space-y-0.5">
+                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1 w-fit">
+                                    <CheckCircle2 className="h-3 w-3" /> Approved
+                                  </Badge>
+                                  {item.reviewedBy && (
+                                    <p className="text-[10px] text-muted-foreground">
+                                      By {item.reviewedBy.split(' ')[0]}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              {item.status === 'rejected' && (
+                                <div className="space-y-1">
+                                  <Badge variant="destructive" className="text-[11px] flex items-center gap-1 w-fit">
+                                    <XCircle className="h-3 w-3" /> Rejected
+                                  </Badge>
+                                  {item.rejectionReason && (
+                                    <p className="text-[10px] text-red-600 line-clamp-1 max-w-[130px]" title={item.rejectionReason}>
+                                      "{item.rejectionReason}"
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {item.status === 'pending' ? (
+                                <div className="flex justify-end items-center gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleVerifyStudent(item.id, 'verified')}
+                                    disabled={verifActionLoading}
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1"
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5" /> Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedVerification(item);
+                                      setRejectDialogOpen(true);
+                                    }}
+                                    disabled={verifActionLoading}
+                                    className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                                  >
+                                    Reject
+                                  </Button>
+                                </div>
+                              ) : item.status === 'rejected' ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleVerifyStudent(item.id, 'verified')}
+                                  disabled={verifActionLoading}
+                                  className="h-7 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                                >
+                                  Re-Approve
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setSelectedVerification(item);
+                                    setRejectDialogOpen(true);
+                                  }}
+                                  disabled={verifActionLoading}
+                                  className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  Revoke
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1037,6 +1520,87 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* REJECT STUDENT VERIFICATION DIALOG */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-destructive mb-1">
+              <AlertTriangle className="h-5 w-5" />
+              <DialogTitle className="text-lg font-bold">Reject Student Credentials</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Please specify the reason why <span className="font-semibold text-foreground">{selectedVerification?.fullName || "this student"}</span>'s admission credentials could not be approved. An automated SMS notification will be dispatched to their phone immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <label className="text-xs font-semibold text-foreground">Common Reasons (click to select):</label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                "Document is blurred or unreadable",
+                "Index number does not match university records",
+                "Expired or invalid student identification card",
+                "Uploaded file is not an official admission letter",
+                "Name on document does not match account name"
+              ].map((reason) => (
+                <Badge
+                  key={reason}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-slate-100 text-[11px] py-1 transition-colors"
+                  onClick={() => setRejectionReason(reason)}
+                >
+                  {reason}
+                </Badge>
+              ))}
+            </div>
+
+            <div className="space-y-1.5 pt-2">
+              <label className="text-xs font-semibold text-foreground">Detailed Reason / Note:</label>
+              <Textarea
+                placeholder="Type or edit the reason sent to the student..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="text-xs min-h-[85px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRejectDialogOpen(false);
+                setSelectedVerification(null);
+                setRejectionReason("");
+              }}
+              disabled={verifActionLoading}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (selectedVerification) {
+                  handleVerifyStudent(
+                    selectedVerification.id,
+                    'rejected',
+                    rejectionReason || "Credentials could not be verified against the university registry."
+                  );
+                }
+              }}
+              disabled={verifActionLoading}
+              className="text-xs font-semibold"
+            >
+              {verifActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <XCircle className="h-4 w-4 mr-1.5" />}
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

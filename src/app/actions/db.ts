@@ -425,8 +425,8 @@ export async function updateStudentVerificationStatusAction(
         const greeting = studentName ? `Hi ${studentName},` : "Dear Student,";
         const smsMessage =
           status === "verified"
-            ? `${greeting} Your student verification on HostelHQ has been APPROVED by the Dean of Students. You can now log in and book accredited hostels.`
-            : `${greeting} Your student verification on HostelHQ was not approved by the Dean of Students.${reason ? ` Reason: ${reason}.` : ""} Please log in to review and re-upload your credentials.`;
+            ? `${greeting} Your student verification on HostelHQ has been APPROVED by the Administration. You can now log in and book accredited hostels.`
+            : `${greeting} Your student verification on HostelHQ was not approved by the Administration.${reason ? ` Reason: ${reason}.` : ""} Please log in to review and re-upload your credentials.`;
         await sendSMS(studentPhoneNumber, smsMessage);
       } catch (smsErr) {
         console.warn("SMS dispatch error during student verification update:", smsErr);

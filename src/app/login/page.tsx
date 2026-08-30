@@ -788,14 +788,14 @@ function LoginPageInner() {
                         <DialogDescription className="text-slate-300 text-xs sm:text-sm leading-relaxed">
                             {underReviewData?.isRejected ? (
                                 <>
-                                    The Dean of Students office reviewed your admission credentials and recorded the following note:
+                                    The Administration reviewed your admission credentials and recorded the following note:
                                     <span className="block mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 font-medium">
                                         "{underReviewData.rejectionReason || "Credentials could not be verified against the university registry."}"
                                     </span>
                                 </>
                             ) : (
                                 <>
-                                    Welcome, <span className="font-semibold text-white">{underReviewData?.fullName}</span>. Your Student ID / Admission Letter is currently undergoing authentication by the USTED Dean of Students office.
+                                    Welcome, <span className="font-semibold text-white">{underReviewData?.fullName}</span>. Your Student ID / Admission Letter is currently undergoing authentication by the HostelHQ Administration.
                                 </>
                             )}
                         </DialogDescription>
@@ -809,7 +809,7 @@ function LoginPageInner() {
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400">Reviewing Authority:</span>
-                                <span className="text-primary font-semibold">Dean of Students</span>
+                                <span className="text-primary font-semibold">HostelHQ Administration</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400">Expected Approval:</span>
