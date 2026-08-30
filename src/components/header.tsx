@@ -80,6 +80,7 @@ type AppUser = {
   address?: string;
   bio?: string;
   authEmail?: string; // Original Firebase Auth email for password verification
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
 }
 
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -770,6 +771,7 @@ export function Header() {
   const isDean = appUser?.role === 'dean';
   const isCoordinator = appUser?.role === 'hostel_coordinator';
   const isExecutive = appUser?.role === 'pro_vc' || appUser?.role === 'vc';
+  const isPending = appUser?.verificationStatus === 'pending';
 
   const baseNavLinks = [
     { label: 'Home', href: '/' },
@@ -1119,7 +1121,7 @@ export function Header() {
                     <DropdownMenuLabel>
                       <div className="font-semibold">{appUser.fullName}</div>
                       <p className="text-xs text-muted-foreground font-normal">{appUser.email}</p>
-                      {isPending && <Badge variant="secondary" className="mt-1">Pending Approval</Badge>}
+                      {isPending && <Badge variant="secondary" className="mt-1">Pending Verification</Badge>}
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setIsProfileOpen(true)} data-profile-trigger>
