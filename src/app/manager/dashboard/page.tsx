@@ -8,16 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
-import { Hostel, RoomType, Room } from '@/lib/data';
+import { Hostel, RoomType, Room, type ComplaintCategory } from '@/lib/data';
+import { submitComplaintAction } from '@/app/actions/db';
 import { BookingsChart } from '@/components/bookings-chart';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -137,6 +139,85 @@ export default function ManagerDashboard() {
     const [visitFilter, setVisitFilter] = useState<'all' | 'pending' | 'accepted' | 'completed' | 'cancelled'>('all');
     const [visitSearch, setVisitSearch] = useState('');
     const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+
+    // Tenant Misconduct Report state (Manager -> Student complaint to Dean)
+    const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
+    const [misconductBooking, setMisconductBooking] = useState<Booking | null>(null);
+    const [misconductCategory, setMisconductCategory] = useState<ComplaintCategory>('Conduct & Policy');
+    const [misconductSubject, setMisconductSubject] = useState('');
+    const [misconductDescription, setMisconductDescription] = useState('');
+    const [misconductSubmitting, setMisconductSubmitting] = useState(false);
+
+    const handleOpenMisconductDialog = (booking: Booking) => {
+        setMisconductBooking(booking);
+        setMisconductCategory('Conduct & Policy');
+        setMisconductSubject('');
+        setMisconductDescription('');
+        setMisconductDialogOpen(true);
+    };
+
+    const handleSubmitMisconduct = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!misconductBooking || !currentUser) return;
+        if (!misconductSubject.trim() || !misconductDescription.trim()) {
+            toast({
+                title: 'Missing fields',
+                description: 'Please provide both a subject and a detailed incident description.',
+                variant: 'destructive'
+            });
+            return;
+        }
+
+        setMisconductSubmitting(true);
+        try {
+            const hostel = hostels.find((h) => h.id === misconductBooking.hostelId);
+            const hostelName = hostel?.name || 'Managed Hostel';
+            const studentName = misconductBooking.studentDetails?.fullName || 'Student Tenant';
+
+            const res = await submitComplaintAction({
+                direction: 'manager_to_student',
+                status: 'Submitted',
+                category: misconductCategory,
+                subject: misconductSubject.trim(),
+                description: misconductDescription.trim(),
+                studentId: misconductBooking.studentId || `student_${Date.now()}`,
+                studentName,
+                studentEmail: misconductBooking.studentDetails?.email || '',
+                studentPhone: misconductBooking.studentDetails?.phoneNumber || '',
+                hostelId: misconductBooking.hostelId,
+                hostelName,
+                managerId: currentUser.uid,
+                managerName: currentUser.displayName || 'Hostel Manager',
+                roomNumber: misconductBooking.roomNumber || undefined,
+                createdAt: new Date().toISOString(),
+            });
+
+            if (res.success) {
+                toast({
+                    title: 'Report Submitted to Dean of Students',
+                    description: `Your incident report regarding ${studentName} has been routed to the Dean's office.`,
+                });
+                setMisconductDialogOpen(false);
+                setBookingDetailOpen(false);
+                setMisconductSubject('');
+                setMisconductDescription('');
+            } else {
+                toast({
+                    title: 'Submission Failed',
+                    description: res.error || 'Failed to submit report. Please try again.',
+                    variant: 'destructive',
+                });
+            }
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: err.message || 'An unexpected error occurred.',
+                variant: 'destructive',
+            });
+        } finally {
+            setMisconductSubmitting(false);
+        }
+    };
 
     const router = useRouter();
     const { toast } = useToast();
@@ -1608,17 +1689,28 @@ export default function ManagerDashboard() {
                                                                 </Badge>
                                                             </TableCell>
                                                             <TableCell className="text-right">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-8"
-                                                                    onClick={() => {
-                                                                        setSelectedBooking(booking);
-                                                                        setBookingDetailOpen(true);
-                                                                    }}
-                                                                >
-                                                                    View
-                                                                </Button>
+                                                                <div className="flex justify-end gap-1.5">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-8 text-xs"
+                                                                        onClick={() => {
+                                                                            setSelectedBooking(booking);
+                                                                            setBookingDetailOpen(true);
+                                                                        }}
+                                                                    >
+                                                                        View
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                                                        title="Report Tenant Misconduct to Dean"
+                                                                        onClick={() => handleOpenMisconductDialog(booking)}
+                                                                    >
+                                                                        <ShieldAlert className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
                                                     );
@@ -2145,9 +2237,127 @@ export default function ManagerDashboard() {
                                 )}
                             </div>
                         )}
-                        <DialogFooter>
-                            <Button onClick={() => setBookingDetailOpen(false)}>Close</Button>
+                        <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                    if (selectedBooking) {
+                                        handleOpenMisconductDialog(selectedBooking);
+                                    }
+                                }}
+                                className="text-xs"
+                            >
+                                <ShieldAlert className="h-4 w-4 mr-1.5" />
+                                Report Tenant Misconduct to Dean
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setBookingDetailOpen(false)}>Close</Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Tenant Misconduct Report Dialog (Manager -> Student to Dean of Students) */}
+                <Dialog open={misconductDialogOpen} onOpenChange={setMisconductDialogOpen}>
+                    <DialogContent className="max-w-lg rounded-2xl">
+                        <DialogHeader>
+                            <div className="flex items-center gap-2">
+                                <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
+                                    <ShieldAlert className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <DialogTitle className="text-lg font-bold">Report Tenant Misconduct</DialogTitle>
+                                    <DialogDescription className="text-xs">
+                                        Formal incident reporting to the Dean of Students regarding student behavior.
+                                    </DialogDescription>
+                                </div>
+                            </div>
+                        </DialogHeader>
+
+                        {misconductBooking && (
+                            <div className="p-3 bg-muted/40 rounded-xl text-xs space-y-1">
+                                <p><span className="font-semibold">Student:</span> {misconductBooking.studentDetails?.fullName || 'N/A'}</p>
+                                <p><span className="font-semibold">Room:</span> {misconductBooking.roomNumber ? `Room ${misconductBooking.roomNumber}` : 'N/A'}</p>
+                                <p><span className="font-semibold">Contact:</span> {misconductBooking.studentDetails?.phoneNumber || 'N/A'}</p>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmitMisconduct} className="space-y-4 pt-1">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="misconduct-category" className="text-xs font-semibold">Incident Category</Label>
+                                <Select
+                                    value={misconductCategory}
+                                    onValueChange={(val: any) => setMisconductCategory(val)}
+                                >
+                                    <SelectTrigger id="misconduct-category" className="h-10 rounded-xl">
+                                        <SelectValue placeholder="Select Category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Conduct & Policy">Conduct & Rule Violations</SelectItem>
+                                        <SelectItem value="Maintenance & Repairs">Property Damage / Vandalism</SelectItem>
+                                        <SelectItem value="Noise & Disturbance">Noise Disturbance / Parties</SelectItem>
+                                        <SelectItem value="Security & Safety">Security & Unauthorized Guests</SelectItem>
+                                        <SelectItem value="Pricing & Overcharging">Non-Payment / Default</SelectItem>
+                                        <SelectItem value="Other">Other Infractions</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="misconduct-subject" className="text-xs font-semibold">Incident Summary / Subject</Label>
+                                <Input
+                                    id="misconduct-subject"
+                                    placeholder="e.g. Unauthorized room subletting and noise complaints"
+                                    value={misconductSubject}
+                                    onChange={(e) => setMisconductSubject(e.target.value)}
+                                    required
+                                    className="h-10 rounded-xl"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="misconduct-desc" className="text-xs font-semibold">Detailed Incident Report</Label>
+                                <Textarea
+                                    id="misconduct-desc"
+                                    placeholder="Provide a thorough, factual account of what happened, date/time, and any evidence..."
+                                    value={misconductDescription}
+                                    onChange={(e) => setMisconductDescription(e.target.value)}
+                                    rows={4}
+                                    required
+                                    className="rounded-xl resize-none"
+                                />
+                            </div>
+
+                            <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-xl text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2">
+                                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>This formal misconduct filing goes directly to the Dean of Students office for institutional review and arbitration.</span>
+                            </div>
+
+                            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-xl"
+                                    onClick={() => setMisconductDialogOpen(false)}
+                                    disabled={misconductSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                                    disabled={misconductSubmitting}
+                                >
+                                    {misconductSubmitting ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Submitting Report...
+                                        </>
+                                    ) : (
+                                        "Submit Report to Dean"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </main>

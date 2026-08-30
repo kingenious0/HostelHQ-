@@ -440,10 +440,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         variant="outline"
                         size="sm"
                         className="text-xs"
-                        onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                        onClick={() => router.push('/my-bookings?tab=visits')}
                     >
                         <Ticket className="mr-1.5 h-3.5 w-3.5" />
-                        Track Visit
+                        View Visits
                     </Button>
                 );
             }
@@ -503,10 +503,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             </Button>
                         ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
                             <Button
-                                onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                                onClick={() => router.push('/my-bookings?tab=visits')}
                                 className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
                             >
-                                Track Visit
+                                View Visits
                             </Button>
                         ) : (
                             <Button
@@ -612,10 +612,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 <Button
                     size="lg"
                     className="w-full h-14 bg-primary text-primary-foreground rounded-2xl font-bold"
-                    onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                    onClick={() => router.push('/my-bookings?tab=visits')}
                 >
                     <Ticket className="mr-2 h-5 w-5" />
-                    Track Your Visit
+                    View Your Visits
                 </Button>
             );
         }

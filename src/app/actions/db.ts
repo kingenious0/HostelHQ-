@@ -411,10 +411,28 @@ export async function updateStudentVerificationStatusAction(
   verificationId: string,
   status: "verified" | "rejected",
   reason?: string,
-  reviewedBy?: string
+  reviewedBy?: string,
+  studentPhoneNumber?: string,
+  studentName?: string
 ) {
   try {
     const data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewedBy);
+
+    // Dispatch SMS notification to student
+    if (studentPhoneNumber) {
+      try {
+        const { sendSMS } = await import("@/lib/wigal");
+        const greeting = studentName ? `Hi ${studentName},` : "Dear Student,";
+        const smsMessage =
+          status === "verified"
+            ? `${greeting} Your student verification on HostelHQ has been APPROVED by the Dean of Students. You can now log in and book accredited hostels.`
+            : `${greeting} Your student verification on HostelHQ was not approved by the Dean of Students.${reason ? ` Reason: ${reason}.` : ""} Please log in to review and re-upload your credentials.`;
+        await sendSMS(studentPhoneNumber, smsMessage);
+      } catch (smsErr) {
+        console.warn("SMS dispatch error during student verification update:", smsErr);
+      }
+    }
+
     return { success: true, data };
   } catch (error: any) {
     console.error("updateStudentVerificationStatusAction error:", error);

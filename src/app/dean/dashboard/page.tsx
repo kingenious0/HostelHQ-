@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   fetchComplaintsAction,
@@ -302,9 +302,31 @@ export default function DeanDashboardPage() {
     setActionLoading(true);
     try {
       const deanName = currentUser?.displayName || "Dean of Students";
-      const res = await updateStudentVerificationStatusAction(verificationId, status, reason, deanName);
+      const verif = verifications.find((v) => v.id === verificationId) || selectedVerification;
+      const res = await updateStudentVerificationStatusAction(
+        verificationId,
+        status,
+        reason,
+        deanName,
+        verif?.phoneNumber,
+        verif?.studentName
+      );
 
       if (res.success) {
+        // Synchronize Firestore user record so student's badges, login state, and profile update immediately
+        if (verif?.userId) {
+          try {
+            await updateDoc(doc(db, "users", verif.userId), {
+              verificationStatus: status,
+              verificationReviewedAt: new Date().toISOString(),
+              verificationReviewedBy: deanName,
+              ...(reason ? { verificationRejectionReason: reason } : {}),
+            });
+          } catch (fsErr) {
+            console.warn("Could not sync verificationStatus to Firestore user:", fsErr);
+          }
+        }
+
         setVerifications((prev) =>
           prev.map((v) =>
             v.id === verificationId
@@ -320,7 +342,7 @@ export default function DeanDashboardPage() {
         );
         toast({
           title: status === "verified" ? "Student Verified" : "Verification Rejected",
-          description: `Admission credentials marked as ${status}.`,
+          description: `Admission credentials marked as ${status}. Notification SMS dispatched.`,
         });
         setSelectedVerification(null);
         setRejectDialogOpen(false);

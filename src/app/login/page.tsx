@@ -9,10 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, KeyRound, Mail, Fingerprint, Lock, Phone, ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
+import { 
+    Loader2, KeyRound, Mail, Fingerprint, Lock, Phone, ShieldCheck, 
+    ArrowLeft, RefreshCw, Clock, ShieldAlert, CheckCircle2, ArrowRight, AlertCircle 
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithCustomToken } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithCustomToken, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { isPlatformAuthenticatorAvailable, verifyBiometric } from '@/lib/webauthn';
 import { cn } from '@/lib/utils';
@@ -34,6 +39,16 @@ function LoginPageInner() {
     const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
     const [biometricAvailable, setBiometricAvailable] = useState(false);
     const [biometricLoading, setBiometricLoading] = useState(false);
+
+    // Under Review Dialog State for Pending/Rejected Students
+    const [underReviewData, setUnderReviewData] = useState<{
+        fullName: string;
+        studentIndexNumber?: string;
+        submittedAt?: string;
+        rejectionReason?: string;
+        isRejected?: boolean;
+    } | null>(null);
+    const [showUnderReviewDialog, setShowUnderReviewDialog] = useState(false);
     
     const { toast } = useToast();
     const router = useRouter();
@@ -171,6 +186,19 @@ function LoginPageInner() {
                 const role = userData.role as string | undefined;
                 const displayName = (userData.fullName as string) || (userData.firstName as string) || '';
 
+                // Intercept pending or rejected student accounts
+                if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                    setUnderReviewData({
+                        fullName: displayName || 'Student',
+                        studentIndexNumber: userData.studentIndexNumber,
+                        submittedAt: userData.createdAt,
+                        rejectionReason: userData.rejectionReason,
+                        isRejected: userData.verificationStatus === 'rejected',
+                    });
+                    setShowUnderReviewDialog(true);
+                    return;
+                }
+
                 toast({ title: displayName ? `Welcome back, ${displayName}!` : 'Login Successful!' });
 
                 const destination =
@@ -304,11 +332,33 @@ function LoginPageInner() {
                     role = userData.role || 'student';
                     displayName = userData.fullName || userData.firstName || 'User';
                     
+                    if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                        setUnderReviewData({
+                            fullName: displayName || 'Student',
+                            studentIndexNumber: userData.studentIndexNumber,
+                            submittedAt: userData.createdAt,
+                            rejectionReason: userData.rejectionReason,
+                            isRejected: userData.verificationStatus === 'rejected',
+                        });
+                        setShowUnderReviewDialog(true);
+                        return;
+                    }
+
                     const userEmail = userData.authEmail || userData.email;
                     if (!verifyData.customToken && userEmail && userData.biometricPassword) {
                         await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
                     }
                 }
+            } else if (role === 'student' && (verifyData.user.verificationStatus === 'pending' || verifyData.user.verificationStatus === 'rejected')) {
+                setUnderReviewData({
+                    fullName: displayName || 'Student',
+                    studentIndexNumber: verifyData.user.studentIndexNumber,
+                    submittedAt: verifyData.user.createdAt,
+                    rejectionReason: verifyData.user.rejectionReason,
+                    isRejected: verifyData.user.verificationStatus === 'rejected',
+                });
+                setShowUnderReviewDialog(true);
+                return;
             }
 
             toast({ title: `Welcome back, ${displayName}!` });
@@ -707,6 +757,93 @@ function LoginPageInner() {
                     </Card>
                 </div>
             </main>
+
+            {/* Account Under Review / Verification Status Dialog */}
+            <Dialog open={showUnderReviewDialog} onOpenChange={setShowUnderReviewDialog}>
+                <DialogContent className="sm:max-w-md bg-slate-900 border border-white/20 text-white rounded-3xl p-6 shadow-2xl">
+                    <DialogHeader className="text-center space-y-3">
+                        {underReviewData?.isRejected ? (
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30">
+                                <ShieldAlert className="h-7 w-7 text-red-400" />
+                            </div>
+                        ) : (
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                <Clock className="h-7 w-7 text-amber-400 animate-pulse" />
+                            </div>
+                        )}
+
+                        <Badge className={cn(
+                            "mx-auto text-xs font-semibold px-3 py-0.5",
+                            underReviewData?.isRejected
+                                ? "bg-red-500/20 text-red-300 border-red-500/30"
+                                : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                        )}>
+                            {underReviewData?.isRejected ? "Action Required" : "Status: Under Review"}
+                        </Badge>
+
+                        <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                            {underReviewData?.isRejected ? "Student Verification Update" : "Your Account is Under Review"}
+                        </DialogTitle>
+
+                        <DialogDescription className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                            {underReviewData?.isRejected ? (
+                                <>
+                                    The Dean of Students office reviewed your admission credentials and recorded the following note:
+                                    <span className="block mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 font-medium">
+                                        "{underReviewData.rejectionReason || "Credentials could not be verified against the university registry."}"
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    Welcome, <span className="font-semibold text-white">{underReviewData?.fullName}</span>. Your Student ID / Admission Letter is currently undergoing authentication by the USTED Dean of Students office.
+                                </>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {!underReviewData?.isRejected && (
+                        <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2 text-xs">
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Student Index Number:</span>
+                                <span className="font-mono font-bold text-white">{underReviewData?.studentIndexNumber || "Submitted"}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Reviewing Authority:</span>
+                                <span className="text-primary font-semibold">Dean of Students</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Expected Approval:</span>
+                                <span className="text-emerald-400 font-semibold">Within 24 Hours</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                setShowUnderReviewDialog(false);
+                                router.push('/hostels');
+                            }}
+                            className="w-full h-10 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 text-xs"
+                        >
+                            Browse Hostels in Preview Mode
+                            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={async () => {
+                                setShowUnderReviewDialog(false);
+                                await signOut(auth);
+                            }}
+                            className="w-full sm:w-auto h-10 rounded-xl bg-white/5 border-white/20 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold"
+                        >
+                            Sign Out
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

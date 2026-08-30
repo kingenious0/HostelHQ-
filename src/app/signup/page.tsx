@@ -11,12 +11,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, User, KeyRound, Mail, GraduationCap, UserCheck, Building, Phone, Eye, EyeOff, ShieldCheck, ArrowLeft, RefreshCw } from 'lucide-react';
+import { 
+    Loader2, User, KeyRound, Mail, GraduationCap, UserCheck, Building, Phone, 
+    Eye, EyeOff, ShieldCheck, ArrowLeft, RefreshCw, UploadCloud, FileText, 
+    CheckCircle2, Clock, ShieldAlert, AlertCircle, Camera, Check, X, ArrowRight 
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { uploadImage } from '@/lib/cloudinary';
+import { submitStudentVerificationAction } from '@/app/actions/db';
 
 type UserRole = 'student' | 'hostel_manager';
 
@@ -62,13 +69,21 @@ export default function SignupPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(true);
 
-    // OTP State
-    const [step, setStep] = useState<'form' | 'otp'>('form');
+    // Multi-stage flow: form -> otp -> document (student only) -> pending_confirmation
+    type SignupStep = 'form' | 'otp' | 'document' | 'pending_confirmation';
+    const [step, setStep] = useState<SignupStep>('form');
     const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
     const [resendTimer, setResendTimer] = useState(60);
     const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    // Document Upload State (for Students)
+    const [documentFile, setDocumentFile] = useState<File | null>(null);
+    const [documentPreview, setDocumentPreview] = useState<string | null>(null);
+    const [documentType, setDocumentType] = useState<'student_id' | 'admission_letter'>('student_id');
+    const [isSubmittingCredentials, setIsSubmittingCredentials] = useState(false);
+    const [submittedDocUrl, setSubmittedDocUrl] = useState<string>('');
 
     // Manager specific state
     const [managerHostels, setManagerHostels] = useState<{ id: string; name?: string; location?: string; managerId?: string }[]>([]);
@@ -267,7 +282,18 @@ export default function SignupPage() {
                 throw new Error(verifyData.error || 'Invalid or expired verification code');
             }
 
-            // 2. Create Firebase Auth account
+            // If student, advance to document upload step instead of auto-activating account
+            if (selectedRole === 'student') {
+                setIsVerifyingOtp(false);
+                toast({
+                    title: 'Phone Verified! 📱',
+                    description: 'Now please upload your Student ID Card or Admission Letter for Dean verification.',
+                });
+                setStep('document');
+                return;
+            }
+
+            // 2. Create Firebase Auth account for Manager
             const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
             const user = userCredential.user;
 
@@ -344,6 +370,128 @@ export default function SignupPage() {
             });
         } finally {
             setIsVerifyingOtp(false);
+        }
+    };
+
+    // Handle student file selection
+    const handleDocumentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setDocumentFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setDocumentPreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    // Submit student credentials to Cloudinary, Firebase Auth, Firestore, and DynamoDB
+    const handleSubmitStudentCredentials = async () => {
+        if (!documentFile) {
+            toast({
+                title: 'Document Required',
+                description: 'Please select a photo of your Student ID Card or Admission Letter.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        const formattedPhone = getFormattedPhone();
+        setIsSubmittingCredentials(true);
+
+        try {
+            // 1. Upload document image to Cloudinary
+            const uploadedUrl = await uploadImage(documentFile);
+            setSubmittedDocUrl(uploadedUrl);
+
+            // 2. Create Firebase Auth account
+            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            const user = userCredential.user;
+
+            // 3. Build unified user profile with 'pending' verification status
+            const userData: any = {
+                uid: user.uid,
+                email: email.trim().toLowerCase(),
+                fullName: fullName.trim(),
+                phone: formattedPhone,
+                phoneNumber: formattedPhone,
+                phoneVerified: true,
+                role: 'student',
+                createdAt: new Date().toISOString(),
+                verificationStatus: 'pending',
+                verificationDocUrl: uploadedUrl,
+                verificationDocType: documentType,
+                studentIndexNumber: studentIndexNumber.trim(),
+                faculty: faculty || '',
+                department: department || '',
+            };
+
+            // 4. Save to Firestore
+            await setDoc(doc(db, 'users', user.uid), userData);
+
+            // 5. Submit verification to DynamoDB for Dean review queue
+            try {
+                await submitStudentVerificationAction({
+                    id: `verif_${user.uid}`,
+                    userId: user.uid,
+                    fullName: fullName.trim(),
+                    email: email.trim().toLowerCase(),
+                    phone: formattedPhone,
+                    studentIdNumber: studentIndexNumber.trim(),
+                    institution: 'USTED / AAMUSTED',
+                    studentIdCardUrl: documentType === 'student_id' ? uploadedUrl : '',
+                    admissionLetterUrl: documentType === 'admission_letter' ? uploadedUrl : '',
+                    status: 'pending',
+                    submittedAt: new Date().toISOString(),
+                });
+            } catch (dynamoErr) {
+                console.warn('Could not queue verification in DynamoDB:', dynamoErr);
+            }
+
+            // 6. Send alert SMS to Dean / System Admin
+            try {
+                fetch('/api/sms/send-notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phoneNumber: '+233597626090',
+                        message: `HostelHQ Alert: New student verification pending review for ${fullName.trim()} (${studentIndexNumber.trim()}, ${faculty || 'USTED'}). Review at /dean/dashboard.`,
+                    }),
+                }).catch(() => {});
+            } catch (_) {}
+
+            // 7. Send confirmation SMS to Student
+            try {
+                fetch('/api/sms/send-notification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phoneNumber: formattedPhone,
+                        message: `HostelHQ: Your registration and credentials have been received! The Dean of Students is reviewing your submission. You will receive an SMS confirmation once verified.`,
+                    }),
+                }).catch(() => {});
+            } catch (_) {}
+
+            toast({
+                title: 'Credentials Submitted! 🎓',
+                description: 'Your account is under review by the Dean of Students.',
+            });
+
+            setStep('pending_confirmation');
+        } catch (error: any) {
+            console.error('Credential submission error:', error);
+            let message = error.message || 'An error occurred while uploading credentials.';
+            if (error.code === 'auth/email-already-in-use') {
+                message = 'This email is already registered. Please sign in instead.';
+            }
+            toast({
+                title: 'Submission Failed',
+                description: message,
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmittingCredentials(false);
         }
     };
 
@@ -436,7 +584,7 @@ export default function SignupPage() {
                                         <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
                                             I am joining as:
                                         </Label>
-                                        <div className="grid grid-cols-3 gap-2 p-1 rounded-2xl bg-black/40 border border-white/10">
+                                        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/40 border border-white/10">
                                             {roles.map((r) => (
                                                 <button
                                                     key={r.id}
@@ -772,8 +920,10 @@ export default function SignupPage() {
                                             {isVerifyingOtp ? (
                                                 <>
                                                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Verifying & Creating Account...
+                                                    Verifying Code...
                                                 </>
+                                            ) : selectedRole === 'student' ? (
+                                                'Verify Phone & Continue to Document Upload'
                                             ) : (
                                                 'Verify Code & Complete Sign Up'
                                             )}
@@ -788,6 +938,234 @@ export default function SignupPage() {
                                         >
                                             <ArrowLeft className="h-4 w-4" />
                                             Back to edit details
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </>
+                        ) : step === 'document' ? (
+                            /* Step 3: Student Document Upload */
+                            <>
+                                <CardHeader className="text-center pt-8 pb-4">
+                                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 border border-primary/30 text-primary shadow-inner">
+                                        <GraduationCap className="h-7 w-7 text-primary" />
+                                    </div>
+                                    <Badge className="mx-auto mb-2 bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs font-semibold">
+                                        Step 2 of 2: University Verification
+                                    </Badge>
+                                    <CardTitle className="text-2xl font-headline font-extrabold tracking-tight text-white">Upload Student Credentials</CardTitle>
+                                    <CardDescription className="text-slate-200/80 text-xs sm:text-sm mt-1 max-w-md mx-auto">
+                                        USTED requires all platform users to verify their student status to ensure secure direct hostel access.
+                                    </CardDescription>
+                                </CardHeader>
+
+                                <CardContent className="space-y-6 px-6 sm:px-10">
+                                    {/* Document Type Selector */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                                            Select Document to Upload:
+                                        </Label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setDocumentType('student_id')}
+                                                className={cn(
+                                                    "flex items-center justify-center gap-2 p-3.5 rounded-xl border text-xs font-bold transition-all",
+                                                    documentType === 'student_id'
+                                                        ? "bg-primary text-white border-primary shadow-lg shadow-primary/25"
+                                                        : "bg-black/30 border-white/10 text-slate-300 hover:bg-white/5"
+                                                )}
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                                Student ID Card
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDocumentType('admission_letter')}
+                                                className={cn(
+                                                    "flex items-center justify-center gap-2 p-3.5 rounded-xl border text-xs font-bold transition-all",
+                                                    documentType === 'admission_letter'
+                                                        ? "bg-primary text-white border-primary shadow-lg shadow-primary/25"
+                                                        : "bg-black/30 border-white/10 text-slate-300 hover:bg-white/5"
+                                                )}
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                                Admission Letter
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* File Upload Box */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                                            Photo / Document Scan:
+                                        </Label>
+                                        {documentPreview ? (
+                                            <div className="relative rounded-2xl overflow-hidden border-2 border-primary/50 bg-black/60 p-2 text-center">
+                                                <img
+                                                    src={documentPreview}
+                                                    alt="Uploaded credential preview"
+                                                    className="w-full max-h-56 object-contain rounded-xl mx-auto"
+                                                />
+                                                <div className="mt-3 flex items-center justify-between px-2 pb-1">
+                                                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                                        {documentFile?.name || "Document Ready"}
+                                                    </span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => { setDocumentFile(null); setDocumentPreview(null); }}
+                                                        className="text-xs text-red-300 hover:text-red-200 hover:bg-red-500/20 h-7 px-2"
+                                                    >
+                                                        <X className="h-3.5 w-3.5 mr-1" />
+                                                        Remove
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-primary/60 bg-black/30 hover:bg-black/40 rounded-2xl p-6 cursor-pointer transition-all group">
+                                                <div className="p-3 rounded-full bg-white/10 group-hover:bg-primary/20 text-slate-300 group-hover:text-primary transition-all mb-3">
+                                                    <UploadCloud className="h-7 w-7" />
+                                                </div>
+                                                <span className="text-sm font-bold text-white mb-1">
+                                                    Tap to select or take photo
+                                                </span>
+                                                <span className="text-xs text-slate-400 text-center max-w-xs">
+                                                    Supports JPEG, PNG, WebP or PDF. Ensure student name and index number are clearly visible.
+                                                </span>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*,.pdf"
+                                                    onChange={handleDocumentFileChange}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                        )}
+                                    </div>
+
+                                    {/* Security & Privacy Notice */}
+                                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
+                                        <ShieldCheck className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                                        <span>
+                                            Your document is safely encrypted and accessed exclusively by the USTED Dean of Students office to authenticate student enrollment.
+                                        </span>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-3 pt-2">
+                                        <Button
+                                            type="button"
+                                            onClick={handleSubmitStudentCredentials}
+                                            disabled={isSubmittingCredentials || !documentFile}
+                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
+                                        >
+                                            {isSubmittingCredentials ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                    Uploading & Submitting for Review...
+                                                </>
+                                            ) : (
+                                                'Submit Credentials & Complete Registration'
+                                            )}
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={() => setStep('otp')}
+                                            disabled={isSubmittingCredentials}
+                                            className="w-full text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold gap-1.5"
+                                        >
+                                            <ArrowLeft className="h-4 w-4" />
+                                            Back to phone verification
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </>
+                        ) : (
+                            /* Step 4: Pending Review Confirmation Screen */
+                            <>
+                                <CardHeader className="text-center pt-8 pb-4">
+                                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-500/20 border border-amber-500/40 text-amber-400 shadow-xl shadow-amber-500/10">
+                                        <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
+                                    </div>
+                                    <Badge className="mx-auto mb-2 bg-amber-500/20 text-amber-300 border-amber-500/30 text-xs font-semibold px-3 py-1">
+                                        Status: Under Review
+                                    </Badge>
+                                    <CardTitle className="text-2xl sm:text-3xl font-headline font-extrabold tracking-tight text-white">
+                                        Registration Submitted!
+                                    </CardTitle>
+                                    <CardDescription className="text-slate-200/90 text-sm mt-1.5 max-w-md mx-auto">
+                                        Thank you, <span className="font-semibold text-white">{fullName}</span>. Your student profile and admission documents are now queued for review by the USTED Dean of Students office.
+                                    </CardDescription>
+                                </CardHeader>
+
+                                <CardContent className="space-y-5 px-6 sm:px-10">
+                                    {/* Application Summary Box */}
+                                    <div className="p-4 rounded-2xl bg-black/40 border border-white/15 space-y-3">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Student Index Number:</span>
+                                            <span className="font-mono font-bold text-white">{studentIndexNumber || "N/A"}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Faculty:</span>
+                                            <span className="font-medium text-slate-200 text-right">{faculty || "USTED Main"}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Registered Phone:</span>
+                                            <span className="font-mono text-slate-200">+{getFormattedPhone()}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">Reviewing Authority:</span>
+                                            <span className="text-primary font-semibold">Dean of Students Office</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs pt-2 border-t border-white/10">
+                                            <span className="text-slate-400">Expected Approval:</span>
+                                            <span className="font-semibold text-emerald-400">Within 24 Hours</span>
+                                        </div>
+                                    </div>
+
+                                    {/* What Happens Next Explainer */}
+                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
+                                        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                                            <ShieldAlert className="h-4 w-4 text-amber-400" />
+                                            What Happens Next:
+                                        </h4>
+                                        <ul className="text-xs text-slate-300/90 space-y-1.5 pl-1">
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-primary font-bold">1.</span>
+                                                <span>The Dean's office cross-references your uploaded document with the institutional student register.</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-primary font-bold">2.</span>
+                                                <span>You will receive an SMS confirmation as soon as your credentials are confirmed.</span>
+                                            </li>
+                                            <li className="flex items-start gap-2">
+                                                <span className="text-primary font-bold">3.</span>
+                                                <span>Once approved, you will unlock full Verified Student privileges to schedule in-person tours and book rooms directly.</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    {/* Navigation Actions */}
+                                    <div className="space-y-3 pt-2">
+                                        <Button
+                                            type="button"
+                                            onClick={() => router.push('/hostels')}
+                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
+                                        >
+                                            Browse Hostels in Preview Mode
+                                            <ArrowRight className="ml-2 h-4 w-4" />
+                                        </Button>
+
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => router.push('/login')}
+                                            className="w-full h-11 rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10 font-semibold text-xs"
+                                        >
+                                            Return to Sign In
                                         </Button>
                                     </div>
                                 </CardContent>

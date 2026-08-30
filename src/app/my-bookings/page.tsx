@@ -10,7 +10,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
+import { submitComplaintAction } from '@/app/actions/db';
+import type { ComplaintCategory } from '@/lib/data';
 import {
     Loader2,
     AlertTriangle,
@@ -32,6 +38,7 @@ import {
     Receipt,
     Trash2,
     ShieldCheck,
+    ShieldAlert,
     ArrowRight,
     Eye
 } from 'lucide-react';
@@ -94,6 +101,88 @@ export default function MyBookingsPage() {
     const { toast } = useToast();
     const router = useRouter();
     const pathname = usePathname();
+
+    // Complaint submission state
+    const [complaintDialogOpen, setComplaintDialogOpen] = useState(false);
+    const [complaintHostelName, setComplaintHostelName] = useState('');
+    const [complaintHostelId, setComplaintHostelId] = useState('');
+    const [complaintRoomNumber, setComplaintRoomNumber] = useState('');
+    const [complaintCategory, setComplaintCategory] = useState<ComplaintCategory>('Sanitation & Water');
+    const [complaintSubject, setComplaintSubject] = useState('');
+    const [complaintDescription, setComplaintDescription] = useState('');
+    const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
+
+    const handleOpenComplaint = (booking?: EnhancedBooking | null) => {
+        if (booking) {
+            setComplaintHostelName(booking.hostelName || '');
+            setComplaintHostelId(booking.hostelId || '');
+            setComplaintRoomNumber(booking.roomNumber || '');
+        } else {
+            setComplaintHostelName(bookings[0]?.hostelName || '');
+            setComplaintHostelId(bookings[0]?.hostelId || '');
+            setComplaintRoomNumber(bookings[0]?.roomNumber || '');
+        }
+        setComplaintSubject('');
+        setComplaintDescription('');
+        setComplaintCategory('Sanitation & Water');
+        setComplaintDialogOpen(true);
+    };
+
+    const handleSubmitComplaint = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!complaintHostelName.trim() || !complaintSubject.trim() || !complaintDescription.trim()) {
+            toast({ title: 'Missing fields', description: 'Please complete all required fields.', variant: 'destructive' });
+            return;
+        }
+
+        setIsSubmittingComplaint(true);
+        try {
+            const studentUid = appUser?.uid || currentUser?.uid || 'anonymous';
+            const studentName = appUser?.fullName || currentUser?.displayName || 'Student';
+            const studentEmail = appUser?.email || currentUser?.email || '';
+            const studentPhone = appUser?.phone || '';
+
+            const res = await submitComplaintAction({
+                direction: 'student_to_hostel',
+                status: 'Submitted',
+                category: complaintCategory,
+                subject: complaintSubject.trim(),
+                description: complaintDescription.trim(),
+                studentId: studentUid,
+                studentName,
+                studentEmail,
+                studentPhone,
+                hostelId: complaintHostelId || `hostel_${Date.now()}`,
+                hostelName: complaintHostelName.trim(),
+                roomNumber: complaintRoomNumber.trim() || undefined,
+                createdAt: new Date().toISOString(),
+            });
+
+            if (res.success) {
+                toast({
+                    title: 'Complaint Submitted to Dean',
+                    description: 'Your dispute has been routed directly to the Dean of Students office for review.',
+                });
+                setComplaintDialogOpen(false);
+                setComplaintSubject('');
+                setComplaintDescription('');
+            } else {
+                toast({
+                    title: 'Submission Failed',
+                    description: res.error || 'Failed to submit complaint. Please try again.',
+                    variant: 'destructive',
+                });
+            }
+        } catch (err: any) {
+            toast({
+                title: 'Error',
+                description: err.message || 'An unexpected error occurred.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSubmittingComplaint(false);
+        }
+    };
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -352,14 +441,25 @@ export default function MyBookingsPage() {
                             <div className="space-y-12">
                                 {/* Secured Hostels History Section */}
                                 <section>
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                                            <ShieldCheck className="h-5 w-5" />
+                                    <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                                                <ShieldCheck className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-xl font-bold font-headline">Secured Hostels</h2>
+                                                <p className="text-xs text-muted-foreground">Your paid bookings with official tenancy agreements.</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h2 className="text-xl font-bold font-headline">Secured Hostels</h2>
-                                            <p className="text-xs text-muted-foreground">Your paid bookings with official tenancy agreements.</p>
-                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-xl border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 text-xs font-semibold"
+                                            onClick={() => handleOpenComplaint(null)}
+                                        >
+                                            <ShieldAlert className="h-4 w-4 mr-1.5 text-amber-600" />
+                                            File Complaint to Dean
+                                        </Button>
                                     </div>
 
                                     <Tabs defaultValue="confirmed" className="w-full">
@@ -385,7 +485,7 @@ export default function MyBookingsPage() {
                                                 {filteredBookings(status).length > 0 ? (
                                                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
                                                         {filteredBookings(status).map(booking => (
-                                                            <BookingCard key={booking.id} booking={booking} />
+                                                            <BookingCard key={booking.id} booking={booking} onOpenComplaint={handleOpenComplaint} />
                                                         ))}
                                                     </div>
                                                 ) : (
@@ -407,7 +507,7 @@ export default function MyBookingsPage() {
                                 </section>
 
                                 {/* Visit Booking History Section */}
-                                <section>
+                                <section id="visits-section">
                                     <div className="flex items-center gap-3 mb-6">
                                         <div className="h-10 w-10 rounded-2xl bg-accent/10 flex items-center justify-center text-accent-foreground">
                                             <Building2 className="h-5 w-5" />
@@ -458,6 +558,129 @@ export default function MyBookingsPage() {
                                 </section>
                             </div>
                         </div>
+
+                        {/* Complaint Submission Dialog */}
+                        <Dialog open={complaintDialogOpen} onOpenChange={setComplaintDialogOpen}>
+                            <DialogContent className="max-w-lg rounded-2xl">
+                                <DialogHeader>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                                            <ShieldAlert className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <DialogTitle className="text-lg font-bold">File Complaint to Dean of Students</DialogTitle>
+                                            <DialogDescription className="text-xs">
+                                                Dispute submission directly reviewed by the Dean of Students office.
+                                            </DialogDescription>
+                                        </div>
+                                    </div>
+                                </DialogHeader>
+
+                                <form onSubmit={handleSubmitComplaint} className="space-y-4 pt-2">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="complaint-hostel" className="text-xs font-semibold">Hostel Name</Label>
+                                        <Input
+                                            id="complaint-hostel"
+                                            placeholder="Enter hostel name"
+                                            value={complaintHostelName}
+                                            onChange={(e) => setComplaintHostelName(e.target.value)}
+                                            required
+                                            className="h-10 rounded-xl"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="complaint-category" className="text-xs font-semibold">Category</Label>
+                                            <Select
+                                                value={complaintCategory}
+                                                onValueChange={(val: any) => setComplaintCategory(val)}
+                                            >
+                                                <SelectTrigger id="complaint-category" className="h-10 rounded-xl">
+                                                    <SelectValue placeholder="Select Category" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Sanitation & Water">Sanitation & Water</SelectItem>
+                                                    <SelectItem value="Pricing & Overcharging">Pricing & Overcharging</SelectItem>
+                                                    <SelectItem value="Security & Safety">Security & Safety</SelectItem>
+                                                    <SelectItem value="Maintenance & Repairs">Maintenance & Repairs</SelectItem>
+                                                    <SelectItem value="Noise & Disturbance">Noise & Disturbance</SelectItem>
+                                                    <SelectItem value="Conduct & Policy">Conduct & Policy</SelectItem>
+                                                    <SelectItem value="Other">Other</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="complaint-room" className="text-xs font-semibold">Room Number (Optional)</Label>
+                                            <Input
+                                                id="complaint-room"
+                                                placeholder="e.g. A12"
+                                                value={complaintRoomNumber}
+                                                onChange={(e) => setComplaintRoomNumber(e.target.value)}
+                                                className="h-10 rounded-xl"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="complaint-subject" className="text-xs font-semibold">Subject / Title</Label>
+                                        <Input
+                                            id="complaint-subject"
+                                            placeholder="e.g. Water outage persistent for 3 days"
+                                            value={complaintSubject}
+                                            onChange={(e) => setComplaintSubject(e.target.value)}
+                                            required
+                                            className="h-10 rounded-xl"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="complaint-desc" className="text-xs font-semibold">Detailed Description</Label>
+                                        <Textarea
+                                            id="complaint-desc"
+                                            placeholder="Provide full details of the incident or unresolved issue..."
+                                            value={complaintDescription}
+                                            onChange={(e) => setComplaintDescription(e.target.value)}
+                                            rows={4}
+                                            required
+                                            className="rounded-xl resize-none"
+                                        />
+                                    </div>
+
+                                    <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                                        <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <span>Submitting this complaint alerts the Dean of Students. False reports may be subject to disciplinary review.</span>
+                                    </div>
+
+                                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="rounded-xl"
+                                            onClick={() => setComplaintDialogOpen(false)}
+                                            disabled={isSubmittingComplaint}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                                            disabled={isSubmittingComplaint}
+                                        >
+                                            {isSubmittingComplaint ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                    Submitting...
+                                                </>
+                                            ) : (
+                                                "Submit Official Complaint"
+                                            )}
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
                     </main>
                 </SidebarInset>
             </div>
@@ -465,7 +688,7 @@ export default function MyBookingsPage() {
     );
 }
 
-function BookingCard({ booking }: { booking: EnhancedBooking }) {
+function BookingCard({ booking, onOpenComplaint }: { booking: EnhancedBooking; onOpenComplaint: (booking: EnhancedBooking) => void }) {
     const router = useRouter();
     const { toast } = useToast();
     const statusInfo = getStatusInfo(booking.status);
@@ -592,6 +815,16 @@ function BookingCard({ booking }: { booking: EnhancedBooking }) {
                         Delete Record
                     </Button>
                 </div>
+
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full mt-2 rounded-xl text-amber-800 hover:text-amber-900 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40 text-[11px] h-9 border-amber-200/60 font-semibold"
+                    onClick={() => onOpenComplaint(booking)}
+                >
+                    <ShieldAlert className="h-3.5 w-3.5 mr-1.5 text-amber-600 shrink-0" />
+                    Report Issue / File Complaint to Dean
+                </Button>
             </div>
         </Card>
     );
