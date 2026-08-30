@@ -425,7 +425,7 @@ export const HOSTELHQ_KNOWLEDGE: HostelHQKnowledge = {
     responseTime: "Immediate for AI chat, within 2 hours for human support",
     escalation: [
       "Level 1: Hostie AI Assistant",
-      "Level 2: Customer Support Agent",
+      "Level 2: Customer Support Representative",
       "Level 3: Senior Support Specialist",
       "Level 4: Management Team"
     ]

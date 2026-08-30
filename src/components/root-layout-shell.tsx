@@ -20,7 +20,9 @@ const FOOTER_HIDDEN_PATHS = [
 const FOOTER_HIDDEN_PREFIXES = [
   "/manager",
   "/admin",
-  "/agent",
+  "/dean",
+  "/coordinator",
+  "/executive",
 ];
 
 interface RootLayoutShellProps {

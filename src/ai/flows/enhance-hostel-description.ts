@@ -3,7 +3,7 @@
 'use server';
 
 /**
- * @fileOverview An AI agent that enhances hostel room descriptions using uploaded photos, GPS location, nearby landmarks, amenities, and room features.
+ * @fileOverview An AI generator that enhances hostel room descriptions using uploaded photos, GPS location, nearby landmarks, amenities, and room features.
  *
  * - enhanceHostelDescription - A function that enhances the hostel description.
  * - EnhanceHostelDescriptionInput - The input type for the enhanceHostelDescription function.

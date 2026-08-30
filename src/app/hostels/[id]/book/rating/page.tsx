@@ -168,7 +168,7 @@ export default function RatingPage() {
                             <CardTitle className="text-2xl font-headline">Rate Your Visit Experience</CardTitle>
                             <div className="w-10">{/* Placeholder to balance the layout */}</div>
                         </div>
-                        <CardDescription>How was the agent and the hostel tour? Your feedback helps other students.</CardDescription>
+                        <CardDescription>How was your hostel tour? Your feedback helps other students.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2 text-center">
@@ -187,7 +187,7 @@ export default function RatingPage() {
                              <label htmlFor="comment" className="text-sm font-medium">Any additional comments?</label>
                             <Textarea
                                 id="comment"
-                                placeholder="Tell us about your experience with the agent and the hostel..."
+                                placeholder="Tell us about your experience with the hostel tour..."
                                 value={comment}
                                 onChange={(e) => setComment(e.target.value)}
                                 rows={4}

@@ -18,7 +18,7 @@ import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } f
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-type UserRole = 'student' | 'agent' | 'hostel_manager';
+type UserRole = 'student' | 'hostel_manager';
 
 const facultyDepartments: Record<string, string[]> = {
     'Faculty of Technical Education (FTE)': [
@@ -328,8 +328,6 @@ export default function SignupPage() {
             // Redirect based on role
             if (selectedRole === 'hostel_manager') {
                 router.push('/manager/dashboard');
-            } else if (selectedRole === 'agent') {
-                router.push('/agent/dashboard');
             } else {
                 router.push('/my-bookings');
             }
@@ -397,12 +395,6 @@ export default function SignupPage() {
             title: 'Student',
             description: 'Find, visit & secure verified rooms near campus',
             icon: <GraduationCap className="h-5 w-5" />,
-        },
-        {
-            id: 'agent' as UserRole,
-            title: 'Field Agent',
-            description: 'List hostels, guide student visits & earn commission',
-            icon: <UserCheck className="h-5 w-5" />,
         },
         {
             id: 'hostel_manager' as UserRole,

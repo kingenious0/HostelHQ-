@@ -9,22 +9,29 @@ import { cn } from "@/lib/utils";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Hero } from "@/components/hero";
+import { PersistentFilterBar } from "@/components/persistent-filter-bar";
+import { ShortlistProvider } from "@/components/shortlist-context";
+import { HostelCompareDrawer } from "@/components/hostel-compare-drawer";
+import { ShieldCheck, Sparkles, Building, CheckCircle2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 type HomeProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     search?: string;
     location?: string;
     institution?: string;
     roomType?: string;
     gender?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    distance?: string;
     page?: string;
-  };
+  }>;
 };
 
 export default async function Home({ searchParams }: HomeProps) {
-  const brandSnapshot = await getDocs(collection(db, "brandPartners"));
+  const brandSnapshot = await getDocs(collection(db, "brandPartners")).catch(() => ({ docs: [] }));
   const brands = brandSnapshot.docs.map((brandDoc: any) => ({
     id: brandDoc.id,
     ...(brandDoc.data() as { name: string; logoUrl: string }),
@@ -36,6 +43,9 @@ export default async function Home({ searchParams }: HomeProps) {
   const institutionQuery = resolvedSearchParams?.institution || "";
   const roomTypeQuery = resolvedSearchParams?.roomType || "";
   const genderQuery = resolvedSearchParams?.gender || "";
+  const minPriceQuery = Number(resolvedSearchParams?.minPrice) || 0;
+  const maxPriceQuery = Number(resolvedSearchParams?.maxPrice) || 0;
+  const distanceQuery = Number(resolvedSearchParams?.distance) || 0;
   const currentPage = Number(resolvedSearchParams?.page) || 1;
   const itemsPerPage = 12;
 
@@ -46,9 +56,34 @@ export default async function Home({ searchParams }: HomeProps) {
   });
 
   const filteredHostels = allHostels.filter((h) => {
-    const matchesSearch = !searchQuery || (h.name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesLocation = !locationQuery || (h.location ?? "").toLowerCase().includes(locationQuery.toLowerCase());
-    return matchesSearch && matchesLocation;
+    // Text search
+    const matchesSearch =
+      !searchQuery ||
+      (h.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (h.location ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Location query
+    const matchesLocation =
+      !locationQuery || (h.location ?? "").toLowerCase().includes(locationQuery.toLowerCase());
+
+    // Price filtering
+    const minPrice = h.priceRange?.min || (h.roomTypes?.[0]?.price ?? 0);
+    const maxPrice = h.priceRange?.max || minPrice;
+
+    const matchesMinPrice = minPriceQuery === 0 || maxPrice >= minPriceQuery;
+    const matchesMaxPrice = maxPriceQuery === 0 || minPrice <= maxPriceQuery;
+
+    // Distance filtering (e.g. "10 mins", "5 mins walk")
+    let matchesDistance = true;
+    if (distanceQuery > 0 && h.distanceToUniversity) {
+      const match = h.distanceToUniversity.match(/\d+/);
+      if (match) {
+        const mins = parseInt(match[0], 10);
+        matchesDistance = mins <= distanceQuery;
+      }
+    }
+
+    return matchesSearch && matchesLocation && matchesMinPrice && matchesMaxPrice && matchesDistance;
   });
 
   const totalPages = Math.ceil(filteredHostels.length / itemsPerPage);
@@ -56,123 +91,155 @@ export default async function Home({ searchParams }: HomeProps) {
   const paginatedHostels = filteredHostels.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <Header />
-      <main className="flex-1 bg-background">
-        <Hero />
+    <ShortlistProvider>
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <Header />
+        <main className="flex-1 bg-background pb-24">
+          {/* Student.com-style Hero with 3-step 'How It Works' strip */}
+          <Hero />
 
-        <section className="container mx-auto -mt-16 px-4 sm:px-6 lg:px-10 relative z-10">
-          <div className="glass-premium rounded-[2.5rem] p-2">
-            <div className="p-4 sm:p-8">
+          {/* Primary Quick Search Bar */}
+          <section className="container mx-auto -mt-10 px-4 sm:px-6 lg:px-10 relative z-20">
+            <div className="rounded-[2.5rem] p-1.5 sm:p-2 bg-card/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-2xl">
               <h2 className="sr-only">Find a hostel</h2>
               <SearchForm />
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
-            <div>
-              <p className="text-sm font-bold text-primary uppercase tracking-[0.2em] mb-1">
-                {filteredHostels.length} {filteredHostels.length === 1 ? "hostel" : "hostels"} available
-              </p>
-              <h2 className="text-3xl font-headline font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-6xl mb-2">
-                {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery
-                  ? <span className="text-gradient">Search results</span>
-                  : <>Verified stays. <span className="text-gradient">Zero fraud.</span></>}
-              </h2>
-            </div>
-          </header>
+          {/* HousingAnywhere-style Persistent Filter Bar */}
+          <section className="mt-8">
+            <PersistentFilterBar totalCount={filteredHostels.length} />
+          </section>
 
-          {paginatedHostels.length > 0 ? (
-            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {paginatedHostels.map((hostel) => (
-                <HostelCard key={hostel.id} hostel={hostel as any} selectedRoomType={roomTypeQuery || undefined} />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-8 rounded-3xl border border-dashed border-muted-foreground/40 bg-card p-10 text-center">
-              <h3 className="text-xl font-semibold text-foreground">No hostels found</h3>
-              <p className="mt-2 text-muted-foreground">
-                Try adjusting your filters or contact our team for personalised recommendations.
-              </p>
-              <Button asChild className="mt-4">
-                <Link href="/contact">Talk to support</Link>
-              </Button>
-            </div>
-          )}
+          {/* Listing Grid Section */}
+          <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-8 sm:px-6 lg:px-10">
+            <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>{filteredHostels.length} Verified {filteredHostels.length === 1 ? "Hostel" : "Hostels"} Available</span>
+                </div>
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-headline font-extrabold tracking-tight text-foreground">
+                  {searchQuery || locationQuery || institutionQuery || roomTypeQuery || genderQuery || minPriceQuery || maxPriceQuery
+                    ? "Search & Filter Results"
+                    : "University-Approved Accommodation"}
+                </h2>
+              </div>
 
-          {paginatedHostels.length > 0 && totalPages > 1 && (
-            <div className="mt-10 flex justify-center gap-2">
-              {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
-                <Link
-                  key={pageNumber}
-                  href={`/?${new URLSearchParams({
-                    ...resolvedSearchParams,
-                    page: pageNumber.toString(),
-                  }).toString()}`}
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-full border transition",
-                    pageNumber === currentPage
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary"
-                  )}
-                >
-                  {pageNumber}
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+              {/* Trust Tagline */}
+              <div className="text-xs text-muted-foreground hidden sm:block text-right">
+                <span className="font-bold text-foreground">100% Direct to Manager</span>
+                <p>Audited prices, zero middleman markup fees</p>
+              </div>
+            </header>
 
-        <section className="bg-muted/30 border-y border-border/40 overflow-hidden">
-          <div className="container mx-auto px-4 py-16 text-center">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.3em] mb-10">Our Trusted Partners</p>
-            <div className="flex flex-wrap items-center justify-center gap-10 opacity-60 hover:opacity-100 transition-opacity duration-500">
-              {(brands.length ? brands : [
-                { id: "frog", name: "Frog.wigal", logoUrl: "/brands/frog-wigal.svg" },
-                { id: "hubtel", name: "Hubtel", logoUrl: "/brands/hubtel.svg" },
-                { id: "paystack", name: "Paystack", logoUrl: "/brands/paystack.svg" },
-              ]).map((brand: { id: string; name: string; logoUrl: string }) => (
-                <div key={brand.id} className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-32 relative grayscale">
-                    <Image
-                      src={brand.logoUrl}
-                      alt={`${brand.name} logo`}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
+            {/* Mobile-first grid: single-column on mobile, responsive scale-up */}
+            {paginatedHostels.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {paginatedHostels.map((hostel) => (
+                  <HostelCard
+                    key={hostel.id}
+                    hostel={hostel as any}
+                    selectedRoomType={roomTypeQuery || undefined}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center max-w-lg mx-auto my-8">
+                <Building className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                <h3 className="text-xl font-headline font-bold text-foreground">No hostels match your filters</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  Try clearing some filters or search for another campus area.
+                </p>
+                <Button asChild className="mt-5 rounded-2xl h-11 px-6 font-bold bg-primary text-white">
+                  <Link href="/#all-hostels">Reset All Filters</Link>
+                </Button>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {paginatedHostels.length > 0 && totalPages > 1 && (
+              <div className="mt-12 flex justify-center items-center gap-2">
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+                  <Link
+                    key={pageNumber}
+                    href={`/?${new URLSearchParams({
+                      ...(resolvedSearchParams || {}),
+                      page: pageNumber.toString(),
+                    }).toString()}#all-hostels`}
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold transition-all",
+                      pageNumber === currentPage
+                        ? "bg-primary text-white shadow-md shadow-primary/20 scale-105"
+                        : "border border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                    )}
+                  >
+                    {pageNumber}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Institutional Trust Badges Strip */}
+          <section className="container mx-auto px-4 py-10 sm:px-6 lg:px-10">
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                {
+                  title: "University Approved",
+                  description: "Every property is audited and sanctioned under university welfare guidelines.",
+                },
+                {
+                  title: "Direct to Manager",
+                  description: "Connect directly with hostel management without unauthorized middleman markups.",
+                },
+                {
+                  title: "Tenancy Protection",
+                  description: "Legally backed agreements and direct escalation channels to the Dean of Students.",
+                },
+              ].map((item) => (
+                <div key={item.title} className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {item.title}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
                 </div>
               ))}
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="container mx-auto px-4 pb-20 pt-10 sm:px-6 lg:px-10">
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              {
-                title: "24/7 student help",
-                description: "We answer WhatsApp, calls, and email to keep bookings moving quickly.",
-              },
-              {
-                title: "Verified landlords",
-                description: "Every property manager is audited for pricing transparency and safety.",
-              },
-              {
-                title: "Secure payments",
-                description: "We support mobile money, bank transfers, and escrow for peace of mind.",
-              },
-            ].map((item) => (
-              <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">{item.title}</p>
-                <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+          {/* Trusted Partners / Infrastructure */}
+          <section className="bg-muted/20 border-t border-border/40 overflow-hidden py-12">
+            <div className="container mx-auto px-4 text-center">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.25em] mb-8">
+                Secured With Trusted Infrastructure
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-10 opacity-70 hover:opacity-100 transition-opacity">
+                {(brands.length ? brands : [
+                  { id: "frog", name: "Frog.wigal", logoUrl: "/brands/frog-wigal.svg" },
+                  { id: "hubtel", name: "Hubtel", logoUrl: "/brands/hubtel.svg" },
+                  { id: "paystack", name: "Paystack", logoUrl: "/brands/paystack.svg" },
+                ]).map((brand: { id: string; name: string; logoUrl: string }) => (
+                  <div key={brand.id} className="flex flex-col items-center">
+                    <div className="h-8 w-28 relative grayscale">
+                      <Image
+                        src={brand.logoUrl}
+                        alt={`${brand.name} logo`}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-      </main>
-    </div>
+            </div>
+          </section>
+
+          {/* Amber Student-Style Compare Drawer */}
+          <HostelCompareDrawer />
+        </main>
+      </div>
+    </ShortlistProvider>
   );
 }

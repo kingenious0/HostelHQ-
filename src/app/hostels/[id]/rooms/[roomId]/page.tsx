@@ -25,7 +25,7 @@ interface AppUser {
   uid: string;
   email: string;
   fullName: string;
-  role: "student" | "agent" | "admin";
+  role: "student" | "hostel_manager" | "admin";
   profileImage?: string;
 }
 
@@ -398,227 +398,266 @@ export default function RoomDetailPage() {
                   <div className="absolute bottom-4 left-4 right-4">
                     <div className="flex items-end justify-between">
                       <div>
-                        <Badge className="mb-2 bg-white/20 backdrop-blur-sm text-white border-white/30">
-                          {hostel.name}
-                        </Badge>
-                        <h1 className="text-2xl md:text-3xl font-bold text-white">
-                          {room.label}
-                        </h1>
-                        <p className="text-white/90 text-sm">
-                          {room.type} • {hostel.location}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-white">
-                          GH₵{room.price.toLocaleString()}
-                        </div>
-                        <div className="text-white/80 text-sm">per year</div>
-                      </div>
-                    </div>
+                        <div className="flex items-center gap-2 mb-2">
+                    <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30">
+                      {hostel.name}
+                    </Badge>
+                    <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white shadow-sm">
+                      University-Approved ✓
+                    </span>
                   </div>
-                  <Badge 
-                    variant="secondary" 
-                    className="absolute top-4 right-4 bg-white/90 text-gray-900"
-                  >
-                    {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
-                  </Badge>
+                  <h1 className="text-2xl md:text-3xl font-bold text-white">
+                    {room.label}
+                  </h1>
+                  <p className="text-white/90 text-sm">
+                    {room.type} • {hostel.location}
+                  </p>
                 </div>
-              </Card>
-
-              {/* Room Details */}
-              <Card className="shadow-lg border-0 bg-white">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Home className="h-5 w-5 text-primary" />
-                    Room Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {room.capacity && (
-                      <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
-                        <Bed className="h-5 w-5 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-blue-900">{room.capacity}</div>
-                          <div className="text-xs text-blue-700">Beds per room</div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
-                      <Users className="h-5 w-5 text-green-600" />
-                      <div>
-                        <div className="font-semibold text-green-900">{room.occupancy}</div>
-                        <div className="text-xs text-green-700">Current occupants</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
-                      <MapPin className="h-5 w-5 text-purple-600" />
-                      <div>
-                        <div className="font-semibold text-purple-900 text-xs">{hostel.location.split(',')[0]}</div>
-                        <div className="text-xs text-purple-700">Location</div>
-                      </div>
-                    </div>
-                    {availabilityStatus && (
-                      <div className={cn("flex items-center gap-2 p-3 rounded-lg", availabilityStatus.bgColor)}>
-                        <CheckCircle className={cn("h-5 w-5", availabilityStatus.color)} />
-                        <div>
-                          <div className={cn("font-semibold text-xs capitalize", availabilityStatus.color)}>
-                            {availabilityStatus.status}
-                          </div>
-                          <div className={cn("text-xs", availabilityStatus.color)}>Status</div>
-                        </div>
-                      </div>
-                    )}
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-white">
+                    GH₵{room.price.toLocaleString()}
                   </div>
+                  <div className="text-white/80 text-sm">per year</div>
+                </div>
+              </div>
+            </div>
+            <Badge 
+              variant="secondary" 
+              className="absolute top-4 right-4 bg-white/90 text-gray-900 shadow-sm"
+            >
+              {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
+            </Badge>
+          </div>
+        </Card>
 
-                  {remainingInfo && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-600" />
-                        <span className="text-sm font-medium text-amber-800">{remainingInfo}</span>
-                      </div>
+        {/* Room Details */}
+        <Card className="shadow-lg border-0 bg-white">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="h-5 w-5 text-primary" />
+              Room Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {room.capacity && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+                  <Bed className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <div className="font-semibold text-blue-900">{room.capacity}</div>
+                    <div className="text-xs text-blue-700">Beds per room</div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
+                <Users className="h-5 w-5 text-green-600" />
+                <div>
+                  <div className="font-semibold text-green-900">{room.occupancy}</div>
+                  <div className="text-xs text-green-700">Current occupants</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
+                <MapPin className="h-5 w-5 text-purple-600" />
+                <div>
+                  <div className="font-semibold text-purple-900 text-xs">{hostel.location.split(',')[0]}</div>
+                  <div className="text-xs text-purple-700">Location</div>
+                </div>
+              </div>
+              {availabilityStatus && (
+                <div className={cn("flex items-center gap-2 p-3 rounded-lg", availabilityStatus.bgColor)}>
+                  <CheckCircle className={cn("h-5 w-5", availabilityStatus.color)} />
+                  <div>
+                    <div className={cn("font-semibold text-xs capitalize", availabilityStatus.color)}>
+                      {availabilityStatus.status}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Amenities Section */}
-              {Object.keys(groupedAmenities).length > 0 && (
-                <Card className="shadow-lg border-0 bg-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Star className="h-5 w-5 text-primary" />
-                      Room Amenities & Features
-                    </CardTitle>
-                    <CardDescription>
-                      Everything included in this room to make your stay comfortable
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {Object.entries(groupedAmenities).map(([category, amenities]) => {
-                      const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES];
-                      const CategoryIcon = categoryInfo.icon;
-                      
-                      return (
-                        <div key={category}>
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={cn(
-                              "p-2 rounded-lg",
-                              categoryInfo.bgColor,
-                              categoryInfo.borderColor,
-                              "border"
-                            )}>
-                              <CategoryIcon className={cn("h-4 w-4", categoryInfo.color)} />
-                            </div>
-                            <h4 className="font-semibold text-gray-900">{category}</h4>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-6">
-                            {amenities.map(({ amenity, info }) => {
-                              const AmenityIcon = info.icon;
-                              return (
-                                <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                                  <AmenityIcon className={cn("h-4 w-4", categoryInfo.color)} />
-                                  <span className="text-sm font-medium text-gray-700">{info.label}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
+                    <div className={cn("text-xs", availabilityStatus.color)}>Status</div>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Booking Card */}
-              <Card className="shadow-lg border-0 bg-white sticky top-6">
-                <CardHeader>
-                  <CardTitle className="text-center">
-                    <div className="text-2xl font-bold text-primary">
-                      GH₵{room.price.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-muted-foreground">per academic year</div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    className="w-full h-12 text-base font-semibold"
-                    onClick={handlePrimaryAction}
-                    disabled={hostel.availability === 'Full' || hasSecuredHostel}
-                  >
-                    {hostel.availability === 'Full' ? (
-                      <>
-                        <ShieldCheck className="h-5 w-5 mr-2" />
-                        Hostel Fully Booked
-                      </>
-                    ) : hasSecuredHostel ? (
-                      <>
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                        Already Secured
-                      </>
-                    ) : hasCompletedVisit ? (
-                      <>
-                        <ShieldCheck className="h-5 w-5 mr-2" />
-                        Secure This Room
-                      </>
-                    ) : (
-                      <>
-                        <Calendar className="h-5 w-5 mr-2" />
-                        Book a Visit
-                      </>
-                    )}
-                  </Button>
-                  
-                  <div className="text-center text-xs text-muted-foreground">
-                    {hasCompletedVisit 
-                      ? "Complete your room booking with secure payment"
-                      : "Schedule a visit to see this room first"}
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Room type:</span>
-                      <span className="font-medium">{room.type}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gender:</span>
-                      <span className="font-medium">{room.gender}</span>
-                    </div>
-                    {room.capacity && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Capacity:</span>
-                        <span className="font-medium">{room.capacity} students</span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+            {remainingInfo && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-800">{remainingInfo}</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-              {/* Contact Card */}
-              <Card className="shadow-lg border-0 bg-white">
-                <CardHeader>
-                  <CardTitle className="text-lg">Need Help?</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start" size="sm">
-                    <Phone className="h-4 w-4 mr-2" />
-                    Call Support
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start" size="sm">
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Message
-                  </Button>
-                </CardContent>
-              </Card>
+        {/* Amenities Section */}
+        {Object.keys(groupedAmenities).length > 0 && (
+          <Card className="shadow-lg border-0 bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="h-5 w-5 text-primary" />
+                Room Amenities & Features
+              </CardTitle>
+              <CardDescription>
+                Everything included in this room to make your stay comfortable
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {Object.entries(groupedAmenities).map(([category, amenities]) => {
+                const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES];
+                const CategoryIcon = categoryInfo.icon;
+                
+                return (
+                  <div key={category}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className={cn(
+                        "p-2 rounded-lg",
+                        categoryInfo.bgColor,
+                        categoryInfo.borderColor,
+                        "border"
+                      )}>
+                        <CategoryIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                      </div>
+                      <h4 className="font-semibold text-gray-900">{category}</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-6">
+                      {amenities.map(({ amenity, info }) => {
+                        const AmenityIcon = info.icon;
+                        return (
+                          <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <AmenityIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                            <span className="text-sm font-medium text-gray-700">{info.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Sidebar */}
+      <div className="space-y-6">
+        {/* Booking Card */}
+        <Card className="shadow-lg border-0 bg-white sticky top-24">
+          <CardHeader>
+            <CardTitle className="text-center">
+              <div className="text-3xl font-extrabold text-primary">
+                GH₵{room.price.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">per academic year • Direct Booking (Zero Middleman Fee)</div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              className="w-full h-12 text-base font-semibold shadow-md"
+              onClick={handlePrimaryAction}
+              disabled={hostel.availability === 'Full' || hasSecuredHostel}
+            >
+              {hostel.availability === 'Full' ? (
+                <>
+                  <ShieldCheck className="h-5 w-5 mr-2" />
+                  Hostel Fully Booked
+                </>
+              ) : hasSecuredHostel ? (
+                <>
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  Already Secured
+                </>
+              ) : hasCompletedVisit ? (
+                <>
+                  <ShieldCheck className="h-5 w-5 mr-2" />
+                  Secure This Room
+                </>
+              ) : (
+                <>
+                  <Calendar className="h-5 w-5 mr-2" />
+                  Request a Free Visit
+                </>
+              )}
+            </Button>
+            
+            <div className="text-center text-xs text-muted-foreground">
+              {hasCompletedVisit 
+                ? "Complete your room booking with secure university escrow"
+                : "Free inspection • Connect directly with hostel manager"}
+            </div>
+            
+            <Separator />
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Room type:</span>
+                <span className="font-medium">{room.type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Gender:</span>
+                <span className="font-medium">{room.gender}</span>
+              </div>
+              {room.capacity && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Capacity:</span>
+                  <span className="font-medium">{room.capacity} students</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-emerald-600 font-medium pt-1">
+                <span>Inspection fee:</span>
+                <span>FREE (Direct Booking)</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Protection Card */}
+        <Card className="border border-emerald-200 bg-emerald-50/50 p-4 rounded-xl">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs text-emerald-900 space-y-1">
+              <p className="font-semibold">University Protected</p>
+              <p className="text-emerald-700">Verified inventory. No illegal middleman charges. Payment held in university-approved escrow until key handoff.</p>
             </div>
           </div>
-        </div>
-      </main>
+        </Card>
+
+        {/* Need Help Card - Message button removed per user directive */}
+        <Card className="shadow-sm border border-border/40 bg-white">
+          <CardHeader className="py-4">
+            <CardTitle className="text-sm font-semibold">Need Assistance?</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 pb-4">
+            <Button variant="outline" className="w-full justify-center gap-2" size="sm" asChild>
+              <a href="tel:+233200000000">
+                <Phone className="h-4 w-4" />
+                Call University Housing Support
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  );
+  </div>
+</main>
+
+{/* Mobile Sticky Bottom Action Bar */}
+<div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 flex items-center justify-between gap-4 md:hidden shadow-lg">
+  <div>
+    <div className="text-xs text-muted-foreground">Rate per year</div>
+    <div className="text-lg font-bold text-foreground">GH₵{room.price.toLocaleString()}</div>
+  </div>
+  <Button 
+    onClick={handlePrimaryAction}
+    disabled={hostel.availability === 'Full' || hasSecuredHostel}
+    className="h-11 px-5 text-sm font-semibold shadow-md"
+  >
+    {hostel.availability === 'Full' 
+      ? 'Fully Booked' 
+      : hasSecuredHostel 
+      ? 'Already Secured' 
+      : hasCompletedVisit 
+      ? 'Secure Room' 
+      : 'Request Free Visit'}
+  </Button>
+</div>
+</div>
+);
 }

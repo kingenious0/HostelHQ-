@@ -23,6 +23,7 @@ import { RoomType } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MapboxLocationPicker from '@/components/mapbox-location-picker';
 import { resizeImage } from '@/lib/image-utils';
+import { saveHostelAction } from '@/app/actions/db';
 
 const hostelAmenitiesList = [
     'WiFi',
@@ -409,6 +410,58 @@ export default function AdminUploadPage() {
 
             console.log(`[Room Creation] Total rooms to be created: ${totalRoomsCreated}`);
 
+            // 1. PRIMARY: Save to DynamoDB
+            try {
+                const dynamoHostelData = {
+                    id: hostelId,
+                    name: hostelName,
+                    slug,
+                    location: fullAddress || gpsLocation,
+                    coordinates: latitude && longitude ? { lat: latitude, lng: longitude } : null,
+                    lat: latitude || 6.6998,
+                    lng: longitude || -1.6841,
+                    nearbyLandmarks,
+                    institution: institution || 'KNUST KUMASI CAMPUS',
+                    priceRange: calculatedPriceRange,
+                    roomTypeTags: calculatedRoomTypeTags,
+                    rating: 0,
+                    reviews: 0,
+                    amenities: selectedAmenities,
+                    images: imageUrls,
+                    description: finalDescription,
+                    status: 'live' as const,
+                    agentId: currentUser.uid,
+                    adminId: currentUser.uid,
+                    adminDisplayId: currentUser.email?.split('@')[0]?.toUpperCase() || currentUser.uid,
+                    createdBy: {
+                        userId: currentUser.uid,
+                        fullName: actualFullName,
+                        email: actualEmail,
+                        role: 'admin',
+                        createdAt: new Date().toISOString()
+                    },
+                    approvedAt: new Date().toISOString(),
+                    submittedAt: new Date().toISOString(),
+                    dateSubmitted: new Date().toISOString(),
+                    availability: (roomTypes.some(rt => rt.availability === 'Available' || rt.availability === 'Limited') ? 'Available' : 'Full') as any,
+                    distanceToUniversity: distanceToUni,
+                    billsIncluded: billsIncluded,
+                    billsExcluded: billsExcluded,
+                    securityAndSafety: securityAndSafety,
+                    gender: gender,
+                    roomTypes: roomTypes.map((r, idx) => ({
+                        id: roomTypeRefs[idx] || `room_${idx}`,
+                        ...r,
+                    })),
+                };
+
+                await saveHostelAction(dynamoHostelData as any, false);
+                console.log("[Admin Upload] Saved hostel to DynamoDB primary database successfully!");
+            } catch (dynamoErr) {
+                console.warn("[Admin Upload] Could not save directly to DynamoDB:", dynamoErr);
+            }
+
+            // 2. BACKUP: Commit to Firestore secondary database
             await batch.commit();
 
             toast({ title: 'Hostel Created Successfully!', description: 'The hostel has been published and is now live.' });

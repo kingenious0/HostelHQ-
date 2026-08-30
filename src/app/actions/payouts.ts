@@ -33,7 +33,7 @@ export type PayoutRequest = {
 
 /**
  * Register a user as a Paystack Transfer Recipient.
- * Call this when a Manager/Agent sets up their payout details.
+ * Call this when a Manager sets up their payout details.
  */
 export async function registerPaystackRecipient(userId: string, name: string, accountNumber: string, bankCode: string) {
     try {

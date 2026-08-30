@@ -31,7 +31,7 @@ const faqs = [
   {
     question: "Can I cancel or reschedule a booked visit?",
     answer:
-      "Yes. Simply open your visit tracking link and choose reschedule or cancel at least 12 hours before the visit time so that our agent can adjust their schedule.",
+      "Yes. Simply open your visit details from your bookings dashboard to reschedule or cancel at least 12 hours before the visit time so that the hostel manager can adjust their schedule.",
     category: "booking",
   },
   {
@@ -59,9 +59,9 @@ const faqs = [
     category: "payment",
   },
   {
-    question: "How do I contact a hostel agent?",
+    question: "How do I contact the hostel manager?",
     answer:
-      "Once you book a viewing, you'll receive contact information for the assigned agent. You can also message them through the booking dashboard.",
+      "Once you request an in-person tour, you will receive direct contact information for the accredited hostel manager so you can coordinate smoothly.",
     category: "booking",
   },
   {

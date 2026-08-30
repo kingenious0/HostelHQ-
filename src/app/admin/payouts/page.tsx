@@ -143,7 +143,7 @@ export default function AdminPayoutsPage() {
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight mb-2">Payout Control Center</h1>
-                        <p className="text-muted-foreground">Manage and release agent/manager withdrawals.</p>
+                        <p className="text-muted-foreground">Manage and release hostel manager withdrawals.</p>
                     </div>
                     <div className="flex gap-2">
                         <Button onClick={() => setAdminWithdrawOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">

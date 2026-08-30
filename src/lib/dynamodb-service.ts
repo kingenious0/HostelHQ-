@@ -6,7 +6,7 @@ import {
   scanEntities,
   batchWrite,
 } from "./dynamodb";
-import type { Hostel, RoomType, Review, Agent, AppUser, Visit } from "./data";
+import type { Hostel, RoomType, Review, AppUser, Visit, Complaint, StudentVerification, ComplaintStatus } from "./data";
 
 // ============================================================================
 // ID & Key Helpers
@@ -17,8 +17,12 @@ export const formatKey = {
   room: (hostelId: string, roomId: string) => ({ id: `ROOM#${hostelId}#${roomId}`, entityType: "ROOM" }),
   pendingRoom: (hostelId: string, roomId: string) => ({ id: `ROOM#${hostelId}#${roomId}`, entityType: "PENDING_ROOM" }),
   student: (id: string) => ({ id: `STUDENT#${id}`, entityType: "STUDENT" }),
-  agent: (id: string) => ({ id: `AGENT#${id}`, entityType: "AGENT" }),
   admin: (id: string) => ({ id: `ADMIN#${id}`, entityType: "ADMIN" }),
+  manager: (id: string) => ({ id: `MANAGER#${id}`, entityType: "MANAGER" }),
+  dean: (id: string) => ({ id: `DEAN#${id}`, entityType: "DEAN" }),
+  hostelCoordinator: (id: string) => ({ id: `COORDINATOR#${id}`, entityType: "COORDINATOR" }),
+  proVc: (id: string) => ({ id: `PRO_VC#${id}`, entityType: "PRO_VC" }),
+  vc: (id: string) => ({ id: `VC#${id}`, entityType: "VC" }),
   user: (id: string, role: string = "user") => {
     const r = role.toUpperCase();
     return { id: `${r}#${id}`, entityType: r };
@@ -27,6 +31,8 @@ export const formatKey = {
   booking: (id: string) => ({ id: `BOOKING#${id}`, entityType: "BOOKING" }),
   visit: (id: string) => ({ id: `VISIT#${id}`, entityType: "VISIT" }),
   review: (id: string) => ({ id: `REVIEW#${id}`, entityType: "REVIEW" }),
+  complaint: (id: string) => ({ id: `COMPLAINT#${id}`, entityType: "COMPLAINT" }),
+  studentVerification: (id: string) => ({ id: `STUDENT_VERIFICATION#${id}`, entityType: "STUDENT_VERIFICATION" }),
 };
 
 // ============================================================================
@@ -42,19 +48,29 @@ export async function getHostelById(hostelId: string): Promise<Hostel | null> {
   }
 
   // Fetch rooms for this hostel
-  const rooms = await getRoomsByHostelId(hostelId);
+  let rooms = await getRoomsByHostelId(hostelId);
+  if (rooms.length === 0 && Array.isArray(hostelDoc.roomTypes) && hostelDoc.roomTypes.length > 0) {
+    rooms = hostelDoc.roomTypes;
+  }
 
   // Fetch approved reviews for this hostel
   const reviews = await getApprovedReviewsByHostelId(hostelId);
 
-  const prices = rooms.map((r) => r.price).filter((p) => typeof p === "number");
+  const prices = rooms.map((r) => r.price).filter((p) => typeof p === "number" && !isNaN(p));
   const priceRange = {
-    min: prices.length > 0 ? Math.min(...prices) : 0,
-    max: prices.length > 0 ? Math.max(...prices) : 0,
+    min: prices.length > 0 ? Math.min(...prices) : (typeof hostelDoc.priceRange?.min === "number" ? hostelDoc.priceRange.min : 0),
+    max: prices.length > 0 ? Math.max(...prices) : (typeof hostelDoc.priceRange?.max === "number" ? hostelDoc.priceRange.max : 0),
   };
 
   const totalRating = reviews.reduce((acc, rev) => acc + (rev.rating || 0), 0);
   const averageRating = reviews.length > 0 ? totalRating / reviews.length : (hostelDoc.rating || 0);
+
+  const hostelLat = typeof hostelDoc.lat === "number" 
+    ? hostelDoc.lat 
+    : (typeof hostelDoc.coordinates?.lat === "number" ? hostelDoc.coordinates.lat : 6.6998);
+  const hostelLng = typeof hostelDoc.lng === "number" 
+    ? hostelDoc.lng 
+    : (typeof hostelDoc.coordinates?.lng === "number" ? hostelDoc.coordinates.lng : -1.6841);
 
   return {
     ...hostelDoc,
@@ -63,6 +79,8 @@ export async function getHostelById(hostelId: string): Promise<Hostel | null> {
     reviews,
     priceRange: hostelDoc.priceRange || priceRange,
     rating: averageRating,
+    lat: hostelLat,
+    lng: hostelLng,
   } as Hostel;
 }
 
@@ -70,7 +88,6 @@ export async function listHostels(options: {
   featuredOnly?: boolean;
   search?: string;
   location?: string;
-  agentId?: string;
 } = {}): Promise<Hostel[]> {
   let filterExpression: string | undefined;
   const names: Record<string, string> = {};
@@ -81,12 +98,6 @@ export async function listHostels(options: {
     names["#isFeatured"] = "isFeatured";
     values[":featured"] = true;
     conditions.push("#isFeatured = :featured");
-  }
-
-  if (options.agentId) {
-    names["#agentId"] = "agentId";
-    values[":agentId"] = options.agentId;
-    conditions.push("#agentId = :agentId");
   }
 
   if (conditions.length > 0) {
@@ -123,6 +134,8 @@ export async function listHostels(options: {
         bathrooms: r.bathrooms,
       })) as RoomType[];
 
+    const finalRooms = hostelRooms.length > 0 ? hostelRooms : (Array.isArray(h.roomTypes) ? h.roomTypes : []);
+
     const hostelReviews = allReviews
       .filter((rev) => rev.hostelId === realId)
       .map((rev) => ({
@@ -135,22 +148,38 @@ export async function listHostels(options: {
         status: rev.status || "approved",
       })) as Review[];
 
-    const prices = hostelRooms.map((r) => r.price).filter((p) => typeof p === "number");
+    const prices = finalRooms.map((r) => r.price).filter((p) => typeof p === "number" && !isNaN(p));
     const priceRange = {
-      min: prices.length > 0 ? Math.min(...prices) : 0,
-      max: prices.length > 0 ? Math.max(...prices) : 0,
+      min: prices.length > 0 ? Math.min(...prices) : (typeof h.priceRange?.min === "number" ? h.priceRange.min : 0),
+      max: prices.length > 0 ? Math.max(...prices) : (typeof h.priceRange?.max === "number" ? h.priceRange.max : 0),
     };
 
     const totalRating = hostelReviews.reduce((acc, rev) => acc + (rev.rating || 0), 0);
     const averageRating = hostelReviews.length > 0 ? totalRating / hostelReviews.length : (h.rating || 0);
 
+    const hostelLat = typeof h.lat === "number" 
+      ? h.lat 
+      : (typeof h.coordinates?.lat === "number" ? h.coordinates.lat : 6.6998);
+    const hostelLng = typeof h.lng === "number" 
+      ? h.lng 
+      : (typeof h.coordinates?.lng === "number" ? h.coordinates.lng : -1.6841);
+
+    const availability = (h.availability as Hostel["availability"]) || 
+      (finalRooms.some((r: any) => r.availability === "Available" || r.availability === "Limited") ? "Available" : "Available");
+
+    const roomTypeTags = h.roomTypeTags || finalRooms.map((r: any) => r.name).filter(Boolean);
+
     return {
       ...h,
       id: realId,
-      roomTypes: hostelRooms,
+      roomTypes: finalRooms,
+      roomTypeTags,
+      availability,
       reviews: hostelReviews,
       priceRange: h.priceRange || priceRange,
       rating: averageRating,
+      lat: hostelLat,
+      lng: hostelLng,
     } as Hostel;
   });
 
@@ -204,6 +233,7 @@ export async function saveHostel(
 
   const itemToSave = {
     ...mainHostelData,
+    roomTypes,
     id: key.id,
     entityType: key.entityType,
     originalId: hostelId,
@@ -270,15 +300,19 @@ export async function deleteHostel(hostelId: string, isPending: boolean = false)
 }
 
 // ============================================================================
-// 2. USER & AGENT OPERATIONS
+// 2. USER OPERATIONS
 // ============================================================================
 
-export async function getUserById(userId: string): Promise<AppUser | Agent | null> {
-  // Check student, agent, admin, and user keys
+export async function getUserById(userId: string): Promise<AppUser | null> {
+  // Check student, admin, manager, dean, coordinator, pro_vc, vc, and user keys
   const candidateKeys = [
     formatKey.student(userId),
-    formatKey.agent(userId),
     formatKey.admin(userId),
+    formatKey.manager(userId),
+    formatKey.dean(userId),
+    formatKey.hostelCoordinator(userId),
+    formatKey.proVc(userId),
+    formatKey.vc(userId),
     formatKey.user(userId, "USER"),
   ];
 
@@ -294,7 +328,7 @@ export async function getUserById(userId: string): Promise<AppUser | Agent | nul
 
   // Fallback scan if role is unknown
   const scanned = await scanEntities<any>({
-    filterExpression: "#originalId = :uid OR #id = :studentKey OR #id = :agentKey OR #id = :adminKey",
+    filterExpression: "#originalId = :uid OR #id = :studentKey OR #id = :adminKey OR #id = :managerKey",
     expressionAttributeNames: {
       "#originalId": "originalId",
       "#id": "id",
@@ -302,8 +336,8 @@ export async function getUserById(userId: string): Promise<AppUser | Agent | nul
     expressionAttributeValues: {
       ":uid": userId,
       ":studentKey": `STUDENT#${userId}`,
-      ":agentKey": `AGENT#${userId}`,
       ":adminKey": `ADMIN#${userId}`,
+      ":managerKey": `MANAGER#${userId}`,
     },
     limit: 1,
   });
@@ -318,27 +352,7 @@ export async function getUserById(userId: string): Promise<AppUser | Agent | nul
   return null;
 }
 
-export async function getAgentById(agentId: string): Promise<Agent | null> {
-  const key = formatKey.agent(agentId);
-  const agentDoc = await getItem<any>(key.id, key.entityType);
-
-  if (agentDoc && agentDoc.role === "agent") {
-    return {
-      ...agentDoc,
-      id: agentDoc.originalId || agentId,
-    } as Agent;
-  }
-
-  // Try generic getUserById in case of key variation
-  const user = await getUserById(agentId);
-  if (user && user.role === "agent") {
-    return user as Agent;
-  }
-
-  return null;
-}
-
-export async function listUsersByRole(role: "student" | "agent" | "admin"): Promise<AppUser[]> {
+export async function listUsersByRole(role: "student" | "hostel_manager" | "manager" | "admin" | "dean" | "pro_vc" | "vc" | "hostel_coordinator"): Promise<AppUser[]> {
   const entityType = role.toUpperCase();
   const users = await scanEntities<any>({
     entityType,
@@ -350,7 +364,7 @@ export async function listUsersByRole(role: "student" | "agent" | "admin"): Prom
   }));
 }
 
-export async function saveUser(user: AppUser | Agent): Promise<AppUser | Agent> {
+export async function saveUser(user: AppUser): Promise<AppUser> {
   const role = user.role || "student";
   const key = formatKey.user(user.id, role);
 
@@ -366,10 +380,6 @@ export async function saveUser(user: AppUser | Agent): Promise<AppUser | Agent> 
   return user;
 }
 
-export async function updateUserLocation(agentId: string, location: { lat: number; lng: number }): Promise<void> {
-  const key = formatKey.agent(agentId);
-  await updateItem(key.id, key.entityType, { location });
-}
 
 // ============================================================================
 // 3. BOOKING OPERATIONS
@@ -447,12 +457,23 @@ export async function listVisitsByStudent(studentId: string): Promise<Visit[]> {
   return visits.map((v) => ({ ...v, id: v.originalId || v.id.replace("VISIT#", "") })) as Visit[];
 }
 
-export async function listVisitsByAgent(agentId: string): Promise<Visit[]> {
+export async function listVisitsByHostel(hostelId: string): Promise<Visit[]> {
   const visits = await scanEntities<any>({
     entityType: "VISIT",
-    filterExpression: "#agentId = :agentId",
-    expressionAttributeNames: { "#agentId": "agentId" },
-    expressionAttributeValues: { ":agentId": agentId },
+    filterExpression: "#hostelId = :hostelId",
+    expressionAttributeNames: { "#hostelId": "hostelId" },
+    expressionAttributeValues: { ":hostelId": hostelId },
+  });
+
+  return visits.map((v) => ({ ...v, id: v.originalId || v.id.replace("VISIT#", "") })) as Visit[];
+}
+
+export async function listVisitsByManager(managerId: string): Promise<Visit[]> {
+  const visits = await scanEntities<any>({
+    entityType: "VISIT",
+    filterExpression: "#managerId = :managerId",
+    expressionAttributeNames: { "#managerId": "managerId" },
+    expressionAttributeValues: { ":managerId": managerId },
   });
 
   return visits.map((v) => ({ ...v, id: v.originalId || v.id.replace("VISIT#", "") })) as Visit[];
@@ -548,3 +569,168 @@ export async function updateReviewStatus(reviewId: string, status: "approved" | 
   const key = formatKey.review(reviewId);
   return updateItem(key.id, key.entityType, { status });
 }
+
+// ============================================================================
+// 6. PENDING HOSTEL OPERATIONS (COORDINATOR DASHBOARD)
+// ============================================================================
+
+export async function listPendingHostels(): Promise<Hostel[]> {
+  const pending = await scanEntities<any>({
+    entityType: "PENDING_HOSTEL",
+  });
+  return pending.map((h) => ({
+    ...h,
+    id: h.originalId || h.id.replace("PENDING_HOSTEL#", ""),
+    status: h.status || "pending",
+  })) as Hostel[];
+}
+
+export async function approvePendingHostel(hostelId: string, approvedBy?: string): Promise<Hostel | null> {
+  const pendingKey = formatKey.pendingHostel(hostelId);
+  const pendingData = await getItem<any>(pendingKey.id, pendingKey.entityType);
+  if (!pendingData) return null;
+
+  const liveHostel = {
+    ...pendingData,
+    status: "approved",
+    approvedAt: new Date().toISOString(),
+    approvedBy: approvedBy || "Hostel Coordinator",
+  };
+  await saveHostel(liveHostel, false);
+  await deleteHostel(hostelId, true);
+  return liveHostel as Hostel;
+}
+
+export async function rejectPendingHostel(hostelId: string, reason?: string): Promise<boolean> {
+  const pendingKey = formatKey.pendingHostel(hostelId);
+  await updateItem(pendingKey.id, pendingKey.entityType, {
+    status: "rejected",
+    rejectionReason: reason || "Requirements not met",
+    rejectedAt: new Date().toISOString(),
+  });
+  return true;
+}
+
+// ============================================================================
+// 7. COMPLAINT OPERATIONS (DEAN & EXECUTIVE DASHBOARDS)
+// ============================================================================
+
+export async function listComplaints(filter?: { status?: string; direction?: string }): Promise<Complaint[]> {
+  const complaints = await scanEntities<any>({
+    entityType: "COMPLAINT",
+  });
+  let list = complaints.map((c) => ({
+    ...c,
+    id: c.originalId || c.id.replace("COMPLAINT#", ""),
+  })) as Complaint[];
+
+  if (filter?.status) {
+    list = list.filter((c) => c.status === filter.status);
+  }
+  if (filter?.direction) {
+    list = list.filter((c) => c.direction === filter.direction);
+  }
+  return list;
+}
+
+export async function saveComplaint(complaintData: Partial<Complaint>): Promise<Complaint> {
+  const complaintId = complaintData.id || `complaint_${Date.now()}`;
+  const key = formatKey.complaint(complaintId);
+  const itemToSave = {
+    ...complaintData,
+    id: key.id,
+    entityType: key.entityType,
+    originalId: complaintId,
+    status: complaintData.status || "Submitted",
+    createdAt: complaintData.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await putItem(itemToSave);
+  return { ...itemToSave, id: complaintId } as Complaint;
+}
+
+export async function updateComplaintStatus(
+  complaintId: string,
+  status: ComplaintStatus,
+  resolutionNotes?: string,
+  resolvedBy?: string
+): Promise<any> {
+  const key = formatKey.complaint(complaintId);
+  const updates: Record<string, any> = {
+    status,
+    updatedAt: new Date().toISOString(),
+  };
+  if (resolutionNotes) updates.resolutionNotes = resolutionNotes;
+  if (status === "Resolved") {
+    updates.resolvedAt = new Date().toISOString();
+    if (resolvedBy) updates.resolvedBy = resolvedBy;
+  }
+  return updateItem(key.id, key.entityType, updates);
+}
+
+// ============================================================================
+// 8. STUDENT VERIFICATION OPERATIONS (DEAN DASHBOARD)
+// ============================================================================
+
+export async function listStudentVerifications(status?: string): Promise<StudentVerification[]> {
+  const verifications = await scanEntities<any>({
+    entityType: "STUDENT_VERIFICATION",
+  });
+  let list = verifications.map((v) => ({
+    ...v,
+    id: v.originalId || v.id.replace("STUDENT_VERIFICATION#", ""),
+  })) as StudentVerification[];
+
+  if (status) {
+    list = list.filter((v) => v.status === status);
+  }
+  return list;
+}
+
+export async function saveStudentVerification(data: Partial<StudentVerification>): Promise<StudentVerification> {
+  const id = data.id || `verif_${Date.now()}`;
+  const key = formatKey.studentVerification(id);
+  const itemToSave = {
+    ...data,
+    id: key.id,
+    entityType: key.entityType,
+    originalId: id,
+    status: data.status || "pending",
+    submittedAt: data.submittedAt || new Date().toISOString(),
+  };
+  await putItem(itemToSave);
+  return { ...itemToSave, id } as StudentVerification;
+}
+
+export async function updateStudentVerificationStatus(
+  verificationId: string,
+  status: "verified" | "rejected",
+  reason?: string,
+  reviewedBy?: string
+): Promise<any> {
+  const key = formatKey.studentVerification(verificationId);
+  const updates: Record<string, any> = {
+    status,
+    reviewedAt: new Date().toISOString(),
+  };
+  if (reason) updates.rejectionReason = reason;
+  if (reviewedBy) updates.reviewedBy = reviewedBy;
+  return updateItem(key.id, key.entityType, updates);
+}
+
+// ============================================================================
+// 9. ROOM PENDING PRICE HOOK (COORDINATOR DATA HOOK)
+// ============================================================================
+
+export async function updateRoomPendingPrice(
+  hostelId: string,
+  roomId: string,
+  pendingPrice: number
+): Promise<any> {
+  const key = formatKey.room(hostelId, roomId);
+  return updateItem(key.id, key.entityType, {
+    pendingPrice,
+    pendingPriceRequestedAt: new Date().toISOString(),
+  });
+}
+

@@ -32,7 +32,8 @@ import {
     Receipt,
     Trash2,
     ShieldCheck,
-    ArrowRight
+    ArrowRight,
+    Eye
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -64,8 +65,8 @@ type EnhancedVisit = {
     visitDate: string;
     visitTime: string;
     status: 'pending' | 'accepted' | 'completed' | 'cancelled';
-    agentId?: string;
-    agentName?: string;
+    managerName?: string;
+    managerPhone?: string;
     paymentReference?: string;
 }
 
@@ -177,16 +178,10 @@ export default function MyBookingsPage() {
                 const data = d.data();
                 const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
 
-                let agentName = 'Not Assigned';
-                if (data.agentId) {
-                    try {
-                        const agentSnap = await getDoc(doc(db, 'users', data.agentId));
-                        if (agentSnap.exists()) {
-                            agentName = agentSnap.data().fullName || agentName;
-                        }
-                    } catch (error) {
-                        console.error('Error fetching agent:', error);
-                    }
+                let managerName = 'Hostel Management';
+                if (hostelSnap.exists()) {
+                    const hData = hostelSnap.data();
+                    managerName = hData.managerName || hData.contactPerson || 'Hostel Management';
                 }
 
                 let visitDate = 'N/A';
@@ -202,8 +197,8 @@ export default function MyBookingsPage() {
                     visitDate: visitDate,
                     visitTime: data.visitTime || 'N/A',
                     status: data.status || 'pending',
-                    agentId: data.agentId,
-                    agentName: agentName,
+                    managerName: managerName,
+                    managerPhone: data.managerPhone,
                     paymentReference: data.paymentReference,
                 } as EnhancedVisit;
             }));
@@ -656,9 +651,9 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                     </div>
                     <div className="flex items-center justify-between py-1.5 border-b border-border/40">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                            <User className="h-3 w-3" /> Agent
+                            <User className="h-3 w-3" /> Host
                         </span>
-                        <span className="text-xs font-semibold truncate max-w-[120px]">{visit.agentName}</span>
+                        <span className="text-xs font-semibold truncate max-w-[120px]">{visit.managerName || 'Management'}</span>
                     </div>
                 </div>
 
@@ -669,11 +664,11 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                         className="flex-1 rounded-xl h-9 text-xs border-primary/20 text-primary hover:bg-primary/5"
                         onClick={() => {
                             if (isCompleted) router.push(`/invoice/${visit.id}`);
-                            else router.push(`/hostels/${visit.hostelId}/book/tracking?visitId=${visit.id}`);
+                            else router.push(`/hostels/${visit.hostelId}`);
                         }}
                     >
-                        {isCompleted ? <Receipt className="mr-2 h-3.5 w-3.5" /> : <Clock className="mr-2 h-3.5 w-3.5" />}
-                        {isCompleted ? 'Invoice' : 'Track Status'}
+                        {isCompleted ? <Receipt className="mr-2 h-3.5 w-3.5" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
+                        {isCompleted ? 'Receipt' : 'View Hostel'}
                     </Button>
                     <Button
                         size="sm"

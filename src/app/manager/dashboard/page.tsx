@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone } from 'lucide-react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +28,26 @@ import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
     roomTypes: Pick<RoomType, 'id' | 'name' | 'price'>[];
+};
+
+type Visit = {
+    id: string;
+    hostelId: string;
+    hostelName?: string;
+    studentId?: string;
+    studentName: string;
+    studentEmail?: string;
+    studentPhone?: string;
+    roomTypeId?: string | null;
+    roomTypeName?: string;
+    visitDate: string | any;
+    visitTime?: string;
+    notes?: string;
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    visitType?: string;
+    createdAt?: string | any;
+    studentCompleted?: boolean;
+    managerPhone?: string;
 };
 
 type Booking = {
@@ -110,6 +130,14 @@ export default function ManagerDashboard() {
     const [proofDialogOpen, setProofDialogOpen] = useState(false);
     const [selectedProof, setSelectedProof] = useState<any>(null);
     const [processingProof, setProcessingProof] = useState(false);
+
+    // In-person Scheduled Visits state
+    const [visits, setVisits] = useState<Visit[]>([]);
+    const [loadingVisits, setLoadingVisits] = useState(true);
+    const [visitFilter, setVisitFilter] = useState<'all' | 'pending' | 'accepted' | 'completed' | 'cancelled'>('all');
+    const [visitSearch, setVisitSearch] = useState('');
+    const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+
     const router = useRouter();
     const { toast } = useToast();
 
@@ -200,6 +228,29 @@ export default function ManagerDashboard() {
                         setPaymentProofs(fetchedProofs);
                     });
 
+                    // Fetch visits for this manager's hostels
+                    const visitsQuery = query(
+                        collection(db, 'visits'),
+                        where('hostelId', 'in', hostelIds.slice(0, 30))
+                    );
+
+                    const unsubscribeVisits = onSnapshot(visitsQuery, (visitsSnapshot) => {
+                        const fetchedVisits = visitsSnapshot.docs.map(vDoc => ({
+                            id: vDoc.id,
+                            ...vDoc.data()
+                        })) as Visit[];
+                        fetchedVisits.sort((a, b) => {
+                            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.visitDate ? new Date(a.visitDate).getTime() : 0);
+                            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.visitDate ? new Date(b.visitDate).getTime() : 0);
+                            return timeB - timeA;
+                        });
+                        setVisits(fetchedVisits);
+                        setLoadingVisits(false);
+                    }, (err) => {
+                        console.error('Error fetching visits for manager:', err);
+                        setLoadingVisits(false);
+                    });
+
                     // Process data for the chart
                     const monthlyBookings = new Array(12).fill(0);
                     fetchedBookings.forEach(booking => {
@@ -217,11 +268,15 @@ export default function ManagerDashboard() {
                     })));
 
                     setLoadingData(false);
-                    return () => unsubscribePaymentProofs();
+                    return () => {
+                        unsubscribePaymentProofs();
+                        unsubscribeVisits();
+                    };
                 });
                 return () => unsubscribeBookings();
             } else {
                 setLoadingData(false);
+                setLoadingVisits(false);
             }
         });
 
@@ -859,6 +914,54 @@ export default function ManagerDashboard() {
         }
     };
 
+    const handleUpdateVisitStatus = async (visitId: string, newStatus: 'accepted' | 'completed' | 'cancelled') => {
+        setUpdatingVisitId(visitId);
+        try {
+            const ref = doc(db, 'visits', visitId);
+            const updates: any = {
+                status: newStatus,
+                updatedAt: new Date().toISOString()
+            };
+            if (newStatus === 'completed') {
+                updates.studentCompleted = true;
+            }
+            await updateDoc(ref, updates);
+            toast({
+                title: `Visit marked as ${newStatus}`,
+                description: `Student visit status has been successfully updated.`,
+            });
+        } catch (err: any) {
+            console.error('Error updating visit status:', err);
+            toast({
+                title: 'Update Failed',
+                description: err.message || 'Failed to update visit status',
+                variant: 'destructive',
+            });
+        } finally {
+            setUpdatingVisitId(null);
+        }
+    };
+
+    const pendingVisitsCount = visits.filter(v => v.status === 'pending').length;
+    const acceptedVisitsCount = visits.filter(v => v.status === 'accepted').length;
+    const completedVisitsCount = visits.filter(v => v.status === 'completed').length;
+    const cancelledVisitsCount = visits.filter(v => v.status === 'cancelled').length;
+
+    const filteredVisits = visits.filter(visit => {
+        if (visitFilter !== 'all' && visit.status !== visitFilter) {
+            return false;
+        }
+        if (visitSearch.trim()) {
+            const query = visitSearch.toLowerCase().trim();
+            const nameMatch = visit.studentName?.toLowerCase().includes(query);
+            const phoneMatch = visit.studentPhone?.toLowerCase().includes(query);
+            const emailMatch = visit.studentEmail?.toLowerCase().includes(query);
+            const hostelMatch = visit.hostelName?.toLowerCase().includes(query);
+            return nameMatch || phoneMatch || emailMatch || hostelMatch;
+        }
+        return true;
+    });
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -867,12 +970,32 @@ export default function ManagerDashboard() {
                     <h1 className="text-3xl font-bold font-headline mb-2">Manager Dashboard</h1>
                     <p className="text-sm text-muted-foreground mb-6">Overview of how your hostels are performing on HostelHQ.</p>
 
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-8">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6 mb-8">
                         {currentUser && (
                             <div className="md:col-span-1 h-full">
                                 <ManagerWalletCard userId={currentUser.uid} />
                             </div>
                         )}
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">Free Visits</CardTitle>
+                                <Calendar className="h-4 w-4 text-emerald-600" />
+                            </CardHeader>
+                            <CardContent>
+                                {loadingVisits ? <Loader2 className="h-6 w-6 animate-spin" /> : (
+                                    <>
+                                        <div className="text-2xl font-bold text-emerald-700">{visits.length}</div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {pendingVisitsCount > 0 ? (
+                                                <span className="font-semibold text-amber-600">{pendingVisitsCount} awaiting confirmation</span>
+                                            ) : (
+                                                'All visits up to date'
+                                            )}
+                                        </p>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Hostels Managed</CardTitle>
@@ -988,6 +1111,239 @@ export default function ManagerDashboard() {
                                     <p className="text-sm text-muted-foreground mt-2">
                                         Students will upload payment proofs here after making manual bank transfers
                                     </p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Scheduled In-Person Visits Section */}
+                    <Card className="mb-8 border-border shadow-sm">
+                        <CardHeader>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                            <Calendar className="h-5 w-5 text-emerald-600" />
+                                            Scheduled Student In-Person Visits
+                                        </CardTitle>
+                                        {pendingVisitsCount > 0 && (
+                                            <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-2 py-0.5">
+                                                {pendingVisitsCount} Pending
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <CardDescription className="text-sm mt-1">
+                                        Students who scheduled a free in-person room inspection directly with you. Use 1-click Call or WhatsApp to confirm their arrival time.
+                                    </CardDescription>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative w-full md:w-64">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search student or hostel..."
+                                            value={visitSearch}
+                                            onChange={(e) => setVisitSearch(e.target.value)}
+                                            className="pl-8 text-xs h-9"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Filter Tabs */}
+                            <div className="flex flex-wrap gap-2 pt-2 border-t mt-3">
+                                {[
+                                    { id: 'all', label: `All (${visits.length})` },
+                                    { id: 'pending', label: `Pending (${pendingVisitsCount})`, alert: pendingVisitsCount > 0 },
+                                    { id: 'accepted', label: `Confirmed (${acceptedVisitsCount})` },
+                                    { id: 'completed', label: `Completed (${completedVisitsCount})` },
+                                    { id: 'cancelled', label: `Cancelled (${cancelledVisitsCount})` },
+                                ].map((tab) => (
+                                    <Button
+                                        key={tab.id}
+                                        type="button"
+                                        size="sm"
+                                        variant={visitFilter === tab.id ? 'default' : 'outline'}
+                                        onClick={() => setVisitFilter(tab.id as any)}
+                                        className={`text-xs h-7 px-2.5 ${tab.alert && visitFilter !== tab.id ? 'border-amber-400 text-amber-700 bg-amber-50/50' : ''}`}
+                                    >
+                                        {tab.label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </CardHeader>
+
+                        <CardContent>
+                            {loadingVisits ? (
+                                <div className="flex items-center justify-center py-10">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : filteredVisits.length === 0 ? (
+                                <div className="text-center py-10 border border-dashed rounded-xl bg-slate-50/50">
+                                    <Calendar className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+                                    <p className="text-sm font-semibold text-slate-700">No scheduled visits found</p>
+                                    <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                                        {visitSearch
+                                            ? 'No visits matched your search term.'
+                                            : 'When students request a free in-person room inspection for your hostels, they will appear right here.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {filteredVisits.map((visit) => {
+                                        let visitDateFormatted = 'Date not set';
+                                        try {
+                                            if (visit.visitDate) {
+                                                const d = typeof visit.visitDate === 'string'
+                                                    ? new Date(visit.visitDate)
+                                                    : (visit.visitDate.toDate ? visit.visitDate.toDate() : new Date(visit.visitDate));
+                                                visitDateFormatted = format(d, 'EEEE, d MMM yyyy');
+                                            }
+                                        } catch (e) {
+                                            visitDateFormatted = String(visit.visitDate);
+                                        }
+
+                                        const statusBadge = {
+                                            pending: { label: 'Pending Confirmation', className: 'bg-amber-100 text-amber-800 border-amber-300' },
+                                            accepted: { label: 'Confirmed / Accepted', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+                                            completed: { label: 'Visit Completed', className: 'bg-blue-100 text-blue-800 border-blue-300' },
+                                            cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-700 border-gray-300' },
+                                        }[visit.status] || { label: visit.status, className: 'bg-gray-100 text-gray-800' };
+
+                                        const cleanPhone = (visit.studentPhone || '').replace(/[^0-9]/g, '');
+
+                                        return (
+                                            <div
+                                                key={visit.id}
+                                                className="border rounded-xl p-4 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                                            >
+                                                <div>
+                                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                                        <div>
+                                                            <h4 className="font-bold text-sm text-slate-900 leading-tight">
+                                                                {visit.studentName}
+                                                            </h4>
+                                                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                                                {visit.hostelName || 'Hostel Inspection'}
+                                                                {visit.roomTypeName && ` • ${visit.roomTypeName}`}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusBadge.className}`}>
+                                                            {statusBadge.label}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/70 rounded-lg p-2.5 my-2.5 border border-slate-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                                            <span className="font-medium text-slate-800">{visitDateFormatted}</span>
+                                                        </div>
+                                                        {visit.visitTime && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                                <span>{visit.visitTime}</span>
+                                                            </div>
+                                                        )}
+                                                        {visit.studentPhone && (
+                                                            <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                                                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                                <span className="font-mono text-[11px]">{visit.studentPhone}</span>
+                                                            </div>
+                                                        )}
+                                                        {visit.studentEmail && (
+                                                            <div className="text-[11px] text-slate-500 truncate">
+                                                                {visit.studentEmail}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {visit.notes && (
+                                                        <p className="text-[11px] italic text-slate-500 bg-amber-50/60 border border-amber-200/50 rounded-md p-2 mb-3">
+                                                            &ldquo;{visit.notes}&rdquo;
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                <div className="pt-2 border-t space-y-2">
+                                                    {/* Contact action buttons */}
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {visit.studentPhone ? (
+                                                            <>
+                                                                <a
+                                                                    href={`tel:${visit.studentPhone}`}
+                                                                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-200 transition-colors"
+                                                                >
+                                                                    <PhoneCall className="w-3 h-3" />
+                                                                    Call
+                                                                </a>
+                                                                <a
+                                                                    href={`https://wa.me/${cleanPhone.startsWith('0') ? '233' + cleanPhone.substring(1) : cleanPhone}`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] text-xs font-semibold border border-[#25D366]/30 transition-colors"
+                                                                >
+                                                                    <MessageSquare className="w-3 h-3" />
+                                                                    WhatsApp
+                                                                </a>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[11px] text-muted-foreground col-span-2">No phone provided</span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Workflow status buttons */}
+                                                    <div className="flex items-center justify-between gap-2 pt-1">
+                                                        {visit.status === 'pending' && (
+                                                            <Button
+                                                                size="sm"
+                                                                type="button"
+                                                                disabled={updatingVisitId === visit.id}
+                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'accepted')}
+                                                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+                                                            >
+                                                                {updatingVisitId === visit.id ? (
+                                                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                                                ) : (
+                                                                    <Check className="w-3 h-3 mr-1" />
+                                                                )}
+                                                                Confirm Time
+                                                            </Button>
+                                                        )}
+
+                                                        {visit.status === 'accepted' && (
+                                                            <Button
+                                                                size="sm"
+                                                                type="button"
+                                                                variant="outline"
+                                                                disabled={updatingVisitId === visit.id}
+                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'completed')}
+                                                                className="flex-1 text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50"
+                                                            >
+                                                                {updatingVisitId === visit.id ? (
+                                                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                                                ) : (
+                                                                    <CheckCircle className="w-3 h-3 mr-1 text-blue-600" />
+                                                                )}
+                                                                Mark Completed
+                                                            </Button>
+                                                        )}
+
+                                                        {visit.status !== 'cancelled' && visit.status !== 'completed' && (
+                                                            <Button
+                                                                size="sm"
+                                                                type="button"
+                                                                variant="ghost"
+                                                                disabled={updatingVisitId === visit.id}
+                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'cancelled')}
+                                                                className="text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </CardContent>

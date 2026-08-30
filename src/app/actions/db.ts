@@ -2,7 +2,7 @@
 
 import * as dynamoService from "@/lib/dynamodb-service";
 import * as dynamoCore from "@/lib/dynamodb";
-import type { Hostel, AppUser, Agent, Visit, Review, RoomType } from "@/lib/data";
+import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
 
 // ============================================================================
 // Hostel Server Actions
@@ -12,14 +12,12 @@ export async function fetchHostelsAction(options: {
   featured?: boolean;
   search?: string;
   location?: string;
-  agentId?: string;
 } = {}) {
   try {
     const hostels = await dynamoService.listHostels({
       featuredOnly: options.featured,
       search: options.search,
       location: options.location,
-      agentId: options.agentId,
     });
     return { success: true, data: hostels };
   } catch (error: any) {
@@ -69,7 +67,7 @@ export async function deleteHostelAction(hostelId: string, isPending: boolean = 
 }
 
 // ============================================================================
-// User & Agent Server Actions
+// User Server Actions
 // ============================================================================
 
 export async function fetchUserAction(userId: string) {
@@ -82,7 +80,7 @@ export async function fetchUserAction(userId: string) {
   }
 }
 
-export async function fetchUsersByRoleAction(role: "student" | "agent" | "admin") {
+export async function fetchUsersByRoleAction(role: string) {
   try {
     const users = await dynamoService.listUsersByRole(role);
     return { success: true, data: users };
@@ -92,23 +90,13 @@ export async function fetchUsersByRoleAction(role: "student" | "agent" | "admin"
   }
 }
 
-export async function saveUserAction(user: AppUser | Agent) {
+export async function saveUserAction(user: AppUser) {
   try {
     const saved = await dynamoService.saveUser(user);
     return { success: true, data: saved };
   } catch (error: any) {
     console.error("saveUserAction error:", error);
     return { success: false, error: error.message || "Failed to save user" };
-  }
-}
-
-export async function updateAgentLocationAction(agentId: string, location: { lat: number; lng: number }) {
-  try {
-    await dynamoService.updateUserLocation(agentId, location);
-    return { success: true };
-  } catch (error: any) {
-    console.error("updateAgentLocationAction error:", error);
-    return { success: false, error: error.message || "Failed to update agent location" };
   }
 }
 
@@ -190,13 +178,23 @@ export async function fetchVisitsByStudentAction(studentId: string) {
   }
 }
 
-export async function fetchVisitsByAgentAction(agentId: string) {
+export async function fetchVisitsByManagerAction(managerId: string) {
   try {
-    const visits = await dynamoService.listVisitsByAgent(agentId);
+    const visits = await dynamoService.listVisitsByManager(managerId);
     return { success: true, data: visits };
   } catch (error: any) {
-    console.error("fetchVisitsByAgentAction error:", error);
-    return { success: false, error: error.message || "Failed to fetch agent visits" };
+    console.error("fetchVisitsByManagerAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch manager visits" };
+  }
+}
+
+export async function fetchVisitsByHostelAction(hostelId: string) {
+  try {
+    const visits = await dynamoService.listVisitsByHostel(hostelId);
+    return { success: true, data: visits };
+  } catch (error: any) {
+    console.error("fetchVisitsByHostelAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch hostel visits" };
   }
 }
 
@@ -319,3 +317,197 @@ export async function executeDynamoQueryAction(params: {
     return { success: false, error: error.message };
   }
 }
+
+// ============================================================================
+// Administrative Server Actions (Dean, Coordinator, Executive)
+// ============================================================================
+
+export async function fetchPendingHostelsAction() {
+  try {
+    const data = await dynamoService.listPendingHostels();
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("fetchPendingHostelsAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch pending hostels" };
+  }
+}
+
+export async function approvePendingHostelAction(hostelId: string, approvedBy?: string) {
+  try {
+    const data = await dynamoService.approvePendingHostel(hostelId, approvedBy);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("approvePendingHostelAction error:", error);
+    return { success: false, error: error.message || "Failed to approve hostel" };
+  }
+}
+
+export async function rejectPendingHostelAction(hostelId: string, reason?: string) {
+  try {
+    const data = await dynamoService.rejectPendingHostel(hostelId, reason);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("rejectPendingHostelAction error:", error);
+    return { success: false, error: error.message || "Failed to reject hostel" };
+  }
+}
+
+export async function fetchComplaintsAction(filter?: { status?: string; direction?: string }) {
+  try {
+    const data = await dynamoService.listComplaints(filter);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("fetchComplaintsAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch complaints" };
+  }
+}
+
+export async function submitComplaintAction(complaintData: any) {
+  try {
+    const data = await dynamoService.saveComplaint(complaintData);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("submitComplaintAction error:", error);
+    return { success: false, error: error.message || "Failed to submit complaint" };
+  }
+}
+
+export async function updateComplaintStatusAction(
+  complaintId: string,
+  status: any,
+  notes?: string,
+  resolvedBy?: string
+) {
+  try {
+    const data = await dynamoService.updateComplaintStatus(complaintId, status, notes, resolvedBy);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("updateComplaintStatusAction error:", error);
+    return { success: false, error: error.message || "Failed to update complaint status" };
+  }
+}
+
+export async function fetchStudentVerificationsAction(status?: string) {
+  try {
+    const data = await dynamoService.listStudentVerifications(status);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("fetchStudentVerificationsAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch student verifications" };
+  }
+}
+
+export async function submitStudentVerificationAction(data: any) {
+  try {
+    const saved = await dynamoService.saveStudentVerification(data);
+    return { success: true, data: saved };
+  } catch (error: any) {
+    console.error("submitStudentVerificationAction error:", error);
+    return { success: false, error: error.message || "Failed to submit student verification" };
+  }
+}
+
+export async function updateStudentVerificationStatusAction(
+  verificationId: string,
+  status: "verified" | "rejected",
+  reason?: string,
+  reviewedBy?: string
+) {
+  try {
+    const data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewedBy);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("updateStudentVerificationStatusAction error:", error);
+    return { success: false, error: error.message || "Failed to update verification status" };
+  }
+}
+
+export async function updateRoomPendingPriceAction(
+  hostelId: string,
+  roomId: string,
+  pendingPrice: number
+) {
+  try {
+    const data = await dynamoService.updateRoomPendingPrice(hostelId, roomId, pendingPrice);
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("updateRoomPendingPriceAction error:", error);
+    return { success: false, error: error.message || "Failed to set room pending price" };
+  }
+}
+
+export async function fetchExecutiveMetricsAction() {
+  try {
+    // Strictly aggregate metrics only — NO individual records returned
+    const [hostels, bookings, complaints, verifications] = await Promise.all([
+      dynamoService.listHostels(),
+      dynamoCore.scanEntities<any>({ entityType: "BOOKING" }),
+      dynamoService.listComplaints(),
+      dynamoService.listStudentVerifications(),
+    ]);
+
+    const totalHostels = hostels.length;
+    const verifiedHostels = hostels.filter((h) => h.status === "approved" || !h.status).length;
+    
+    // Count confirmed / completed bookings as students accommodated
+    const accommodatedStudents = bookings.filter((b) => 
+      b.status === "confirmed" || b.status === "completed" || b.status === "paid" || b.status === "active"
+    ).length;
+
+    const totalComplaints = complaints.length;
+    const resolvedComplaints = complaints.filter((c) => c.status === "Resolved").length;
+    const underReviewComplaints = complaints.filter((c) => c.status === "Under Review").length;
+    const submittedComplaints = complaints.filter((c) => c.status === "Submitted").length;
+
+    // Complaint categories aggregation
+    const categoryCounts: Record<string, number> = {};
+    complaints.forEach((c) => {
+      const cat = c.category || "General";
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+
+    const categoryBreakdown = Object.entries(categoryCounts).map(([category, count]) => ({
+      category,
+      count,
+      percentage: totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0,
+    })).sort((a, b) => b.count - a.count);
+
+    // Complaint directions
+    const studentToHostelCount = complaints.filter((c) => c.direction === "student_to_hostel").length;
+    const managerToStudentCount = complaints.filter((c) => c.direction === "manager_to_student").length;
+
+    // Verification rate
+    const totalVerifications = verifications.length;
+    const approvedVerifications = verifications.filter((v) => v.status === "verified").length;
+    const pendingVerifications = verifications.filter((v) => v.status === "pending").length;
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalHostels,
+          verifiedHostels,
+          accommodatedStudents,
+          totalComplaints,
+          resolvedComplaints,
+          underReviewComplaints,
+          submittedComplaints,
+          resolutionRate: totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 100,
+          totalVerifications,
+          approvedVerifications,
+          pendingVerifications,
+          verificationRate: totalVerifications > 0 ? Math.round((approvedVerifications / totalVerifications) * 100) : 100,
+        },
+        categoryBreakdown,
+        directionBreakdown: {
+          studentToHostel: studentToHostelCount,
+          managerToStudent: managerToStudentCount,
+        },
+      },
+    };
+  } catch (error: any) {
+    console.error("fetchExecutiveMetricsAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch executive metrics" };
+  }
+}
+

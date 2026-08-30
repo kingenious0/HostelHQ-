@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck } from "lucide-react"
+import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck, ArrowLeft } from "lucide-react"
 import { getHostel, Hostel, RoomType } from "@/lib/data"
 import { notFound } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
@@ -297,7 +297,26 @@ export default function SecureHostelPage() {
   return (
     <div className="flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 bg-gray-50/50 py-8 md:py-12">
+        <main className="flex-1 bg-gray-50/50 py-6 md:py-10">
+            <div className="mx-auto max-w-6xl px-4 md:px-6 mb-4 flex items-center justify-between">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.back()}
+                    className="flex items-center gap-2 text-muted-foreground hover:text-foreground -ml-2"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to room selection
+                </Button>
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        University-Approved ✓
+                    </span>
+                    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        Escrow Protected
+                    </span>
+                </div>
+            </div>
             <div className="mx-auto max-w-6xl px-4 md:px-6 mb-6 md:mb-8">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6 rounded-2xl bg-gradient-to-r from-primary/5 via-muted/70 to-background px-6 py-6 md:px-10 md:py-8 border border-primary/20 shadow-sm">
                     <div className="space-y-2 md:space-y-3 text-center md:text-left md:flex-1">

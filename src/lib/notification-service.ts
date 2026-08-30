@@ -112,18 +112,6 @@ export async function notifyPaymentReceived(userId: string, amount: number, host
   });
 }
 
-/**
- * Send notification to agent when new booking is made
- */
-export async function notifyAgentNewBooking(agentId: string, studentName: string, hostelName: string) {
-  return sendNotification({
-    userId: agentId,
-    title: '🔔 New Booking',
-    body: `${studentName} just booked a room at ${hostelName}`,
-    url: `/agent/bookings`,
-    tag: 'agent-new-booking',
-  });
-}
 
 /**
  * Send notification to admin when new hostel is submitted

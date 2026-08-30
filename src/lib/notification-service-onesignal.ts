@@ -113,19 +113,6 @@ export async function notifyPaymentReceived(userId: string, amount: number, host
 }
 
 /**
- * Send notification to agent when new booking is made
- */
-export async function notifyAgentNewBooking(agentId: string, studentName: string, hostelName: string) {
-  return sendNotification({
-    userId: agentId,
-    title: '🔔 New Booking',
-    body: `${studentName} just booked a room at ${hostelName}`,
-    url: `/agent/bookings`,
-    data: { type: 'agent-new-booking' },
-  });
-}
-
-/**
  * Send notification to manager when a room is secured in their hostel
  */
 export async function notifyManagerNewBooking(managerId: string, hostelName: string, bookingId: string) {
@@ -152,15 +139,15 @@ export async function notifyAdminNewBooking(adminId: string, hostelName: string,
 }
 
 /**
- * Send notification to agent when a student requests a visit
+ * Send notification to manager when a student requests a visit
  */
-export async function notifyAgentVisitRequest(agentId: string, studentName: string, hostelName: string, visitId: string) {
+export async function notifyManagerVisitRequest(managerId: string, studentName: string, hostelName: string, visitId: string) {
   return sendNotification({
-    userId: agentId,
+    userId: managerId,
     title: '👀 New Visit Request',
-    body: `${studentName} wants to visit ${hostelName}.`,
-    url: `/agent/dashboard`,
-    data: { type: 'agent-visit-request', visitId },
+    body: `${studentName} requested an in-person tour of ${hostelName}.`,
+    url: `/manager/dashboard`,
+    data: { type: 'manager-visit-request', visitId },
   });
 }
 

@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/app/actions/sms';
 import { getAdminPaystackBalance } from '@/app/actions/payouts';
+import { saveHostelAction } from '@/app/actions/db';
 
 type Hostel = {
   id: string;
@@ -45,11 +46,12 @@ type Hostel = {
 type PendingHostel = Omit<Hostel, 'availability'> & {
   dateSubmitted: string;
   roomTypes: RoomType[];
+  submittedBy?: string;
   createdBy?: {
     userId: string;
     fullName: string;
     email: string;
-    role: 'agent' | 'manager' | 'admin';
+    role: 'manager' | 'admin';
     createdAt: string;
   };
 };
@@ -58,16 +60,7 @@ type User = {
   id: string;
   fullName: string;
   email: string;
-  role: 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager';
-}
-
-type OnlineAgent = {
-  clientId: string;
-  data: {
-    id: string;
-    fullName: string;
-    email: string;
-  }
+  role: 'student' | 'admin' | 'hostel_manager' | 'manager' | 'dean' | 'hostel_coordinator' | 'pro_vc' | 'vc';
 }
 
 const availabilityCycle: Record<Hostel['availability'], Hostel['availability']> = {
@@ -88,7 +81,6 @@ export default function AdminDashboard() {
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [pendingReviews, setPendingReviews] = useState<Review[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [onlineAgents, setOnlineAgents] = useState<OnlineAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedHostel, setSelectedHostel] = useState<PendingHostel | null>(null);
@@ -105,7 +97,7 @@ export default function AdminDashboard() {
         return {
           id: doc.id,
           name: data.name || 'No Name',
-          agentId: data.agentId || 'Unknown Agent',
+          submittedBy: data.submittedBy || data.managerName || 'Hostel Management',
           location: data.location || 'No Location',
           dateSubmitted: date,
           price: data.price || 0,
@@ -146,20 +138,6 @@ export default function AdminDashboard() {
       setPendingReviews(reviewsData);
     });
 
-    // Ably presence for online agents
-    const presenceChannel = ably.channels.get('agents:live');
-    const updateOnlineAgents = (agents: Types.PresenceMessage[]) => {
-      setOnlineAgents(agents.map(a => ({ clientId: a.clientId, data: a.data as any })));
-    };
-    const setupPresenceListener = async () => {
-      await presenceChannel.presence.subscribe(['enter', 'present', 'leave'], () => {
-        presenceChannel.presence.get().then(updateOnlineAgents);
-      });
-      const initialAgents = await presenceChannel.presence.get();
-      updateOnlineAgents(initialAgents);
-    };
-    setupPresenceListener();
-
     // Fetch Admin Balance
     const fetchBalance = async () => {
       const res = await getAdminPaystackBalance();
@@ -169,13 +147,11 @@ export default function AdminDashboard() {
     };
     fetchBalance();
 
-
     return () => {
       unsubPending();
       unsubApproved();
       unsubUsers();
       unsubReviews();
-      presenceChannel.presence.unsubscribe();
     };
   }, []);
 
@@ -228,6 +204,19 @@ export default function AdminDashboard() {
       } else {
         // Delete the original pending document if no room types
         await deleteDoc(pendingDocRef);
+      }
+
+      // PRIMARY: Save approved hostel to DynamoDB
+      try {
+        const approvedRooms = pendingRoomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        await saveHostelAction({
+          ...approvedHostel,
+          id: hostelId,
+          roomTypes: approvedRooms,
+        } as any, false);
+        console.log(`[Approval] Saved approved hostel ${hostelId} to DynamoDB primary database`);
+      } catch (dynamoErr) {
+        console.warn(`[Approval] Could not save approved hostel to DynamoDB:`, dynamoErr);
       }
 
       // Send SMS notification to creator
@@ -371,15 +360,15 @@ export default function AdminDashboard() {
 
 
   const toggleUserRole = async (user: User) => {
-    const newRole = user.role === 'student' ? 'agent' : 'student';
-    if (!confirm(`Are you sure you want to change ${user.fullName} 's role to ${newRole}?`)) return;
+    const newRole = user.role === 'student' ? 'hostel_manager' : 'student';
+    if (!confirm(`Are you sure you want to change ${user.fullName} 's role to ${newRole === 'hostel_manager' ? 'Hostel Manager' : 'Student'}?`)) return;
 
     setProcessingId(user.id);
     toast({ title: 'Updating user role...' });
     try {
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, { role: newRole });
-      toast({ title: 'Role Updated', description: `${user.fullName} is now an ${newRole}.` });
+      toast({ title: 'Role Updated', description: `${user.fullName} is now a ${newRole === 'hostel_manager' ? 'Hostel Manager' : 'Student'}.` });
     } catch (error) {
       console.error("Error updating user role:", error);
       toast({ title: 'Update Failed', description: "Could not update user role.", variant: "destructive" });
@@ -458,18 +447,16 @@ export default function AdminDashboard() {
   }
 
   const students = users.filter(u => u.role === 'student');
-  const agents = users.filter(u => u.role === 'agent');
-  const managers = users.filter(u => u.role === 'hostel_manager');
+  const managers = users.filter(u => u.role === 'hostel_manager' || u.role === 'manager');
   const admins = users.filter(u => u.role === 'admin');
-  const pendingAgents = users.filter(u => u.role === 'pending_agent');
+  const institutionalStaff = users.filter(u => ['dean', 'hostel_coordinator', 'pro_vc', 'vc'].includes(u.role));
   const totalPending = pendingHostels.length + pendingReviews.length;
 
   const userRoleData = [
     { role: 'Students', count: students.length },
-    { role: 'Agents', count: agents.length },
-    { role: 'Admins', count: users.filter(u => u.role === 'admin').length },
     { role: 'Managers', count: managers.length },
-    { role: 'Pending Agents', count: users.filter(u => u.role === 'pending_agent').length },
+    { role: 'Staff', count: institutionalStaff.length },
+    { role: 'Admins', count: admins.length },
   ];
 
   const availabilityCounts: Record<Hostel['availability'], number> = {
@@ -519,18 +506,8 @@ export default function AdminDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Agents</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{agents.length}</div>
-                <p className="text-xs text-muted-foreground">Registered agents</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Managers</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <Building className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{managers.length}</div>
@@ -539,12 +516,12 @@ export default function AdminDashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Online Agents</CardTitle>
-                <Wifi className="h-4 w-4 text-green-500" />
+                <CardTitle className="text-sm font-medium">Institutional Staff</CardTitle>
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{onlineAgents.length}</div>
-                <p className="text-xs text-muted-foreground">Currently active</p>
+                <div className="text-2xl font-bold">{institutionalStaff.length}</div>
+                <p className="text-xs text-muted-foreground">Dean, Coord, Exec</p>
               </CardContent>
             </Card>
             <Card>
@@ -564,7 +541,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalPending}</div>
-                <p className="text-xs text-muted-foreground">Hostels, Agents & Reviews</p>
+                <p className="text-xs text-muted-foreground">Hostels & Reviews</p>
               </CardContent>
             </Card>
           </div>
@@ -705,7 +682,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Review hostel submission requests from managers and agents.
+                  Review hostel submission requests from hostel managers.
                 </p>
                 <Button asChild size="sm">
                   <Link href="/admin/hostel-requests">
@@ -893,9 +870,8 @@ export default function AdminDashboard() {
                       [
                         { label: 'Admins', items: admins },
                         { label: 'Managers', items: managers },
-                        { label: 'Agents', items: agents },
+                        { label: 'Institutional Staff', items: institutionalStaff },
                         { label: 'Students', items: students },
-                        { label: 'Pending Agents', items: pendingAgents },
                       ].map(group =>
                         group.items.length > 0 ? (
                           <React.Fragment key={`group-${group.label}`}>
@@ -909,7 +885,7 @@ export default function AdminDashboard() {
                                 <TableCell className="font-medium">{user.fullName}</TableCell>
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell>
-                                  <Badge variant={user.role === 'agent' ? 'secondary' : 'outline'} className="capitalize">
+                                  <Badge variant="outline" className="capitalize">
                                     {user.role}
                                   </Badge>
                                 </TableCell>
@@ -920,7 +896,7 @@ export default function AdminDashboard() {
                                       size="sm"
                                       onClick={() => toggleUserRole(user)}
                                       disabled={processingId === user.id || user.role === 'admin'}
-                                      title={`Change to ${user.role === 'student' ? 'Agent' : 'Student'}`}
+                                      title={`Toggle ${user.role === 'student' ? 'Hostel Manager' : 'Student'}`}
                                     >
                                       {processingId === user.id ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -964,46 +940,6 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Online Agents</CardTitle>
-                <CardDescription>A real-time list of agents currently active on the platform.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Full Name</TableHead>
-                      <TableHead>Email</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {onlineAgents.length > 0 ? (
-                      onlineAgents.map(agent => (
-                        <TableRow key={`${agent.clientId}-${agent.data.id}`}>
-                          <TableCell className="font-medium flex items-center gap-2">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback>{agent.data.fullName.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            {agent.data.fullName}
-                          </TableCell>
-                          <TableCell>{agent.data.email}</TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center h-24">
-                          No agents are currently online.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-
         </div>
       </main>
 
@@ -1013,7 +949,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle className="font-headline text-2xl">Review: {selectedHostel.name}</DialogTitle>
               <DialogDescription>
-                Location: {selectedHostel.location} | Submitted by Agent: {selectedHostel.agentId.substring(0, 8)}...
+                Location: {selectedHostel.location} {selectedHostel.submittedBy ? `| Submitted by: ${selectedHostel.submittedBy}` : ''}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">

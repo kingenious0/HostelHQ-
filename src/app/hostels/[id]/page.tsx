@@ -8,7 +8,7 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, Eye, Sparkles, Building, Info, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -29,6 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MapboxMap } from '@/components/map';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -51,7 +52,7 @@ interface AppUser {
     uid: string;
     email: string;
     fullName: string;
-    role: 'student' | 'agent' | 'admin';
+    role: 'student' | 'hostel_manager' | 'admin';
     profileImage?: string;
 }
 
@@ -357,38 +358,64 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
     }
 
+    const handleLoginRedirect = () => {
+        toast({
+            title: "Please Log In",
+            description: "You need to be logged in as a student to request a visit or secure a room.",
+            variant: "default",
+        });
+        router.push(`/login?redirect=/hostels/${hostel.id}`);
+    };
+
     const getVisitButton = (room: RoomType) => {
+        if (!currentUser) {
+            return (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={room.availability === 'Full'}
+                    onClick={handleLoginRedirect}
+                    className="rounded-xl text-xs font-semibold"
+                >
+                    Request Visit
+                </Button>
+            );
+        }
+
         // If the hostel is marked Full by admin, block all room-level CTAs
         if (hostel.availability === 'Full') {
             return (
                 <Button
                     size="sm"
-                    className="bg-muted text-muted-foreground cursor-not-allowed w-full justify-center"
+                    className="bg-muted text-muted-foreground cursor-not-allowed w-full justify-center text-xs"
                     disabled
                 >
-                    Hostel Fully Booked
+                    Hostel Full
                 </Button>
             );
         }
 
         // First check if hostel is already secured
         if (existingBooking !== undefined && existingBooking !== null) {
-            // Check if this room type matches the secured room
             const isSecuredRoom = existingBooking.roomTypeId === room.id;
             return (
                 <Button
                     size="sm"
                     disabled
-                    className="bg-green-600 hover:bg-green-600 text-white cursor-not-allowed"
+                    className="bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed text-xs"
                 >
-                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
                     {isSecuredRoom ? 'Hostel Secured' : 'Room Secured'}
                 </Button>
             );
         }
 
         if (existingVisit === undefined) {
-            return <Button variant="outline" size="sm" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking...</Button>;
+            return (
+                <Button variant="outline" size="sm" disabled className="text-xs">
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Checking...
+                </Button>
+            );
         }
 
         if (existingVisit) {
@@ -399,9 +426,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         size="sm"
                         disabled={room.availability === 'Full'}
                         onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
-                        className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                        className="bg-accent hover:bg-accent/90 text-accent-foreground text-xs font-bold"
                     >
-                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
                         Secure Room
                     </Button>
                 );
@@ -412,9 +439,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <Button
                         variant="outline"
                         size="sm"
+                        className="text-xs"
                         onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
                     >
-                        <Ticket className="mr-2 h-4 w-4" />
+                        <Ticket className="mr-1.5 h-3.5 w-3.5" />
                         Track Visit
                     </Button>
                 );
@@ -427,85 +455,107 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 size="sm"
                 disabled={room.availability === 'Full'}
                 onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
-                className="rounded-xl"
+                className="rounded-xl text-xs font-semibold hover:bg-primary hover:text-white transition-colors"
             >
-                Book Visit
+                Request Visit
             </Button>
         );
-    }
+    };
 
     // Mobile Sticky Container
     const renderMobileStickyCTA = () => {
         const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
 
         return (
-            <div className="fixed bottom-20 left-0 z-40 w-full p-4 md:hidden animate-in fade-in slide-in-from-bottom-5 duration-500">
-                <div className="glass-premium rounded-[2.5rem] p-4 shadow-2xl flex items-center justify-between gap-4 border border-white/80 dark:border-white/10">
+            <div className="fixed bottom-0 left-0 right-0 z-40 p-4 lg:hidden bg-background/95 backdrop-blur-xl border-t border-border shadow-2xl animate-in fade-in slide-in-from-bottom-5 duration-300">
+                <div className="container mx-auto flex items-center justify-between gap-4">
                     <div className="flex flex-col">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Starting from</span>
                         <div className="flex items-baseline gap-1 text-primary">
                             <span className="text-xs font-bold">GH₵</span>
                             <span className="text-xl font-bold">{(hostel.priceRange?.min || hostel.price || 0).toLocaleString()}</span>
+                            <span className="text-[10px] text-muted-foreground">/yr</span>
                         </div>
                     </div>
-                    {hostel.availability === 'Full' ? (
-                        <Button disabled variant="secondary" className="rounded-2xl px-6">Full</Button>
-                    ) : existingBooking ? (
-                        <Button
-                            onClick={() => router.push(`/my-bookings`)}
-                            className="rounded-2xl px-8 bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-600/20"
-                        >
-                            Secured
-                        </Button>
-                    ) : canSecure ? (
-                        <Button
-                            onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
-                            className="rounded-2xl px-8 bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-lg shadow-accent/20"
-                        >
-                            Secure Room
-                        </Button>
-                    ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
-                        <Button
-                            onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
-                            className="rounded-2xl px-8 bg-primary text-white font-bold shadow-lg shadow-primary/20"
-                        >
-                            Track Visit
-                        </Button>
-                    ) : (
-                        <Button
-                            onClick={() => router.push(`/hostels/${hostel.id}/book`)}
-                            className="rounded-2xl px-8 bg-primary text-white font-bold shadow-lg shadow-primary/20"
-                        >
-                            Book Visit
-                        </Button>
-                    )}
+                    <div>
+                        {!currentUser ? (
+                            <Button
+                                onClick={handleLoginRedirect}
+                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
+                            >
+                                Request Free Visit
+                            </Button>
+                        ) : hostel.availability === 'Full' ? (
+                            <Button disabled variant="secondary" className="rounded-2xl px-6 text-xs h-11">Hostel Full</Button>
+                        ) : existingBooking ? (
+                            <Button
+                                onClick={() => router.push(`/my-bookings`)}
+                                className="rounded-2xl px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md text-xs h-11"
+                            >
+                                Secured ✓
+                            </Button>
+                        ) : canSecure ? (
+                            <Button
+                                onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
+                                className="rounded-2xl px-6 bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-md text-xs h-11"
+                            >
+                                Secure Room
+                            </Button>
+                        ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
+                            <Button
+                                onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
+                            >
+                                Track Visit
+                            </Button>
+                        ) : (
+                            <Button
+                                onClick={() => router.push(`/hostels/${hostel.id}/book`)}
+                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
+                            >
+                                Request Free Visit
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
         );
     };
 
     const renderPrice = () => {
-        const priceStyle = "text-4xl font-bold";
+        const priceStyle = "text-3xl font-extrabold";
         if (!hostel.priceRange || hostel.priceRange.min === 0) {
-            return <span className={priceStyle}>GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>
+            return <span className={priceStyle}>GH₵{hostel.price?.toLocaleString() || 'N/A'}</span>;
         }
         if (hostel.priceRange.min === hostel.priceRange.max) {
             return <span className={priceStyle}>GH₵{hostel.priceRange.min.toLocaleString()}</span>;
         }
         return (
-            <span className="text-3xl font-bold">
+            <span className="text-2xl sm:text-3xl font-extrabold">
                 GH₵{hostel.priceRange.min.toLocaleString()} - {hostel.priceRange.max.toLocaleString()}
             </span>
         );
     };
 
     const getPrimaryCTA = () => {
+        if (!currentUser) {
+            return (
+                <Button
+                    size="lg"
+                    className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/20 rounded-2xl"
+                    onClick={handleLoginRedirect}
+                >
+                    Log In to Request Free Visit
+                </Button>
+            );
+        }
+
         // If the hostel is marked Full by admin, block all CTAs
         if (hostel.availability === 'Full') {
             return (
                 <Button
                     size="lg"
-                    className="w-full mt-6 h-14"
+                    className="w-full h-14 rounded-2xl"
                     variant="secondary"
                     disabled
                     title="This hostel is fully booked"
@@ -518,10 +568,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         // First check if hostel is already secured (takes priority)
         if (existingBooking !== undefined && existingBooking !== null) {
             return (
-                <div className="space-y-3 mt-6">
+                <div className="space-y-3">
                     <Button
                         size="lg"
-                        className="w-full h-14 bg-green-600 hover:bg-green-600 text-white cursor-not-allowed"
+                        className="w-full h-14 bg-emerald-600 hover:bg-emerald-600 text-white cursor-not-allowed rounded-2xl font-bold"
                         disabled
                     >
                         <ShieldCheck className="mr-2 h-5 w-5" />
@@ -530,19 +580,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <div className="flex gap-2">
                         <Button
                             variant="outline"
-                            className="flex-1"
+                            className="flex-1 rounded-xl text-xs"
                             onClick={() => router.push(`/invoice/${existingBooking.id}`)}
                         >
-                            <FileText className="mr-2 h-4 w-4" />
-                            View Invoice
+                            <FileText className="mr-1.5 h-4 w-4" />
+                            Invoice
                         </Button>
                         <Button
                             variant="outline"
-                            className="flex-1"
+                            className="flex-1 rounded-xl text-xs"
                             onClick={() => router.push(`/agreement/${existingBooking.id}`)}
                         >
-                            <FileText className="mr-2 h-4 w-4" />
-                            View Agreement
+                            <FileText className="mr-1.5 h-4 w-4" />
+                            Agreement
                         </Button>
                     </div>
                 </div>
@@ -550,12 +600,20 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         }
 
         if (existingVisit === undefined) {
-            return <Button size="lg" className="w-full mt-6 h-14" disabled><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking Status...</Button>;
+            return (
+                <Button size="lg" className="w-full h-14 rounded-2xl" disabled>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking Status...
+                </Button>
+            );
         }
 
         if (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') {
             return (
-                <Button size="lg" className="w-full mt-6 h-14 bg-primary text-primary-foreground" onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}>
+                <Button
+                    size="lg"
+                    className="w-full h-14 bg-primary text-primary-foreground rounded-2xl font-bold"
+                    onClick={() => router.push(`/hostels/${hostel.id}/book/tracking?visitId=${existingVisit.id}`)}
+                >
                     <Ticket className="mr-2 h-5 w-5" />
                     Track Your Visit
                 </Button>
@@ -567,11 +625,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             const roomTypes = hostel.roomTypes || [];
 
             if (roomTypes.length === 1 && roomTypes[0]?.id) {
-                // Single room type: secure that specific room directly
                 return (
                     <Button
                         size="lg"
-                        className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
+                        className="w-full h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-2xl font-bold shadow-lg"
                         onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${roomTypes[0].id}`)}
                     >
                         <ShieldCheck className="mr-2 h-5 w-5" />
@@ -581,24 +638,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             }
 
             if (roomTypes.length > 1) {
-                // Multiple room types: nudge them to view and pick a room to secure
                 return (
                     <Button
                         size="lg"
-                        className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
+                        className="w-full h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-2xl font-bold shadow-lg"
                         onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                     >
                         <ShieldCheck className="mr-2 h-5 w-5" />
-                        View available rooms to secure your space
+                        Select Room to Secure
                     </Button>
                 );
             }
 
-            // Fallback: if we can't see room types, keep the old hostel-level secure CTA
             return (
                 <Button
                     size="lg"
-                    className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
+                    className="w-full h-14 bg-accent hover:bg-accent/90 text-accent-foreground rounded-2xl font-bold shadow-lg"
                     onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
                 >
                     <ShieldCheck className="mr-2 h-5 w-5" />
@@ -610,170 +665,478 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         return (
             <Button
                 size="lg"
-                className="w-full mt-6 h-14 bg-accent hover:bg-accent/90 text-accent-foreground"
+                className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-2xl shadow-lg shadow-primary/20"
                 onClick={() => router.push(`/hostels/${hostel.id}/book`)}
             >
-                Book a Visit
+                Request a Free Visit
             </Button>
         );
     };
 
+    const renderAirbnbGallery = () => {
+        const images = primaryImages.length > 0 ? primaryImages : ['/AAMUSTED-Full-shot.jpeg'];
+
+        return (
+            <>
+                {/* Desktop Grid Layout (Airbnb Style) */}
+                <div className="hidden md:grid md:grid-cols-4 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
+                    {/* Hero Image (Left 2 cols, 2 rows) */}
+                    <div
+                        className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted"
+                        onClick={() => setRoomsDialogOpen(true)}
+                    >
+                        <Image
+                            src={images[0]}
+                            alt={`${hostel.name} main photo`}
+                            fill
+                            className="object-cover transition-transform duration-700 group-hover:scale-105"
+                            priority
+                            sizes="(max-width: 1024px) 50vw, 50vw"
+                        />
+                    </div>
+
+                    {/* 4 Thumbnails (Right 2 cols, 2x2) */}
+                    {Array.from({ length: 4 }).map((_, i) => {
+                        const img = images[i + 1] || images[0];
+                        return (
+                            <div
+                                key={i}
+                                className="relative cursor-pointer overflow-hidden bg-muted"
+                                onClick={() => setRoomsDialogOpen(true)}
+                            >
+                                <Image
+                                    src={img}
+                                    alt={`${hostel.name} detail photo ${i + 2}`}
+                                    fill
+                                    className="object-cover transition-transform duration-700 hover:scale-110"
+                                    sizes="(max-width: 1024px) 25vw, 25vw"
+                                />
+                            </div>
+                        );
+                    })}
+
+                    {/* Show All Photos Floating Pill Button */}
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setRoomsDialogOpen(true)}
+                        className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                    >
+                        <Grid className="h-4 w-4" />
+                        Show all {images.length} photos
+                    </Button>
+                </div>
+
+                {/* Mobile Gallery Layout */}
+                <div className="md:hidden relative h-[280px] sm:h-[340px] rounded-2xl overflow-hidden group">
+                    <Image
+                        src={images[0]}
+                        alt={hostel.name}
+                        fill
+                        className="object-cover"
+                        priority
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+
+                    {/* Photo count indicator pill */}
+                    <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-white/20">
+                        <ImagePlus className="h-3.5 w-3.5" />
+                        <span>1 / {images.length} photos</span>
+                    </div>
+
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setRoomsDialogOpen(true)}
+                        className="absolute bottom-4 right-4 bg-white/90 text-black hover:bg-white text-xs font-bold rounded-xl shadow-md"
+                    >
+                        View Photos
+                    </Button>
+                </div>
+
+                {/* Full Photos Dialog */}
+                <Dialog open={roomsDialogOpen} onOpenChange={setRoomsDialogOpen}>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl">
+                        <DialogHeader className="mb-4">
+                            <DialogTitle className="text-2xl font-bold font-headline">{hostel.name} — Photo Gallery</DialogTitle>
+                            <DialogDescription>
+                                High resolution photos of bedrooms, common study rooms, and amenities.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {images.map((img, index) => (
+                                <div key={index} className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-border/50 bg-muted">
+                                    <Image
+                                        src={img}
+                                        alt={`${hostel.name} photo ${index + 1}`}
+                                        fill
+                                        className="object-cover"
+                                    />
+                                    <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md">
+                                        Photo {index + 1}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            </>
+        );
+    };
+
     return (
-        <div className="grid lg:grid-cols-[1fr_0.42fr] gap-8 lg:gap-16 relative pb-32 md:pb-0">
+        <div className="space-y-8 pb-32 lg:pb-16 relative">
+            {/* Mobile Sticky CTA Bar */}
             {renderMobileStickyCTA()}
-            <div className="lg:col-span-2 mb-4">
+
+            {/* Back Button & Share Top Row */}
+            <div className="flex items-center justify-between">
                 <Button
                     variant="ghost"
                     size="sm"
-                    className="rounded-full gap-2 text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors pr-6"
+                    className="rounded-full gap-2 text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors pr-4"
                     onClick={() => router.back()}
                 >
                     <ArrowLeft className="h-4 w-4" />
                     Back to Hostels
                 </Button>
-            </div>
-            <div className="order-2 lg:order-1 space-y-12">
-                {/* Immersive Gallery Section */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 h-[350px] sm:h-[450px] lg:h-[550px]">
-                    <div className="md:col-span-3 relative group overflow-hidden rounded-[2.5rem] shadow-2xl">
-                        <Image
-                            src={primaryImages[0]}
-                            alt={`${hostel.name} main`}
-                            fill
-                            className="object-cover transition-transform duration-1000 group-hover:scale-105"
-                            priority
-                        />
-                        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-80" />
-                        <div className="absolute bottom-8 left-8">
-                            <Badge className="bg-white/20 backdrop-blur-md border-white/30 text-white mb-3">Main View</Badge>
-                            <h2 className="text-white text-3xl font-bold font-headline drop-shadow-lg">{hostel.name}</h2>
+
+                <div className="relative">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full gap-2 border-border/70 text-muted-foreground hover:text-foreground text-xs"
+                        onClick={() => setShareMenuOpen((open) => !open)}
+                    >
+                        <Share2 className="h-3.5 w-3.5" />
+                        Share
+                    </Button>
+                    {shareMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-48 rounded-2xl border bg-background/95 backdrop-blur-xl shadow-2xl z-50 p-2 border-border/60">
+                            <button
+                                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs font-semibold hover:bg-muted rounded-xl transition-colors"
+                                onClick={() => { setShareMenuOpen(false); handleShare('whatsapp'); }}
+                            >
+                                <div className="h-7 w-7 rounded-lg bg-green-500/10 flex items-center justify-center text-green-600">
+                                    <MessageCircle className="h-4 w-4" />
+                                </div>
+                                <span>WhatsApp</span>
+                            </button>
+                            <button
+                                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs font-semibold hover:bg-muted rounded-xl transition-colors"
+                                onClick={() => { setShareMenuOpen(false); handleShare('twitter'); }}
+                            >
+                                <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                    <Twitter className="h-4 w-4" />
+                                </div>
+                                <span>Twitter</span>
+                            </button>
+                            <button
+                                className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs font-semibold hover:bg-muted rounded-xl transition-colors"
+                                onClick={() => { setShareMenuOpen(false); handleShare('copy'); }}
+                            >
+                                <div className={cn("h-7 w-7 rounded-lg flex items-center justify-center", shareCopied ? "bg-emerald-500/10 text-emerald-600" : "bg-muted text-muted-foreground")}>
+                                    {shareCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                </div>
+                                <span>{shareCopied ? 'Copied!' : 'Copy Link'}</span>
+                            </button>
                         </div>
-                    </div>
-                    <div className="hidden md:grid grid-rows-2 gap-4">
-                        {primaryImages.slice(1, 3).map((img, idx) => (
-                            <div key={idx} className="relative group overflow-hidden rounded-[2rem] shadow-xl border border-white/20">
-                                <Image
-                                    src={img}
-                                    alt={`${hostel.name} detail ${idx + 1}`}
-                                    fill
-                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
-                                />
-                                {idx === 1 && primaryImages.length > 3 && (
-                                    <div
-                                        className="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center cursor-pointer hover:bg-black/50 transition-colors"
-                                        onClick={() => setRoomsDialogOpen(true)}
-                                    >
-                                        <div className="p-3 rounded-full bg-white/20 border border-white/40 mb-2">
-                                            <ImagePlus className="text-white h-6 w-6" />
-                                        </div>
-                                        <span className="text-white font-bold text-sm">+{primaryImages.length - 3} Photos</span>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Title + Key-Facts Row Directly Beneath Gallery (Full Width) */}
+            <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-headline tracking-tight text-foreground">
+                        {hostel.name}
+                    </h1>
+                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> University-Approved ✓
+                    </Badge>
+                    <Badge
+                        variant="outline"
+                        className={cn("text-xs font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}
+                    >
+                        {currentAvailability.text}
+                    </Badge>
                 </div>
 
-                <div className="mt-8 space-y-10">
-                    <div className="glass-premium rounded-[2.5rem] p-10 border border-white/40 shadow-premium overflow-hidden relative">
-                        <div className="absolute top-0 right-0 p-8 opacity-5">
-                            <BookOpen className="h-40 w-40 text-primary" />
-                        </div>
-                        <h3 className="text-2xl font-extrabold font-headline mb-6 tracking-tight flex items-center gap-3">
-                            <div className="h-8 w-1.5 bg-primary rounded-full" />
+                <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                        <span className="font-bold text-foreground">
+                            {reviewStats.total > 0 ? reviewAverage.toFixed(1) : "New"}
+                        </span>
+                        <span>
+                            ({totalReviews} {totalReviews === 1 ? "review" : "reviews"})
+                        </span>
+                    </div>
+                    <span>•</span>
+                    <div className="flex items-center gap-1.5">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <span>{hostel.location}</span>
+                    </div>
+                    {hostel.distanceToUniversity && (
+                        <>
+                            <span>•</span>
+                            <div className="flex items-center gap-1.5 text-primary font-medium">
+                                <Clock className="h-4 w-4" />
+                                <span>{hostel.distanceToUniversity} from campus</span>
+                            </div>
+                        </>
+                    )}
+                    {hostel.institution && (
+                        <>
+                            <span>•</span>
+                            <Badge variant="secondary" className="font-semibold text-xs">
+                                {hostel.institution}
+                            </Badge>
+                        </>
+                    )}
+                    {hostel.gender && (
+                        <>
+                            <span>•</span>
+                            <Badge variant="outline" className="text-xs">
+                                {hostel.gender} Students Only
+                            </Badge>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Airbnb-style Photo Gallery */}
+            {renderAirbnbGallery()}
+
+            {/* Two-Column Body below the gallery */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px] gap-8 lg:gap-12 items-start mt-8">
+                {/* Left Column (Scrollable content) */}
+                <div className="space-y-10 min-w-0">
+                    {/* 1. About Description */}
+                    <div className="rounded-3xl p-6 sm:p-8 border border-border/70 bg-card/60 backdrop-blur-sm space-y-6">
+                        <h3 className="text-xl font-extrabold font-headline flex items-center gap-2.5">
+                            <BookOpen className="h-5 w-5 text-primary" />
                             About this Hostel
                         </h3>
-                        <p className="text-lg text-foreground/80 leading-relaxed font-medium mb-8 max-w-3xl">
+                        <p className="text-base text-foreground/80 leading-relaxed font-normal">
                             {hostel.description}
                         </p>
-                        <div className="flex flex-wrap gap-4">
+                        <div className="flex flex-wrap gap-3 pt-2">
                             {hostel.institution && (
-                                <div className="flex items-center gap-3 px-6 py-3 bg-secondary/30 rounded-2xl border border-secondary/20 transition-all hover:bg-secondary/40">
-                                    <User className="h-5 w-5 text-secondary-foreground" />
-                                    <span className="text-sm font-bold text-secondary-foreground">{hostel.institution}</span>
+                                <div className="flex items-center gap-2 px-4 py-2 bg-secondary/40 rounded-xl border border-secondary/30 text-xs font-semibold text-secondary-foreground">
+                                    <Building className="h-4 w-4" />
+                                    <span>Affiliated with {hostel.institution}</span>
                                 </div>
                             )}
-                            {hostel.distanceToUniversity && (
-                                <div className="flex items-center gap-3 px-6 py-3 bg-accent/10 rounded-2xl border border-accent/20 transition-all hover:bg-accent/20">
-                                    <Clock className="h-5 w-5 text-accent-foreground" />
-                                    <span className="text-sm font-bold text-accent-foreground">{hostel.distanceToUniversity} from Campus</span>
-                                </div>
-                            )}
-                            <div className="flex items-center gap-3 px-6 py-3 bg-primary/5 rounded-2xl border border-primary/10 transition-all hover:bg-primary/10">
-                                <UsersIcon className="h-5 w-5 text-primary" />
-                                <span className="text-sm font-bold text-primary">{hostel.gender} Students Only</span>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-xl border border-primary/10 text-xs font-semibold text-primary">
+                                <UsersIcon className="h-4 w-4" />
+                                <span>{hostel.gender} Students Only</span>
                             </div>
                         </div>
                     </div>
 
                     <Separator />
 
+                    {/* 2. Spotahome-style Room Types Mini-Listings */}
+                    <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+                            <div>
+                                <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                                    <Bed className="h-6 w-6 text-primary" />
+                                    Available Room Types
+                                </h3>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Individual layouts, amenities, and annual rates per room type.
+                                </p>
+                            </div>
+                            {(hostel.roomTypes?.length ?? 0) > 1 && (
+                                <Link
+                                    href={`/hostels/${hostel.id}/rooms`}
+                                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1 shrink-0"
+                                >
+                                    Compare side-by-side <ChevronRight className="h-4 w-4" />
+                                </Link>
+                            )}
+                        </div>
+
+                        <div className="grid gap-5">
+                            {(hostel.roomTypes && hostel.roomTypes.length > 0) ? (
+                                hostel.roomTypes.map((room, idx) => {
+                                    const roomImg = room.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
+                                    return (
+                                        <div
+                                            key={room.id || idx}
+                                            className="rounded-3xl border border-border/70 bg-card/60 backdrop-blur-sm p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between"
+                                        >
+                                            <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center w-full md:w-auto">
+                                                <div className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted">
+                                                    <Image
+                                                        src={roomImg}
+                                                        alt={room.name}
+                                                        fill
+                                                        className="object-cover"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
+                                                        <Badge
+                                                            variant={getRoomAvailabilityVariant(room.availability)}
+                                                            className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
+                                                        >
+                                                            {room.availability}
+                                                        </Badge>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-medium">
+                                                        {room.capacity && (
+                                                            <span className="flex items-center gap-1">
+                                                                <UsersIcon className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{room.capacity > 1 ? 's' : ''}
+                                                            </span>
+                                                        )}
+                                                        {room.beds && (
+                                                            <span className="flex items-center gap-1">
+                                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Bed{room.beds > 1 ? 's' : ''}
+                                                            </span>
+                                                        )}
+                                                        {room.bathrooms && (
+                                                            <span className="flex items-center gap-1">
+                                                                <Bath className="h-3.5 w-3.5 text-primary" /> {room.bathrooms} Bath
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {room.amenities && room.amenities.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5 pt-1">
+                                                            {room.amenities.slice(0, 3).map((am, i) => (
+                                                                <span key={i} className="text-[10px] bg-muted px-2 py-0.5 rounded-md text-muted-foreground font-medium">
+                                                                    {am}
+                                                                </span>
+                                                            ))}
+                                                            {room.amenities.length > 3 && (
+                                                                <span className="text-[10px] text-muted-foreground font-medium self-center">
+                                                                    +{room.amenities.length - 3} more
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex sm:flex-col items-center sm:items-end justify-between w-full md:w-auto gap-3 pt-4 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                                                <div className="text-left sm:text-right">
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Annual Rate</p>
+                                                    <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
+                                                </div>
+                                                <div>
+                                                    {getVisitButton(room)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="p-8 rounded-3xl border border-dashed text-center text-muted-foreground">
+                                    <p>Contact manager for room specifications and current availability.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* 3. Amenities Icon Grid */}
+                    <div className="space-y-6">
+                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                            <Sparkles className="h-6 w-6 text-primary" />
+                            Hostel Amenities
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                            {hostel.amenities.map((amenity: string) => {
+                                const key = amenity.toLowerCase().replace(/\s+/g, '-');
+                                const icon = amenityIcons[key] || <DoorOpen className="h-5 w-5" />;
+                                return (
+                                    <div
+                                        key={amenity}
+                                        className="flex items-center gap-3 p-4 rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm hover:border-primary/40 transition-colors"
+                                    >
+                                        <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+                                            {icon}
+                                        </div>
+                                        <span className="text-xs font-semibold text-foreground leading-tight">
+                                            {amenity}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* 4. Financial Breakdown */}
                     <div className="space-y-6">
                         <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
                             <Receipt className="h-6 w-6 text-primary" />
-                            Financial Breakdown
+                            Bills & Utilities Included
                         </h3>
-                        <div className="grid sm:grid-cols-2 gap-6">
-                            {hostel.billsIncluded && hostel.billsIncluded.length > 0 && (
-                                <div className="p-6 bg-green-50/50 rounded-3xl border border-green-100">
-                                    <p className="font-bold text-green-800 mb-3 flex items-center gap-2 uppercase text-xs tracking-widest">
-                                        <Check className="h-4 w-4" /> Included in Rent
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {hostel.billsIncluded.map(bill => (
-                                            <Badge key={bill} variant="outline" className="bg-white border-green-200 text-green-700 rounded-lg">{bill}</Badge>
-                                        ))}
-                                    </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="p-5 bg-emerald-500/10 dark:bg-emerald-950/20 rounded-3xl border border-emerald-500/20 space-y-3">
+                                <p className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2 uppercase text-xs tracking-wider">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Included in Rent
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {hostel.billsIncluded && hostel.billsIncluded.length > 0 ? (
+                                        hostel.billsIncluded.map((bill) => (
+                                            <Badge key={bill} variant="outline" className="bg-background/80 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs py-1">
+                                                {bill}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">Water & regular waste sanitation included</span>
+                                    )}
                                 </div>
-                            )}
-                            {hostel.billsExcluded && hostel.billsExcluded.length > 0 && (
-                                <div className="p-6 bg-red-50/50 rounded-3xl border border-red-100">
-                                    <p className="font-bold text-red-800 mb-3 flex items-center gap-2 uppercase text-xs tracking-widest">
-                                        <AlertTriangle className="h-4 w-4" /> Excluded / Extra
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {hostel.billsExcluded.map(bill => (
-                                            <Badge key={bill} variant="outline" className="bg-white border-red-200 text-red-700 rounded-lg">{bill}</Badge>
-                                        ))}
-                                    </div>
+                            </div>
+
+                            <div className="p-5 bg-amber-500/10 dark:bg-amber-950/20 rounded-3xl border border-amber-500/20 space-y-3">
+                                <p className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-2 uppercase text-xs tracking-wider">
+                                    <AlertTriangle className="h-4 w-4 text-amber-600" /> Extra / Pay-As-You-Go
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {hostel.billsExcluded && hostel.billsExcluded.length > 0 ? (
+                                        hostel.billsExcluded.map((bill) => (
+                                            <Badge key={bill} variant="outline" className="bg-background/80 border-amber-500/30 text-amber-700 dark:text-amber-300 rounded-lg text-xs py-1">
+                                                {bill}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">Electricity prepaid meter per room</span>
+                                    )}
                                 </div>
-                            )}
+                            </div>
                         </div>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                            HostelHQ operates with 100% transparent pricing — zero hidden middleman fees or viewing charges.
+                        </p>
                     </div>
 
                     <Separator />
 
+                    {/* 5. Security & Safety */}
                     <div className="space-y-6">
                         <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
                             <ShieldCheck className="h-6 w-6 text-primary" />
-                            Security & Safety
+                            Security & Building Safety
                         </h3>
-                        {hostel.securityAndSafety && hostel.securityAndSafety.length > 0 && (
-                            <div className="grid sm:grid-cols-2 gap-3">
-                                {hostel.securityAndSafety.map(item => (
-                                    <div key={item} className="flex items-center gap-3 p-4 bg-white/40 rounded-2xl border border-white/20">
-                                        <div className="h-2 w-2 rounded-full bg-primary" />
-                                        <span className="text-sm font-semibold text-foreground/80">{item}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-6">
-                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
-                            <Wifi className="h-6 w-6 text-primary" />
-                            Premium Amenities
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {hostel.amenities.map((amenity: string) => (
-                                <div key={amenity} className="flex flex-col items-center justify-center p-6 bg-white/40 rounded-[2rem] border border-white/20 hover:border-primary/30 transition-all group/amenity">
-                                    <div className="p-3 bg-primary/5 rounded-2xl mb-3 group-hover/amenity:bg-primary group-hover/amenity:text-white transition-colors">
-                                        {amenityIcons[amenity.toLowerCase().replace(' ', '-')] || <DoorOpen className="h-6 w-6" />}
-                                    </div>
-                                    <span className="text-xs font-bold uppercase tracking-widest text-center">{amenity}</span>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            {(hostel.securityAndSafety && hostel.securityAndSafety.length > 0
+                                ? hostel.securityAndSafety
+                                : ['24/7 Security Personnel', 'Gated Perimeter Fence', 'Fire Extinguishers on Each Floor', 'Emergency Contact Access']
+                            ).map((item) => (
+                                <div key={item} className="flex items-center gap-3 p-4 rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
+                                    <span className="text-xs font-semibold text-foreground/90">{item}</span>
                                 </div>
                             ))}
                         </div>
@@ -781,36 +1144,68 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
                     <Separator />
 
+                    {/* 6. Location & Campus Proximity Map */}
+                    <div className="space-y-6">
+                        <div>
+                            <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                                <MapPin className="h-6 w-6 text-primary" />
+                                Location & Campus Proximity
+                            </h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                {hostel.location} {hostel.distanceToUniversity ? `• ${hostel.distanceToUniversity} from campus` : ''}
+                            </p>
+                        </div>
+
+                        <div className="h-[360px] sm:h-[420px] rounded-3xl overflow-hidden border border-border/70 shadow-sm relative">
+                            <MapboxMap hostelLocation={hostel} />
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-xl border border-border/40">
+                                <Compass className="h-4 w-4 text-primary" />
+                                <span>Walking distance to university faculties & shuttle stop</span>
+                            </div>
+                            <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-xl border border-border/40">
+                                <Building className="h-4 w-4 text-primary" />
+                                <span>Surrounded by student cafeterias, marts, and study centers</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* 7. Student Reviews Section */}
                     <div className="space-y-6">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <h3 className="text-xl font-semibold font-headline">What students are saying</h3>
-                                <p className="text-sm text-muted-foreground">Transparent feedback helps you decide faster.</p>
+                                <h3 className="text-2xl font-extrabold font-headline tracking-tight">Student Feedback & Reviews</h3>
+                                <p className="text-sm text-muted-foreground">Authentic reviews from verified students who inspected or stayed at this hostel.</p>
                             </div>
                             <span className="text-xs uppercase tracking-wide text-muted-foreground">
                                 {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'} collected
                             </span>
                         </div>
+
                         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-                            <Card className="border border-border/60 shadow-sm">
+                            <Card className="border border-border/60 shadow-sm rounded-3xl">
                                 <CardHeader className="pb-2">
-                                    <CardTitle className="text-2xl font-headline">Customer Review</CardTitle>
-                                    <CardDescription>From verified HostelHQ students</CardDescription>
+                                    <CardTitle className="text-xl font-headline">Review Summary</CardTitle>
+                                    <CardDescription>Verified HostelHQ student evaluations</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
                                     <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="text-center sm:text-left space-y-2">
-                                            <div className="text-5xl font-bold text-foreground">
-                                                {reviewAverage.toFixed(1)}
+                                            <div className="text-5xl font-extrabold text-foreground">
+                                                {reviewStats.total > 0 ? reviewAverage.toFixed(1) : "—"}
                                             </div>
                                             <p className="text-sm text-muted-foreground">
                                                 Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'}
                                             </p>
-                                            <div className="flex justify-center sm:justify-start gap-1 text-yellow-400">
+                                            <div className="flex justify-center sm:justify-start gap-1 text-amber-400">
                                                 {[...Array(5)].map((_, i) => (
                                                     <Star
                                                         key={i}
-                                                        className={`h-5 w-5 ${i < roundedAverage ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/30'}`}
+                                                        className={`h-5 w-5 ${i < roundedAverage ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`}
                                                     />
                                                 ))}
                                             </div>
@@ -819,7 +1214,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             {reviewStats.breakdown.map((row) => (
                                                 <div key={row.star} className="flex items-center gap-3">
                                                     <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground min-w-[32px]">
-                                                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                                                         {row.star}
                                                     </div>
                                                     <Progress value={row.percentage} className="h-2 flex-1 bg-muted" />
@@ -830,7 +1225,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     </div>
                                     <div className="grid gap-4 sm:grid-cols-[minmax(0,150px)_1fr]">
                                         <Select value={selectedRating} onValueChange={setSelectedRating}>
-                                            <SelectTrigger className="bg-background">
+                                            <SelectTrigger className="bg-background rounded-xl">
                                                 <SelectValue placeholder="Rating" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -844,59 +1239,63 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                         <Textarea
                                             value={draftReview}
                                             onChange={(event) => setDraftReview(event.target.value)}
-                                            placeholder="Share your experience staying here..."
-                                            className="min-h-[110px]"
+                                            placeholder="Share your experience inspecting or staying here..."
+                                            className="min-h-[90px] rounded-xl"
                                         />
                                     </div>
-                                    <Button className="justify-between" onClick={handleReviewCTA}>
-                                        {currentUser ? 'Continue to review form' : 'Login to post review'}
+                                    <Button className="w-full justify-between rounded-xl" onClick={handleReviewCTA}>
+                                        {currentUser ? 'Continue to review submission' : 'Login to post review'}
                                         <ArrowRight className="h-4 w-4" />
                                     </Button>
                                 </CardContent>
                             </Card>
-                            <Card className="border border-primary/30 bg-primary/5 shadow-sm">
+
+                            <Card className="border border-primary/20 bg-primary/5 shadow-sm rounded-3xl">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-lg font-semibold text-primary">Price starts at</CardTitle>
-                                    <CardDescription>Best rates guaranteed for trusted students</CardDescription>
+                                    <CardDescription>Direct approved rates guaranteed</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-5">
                                     <div>
-                                        <p className="text-3xl font-bold text-primary">
+                                        <p className="text-3xl font-extrabold text-primary">
                                             {hostel.priceRange?.min
                                                 ? `GH₵${hostel.priceRange.min.toLocaleString()}`
                                                 : hostel.price
                                                     ? `GH₵${hostel.price.toLocaleString()}`
-                                                    : 'Contact for pricing'}
+                                                    : 'Contact for rates'}
                                         </p>
-                                        <div className="mt-2 flex items-center gap-1 text-yellow-400">
+                                        <div className="mt-2 flex items-center gap-1 text-amber-400">
                                             {[...Array(5)].map((_, i) => (
                                                 <Star
                                                     key={`price-rating-${i}`}
-                                                    className={`h-4 w-4 ${i < roundedAverage ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/30'}`}
+                                                    className={`h-4 w-4 ${i < roundedAverage ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`}
                                                 />
                                             ))}
-                                            <span className="ml-2 text-xs text-muted-foreground">{reviewAverage.toFixed(1)} / 5.0</span>
+                                            <span className="ml-2 text-xs text-muted-foreground">
+                                                {reviewStats.total > 0 ? `${reviewAverage.toFixed(1)} / 5.0` : 'No ratings yet'}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
-                                        <div className="rounded-lg border border-primary/20 bg-background/80 p-3">
-                                            <p className="uppercase tracking-wide text-xs text-primary/80">Payments</p>
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="rounded-xl border border-primary/20 bg-background/80 p-3">
+                                            <p className="uppercase tracking-wide text-[10px] text-primary/80 font-bold">Payments</p>
                                             <p className="font-semibold text-primary mt-1">Mobile Money, Card</p>
                                         </div>
-                                        <div className="rounded-lg border border-primary/20 bg-background/80 p-3">
-                                            <p className="uppercase tracking-wide text-xs text-primary/80">Support</p>
-                                            <p className="font-semibold text-primary mt-1">24/7 Student Desk</p>
+                                        <div className="rounded-xl border border-primary/20 bg-background/80 p-3">
+                                            <p className="uppercase tracking-wide text-[10px] text-primary/80 font-bold">Support</p>
+                                            <p className="font-semibold text-primary mt-1">University Helpdesk</p>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
                         </div>
+
                         <div className="space-y-4">
-                            <h4 className="text-lg font-semibold">Latest reviews</h4>
+                            <h4 className="text-base font-bold">Latest Reviews</h4>
                             {(hostel.reviews && hostel.reviews.length > 0) ? (
-                                <div className="space-y-6">
+                                <div className="space-y-4">
                                     {hostel.reviews.map((review) => (
-                                        <div key={review.id} className="flex gap-4 rounded-xl border border-border/40 bg-background/80 p-4">
+                                        <div key={review.id} className="flex gap-4 rounded-2xl border border-border/50 bg-background/80 p-4">
                                             <Avatar>
                                                 {review.userProfileImage ? (
                                                     <AvatarImage src={review.userProfileImage} alt={review.studentName} />
@@ -906,7 +1305,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             </Avatar>
                                             <div className="space-y-2">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <p className="font-semibold">{review.studentName}</p>
+                                                    <p className="font-semibold text-sm">{review.studentName}</p>
                                                     <span className="text-xs text-muted-foreground">
                                                         {format(new Date(review.createdAt), 'PP')}
                                                     </span>
@@ -915,7 +1314,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     {[...Array(5)].map((_, i) => (
                                                         <Star
                                                             key={`${review.id}-${i}`}
-                                                            className={`h-4 w-4 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/30'}`}
+                                                            className={`h-3.5 w-3.5 ${i < review.rating ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground/30'}`}
                                                         />
                                                     ))}
                                                 </div>
@@ -932,188 +1331,87 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         </div>
                     </div>
                 </div>
-            </div>
-            <div className="flex flex-col order-1 lg:order-2 lg:sticky lg:top-32 h-fit space-y-8">
-                <div className="glass-premium p-8 rounded-[3rem] border border-white shadow-2xl space-y-8 overflow-hidden relative">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
 
-                    <div className="flex items-center justify-between">
-                        <Badge
-                            variant="outline"
-                            className={cn("text-[10px] font-bold uppercase tracking-[0.2em] px-4 py-1.5 rounded-full", currentAvailability.className)}
-                        >
-                            {currentAvailability.text}
-                        </Badge>
-                        <div className="relative">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-10 w-10 rounded-full border-primary/20 text-primary bg-primary/5 hover:bg-primary/10 transition-all"
-                                onClick={() => setShareMenuOpen((open) => !open)}
-                            >
-                                <Share2 className="h-4 w-4" />
-                            </Button>
-                            {shareMenuOpen && (
-                                <div className="absolute right-0 mt-3 w-48 rounded-2xl border bg-white/95 backdrop-blur-xl shadow-2xl z-50 p-2 border-white/40">
-                                    <button
-                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
-                                        onClick={() => { setShareMenuOpen(false); handleShare('whatsapp'); }}
-                                    >
-                                        <div className="h-8 w-8 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
-                                            <MessageCircle className="h-4 w-4" />
-                                        </div>
-                                        <span>WhatsApp</span>
-                                    </button>
-                                    <button
-                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
-                                        onClick={() => { setShareMenuOpen(false); handleShare('twitter'); }}
-                                    >
-                                        <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-400">
-                                            <Twitter className="h-4 w-4" />
-                                        </div>
-                                        <span>Twitter</span>
-                                    </button>
-                                    <button
-                                        className="flex w-full items-center gap-3 px-4 py-3 text-xs font-bold hover:bg-primary/5 rounded-xl transition-colors"
-                                        onClick={() => { setShareMenuOpen(false); handleShare('copy'); }}
-                                    >
-                                        <div className={`h-8 w-8 rounded-lg ${shareCopied ? 'bg-green-100 text-green-600' : 'bg-gray-50 text-gray-600'} flex items-center justify-center`}>
-                                            {shareCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                                        </div>
-                                        <span>{shareCopied ? 'Copied!' : 'Copy Link'}</span>
-                                    </button>
+                {/* Right Column (Desktop Sticky Booking & Pricing Card) */}
+                <div className="hidden lg:block sticky top-24 self-start space-y-6">
+                    <div className="rounded-[2.5rem] p-7 border border-border/70 bg-card/90 backdrop-blur-xl shadow-xl space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Starting from</span>
+                                <div className="flex items-baseline gap-1 text-foreground">
+                                    {renderPrice()}
+                                    <span className="text-xs font-bold text-muted-foreground">/ yr</span>
                                 </div>
+                            </div>
+                            <Badge
+                                variant="outline"
+                                className={cn("text-[10px] font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}
+                            >
+                                {currentAvailability.text}
+                            </Badge>
+                        </div>
+
+                        <Separator />
+
+                        {/* Primary Action Button */}
+                        <div className="space-y-3">
+                            {getPrimaryCTA()}
+                            {(hostel.roomTypes?.length ?? 0) > 1 && (
+                                <Button
+                                    variant="outline"
+                                    className="w-full h-12 rounded-2xl font-bold text-xs"
+                                    onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
+                                >
+                                    Compare All {hostel.roomTypes?.length} Room Options
+                                </Button>
                             )}
                         </div>
-                    </div>
 
-                    <div className="space-y-3">
-                        <h1 className="text-3xl font-extrabold font-headline leading-tight tracking-tight text-gradient">{hostel.name}</h1>
-                        <div className="flex items-center text-muted-foreground/80">
-                            <MapPin className="h-4 w-4 mr-2 text-primary/60" />
-                            <span className="text-sm font-medium">{hostel.location}</span>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                        <div className="flex items-center gap-2">
-                            <div className="flex text-yellow-400">
-                                {[...Array(5)].map((_, i) => (
-                                    <Star key={i} className={`h-4 w-4 ${i < roundedAverage ? 'fill-current' : 'text-muted-foreground/30'}`} />
-                                ))}
+                        {/* University Oversight & Direct Booking Guarantees */}
+                        <div className="rounded-2xl bg-muted/50 border border-border/60 p-4 space-y-3">
+                            <div className="flex items-start gap-2.5">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-bold text-foreground">University-Approved Listing</p>
+                                    <p className="text-[11px] text-muted-foreground">Inspected and certified for student safety and standard accommodation.</p>
+                                </div>
                             </div>
-                            <span className="text-sm font-bold">{reviewAverage.toFixed(1)}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground font-medium underline underline-offset-4 cursor-pointer">
-                            {totalReviews} Student Reviews
-                        </span>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="flex items-end justify-between">
-                            <div className="space-y-1">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Starting from</p>
-                                {renderPrice()}
+                            <div className="flex items-start gap-2.5">
+                                <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-bold text-foreground">Zero Middleman Viewing Fees</p>
+                                    <p className="text-[11px] text-muted-foreground">In-person inspections are 100% free with direct manager scheduling.</p>
+                                </div>
                             </div>
-                            <span className="text-sm font-bold text-muted-foreground pb-1">/ year</span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-secondary/20 rounded-xl border border-secondary/30 flex items-center gap-2">
-                                <Smartphone className="h-4 w-4 text-secondary-foreground" />
-                                <span className="text-[10px] font-bold text-secondary-foreground uppercase">MoMo</span>
-                            </div>
-                            <div className="p-3 bg-secondary/20 rounded-xl border border-secondary/30 flex items-center gap-2">
-                                <CreditCard className="h-4 w-4 text-secondary-foreground" />
-                                <span className="text-[10px] font-bold text-secondary-foreground uppercase">Card</span>
+                            <div className="flex items-start gap-2.5">
+                                <Lock className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-xs font-bold text-foreground">Payment Protection Escrow</p>
+                                    <p className="text-[11px] text-muted-foreground">Payments via Mobile Money & Card are verified with official university invoice.</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="space-y-4 pt-4 border-t border-primary/5">
-                        {getPrimaryCTA()}
-
-                        {(hostel.roomTypes?.length ?? 0) > 1 && (
-                            <Button
-                                variant="outline"
-                                className="w-full h-14 rounded-2xl border-primary/20 text-primary hover:bg-primary/5 font-bold group"
-                                onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                            <span className="flex items-center gap-1.5">
+                                <Smartphone className="h-3.5 w-3.5 text-primary" /> MoMo / Card Accepted
+                            </span>
+                            <button
+                                onClick={() => handleShare('copy')}
+                                className="hover:text-primary transition-colors flex items-center gap-1 font-semibold"
                             >
-                                Compare Room Options
-                                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                            </Button>
-                        )}
-                    </div>
-
-                    <div className="bg-background/80 backdrop-blur-sm rounded-[1.5rem] border border-primary/5 p-5 space-y-4">
-                        <div className="flex items-start gap-3">
-                            <div className="h-8 w-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 shrink-0">
-                                <ShieldCheck className="h-4 w-4" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-bold">Verified Agent</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">This property has been physically inspected by our team.</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                                <Lock className="h-4 w-4" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-bold">Encrypted Payments</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">Your data and payments are secured with end-to-end encryption.</p>
-                            </div>
+                                {shareCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Share2 className="h-3.5 w-3.5" />}
+                                {shareCopied ? 'Copied Link' : 'Share'}
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
-
-            {(hostel.roomTypes?.length ?? 0) === 1 && (
-                <div className="mt-8 space-y-4">
-                    <h4 className="text-lg font-bold font-headline flex items-center gap-2">
-                        <Bed className="h-5 w-5 text-primary" />
-                        Room Specification
-                    </h4>
-                    {hostel.roomTypes?.map((room) => (
-                        <div key={room.id} className="glass-card rounded-3xl p-6 border-primary/10 hover:border-primary/30 shadow-sm group">
-                            <div className="flex items-start justify-between mb-4">
-                                <div>
-                                    <h5 className="text-xl font-bold">{room.name}</h5>
-                                    <div className="flex items-center gap-4 mt-2">
-                                        {room.beds && (
-                                            <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Beds
-                                            </span>
-                                        )}
-                                        {room.bathrooms && (
-                                            <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                                                <Bath className="h-3.5 w-3.5 text-primary" /> {room.bathrooms}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <Badge variant={getRoomAvailabilityVariant(room.availability)} className="px-3 py-1 rounded-full uppercase tracking-tighter text-[10px] font-bold">
-                                    {room.availability}
-                                </Badge>
-                            </div>
-                            <div className="flex items-center justify-between pt-4 border-t border-primary/5">
-                                <div>
-                                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Annual Rate</p>
-                                    <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
-                                </div>
-                                {getVisitButton(room)}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
         </div>
     );
 }
 
 function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
-    const router = useRouter();
     const { toast } = useToast();
 
     const handleLoginRedirect = () => {
@@ -1342,8 +1640,8 @@ export default function HostelDetailPage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-1 container mx-auto px-4 md:px-6 py-12">
-                {isStudent ? <FullHostelDetails hostel={hostel} currentUser={appUser} /> : <LimitedHostelDetails hostel={hostel} />}
+            <main className="flex-1 container mx-auto px-4 md:px-6 py-6 lg:py-8">
+                <FullHostelDetails hostel={hostel} currentUser={appUser} />
             </main>
         </div>
     );

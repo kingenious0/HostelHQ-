@@ -13,8 +13,7 @@ type MomoPaymentPayload = {
     label?: string;
     hostelId: string;
     visitDate: string;
-    visitTime: string;
-    visitType: 'agent' | 'self';
+    visitType?: 'in_person' | 'self';
     studentName?: string; // For generating payment reference
 }
 

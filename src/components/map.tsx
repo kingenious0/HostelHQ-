@@ -1,15 +1,12 @@
+"use client";
 
-"use client"
 import 'mapbox-gl/dist/mapbox-gl.css';
 import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { Hostel, Agent } from '@/lib/data';
+import { Hostel } from '@/lib/data';
 import { Map, Layers } from 'lucide-react';
-import { ably } from '@/lib/ably';
-import { getAgent } from '@/lib/data';
 
 interface MapboxMapProps {
-    agentId?: string | null;
     hostelLocation: Hostel | null;
 }
 
@@ -20,7 +17,7 @@ const mapStyles = {
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || '';
 
-export const MapboxMap = React.memo(function MapboxMap({ agentId, hostelLocation }: MapboxMapProps) {
+export const MapboxMap = React.memo(function MapboxMap({ hostelLocation }: MapboxMapProps) {
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<mapboxgl.Map | null>(null);
     const hostelMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -28,29 +25,8 @@ export const MapboxMap = React.memo(function MapboxMap({ agentId, hostelLocation
     const [mapLoaded, setMapLoaded] = useState(false);
     const [activeStyle, setActiveStyle] = useState<'streets' | 'satellite'>('satellite');
     const [styleUrl, setStyleUrl] = useState(mapStyles.satellite);
-    const [agent, setAgent] = useState<Agent | null>(null);
-    const [agentLocation, setAgentLocation] = useState<{lat: number, lng: number} | null>(null);
 
     const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY;
-
-    // Fetch agent data to get their last known location
-    useEffect(() => {
-        if (!agentId) return;
-        
-        const fetchAgent = async () => {
-            try {
-                const agentData = await getAgent(agentId);
-                if (agentData) {
-                    setAgent(agentData);
-                    setAgentLocation(agentData.location);
-                }
-            } catch (error) {
-                console.error('Error fetching agent:', error);
-            }
-        };
-        
-        fetchAgent();
-    }, [agentId]);
 
     useEffect(() => {
         if (!mapboxToken || mapboxToken === 'YOUR_MAPBOX_API_KEY_HERE') {
@@ -59,50 +35,21 @@ export const MapboxMap = React.memo(function MapboxMap({ agentId, hostelLocation
         }
         if (mapRef.current || !mapContainerRef.current) return; 
 
-        // Center on agent location first, then fallback to hostel location
-        const center = agentLocation 
-            ? [agentLocation.lng, agentLocation.lat]
-            : hostelLocation 
-                ? [hostelLocation.lng, hostelLocation.lat]
-                : [-0.1870, 5.6037]; // Last resort fallback
+        const center = hostelLocation 
+            ? [hostelLocation.lng, hostelLocation.lat]
+            : [-0.1870, 5.6037]; // Fallback (Ghana coordinates)
 
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: styleUrl,
             center: center as [number, number],
-            zoom: agentLocation ? 16 : 14 // Zoom in closer if we have agent location
+            zoom: 15
         });
 
         mapRef.current = map;
         
         map.on('load', () => {
              setMapLoaded(true);
-
-             // Add agent location source with initial location
-             if (!map.getSource('agent')) {
-                map.addSource('agent', {
-                    type: 'geojson',
-                    data: {
-                        type: 'Point',
-                        coordinates: agentLocation ? [agentLocation.lng, agentLocation.lat] : [0, 0]
-                    }
-                });
-             }
-            
-             // Add a layer for the agent's location (a circle)
-             if (!map.getLayer('agent')) {
-                map.addLayer({
-                    id: 'agent',
-                    type: 'circle',
-                    source: 'agent',
-                    paint: {
-                        'circle-radius': 10,
-                        'circle-color': '#008080', // Deep Teal
-                        'circle-stroke-width': 2,
-                        'circle-stroke-color': '#ffffff'
-                    }
-                });
-             }
         });
 
         return () => {
@@ -120,49 +67,13 @@ export const MapboxMap = React.memo(function MapboxMap({ agentId, hostelLocation
                 hostelMarkerRef.current.setLngLat([hostelLocation.lng, hostelLocation.lat]);
             } else {
                 const el = document.createElement('div');
-                el.className = 'w-4 h-4 rounded-full bg-red-700 border-2 border-white shadow-lg';
+                el.className = 'w-5 h-5 rounded-full bg-primary border-2 border-white shadow-lg ring-4 ring-primary/20 animate-pulse';
                 hostelMarkerRef.current = new mapboxgl.Marker(el)
                     .setLngLat([hostelLocation.lng, hostelLocation.lat])
                     .addTo(mapRef.current!);
             }
         }
-        
     }, [mapLoaded, hostelLocation?.lat, hostelLocation?.lng]);
-
-    useEffect(() => {
-        if (!mapLoaded || !mapRef.current || !agentId || !ably) {
-            return;
-        }
-
-        const channel = ably.channels.get(`agent:${agentId}:gps`);
-        
-        const onLocationUpdate = (message: any) => {
-            const { lat, lng } = message.data;
-            const map = mapRef.current;
-            if (map) {
-                // Update agent location state
-                setAgentLocation({ lat, lng });
-                
-                // Update map marker
-                const agentSource = map.getSource('agent') as mapboxgl.GeoJSONSource;
-                if (agentSource) {
-                     agentSource.setData({
-                        type: 'Point',
-                        coordinates: [lng, lat]
-                    });
-                    map.panTo([lng, lat]);
-                }
-            }
-        };
-
-        channel.subscribe('location', onLocationUpdate);
-        
-        return () => {
-            channel.unsubscribe('location', onLocationUpdate);
-        };
-
-    }, [mapLoaded, agentId]);
-
 
     const switchStyle = (newStyle: 'streets' | 'satellite') => {
         if (!mapRef.current) return;

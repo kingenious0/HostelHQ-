@@ -73,7 +73,7 @@ type AppUser = {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'agent' | 'admin' | 'pending_agent' | 'hostel_manager';
+  role: 'student' | 'admin' | 'hostel_manager' | 'manager' | 'dean' | 'hostel_coordinator' | 'pro_vc' | 'vc';
   profileImage?: string;
   phone?: string;
   phoneNumber?: string;
@@ -121,9 +121,7 @@ export function Header() {
   const [uiScale, setUiScale] = useState<number>(100); // 70-130 range (percentage)
   const { toast } = useToast();
   const router = useRouter();
-  const pathname = usePathname();
   const locationWatcherId = useRef<number | null>(null);
-  const agentPresenceChannel = useRef<any>(null);
   const applyTheme = useCallback((value: ThemeMode) => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -379,12 +377,16 @@ export function Header() {
 
     // Get role prefix
     let rolePrefix = 'stu'; // default
-    if (role === 'agent' || role === 'pending_agent') {
-      rolePrefix = 'agnt';
-    } else if (role === 'hostel_manager') {
+    if (role === 'hostel_manager' || role === 'manager') {
       rolePrefix = 'mng';
     } else if (role === 'admin') {
       rolePrefix = 'adm';
+    } else if (role === 'dean') {
+      rolePrefix = 'dean';
+    } else if (role === 'hostel_coordinator') {
+      rolePrefix = 'coord';
+    } else if (role === 'pro_vc' || role === 'vc') {
+      rolePrefix = 'exec';
     }
 
     return `${rolePrefix}-${namePart}${phonePart}@hostelhq.com`;
@@ -743,75 +745,7 @@ export function Header() {
     }
   };
 
-  useEffect(() => {
-    // This effect handles Ably presence and location tracking for agents.
-    const ablyClient = ably;
-    if (appUser?.role === 'agent' && ablyClient) {
-      // --- Enter Presence ---
-      agentPresenceChannel.current = ablyClient.channels.get('agents:live');
-      const enterPresence = async () => {
-        try {
-          await agentPresenceChannel.current?.presence.enter({
-            id: appUser.uid,
-            fullName: appUser.fullName,
-            email: appUser.email
-          });
-        } catch (e) {
-          console.error('Error entering Ably presence:', e);
-        }
-      };
-      enterPresence();
 
-      // --- Start Location Tracking ---
-      if ('geolocation' in navigator) {
-        let lastToastTime = 0;
-        locationWatcherId.current = navigator.geolocation.watchPosition(
-          async (position) => {
-            const { latitude, longitude } = position.coords;
-            const agentGpsChannel = ablyClient.channels.get(`agent:${appUser.uid}:gps`);
-
-            // Publish to Ably for real-time map updates
-            agentGpsChannel.publish('location', { lat: latitude, lng: longitude });
-
-            // Also update Firestore
-            const userDocRef = doc(db, "users", appUser.uid);
-            await updateDoc(userDocRef, {
-              location: { lat: latitude, lng: longitude },
-              lastActive: new Date().toISOString()
-            });
-          },
-          (error) => {
-            const now = Date.now();
-            // Only toast once every 5 minutes to avoid spamming
-            if (error.code === 1 && now - lastToastTime > 300000) {
-              lastToastTime = now;
-              toast({
-                title: 'Location visibility limited',
-                description: 'Enable location to help students find you on the map.',
-                variant: 'default'
-              });
-            }
-          },
-          { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
-        );
-      }
-
-    }
-
-    // --- Cleanup function ---
-    return () => {
-      // Leave presence when component unmounts or user changes
-      if (agentPresenceChannel.current) {
-        agentPresenceChannel.current.presence.leave();
-        agentPresenceChannel.current = null;
-      }
-      // Stop watching location
-      if (locationWatcherId.current !== null) {
-        navigator.geolocation.clearWatch(locationWatcherId.current);
-        locationWatcherId.current = null;
-      }
-    };
-  }, [appUser, toast]);
 
   const handleLogout = async () => {
     setAuthAction(true);
@@ -829,11 +763,12 @@ export function Header() {
   };
 
   // Role helpers
-  const isAgent = appUser?.role === 'agent';
   const isAdmin = appUser?.role === 'admin';
   const isStudent = appUser?.role === 'student';
-  const isPending = appUser?.role === 'pending_agent';
-  const isManager = appUser?.role === 'hostel_manager';
+  const isManager = appUser?.role === 'hostel_manager' || appUser?.role === 'manager';
+  const isDean = appUser?.role === 'dean';
+  const isCoordinator = appUser?.role === 'hostel_coordinator';
+  const isExecutive = appUser?.role === 'pro_vc' || appUser?.role === 'vc';
 
   const baseNavLinks = [
     { label: 'Home', href: '/' },
@@ -853,13 +788,6 @@ export function Header() {
 
   /* Manageable links (consolidated into a dropdown for cleaner UI) */
   const manageLinks: { label: string; href: string; icon?: React.ReactNode }[] = [];
-  if (isAgent) {
-    manageLinks.push(
-      { label: 'Dashboard', href: '/agent/dashboard', icon: <LayoutDashboard className="mr-2 h-4 w-4" /> },
-      { label: 'My Listings', href: '/agent/listings', icon: <ListPlus className="mr-2 h-4 w-4" /> },
-      { label: 'Create Manager', href: '/agent/create-manager', icon: <UserPlus className="mr-2 h-4 w-4" /> }
-    );
-  }
   if (isAdmin) {
     manageLinks.push(
       { label: 'Admin Console', href: '/admin/dashboard', icon: <LayoutDashboard className="mr-2 h-4 w-4" /> },
@@ -870,6 +798,15 @@ export function Header() {
   }
   if (isManager) {
     manageLinks.push({ label: 'Manager Console', href: '/manager/dashboard', icon: <Building className="mr-2 h-4 w-4" /> });
+  }
+  if (isDean) {
+    manageLinks.push({ label: 'Dean Console', href: '/dean/dashboard', icon: <ShieldCheck className="mr-2 h-4 w-4" /> });
+  }
+  if (isCoordinator) {
+    manageLinks.push({ label: 'Coordinator Console', href: '/coordinator/dashboard', icon: <Building className="mr-2 h-4 w-4" /> });
+  }
+  if (isExecutive) {
+    manageLinks.push({ label: 'Executive Overview', href: '/executive/dashboard', icon: <LayoutDashboard className="mr-2 h-4 w-4" /> });
   }
 
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
@@ -939,7 +876,7 @@ export function Header() {
                         <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
                         <div className="mt-1">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary capitalize">
-                            {appUser.role === 'hostel_manager' ? 'Hostel Manager' : appUser.role === 'pending_agent' ? 'Pending Agent' : appUser.role === 'agent' ? 'Field Agent' : appUser.role}
+                            {appUser.role === 'hostel_manager' || appUser.role === 'manager' ? 'Hostel Manager' : appUser.role === 'dean' ? 'Dean of Students' : appUser.role === 'hostel_coordinator' ? 'Hostel Coordinator' : appUser.role === 'pro_vc' ? 'Pro-VC' : appUser.role === 'vc' ? 'Vice-Chancellor' : appUser.role === 'admin' ? 'Admin' : 'Student'}
                           </span>
                         </div>
                       </div>
@@ -1124,7 +1061,7 @@ export function Header() {
               </Link>
             ))}
 
-            {(isAgent || isAdmin || isManager) && (
+            {manageLinks.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 flex items-center gap-1.5 focus:outline-none focus:ring-0">
@@ -1217,21 +1154,29 @@ export function Header() {
                       <MessageSquare className="mr-2 h-4 w-4" />
                       <span>Chat with Hostie</span>
                     </DropdownMenuItem>
-                    {isAgent && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link href="/agent/dashboard">
-                            <LayoutDashboard className="mr-2 h-4 w-4" />
-                            Dashboard
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href="/agent/listings">
-                            <ListPlus className="mr-2 h-4 w-4" />
-                            My Listings
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
+                    {isDean && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/dean/dashboard">
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                          Dean Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {isCoordinator && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/coordinator/dashboard">
+                          <Building className="mr-2 h-4 w-4" />
+                          Coordinator Dashboard
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {isExecutive && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/executive/dashboard">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          Executive Dashboard
+                        </Link>
+                      </DropdownMenuItem>
                     )}
                     {isAdmin && (
                       <>
@@ -1447,12 +1392,28 @@ export function Header() {
                   { href: '/manager/bank-accounts', icon: Banknote, label: 'Wallet' },
                   { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
                 ]
-              : isAgent
+              : isDean
               ? [
-                  { href: '/agent/dashboard', icon: LayoutDashboard, label: 'Visits' },
-                  { href: '/agent/listings', icon: ListPlus, label: 'Listings' },
-                  { href: '/agent/upload', icon: Building, label: 'Add' },
-                  { href: '/agent/create-manager', icon: Users, label: 'Managers' },
+                  { href: '/dean/dashboard', icon: LayoutDashboard, label: 'Overview' },
+                  { href: '/dean/dashboard#complaints', icon: MessageSquare, label: 'Disputes' },
+                  { href: '/dean/dashboard#verification', icon: ShieldCheck, label: 'Students' },
+                  { href: '/dean/dashboard#placements', icon: Building, label: 'Hostels' },
+                  { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
+                ]
+              : isCoordinator
+              ? [
+                  { href: '/coordinator/dashboard', icon: LayoutDashboard, label: 'Overview' },
+                  { href: '/coordinator/dashboard#approvals', icon: Building, label: 'Approvals' },
+                  { href: '/coordinator/dashboard#hostels', icon: ListPlus, label: 'Hostels' },
+                  { href: '/admin/hostel-requests', icon: FileText, label: 'Requests' },
+                  { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
+                ]
+              : isExecutive
+              ? [
+                  { href: '/executive/dashboard', icon: LayoutDashboard, label: 'Overview' },
+                  { href: '/executive/dashboard#metrics', icon: Building, label: 'Stats' },
+                  { href: '/executive/dashboard#trends', icon: FileText, label: 'Trends' },
+                  { href: '/#all-hostels', icon: Building2, label: 'Hostels' },
                   { href: appUser ? '/profile' : '/login', icon: User, label: 'Profile', isAvatar: true },
                 ]
               : isAdmin

@@ -21,9 +21,6 @@ function ConfirmationContent() {
     const reference = searchParams.get('reference');
     const trxref = searchParams.get('trxref');
     const bookingType = searchParams.get('bookingType');
-    const visitDate = searchParams.get('visitDate');
-    const visitTime = searchParams.get('visitTime');
-    const visitTypeParam = searchParams.get('visitType');
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
@@ -160,47 +157,6 @@ function ConfirmationContent() {
                 return;
             }
 
-            // This is a visit-only payment
-            if (reference && hostelId && visitTypeParam) {
-                try {
-                    // Fetch student details for the visit record
-                    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-                    const userData = userDoc.exists() ? userDoc.data() : {};
-
-                    const visitRef = await addDoc(collection(db, 'visits'), {
-                        studentId: currentUser.uid,
-                        studentDetails: {
-                            fullName: userData.fullName || '',
-                            email: userData.email || currentUser.email || '',
-                            phoneNumber: userData.phoneNumber || userData.phone || '',
-                        },
-                        hostelId: hostelId,
-                        agentId: null,
-                        status: visitTypeParam === 'self' ? 'accepted' : 'scheduling',
-                        paymentReference: reference, // This is the professional reference from Paystack
-                        createdAt: serverTimestamp(),
-                        visitDate: visitDate || new Date().toISOString(),
-                        visitTime: visitTime || new Date().toLocaleTimeString(),
-                        visitType: visitTypeParam as 'agent' | 'self',
-                        studentCompleted: false,
-                        amountPaid: visitTypeParam === 'agent' ? 1 : 15, // Store the amount paid
-                        bookingType: 'visit', // Mark as visit booking
-                    });
-
-                    const redirectUrl = visitTypeParam === 'self'
-                        ? `/hostels/${hostelId}/book/tracking?visitId=${visitRef.id}`
-                        : `/hostels/book/schedule?visitId=${visitRef.id}`;
-
-                    router.push(redirectUrl);
-
-                } catch (error) {
-                    console.error("Error creating visit record:", error);
-                    toast({ title: "Visit Error", description: "Could not save your visit details. Please contact support.", variant: 'destructive' });
-                    router.push(`/hostels/${hostelId}`);
-                }
-                return;
-            }
-
             // Fallback if no valid parameters are found after the initial check
             toast({ title: "Invalid Confirmation Link", description: "The confirmation link is incomplete.", variant: "destructive" });
             router.push('/');
@@ -208,7 +164,7 @@ function ConfirmationContent() {
 
         handleConfirmation();
 
-    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, toast, visitDate, visitTime, visitTypeParam]);
+    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, toast]);
 
     return (
         <div className="flex flex-col items-center justify-center text-center">

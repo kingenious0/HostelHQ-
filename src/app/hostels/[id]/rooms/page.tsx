@@ -5,7 +5,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter } from 'lucide-react';
+import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter, CheckCircle2, Clock, ShieldCheck, Sparkles, Building, ChevronRight, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +23,7 @@ interface AppUser {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'agent' | 'admin';
+  role: 'student' | 'hostel_manager' | 'admin';
   profileImage?: string;
 }
 
@@ -362,304 +362,348 @@ export default function RoomsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
-      <main className="flex-1 bg-background">
-        {/* Hero Section */}
-        <section className="relative h-[300px] sm:h-[400px] w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/10">
-          <div className="absolute inset-0">
-            {hostel.images?.[0] && (
-              <Image
-                src={hostel.images[0]}
-                alt={hostel.name}
-                fill
-                className="object-cover opacity-80"
-                priority
-              />
-            )}
+      <main className="flex-1 container mx-auto px-4 md:px-6 py-8 space-y-8">
+        {/* Navigation & Breadcrumb */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/hostels/${id}`)}
+            className="rounded-full gap-2 text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors pr-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to {hostel.name}
+          </Button>
+
+          <div className="text-xs text-muted-foreground hidden sm:block">
+            <Link href="/" className="hover:underline">Home</Link>
+            <span className="mx-2">/</span>
+            <Link href={`/hostels/${id}`} className="hover:underline">{hostel.name}</Link>
+            <span className="mx-2">/</span>
+            <span className="text-foreground font-semibold">Rooms</span>
           </div>
-          <div className="relative container mx-auto px-4 sm:px-6 h-full flex flex-col justify-center items-center text-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.back()}
-              className="absolute top-4 left-4 sm:left-6 text-white hover:bg-white/20"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mt-8">
-              Rooms Available in {hostel.name.toUpperCase()}
+        </div>
+
+        {/* Header Title & Trust Strip */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-headline tracking-tight text-foreground">
+              Room Options at {hostel.name}
             </h1>
-            <div className="flex items-center justify-center text-white/90 mt-3">
-              <MapPin className="h-5 w-5 mr-2" />
-              <span className="text-lg sm:text-xl font-medium">{hostel.location}</span>
-            </div>
+            <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
+              <CheckCircle2 className="h-3.5 w-3.5" /> University-Approved ✓
+            </Badge>
           </div>
-        </section>
 
-        {/* Filters Section */}
-        <section className="container mx-auto px-4 sm:px-6 -mt-2">
-          <Card className="shadow-lg border border-border align-center bg-card">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex justify-center gap-4 mb-4">
-                
-                <Select
-                  value={roomTypeFilter || '__all__'}
-                  onValueChange={(value) => setRoomTypeFilter(value === '__all__' ? '' : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Room Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All Room Types</SelectItem>
-                    {uniqueRoomTypes.map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={genderFilter || '__all__'}
-                  onValueChange={(value) => setGenderFilter(value === '__all__' ? '' : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All Genders</SelectItem>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
+          <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 text-primary" />
+              <span>{hostel.location}</span>
+            </div>
+            {hostel.distanceToUniversity && (
+              <>
+                <span>•</span>
+                <div className="flex items-center gap-1.5 text-primary font-medium">
+                  <Clock className="h-4 w-4" />
+                  <span>{hostel.distanceToUniversity} from campus</span>
+                </div>
+              </>
+            )}
+            {hostel.institution && (
+              <>
+                <span>•</span>
+                <Badge variant="secondary" className="font-semibold text-xs">
+                  {hostel.institution}
+                </Badge>
+              </>
+            )}
+            <span>•</span>
+            <span className="text-xs font-semibold text-foreground">
+              {roomInventory.length} room configuration{roomInventory.length === 1 ? '' : 's'} available
+            </span>
+          </div>
+        </div>
 
-        {/* Rooms Section */}
-        <section className="container mx-auto px-4 sm:px-6 py-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-            <h2 className="text-2xl font-bold font-headline text-foreground">Select Rooms</h2>
-            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search Room Number"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+        {/* Quick Filter Bar (Amber Student Style) */}
+        <div className="rounded-3xl border border-border/70 bg-card/70 backdrop-blur-xl p-4 sm:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
+            {/* Quick Room Type Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
+              <Button
+                variant={roomTypeFilter === '' ? 'default' : 'outline'}
+                size="sm"
+                className="rounded-full text-xs font-semibold shrink-0"
+                onClick={() => setRoomTypeFilter('')}
+              >
+                All Rooms
+              </Button>
+              {uniqueRoomTypes.map((type) => (
+                <Button
+                  key={type}
+                  variant={roomTypeFilter === type ? 'default' : 'outline'}
+                  size="sm"
+                  className="rounded-full text-xs font-semibold shrink-0"
+                  onClick={() => setRoomTypeFilter(roomTypeFilter === type ? '' : type)}
+                >
+                  {type}
+                </Button>
+              ))}
+            </div>
+
+            {/* Gender Pills & Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-full border border-border/50">
+                <button
+                  className={cn(
+                    "px-3 py-1 text-xs font-semibold rounded-full transition-colors",
+                    genderFilter === '' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setGenderFilter('')}
+                >
+                  All
+                </button>
+                <button
+                  className={cn(
+                    "px-3 py-1 text-xs font-semibold rounded-full transition-colors",
+                    genderFilter === 'Male' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setGenderFilter(genderFilter === 'Male' ? '' : 'Male')}
+                >
+                  Male
+                </button>
+                <button
+                  className={cn(
+                    "px-3 py-1 text-xs font-semibold rounded-full transition-colors",
+                    genderFilter === 'Female' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setGenderFilter(genderFilter === 'Female' ? '' : 'Female')}
+                >
+                  Female
+                </button>
               </div>
+
+              {/* Sort By */}
               <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue placeholder="Select Sort" />
+                <SelectTrigger className="w-[170px] rounded-full text-xs h-9">
+                  <SelectValue placeholder="Sort price" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="price-low">PRICE: LOW TO HIGH</SelectItem>
-                  <SelectItem value="price-high">PRICE: HIGH TO LOW</SelectItem>
-                  <SelectItem value="newest">NEWEST</SelectItem>
-                  <SelectItem value="oldest">OLDEST</SelectItem>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="price-low">Price: Low to High</SelectItem>
+                  <SelectItem value="price-high">Price: High to Low</SelectItem>
+                  <SelectItem value="newest">Room: A to Z</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex gap-2 border rounded-lg p-1">
+
+              {/* View Mode Toggle */}
+              <div className="hidden sm:flex items-center border rounded-full p-1 bg-muted/40">
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('grid')}
-                  className="h-9"
+                  className="h-7 w-7 p-0 rounded-full"
                 >
-                  <Grid3x3 className="h-4 w-4" />
+                  <Grid3x3 className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('list')}
-                  className="h-9"
+                  className="h-7 w-7 p-0 rounded-full"
                 >
-                  <List className="h-4 w-4" />
+                  <List className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
           </div>
+        </div>
 
-          {filteredAndSortedRooms.length > 0 ? (
-            <div className="space-y-10">
-              {Object.entries(groupedRoomsByType).map(([typeName, roomsForType]) => (
-                <div key={typeName} className="space-y-4">
-                  <div className="flex items-baseline justify-between">
-                    <h3 className="text-xl font-semibold font-headline text-foreground">
-                      {typeName.toUpperCase()}
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                      {roomsForType.length} room{roomsForType.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <div
-                    className={cn(
-                      "gap-6",
-                      viewMode === 'grid'
-                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                        : "flex flex-col"
-                    )}
-                  >
-                    {roomsForType.map((room) => (
-                      <Card
-                        key={room.id}
-                        className={cn(
-                          "overflow-hidden transition-all hover:shadow-xl group cursor-pointer",
-                          viewMode === 'list' && "flex flex-row"
-                        )}
-                        onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
-                      >
-                  <div className={cn(
-                    "relative bg-background/40 overflow-hidden",
-                    viewMode === 'grid' ? "h-48" : "h-32 w-32 flex-shrink-0"
-                  )}>
-                    <Image
-                      src={room.image}
-                      alt={room.label}
-                      fill
-                      className="object-cover transition-transform duration-300 group-hover:scale-110"
-                    />
-                    {(() => {
-                      const perRoomCapacity = room.capacity ?? null;
-                      const totalCapacity =
-                        perRoomCapacity && room.totalRooms
-                          ? perRoomCapacity * room.totalRooms
-                          : perRoomCapacity;
-                      const used = totalCapacity != null
-                        ? Math.max(0, Math.min(totalCapacity, room.occupancy))
-                        : room.occupancy;
-                      const isFull = totalCapacity != null && used >= totalCapacity;
-                      const label = totalCapacity != null
-                        ? isFull
-                          ? 'Room Full'
-                          : `${used} of ${totalCapacity} Occupied`
-                        : `${room.occupancy} ${room.occupancy === 1 ? 'Occupant' : 'Occupants'}`;
-                      return (
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "absolute left-3 top-3 border-0",
-                            isFull
-                              ? "bg-red-600 text-white"
-                              : "bg-slate-900/70 text-white"
-                          )}
-                        >
-                          {label}
-                        </Badge>
-                      );
-                    })()}
-                    <div className="absolute right-3 top-3 flex gap-1">
-                      <Badge variant="outline" className="bg-card/90 text-xs">
-                        {room.gender === 'Male' ? '♂' : room.gender === 'Female' ? '♀' : 'Mixed'}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardContent className={cn(
-                    "p-4 flex flex-col",
-                    viewMode === 'list' && "flex-1"
-                  )}>
-                    <div className="flex-1 space-y-2">
-                      <h3 className="font-bold text-lg text-foreground">
-                        {room.label}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{room.type}</p>
+        {/* Room Comparison Section */}
+        {filteredAndSortedRooms.length > 0 ? (
+          <div className="space-y-10">
+            {Object.entries(groupedRoomsByType).map(([typeName, roomsForType]) => (
+              <div key={typeName} className="space-y-4">
+                <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                  <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
+                    <Bed className="h-5 w-5 text-primary" />
+                    {typeName}
+                  </h3>
+                  <span className="text-xs text-muted-foreground font-medium">
+                    {roomsForType.length} {roomsForType.length === 1 ? 'room option' : 'room options'}
+                  </span>
+                </div>
 
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-xl font-bold text-primary">
-                          GH₵{room.price.toLocaleString()}
-                        </span>
-                        <span className="text-xs text-muted-foreground">per year</span>
+                <div
+                  className={cn(
+                    "gap-6",
+                    viewMode === 'grid'
+                      ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                      : "flex flex-col"
+                  )}
+                >
+                  {roomsForType.map((room) => (
+                    <Card
+                      key={room.id}
+                      className={cn(
+                        "rounded-3xl border border-border/70 bg-card/80 backdrop-blur-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-primary/40 group flex flex-col justify-between",
+                        viewMode === 'list' && "sm:flex-row sm:items-center sm:gap-6"
+                      )}
+                    >
+                      <div className={cn("relative overflow-hidden bg-muted", viewMode === 'grid' ? "h-52 w-full" : "h-44 sm:w-64 shrink-0")}>
+                        <Image
+                          src={room.image}
+                          alt={room.label}
+                          fill
+                          className="object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
+
+                        {/* Top badge indicators */}
+                        <div className="absolute top-3 left-3 flex gap-2">
+                          <Badge className="bg-background/90 text-foreground backdrop-blur-md border-0 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm">
+                            {room.gender === 'Male' ? '♂ Male' : room.gender === 'Female' ? '♀ Female' : 'Mixed'}
+                          </Badge>
+                        </div>
+
+                        {/* Capacity info pill */}
+                        <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-full flex items-center gap-1.5 border border-white/20">
+                          <Users className="h-3 w-3" />
+                          <span>
+                            {room.capacity ? `${room.capacity} in a Room` : room.type}
+                          </span>
+                        </div>
                       </div>
 
-                      {room.capacity && room.totalRooms && (
-                        <p className="text-xs text-muted-foreground">
-                          {(() => {
-                            const totalSlots = room.capacity! * room.totalRooms!;
-                            const used = Math.max(0, Math.min(totalSlots, room.occupancy));
-                            const remainingSlots = Math.max(0, totalSlots - used);
-                            const remainingRooms = Math.round(remainingSlots / room.capacity!);
-                            const totalRooms = room.totalRooms!;
-                            return `${remainingRooms} of ${totalRooms} ${totalRooms === 1 ? 'room' : 'rooms'} available`;
-                          })()}
-                        </p>
-                      )}
+                      <CardContent className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="font-bold text-lg text-foreground font-headline group-hover:text-primary transition-colors">
+                              {room.label}
+                            </h4>
+                          </div>
 
-                      {room.amenities && room.amenities.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {room.amenities.slice(0, 3).map((amenity) => (
-                            <Badge key={amenity} variant="outline" className="text-[10px] px-1.5 py-0.5">
-                              {amenity}
-                            </Badge>
-                          ))}
-                          {room.amenities.length > 3 && (
-                            <span className="text-[10px] text-slate-500">+{room.amenities.length - 3} more</span>
+                          <div className="flex items-baseline justify-between pt-1">
+                            <div>
+                              <span className="text-2xl font-extrabold text-primary font-headline">
+                                GH₵{room.price.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-1.5 font-medium">/ year</span>
+                            </div>
+                          </div>
+
+                          {/* Room Specifications */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-1 font-medium">
+                            {room.capacity && (
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{room.capacity > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Bed className="h-3.5 w-3.5 text-primary" /> Single Bed
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Bath className="h-3.5 w-3.5 text-primary" /> Washroom
+                            </span>
+                          </div>
+
+                          {/* Amenities Tags */}
+                          {room.amenities && room.amenities.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-2">
+                              {room.amenities.slice(0, 3).map((amenity) => (
+                                <span
+                                  key={amenity}
+                                  className="text-[10px] bg-muted/80 px-2 py-0.5 rounded-md text-muted-foreground font-medium"
+                                >
+                                  {amenity}
+                                </span>
+                              ))}
+                              {room.amenities.length > 3 && (
+                                <span className="text-[10px] text-muted-foreground self-center">
+                                  +{room.amenities.length - 3} more
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="w-full mt-4"
-                      disabled={hostel?.availability === 'Full' || hasSecuredHostel}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!hostel || hostel.availability === 'Full' || hasSecuredHostel) {
-                          return;
-                        }
 
-                        const params = new URLSearchParams();
-                        params.set('roomTypeId', room.id);
-                        if (room.id) params.set('roomId', room.id);
-                        if (room.roomNumber) params.set('roomNumber', room.roomNumber);
+                        {/* CTA Buttons */}
+                        <div className="space-y-2 pt-2 border-t border-border/50">
+                          <Button
+                            className="w-full rounded-xl font-bold text-xs h-11"
+                            disabled={hostel?.availability === 'Full' || hasSecuredHostel}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (!hostel || hostel.availability === 'Full' || hasSecuredHostel) {
+                                return;
+                              }
 
-                        const base = hasCompletedVisit ? 'secure' : 'book';
-                        const target = `/hostels/${id}/${base}?${params.toString()}`;
+                              const params = new URLSearchParams();
+                              params.set('roomTypeId', room.id);
+                              if (room.id) params.set('roomId', room.id);
+                              if (room.roomNumber) params.set('roomNumber', room.roomNumber);
 
-                        if (appUser) {
-                          router.push(target);
-                        } else {
-                          router.push(`/login?redirect=${encodeURIComponent(target)}`);
-                          toast({
-                            title: 'Login Required',
-                            description: hasCompletedVisit
-                              ? 'Please log in to secure this room.'
-                              : 'Please log in to book a visit for this room.',
-                          });
-                        }
-                      }}
-                    >
-                      {hostel?.availability === 'Full'
-                        ? 'Hostel Fully Booked'
-                        : hasSecuredHostel
-                        ? 'You already secured a room here'
-                        : hasCompletedVisit
-                        ? 'Secure Room'
-                        : 'Book Room'}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                              const base = hasCompletedVisit ? 'secure' : 'book';
+                              const target = `/hostels/${id}/${base}?${params.toString()}`;
+
+                              if (appUser) {
+                                router.push(target);
+                              } else {
+                                router.push(`/login?redirect=${encodeURIComponent(target)}`);
+                                toast({
+                                  title: 'Login Required',
+                                  description: hasCompletedVisit
+                                    ? 'Please log in to secure this room.'
+                                    : 'Please log in to request a visit for this room.',
+                                });
+                              }
+                            }}
+                          >
+                            {hostel?.availability === 'Full'
+                              ? 'Hostel Fully Booked'
+                              : hasSecuredHostel
+                              ? 'Room Secured ✓'
+                              : hasCompletedVisit
+                              ? 'Secure This Room'
+                              : 'Request Free Visit'}
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-xs text-muted-foreground hover:text-primary flex items-center justify-center gap-1 h-8"
+                            onClick={() => router.push(`/hostels/${id}/rooms/${room.id}`)}
+                          >
+                            <span>View room specifications</span>
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-              ))}
+        ) : (
+          <div className="text-center py-16 rounded-3xl border border-dashed border-border/70 p-8 space-y-4">
+            <DoorOpen className="h-12 w-12 text-muted-foreground mx-auto" />
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold">No room configurations found</h3>
+              <p className="text-sm text-muted-foreground">Try adjusting your filters or search query to see other rooms.</p>
             </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No rooms found matching your filters.</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => {
-                  setSearchQuery('');
-                  setRoomTypeFilter('');
-                  setGenderFilter('');
-                }}
-              >
-                Clear Filters
-              </Button>
-            </div>
-          )}
-        </section>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl text-xs font-semibold"
+              onClick={() => {
+                setSearchQuery('');
+                setRoomTypeFilter('');
+                setGenderFilter('');
+              }}
+            >
+              Reset Filters
+            </Button>
+          </div>
+        )}
       </main>
     </div>
   );

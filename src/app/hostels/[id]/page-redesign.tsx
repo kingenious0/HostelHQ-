@@ -48,7 +48,7 @@ interface AppUser {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'agent' | 'admin';
+  role: 'student' | 'hostel_manager' | 'admin';
   profileImage?: string;
 }
 

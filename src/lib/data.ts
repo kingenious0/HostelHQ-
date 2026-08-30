@@ -1,7 +1,7 @@
 import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy, or } from "firebase/firestore";
 import { ably } from './ably';
-import { getHostelById, listHostels, getAgentById } from './dynamodb-service';
+import { getHostelById, listHostels } from './dynamodb-service';
 
 export type RoomType = {
   id?: string;
@@ -26,6 +26,7 @@ export type Room = {
   capacity: number; // total beds in this room
   currentOccupancy: number; // confirmed occupants
   status: 'active' | 'inactive';
+  pendingPrice?: number; // Hook for future coordinator price-approval workflow
 };
 
 export type Review = {
@@ -48,7 +49,6 @@ export type Hostel = {
   amenities: string[];
   images: string[];
   description: string;
-  agentId?: string;
   lat?: number;
   lng?: number;
   availability: 'Available' | 'Limited' | 'Full';
@@ -69,7 +69,7 @@ export type Hostel = {
     userId: string;
     fullName: string;
     email: string;
-    role: 'agent' | 'manager' | 'admin';
+    role: 'manager' | 'admin' | 'hostel_coordinator';
     createdAt: string;
   };
   status?: 'pending' | 'approved' | 'rejected' | 'live';
@@ -79,31 +79,86 @@ export type Hostel = {
   [key: string]: any;
 };
 
+export type UserRole = 'student' | 'hostel_manager' | 'manager' | 'admin' | 'dean' | 'pro_vc' | 'vc' | 'hostel_coordinator';
+
 export type AppUser = {
   id: string;
   fullName: string;
   email: string;
-  role: 'student' | 'agent' | 'admin';
+  role: UserRole;
+  phone?: string;
   profileImage?: string;
+  studentIdNumber?: string;
+  admissionLetterUrl?: string;
+  studentIdCardUrl?: string;
+  verificationStatus?: 'pending' | 'verified' | 'rejected';
+  verifiedAt?: string;
+  verifiedBy?: string;
 };
 
-export type Agent = AppUser & {
-    role: 'agent';
-    rating: number;
-    vehicle: string;
-    status: 'online' | 'offline';
-    location: { lat: number; lng: number; };
-    imageUrl: string;
-    phone: string;
+export type ComplaintDirection = 'student_to_hostel' | 'manager_to_student';
+export type ComplaintStatus = 'Submitted' | 'Under Review' | 'Resolved';
+export type ComplaintCategory = 'Maintenance & Repairs' | 'Noise & Disturbance' | 'Pricing & Overcharging' | 'Security & Safety' | 'Sanitation & Water' | 'Conduct & Policy' | 'Other';
+
+export type Complaint = {
+  id: string;
+  direction: ComplaintDirection;
+  status: ComplaintStatus;
+  category: ComplaintCategory;
+  subject: string;
+  description: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  hostelId: string;
+  hostelName: string;
+  managerId?: string;
+  managerName?: string;
+  managerPhone?: string;
+  roomId?: string;
+  roomNumber?: string;
+  resolutionNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+};
+
+export type StudentVerification = {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  studentIdNumber: string;
+  institution?: string;
+  admissionLetterUrl?: string;
+  studentIdCardUrl?: string;
+  status: 'pending' | 'verified' | 'rejected';
+  rejectionReason?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 };
 
 export type Visit = {
     id: string;
     studentId: string;
-    agentId: string;
-    visitDate: Date;
-    status: 'pending' | 'accepted' | 'declined' | 'completed';
-}
+    studentName?: string;
+    studentPhone?: string;
+    studentEmail?: string;
+    hostelId: string;
+    hostelName?: string;
+    managerId?: string;
+    managerPhone?: string;
+    visitDate: string | Date;
+    preferredTime?: string;
+    timeSlot?: string;
+    notes?: string;
+    status: 'pending' | 'confirmed' | 'accepted' | 'completed' | 'cancelled' | 'declined';
+    createdAt?: string;
+};
 
 export type GetHostelsOptions = {
   featured?: boolean;
@@ -270,67 +325,6 @@ const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
   return matchesInstitution && matchesGender && matchesRoomType && matchesSearch && matchesLocation;
 };
 
-
-let simulationInterval: NodeJS.Timeout | null = null;
-
-const simulateAgentMovementWithAbly = (agentId: string, destinationLat: number, destinationLng: number) => {
-    // Clear any existing simulation
-    if (simulationInterval) {
-        clearInterval(simulationInterval);
-    }
-    
-    if (!ably) return;
-    const channel = ably.channels.get(`agent:${agentId}:gps`);
-
-    const agentRef = doc(db, 'users', agentId);
-    let step = 0;
-    const totalSteps = 20;
-
-    simulationInterval = setInterval(async () => {
-        const agentSnap = await getDoc(agentRef);
-        if (!agentSnap.exists()) {
-            clearInterval(simulationInterval!);
-            return;
-        }
-
-        const currentLoc = agentSnap.data().location;
-        const newLat = currentLoc.lat + (destinationLat - currentLoc.lat) / (totalSteps - step);
-        const newLng = currentLoc.lng + (destinationLng - currentLoc.lng) / (totalSteps - step);
-        const newLocation = { lat: newLat, lng: newLng };
-
-        await updateDoc(agentRef, { location: newLocation });
-        await channel.publish('location', newLocation);
-
-        step++;
-        if (step >= totalSteps) {
-            await updateDoc(agentRef, { location: { lat: destinationLat, lng: destinationLng } });
-            await channel.publish('location', { lat: destinationLat, lng: destinationLng });
-            console.log(`Agent ${agentId} has arrived and simulation ended.`);
-            clearInterval(simulationInterval!);
-        }
-    }, 2000); 
-};
-
-
-export async function getAgent(agentId: string): Promise<Agent | null> {
-    try {
-        const agentDocRef = doc(db, 'users', agentId);
-        const agentDoc = await getDoc(agentDocRef);
-        if (agentDoc.exists() && agentDoc.data().role === 'agent') {
-            return { id: agentDoc.id, ...agentDoc.data() } as Agent;
-        }
-    } catch (e) {
-        console.error("Error fetching agent: ", e);
-    }
-
-    try {
-        const dynamoAgent = await getAgentById(agentId);
-        if (dynamoAgent) return dynamoAgent;
-    } catch (e) {}
-
-    return null;
-}
-
 // Function to convert Firestore Timestamps to strings
 const convertTimestamps = (data: any) => {
   const newData: { [key: string]: any } = {};
@@ -351,6 +345,17 @@ const convertTimestamps = (data: any) => {
 
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
+    // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
+    try {
+        const dynamoHostel = await getHostelById(hostelId);
+        if (dynamoHostel) {
+            return dynamoHostel;
+        }
+    } catch (e) {
+        console.warn(`[Data Layer] DynamoDB primary getHostel failed for ${hostelId}, trying Firestore backup:`, e);
+    }
+
+    // 2. SECONDARY: Firestore Backup / Fallback
     try {
         const hostelDocRef = doc(db, 'hostels', hostelId);
         const hostelDoc = await getDoc(hostelDocRef);
@@ -426,11 +431,6 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         console.error("Error fetching hostel from firestore: ", e);
     }
 
-    try {
-        const dynamoHostel = await getHostelById(hostelId);
-        if (dynamoHostel) return dynamoHostel;
-    } catch (e) {}
-
     console.log("Falling back to static hostel data for hostelId: ", hostelId);
     const staticHostel = staticHostels.find(h => h.id === hostelId);
     if (staticHostel) {
@@ -441,7 +441,24 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
 
 export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
-    // 1. PRIMARY: Fetch from Firestore (live database with all uploaded hostels)
+    // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
+    try {
+        const dynamoHostels = await listHostels({
+            featuredOnly: options.featured,
+            search: options.search,
+            location: options.location,
+        });
+        if (dynamoHostels && dynamoHostels.length > 0) {
+            const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+            if (filtered.length > 0) {
+                return filtered;
+            }
+        }
+    } catch (dynamoErr) {
+        console.warn("[Data Layer] DynamoDB primary query failed, falling back to Firestore backup:", dynamoErr);
+    }
+
+    // 2. SECONDARY: Firestore Backup / Fallback
     try {
         const querySnapshot = await getDocs(collection(db, 'hostels'));
 
@@ -496,7 +513,7 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
                     id: docSnap.id, 
                     ...data, 
                     lat: hostelLat ?? staticHostels[0].lat,
-                    lng: hostelLng ?? staticHostels[0].lng,
+                    lng: hostelLng ?? staticHostels[0].lng, 
                     roomTypes, 
                     roomTypeTags,
                     availability, 
@@ -507,28 +524,13 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
             }));
 
             const filteredFirestore = firestoreHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-            if (filteredFirestore.length > 0) {
-                return filteredFirestore;
-            }
+            return filteredFirestore;
         }
     } catch (e: any) {
-        console.error("Error fetching hostels from Firestore: ", e);
+        console.error("Error fetching hostels from Firestore backup: ", e);
     }
 
-    // 2. SECONDARY: DynamoDB fallback
-    try {
-        const dynamoHostels = await listHostels({
-            featuredOnly: options.featured,
-            search: options.search,
-            location: options.location,
-        });
-        if (dynamoHostels && dynamoHostels.length > 0) {
-            const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-            if (filtered.length > 0) return filtered;
-        }
-    } catch (e) {}
-
-    // 3. TERTIARY: Static fallback
+    // 3. TERTIARY: Static fallback safety net
     const fallbackHostels = staticHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
     return fallbackHostels;
 }

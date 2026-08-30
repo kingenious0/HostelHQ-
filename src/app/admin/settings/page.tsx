@@ -384,7 +384,7 @@ export default function AdminSettingsPage() {
                             />
                             <p className="text-sm text-muted-foreground">
                                 Include country code (e.g., +233 for Ghana). This number will receive SMS notifications
-                                when agents submit new hostels for approval.
+                                when managers submit new hostels for approval.
                             </p>
                         </div>
 
@@ -424,7 +424,7 @@ export default function AdminSettingsPage() {
                             <div>
                                 <h4 className="font-medium">New Hostel Submissions</h4>
                                 <p className="text-sm text-muted-foreground">
-                                    Receive SMS via Wigal FROG when agents/manager submit hostels for approval
+                                    Receive SMS via Wigal FROG when managers submit hostels for approval
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -498,7 +498,7 @@ export default function AdminSettingsPage() {
                                 <strong>When Deployed:</strong>
                             </p>
                             <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
-                                <li>Admins receive SMS when agents submit hostels</li>
+                                <li>Admins receive SMS when managers submit hostels</li>
                                 <li>Creators get SMS for approval/rejection status</li>
                                 <li>Test SMS works for verification</li>
                             </ul>
