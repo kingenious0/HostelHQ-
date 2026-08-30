@@ -1,7 +1,6 @@
 import { db } from './firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, Timestamp, writeBatch, deleteDoc, addDoc, orderBy, or } from "firebase/firestore";
 import { ably } from './ably';
-import { getHostelById, listHostels } from './dynamodb-service';
 
 export type RoomType = {
   id?: string;
@@ -346,13 +345,26 @@ const convertTimestamps = (data: any) => {
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
     // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
-    try {
-        const dynamoHostel = await getHostelById(hostelId);
-        if (dynamoHostel) {
-            return dynamoHostel;
+    if (typeof window !== 'undefined') {
+        try {
+            const { fetchHostelByIdAction } = await import('@/app/actions/db');
+            const res = await fetchHostelByIdAction(hostelId);
+            if (res.success && res.data) {
+                return res.data;
+            }
+        } catch (e) {
+            console.warn(`[Data Layer] DynamoDB server action fetchHostelByIdAction failed for ${hostelId}, trying Firestore backup:`, e);
         }
-    } catch (e) {
-        console.warn(`[Data Layer] DynamoDB primary getHostel failed for ${hostelId}, trying Firestore backup:`, e);
+    } else {
+        try {
+            const { getHostelById } = await import('./dynamodb-service');
+            const dynamoHostel = await getHostelById(hostelId);
+            if (dynamoHostel) {
+                return dynamoHostel;
+            }
+        } catch (e) {
+            console.warn(`[Data Layer] DynamoDB primary getHostel failed for ${hostelId}, trying Firestore backup:`, e);
+        }
     }
 
     // 2. SECONDARY: Firestore Backup / Fallback
@@ -442,20 +454,40 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
 export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
     // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
-    try {
-        const dynamoHostels = await listHostels({
-            featuredOnly: options.featured,
-            search: options.search,
-            location: options.location,
-        });
-        if (dynamoHostels && dynamoHostels.length > 0) {
-            const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-            if (filtered.length > 0) {
-                return filtered;
+    if (typeof window !== 'undefined') {
+        try {
+            const { fetchHostelsAction } = await import('@/app/actions/db');
+            const res = await fetchHostelsAction({
+                featured: options.featured,
+                search: options.search,
+                location: options.location,
+            });
+            if (res.success && res.data && res.data.length > 0) {
+                const filtered = res.data.filter((hostel) => hostelMatchesOptions(hostel, options));
+                if (filtered.length > 0) {
+                    return filtered;
+                }
             }
+        } catch (dynamoErr) {
+            console.warn("[Data Layer] DynamoDB server action fetchHostelsAction failed, falling back to Firestore backup:", dynamoErr);
         }
-    } catch (dynamoErr) {
-        console.warn("[Data Layer] DynamoDB primary query failed, falling back to Firestore backup:", dynamoErr);
+    } else {
+        try {
+            const { listHostels } = await import('./dynamodb-service');
+            const dynamoHostels = await listHostels({
+                featuredOnly: options.featured,
+                search: options.search,
+                location: options.location,
+            });
+            if (dynamoHostels && dynamoHostels.length > 0) {
+                const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
+                if (filtered.length > 0) {
+                    return filtered;
+                }
+            }
+        } catch (dynamoErr) {
+            console.warn("[Data Layer] DynamoDB primary query failed, falling back to Firestore backup:", dynamoErr);
+        }
     }
 
     // 2. SECONDARY: Firestore Backup / Fallback
