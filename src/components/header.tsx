@@ -121,6 +121,7 @@ export function Header() {
   const [uiScale, setUiScale] = useState<number>(100); // 70-130 range (percentage)
   const { toast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
   const locationWatcherId = useRef<number | null>(null);
   const applyTheme = useCallback((value: ThemeMode) => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
