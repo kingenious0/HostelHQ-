@@ -859,7 +859,7 @@ export default function SignupPage() {
                                     </p>
                                 </CardFooter>
                             </>
-                        ) : (
+                        ) : step === 'otp' ? (
                             /* OTP Verification Step */
                             <>
                                 <CardHeader className="text-center pt-8 pb-4">
