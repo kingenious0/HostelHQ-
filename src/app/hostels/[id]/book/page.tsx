@@ -61,6 +61,7 @@ export default function BookingVisitPage() {
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdVisitId, setCreatedVisitId] = useState<string | null>(null);
@@ -85,6 +86,7 @@ export default function BookingVisitPage() {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data() as any;
+            if (userData.verificationStatus) setVerificationStatus(userData.verificationStatus);
             if (userData.fullName) setStudentName(userData.fullName);
             if (userData.email || user.email) setEmail(userData.email || user.email || '');
             if (userData.phoneNumber || userData.phone) setPhone(userData.phoneNumber || userData.phone || '');
@@ -145,6 +147,15 @@ export default function BookingVisitPage() {
       toast({
         title: "Login Required",
         description: "Please log in with your student account to schedule your free inspection.",
+      });
+      return;
+    }
+
+    if (verificationStatus === 'pending') {
+      toast({
+        title: "Account Under Review",
+        description: "Your student credentials are currently undergoing authentication by the Dean of Students office. You can browse hostels in preview mode while your verification is in progress.",
+        variant: "destructive",
       });
       return;
     }

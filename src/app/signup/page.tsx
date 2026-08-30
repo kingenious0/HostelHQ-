@@ -1152,7 +1152,7 @@ export default function SignupPage() {
                                     <div className="space-y-3 pt-2">
                                         <Button
                                             type="button"
-                                            onClick={() => router.push('/hostels')}
+                                            onClick={() => router.push('/#all-hostels')}
                                             className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
                                         >
                                             Browse Hostels in Preview Mode

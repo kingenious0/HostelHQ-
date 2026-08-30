@@ -106,6 +106,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/hostels',
+        destination: '/#all-hostels',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 let exportedConfig: any = nextConfig;

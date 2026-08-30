@@ -67,6 +67,7 @@ export default function SecureHostelPage() {
     const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [existingBooking, setExistingBooking] = React.useState<{ id: string } | null | undefined>(null);
+    const [verificationStatus, setVerificationStatus] = React.useState<string | null>(null);
     const [aiQuestion, setAiQuestion] = React.useState("");
     const [aiAnswer, setAiAnswer] = React.useState<string | null>(null);
     const [aiLoading, setAiLoading] = React.useState(false);
@@ -92,6 +93,7 @@ export default function SecureHostelPage() {
         const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
             if (!user || typeof hostelId !== 'string') {
                 setExistingBooking(null);
+                setVerificationStatus(null);
                 form.reset({
                     studentName: "",
                     indexNumber: "",
@@ -113,6 +115,7 @@ export default function SecureHostelPage() {
             try {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
                 const userData = userDoc.exists() ? userDoc.data() as any : {};
+                if (userData.verificationStatus) setVerificationStatus(userData.verificationStatus);
                 form.reset({
                     studentName: userData.fullName || user.displayName || "",
                     indexNumber: "",
@@ -218,6 +221,26 @@ export default function SecureHostelPage() {
     async function onSubmit(values: z.infer<typeof formSchema>) {
         if (!hostel || !selectedRoom || typeof hostelId !== 'string') return;
         
+        if (!auth.currentUser) {
+            toast({
+                title: "Login Required",
+                description: "You need to be logged in with an active student account to secure a room.",
+                variant: "destructive",
+            });
+            const redirectUrl = `/hostels/${hostelId}/secure${roomTypeId ? `?roomTypeId=${roomTypeId}` : ''}`;
+            router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+            return;
+        }
+
+        if (verificationStatus === 'pending') {
+            toast({
+                title: "Account Under Review",
+                description: "Your student credentials are undergoing authentication by the Dean of Students office. You can browse hostels in preview mode while your verification is in progress.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         setIsSubmitting(true);
         toast({ title: "Initializing Payment..." });
 

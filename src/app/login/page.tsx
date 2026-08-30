@@ -823,7 +823,7 @@ function LoginPageInner() {
                             type="button"
                             onClick={() => {
                                 setShowUnderReviewDialog(false);
-                                router.push('/hostels');
+                                router.push('/#all-hostels');
                             }}
                             className="w-full h-10 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 text-xs"
                         >
