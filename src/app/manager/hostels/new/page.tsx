@@ -4,10 +4,10 @@ import React from "react";
 import Link from "next/link";
 import { Header } from "@/components/header";
 import { HostelListingWizard } from "@/components/hostel-listing-wizard";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function AdminUploadPage() {
+export default function ManagerNewHostelPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
@@ -20,14 +20,14 @@ export default function AdminUploadPage() {
             size="sm"
             className="text-muted-foreground hover:text-foreground text-xs gap-1.5 h-8 px-2"
           >
-            <Link href="/admin/dashboard">
+            <Link href="/manager/dashboard">
               <ArrowLeft className="h-4 w-4" />
-              Back to Admin Dashboard
+              Back to Manager Dashboard
             </Link>
           </Button>
         </div>
 
-        <HostelListingWizard mode="admin" />
+        <HostelListingWizard mode="manager" />
       </main>
     </div>
   );

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Hero } from "@/components/hero";
+import { HowItWorksStrip } from "@/components/how-it-works-strip";
 import { PersistentFilterBar } from "@/components/persistent-filter-bar";
 import { ShortlistProvider } from "@/components/shortlist-context";
 import { HostelCompareDrawer } from "@/components/hostel-compare-drawer";
@@ -95,19 +96,14 @@ export default async function Home({ searchParams }: HomeProps) {
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <Header />
         <main className="flex-1 bg-background pb-24">
-          {/* Student.com-style Hero with 3-step 'How It Works' strip */}
+          {/* Simplified Student.com-style Hero with Integrated Search */}
           <Hero />
 
-          {/* Primary Quick Search Bar */}
-          <section className="container mx-auto -mt-10 px-4 sm:px-6 lg:px-10 relative z-20">
-            <div className="rounded-[2.5rem] p-1.5 sm:p-2 bg-card/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-2xl">
-              <h2 className="sr-only">Find a hostel</h2>
-              <SearchForm />
-            </div>
-          </section>
+          {/* Dedicated 3-Step 'How It Works' Section */}
+          <HowItWorksStrip />
 
           {/* HousingAnywhere-style Persistent Filter Bar */}
-          <section className="mt-8">
+          <section className="mt-4">
             <PersistentFilterBar totalCount={filteredHostels.length} />
           </section>
 

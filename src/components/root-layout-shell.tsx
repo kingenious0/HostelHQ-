@@ -53,7 +53,7 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
 
   return (
     <MaintenanceGuard>
-      <div className="flex min-h-full flex-col">
+      <div className="flex min-h-full flex-col pb-20 md:pb-0">
         {children}
         {!hideFooter && <Footer />}
       </div>

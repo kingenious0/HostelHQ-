@@ -38,7 +38,7 @@ export function HostelCompareDrawer() {
       {/* Floating Bottom Bar (Amber Student-style) */}
       <aside
         aria-label="Hostel comparison drawer"
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[95%] max-w-2xl bg-slate-950/95 text-white backdrop-blur-xl border border-white/15 rounded-3xl p-3 sm:p-4 shadow-2xl shadow-black/40 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-6 duration-300"
+        className="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 z-40 w-[95%] max-w-2xl bg-slate-950/95 text-white backdrop-blur-xl border border-white/15 rounded-3xl p-3 sm:p-4 shadow-2xl shadow-black/40 flex items-center justify-between gap-3 animate-in slide-in-from-bottom-6 duration-300"
       >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="flex items-center -space-x-3 shrink-0">

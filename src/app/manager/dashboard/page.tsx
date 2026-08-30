@@ -15,6 +15,7 @@ import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
 import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
@@ -1450,14 +1451,14 @@ export default function ManagerDashboard() {
                                             Attach Existing Hostel
                                         </Button>
                                         <Button
-                                            type="button"
-                                            variant="outline"
+                                            asChild
                                             size="sm"
-                                            onClick={() => setRequestDialogOpen(true)}
-                                            className="text-xs"
+                                            className="text-xs bg-primary hover:bg-primary/90 text-white font-medium"
                                         >
-                                            <PlusCircle className="mr-1 h-3 w-3" />
-                                            Request New Hostel
+                                            <Link href="/manager/hostels/new">
+                                                <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+                                                List New Hostel
+                                            </Link>
                                         </Button>
                                     </div>
                                 </div>
