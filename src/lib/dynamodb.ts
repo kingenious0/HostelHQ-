@@ -128,12 +128,8 @@ export async function updateItem<T = Record<string, any>>(
   if (!client) return null;
 
   const updateEntries = Object.entries(updates).filter(
-    ([key, val]) => key !== "id" && key !== "entityType" && val !== undefined
+    ([key, val]) => key !== "id" && key !== "entityType" && key !== "updatedAt" && val !== undefined
   );
-
-  if (updateEntries.length === 0) {
-    return getItem<T>(id, entityType, tableName);
-  }
 
   const expressionAttributeNames: Record<string, string> = {};
   const expressionAttributeValues: Record<string, any> = {};
@@ -147,9 +143,9 @@ export async function updateItem<T = Record<string, any>>(
     setExpressions.push(`${attrName} = ${attrVal}`);
   });
 
-  // Always update the updatedAt timestamp
+  // Always update the updatedAt timestamp exactly once
   expressionAttributeNames["#updatedAt"] = "updatedAt";
-  expressionAttributeValues[":updatedAt"] = new Date().toISOString();
+  expressionAttributeValues[":updatedAt"] = (updates as any).updatedAt || new Date().toISOString();
   setExpressions.push("#updatedAt = :updatedAt");
 
   const params: UpdateCommandInput = {

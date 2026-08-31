@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -396,312 +403,270 @@ export default function DeanDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Header />
-
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
-        {/* Executive Banner */}
-        <div className="mb-8 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 sm:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-blue-200 border border-white/20">
-              <Shield className="h-3.5 w-3.5" />
-              Student Affairs • Welfare & Housing
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+      <Header />      <main className="flex-1 container mx-auto px-4 py-6 max-w-7xl">
+        {/* Streamlined Utility Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/60 pb-5">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               Dean of Students Housing Console
             </h1>
-            <p className="text-sm text-blue-100/80 max-w-2xl">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               Arbitrate student-hostel disputes, verify student admission credentials, and oversee residential welfare.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={loadDashboardData}
               disabled={loadingData}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
+              className="h-8 px-3 text-xs font-medium text-foreground bg-background hover:bg-muted/80 shadow-xs"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loadingData ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loadingData ? "animate-spin" : ""}`} />
               Refresh Feed
             </Button>
           </div>
         </div>
 
         {/* Operational Metrics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Active Disputes
-              </CardTitle>
-              <ShieldAlert className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl sm:text-3xl font-black text-foreground">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <Card className="border border-border/60 shadow-xs bg-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                <span>Active Disputes</span>
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-bold text-foreground mt-2">
                 {submittedComplaintsCount + underReviewComplaintsCount}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-[11px] text-muted-foreground mt-0.5">
                 {submittedComplaintsCount} awaiting review • {underReviewComplaintsCount} in investigation
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Verification Queue
-              </CardTitle>
-              <UserCheck className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl sm:text-3xl font-black text-foreground">{pendingVerificationsCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Pending admission letter & ID inspections
+          <Card className="border border-border/60 shadow-xs bg-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                <span>Verification Queue</span>
+                <UserCheck className="h-4 w-4 text-blue-500" />
+              </div>
+              <div className="text-2xl font-bold text-foreground mt-2">{pendingVerificationsCount}</div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Awaiting document inspection
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Resolved Disputes
-              </CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-600">
+          <Card className="border border-border/60 shadow-xs bg-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                <span>Resolved Disputes</span>
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              </div>
+              <div className="text-2xl font-bold text-emerald-600 mt-2">
                 {complaints.filter((c) => c.status === "Resolved").length}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Settled with formal dean intervention</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Settled with formal resolution</p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Accredited Hostels
-              </CardTitle>
-              <Building className="h-4 w-4 text-indigo-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl sm:text-3xl font-black text-foreground">{hostels.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Under official university zoning</p>
+          <Card className="border border-border/60 shadow-xs bg-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                <span>Accredited Hostels</span>
+                <Building className="h-4 w-4 text-slate-500" />
+              </div>
+              <div className="text-2xl font-bold text-foreground mt-2">{hostels.length}</div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Under official university zoning</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Dashboard Tabs */}
-        <Tabs defaultValue="complaints" className="space-y-6">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="bg-slate-200/80 p-1 rounded-xl flex whitespace-nowrap min-w-max">
-              <TabsTrigger value="complaints" className="rounded-lg font-semibold flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Two-Way Complaints Inbox
+        <Tabs defaultValue="complaints" className="space-y-4">
+          <div className="border-b border-border/60 pb-px">
+            <TabsList className="bg-transparent h-auto p-0 gap-6 border-b-0">
+              <TabsTrigger
+                value="complaints"
+                className="relative py-2 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground transition-all flex items-center gap-2"
+              >
+                <span>Disputes Inbox</span>
                 {submittedComplaintsCount > 0 && (
-                  <Badge variant="destructive" className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
                     {submittedComplaintsCount}
-                  </Badge>
+                  </span>
                 )}
               </TabsTrigger>
 
-              <TabsTrigger value="verifications" className="rounded-lg font-semibold flex items-center gap-2">
-                <FileCheck className="h-4 w-4" />
-                Student Verification Queue
+              <TabsTrigger
+                value="verifications"
+                className="relative py-2 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground transition-all flex items-center gap-2"
+              >
+                <span>Student Verifications</span>
                 {pendingVerificationsCount > 0 && (
-                  <Badge className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
                     {pendingVerificationsCount}
-                  </Badge>
+                  </span>
                 )}
               </TabsTrigger>
 
-              <TabsTrigger value="placements" className="rounded-lg font-semibold flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Placements & Density
+              <TabsTrigger
+                value="placements"
+                className="relative py-2 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground transition-all flex items-center gap-2"
+              >
+                <span>Placements & Density</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
           {/* TAB 1: TWO-WAY COMPLAINTS INBOX */}
-          <TabsContent value="complaints" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-lg font-bold">Dispute Resolution Inbox</CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Full-context disputes auto-linked with verified tenancy agreements and resident records.
-                    </CardDescription>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                    {/* Search Input */}
-                    <div className="relative flex-1 sm:w-64 min-w-[200px]">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search student, hostel, issue..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 h-9 text-xs"
-                      />
-                    </div>
-
-                    {/* Direction Filter */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs overflow-x-auto">
-                      <Button
-                        size="sm"
-                        variant={directionFilter === "all" ? "default" : "ghost"}
-                        onClick={() => setDirectionFilter("all")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        All
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={directionFilter === "student_to_hostel" ? "default" : "ghost"}
-                        onClick={() => setDirectionFilter("student_to_hostel")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        Student → Hostel
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={directionFilter === "manager_to_student" ? "default" : "ghost"}
-                        onClick={() => setDirectionFilter("manager_to_student")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        Manager → Student
-                      </Button>
-                    </div>
-
-                    {/* Status Filter */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs overflow-x-auto">
-                      <Button
-                        size="sm"
-                        variant={statusFilter === "all" ? "default" : "ghost"}
-                        onClick={() => setStatusFilter("all")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        All
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={statusFilter === "Submitted" ? "default" : "ghost"}
-                        onClick={() => setStatusFilter("Submitted")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        Submitted
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={statusFilter === "Under Review" ? "default" : "ghost"}
-                        onClick={() => setStatusFilter("Under Review")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        Reviewing
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={statusFilter === "Resolved" ? "default" : "ghost"}
-                        onClick={() => setStatusFilter("Resolved")}
-                        className="h-7 text-xs px-2.5 shrink-0"
-                      >
-                        Resolved
-                      </Button>
-                    </div>
-                  </div>
+          <TabsContent value="complaints" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              {/* Filter Bar */}
+              <div className="p-3.5 border-b border-border/50 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between bg-card rounded-t-xl">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search student, hostel, or subject..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8.5 h-8 text-xs bg-background"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-              </CardHeader>
+
+                {/* Dropdown Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Direction Dropdown */}
+                  <Select
+                    value={directionFilter}
+                    onValueChange={(val) => setDirectionFilter(val as any)}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-[160px] bg-background">
+                      <SelectValue placeholder="Direction" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Directions</SelectItem>
+                      <SelectItem value="student_to_hostel">Student → Hostel</SelectItem>
+                      <SelectItem value="manager_to_student">Manager → Student</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Status Dropdown */}
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) => setStatusFilter(val as any)}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-[130px] bg-background">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Submitted">Submitted</SelectItem>
+                      <SelectItem value="Under Review">Under Review</SelectItem>
+                      <SelectItem value="Resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {(directionFilter !== "all" || statusFilter !== "all" || searchQuery) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDirectionFilter("all");
+                        setStatusFilter("all");
+                        setSearchQuery("");
+                      }}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground px-2"
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+              </div>
 
               <CardContent className="p-0">
                 {filteredComplaints.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
-                    <p className="font-semibold text-foreground">No active complaints found</p>
-                    <p className="text-xs">There are no reports matching the selected filters.</p>
+                    <p className="font-semibold text-foreground">No complaints match your filters</p>
+                    <p className="text-xs">Adjust or clear search filters to view recorded records.</p>
                   </div>
                 ) : (
                   <>
                     {/* Desktop Table View */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-100/60">
+                        <TableHeader className="bg-slate-50 border-b border-border/60">
                           <TableRow>
-                            <TableHead className="w-28">Direction</TableHead>
-                            <TableHead>Subject & Category</TableHead>
-                            <TableHead>Student Context</TableHead>
-                            <TableHead>Hostel / Manager</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead className="w-32">Status</TableHead>
+                            <TableHead>Subject & Context</TableHead>
+                            <TableHead>Parties Involved</TableHead>
+                            <TableHead>Direction</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {filteredComplaints.map((complaint) => (
                             <TableRow key={complaint.id} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell>
-                                {complaint.direction === "student_to_hostel" ? (
-                                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
-                                    <GraduationCap className="h-3 w-3" />
-                                    Stu → Hostel
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
-                                    <Building className="h-3 w-3" />
-                                    Mgr → Student
-                                  </Badge>
+                              {/* Status: The ONE strong colored pill */}
+                              <TableCell className="py-3">
+                                {complaint.status === "Submitted" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                    <Clock className="h-3 w-3" /> Submitted
+                                  </span>
                                 )}
-                                <div className="text-[10px] text-muted-foreground mt-1">
-                                  {new Date(complaint.createdAt).toLocaleDateString()}
+                                {complaint.status === "Under Review" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <AlertTriangle className="h-3 w-3" /> Under Review
+                                  </span>
+                                )}
+                                {complaint.status === "Resolved" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 className="h-3 w-3" /> Resolved
+                                  </span>
+                                )}
+                              </TableCell>
+
+                              {/* Subject & Category: Category is quiet text */}
+                              <TableCell className="py-3 max-w-sm">
+                                <p className="font-medium text-foreground text-sm line-clamp-1">
+                                  {complaint.subject}
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                  <span>{complaint.category}</span>
+                                  <span>•</span>
+                                  <span>{new Date(complaint.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
                                 </div>
                               </TableCell>
 
-                              <TableCell className="max-w-xs">
-                                <p className="font-semibold text-foreground text-sm line-clamp-1">
-                                  {complaint.subject}
-                                </p>
-                                <Badge variant="outline" className="text-[10px] font-normal mt-0.5">
-                                  {complaint.category}
-                                </Badge>
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                  {complaint.description}
+                              {/* Parties Involved: Student & Hostel Name (no contact clutter) */}
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-sm">{complaint.studentName}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {complaint.hostelName} {complaint.roomNumber ? `• Rm ${complaint.roomNumber}` : ""}
                                 </p>
                               </TableCell>
 
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-xs">{complaint.studentName}</p>
-                                <p className="text-[11px] text-muted-foreground">{complaint.studentEmail}</p>
-                                <p className="text-[11px] text-muted-foreground font-mono">{complaint.studentPhone}</p>
+                              {/* Direction: Quiet secondary text label */}
+                              <TableCell className="py-3">
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  {complaint.direction === "student_to_hostel" ? "Student → Hostel" : "Manager → Student"}
+                                </span>
                               </TableCell>
 
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-xs">{complaint.hostelName}</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  Room: <span className="font-medium text-foreground">{complaint.roomNumber || "N/A"}</span>
-                                </p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  Mgr: {complaint.managerName || "Assigned"} ({complaint.managerPhone || "On file"})
-                                </p>
-                              </TableCell>
-
-                              <TableCell>
-                                {complaint.status === "Submitted" && (
-                                  <Badge variant="destructive" className="text-[11px] flex items-center gap-1 w-fit">
-                                    <Clock className="h-3 w-3" /> Submitted
-                                  </Badge>
-                                )}
-                                {complaint.status === "Under Review" && (
-                                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1 w-fit">
-                                    <AlertTriangle className="h-3 w-3" /> Under Review
-                                  </Badge>
-                                )}
-                                {complaint.status === "Resolved" && (
-                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1 w-fit">
-                                    <CheckCircle2 className="h-3 w-3" /> Resolved
-                                  </Badge>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="text-right">
+                              {/* Actions */}
+                              <TableCell className="py-3 text-right">
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -709,7 +674,7 @@ export default function DeanDashboardPage() {
                                     setSelectedComplaint(complaint);
                                     setResolutionNotes(complaint.resolutionNotes || "");
                                   }}
-                                  className="h-8 text-xs font-semibold"
+                                  className="h-8 text-xs font-medium hover:bg-slate-100"
                                 >
                                   Investigate
                                 </Button>
@@ -723,62 +688,40 @@ export default function DeanDashboardPage() {
                     {/* Mobile Stacked Card View */}
                     <div className="block md:hidden divide-y divide-border/60">
                       {filteredComplaints.map((complaint) => (
-                        <div key={complaint.id} className="p-4 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {complaint.direction === "student_to_hostel" ? (
-                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold flex items-center gap-1">
-                                  <GraduationCap className="h-3 w-3" /> Stu → Hostel
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-semibold flex items-center gap-1">
-                                  <Building className="h-3 w-3" /> Mgr → Student
-                                </Badge>
-                              )}
-                              <Badge variant="outline" className="text-[10px] font-normal">
-                                {complaint.category}
-                              </Badge>
-                            </div>
-                            <span className="text-[10px] text-muted-foreground shrink-0">
-                              {new Date(complaint.createdAt).toLocaleDateString()}
+                        <div key={complaint.id} className="p-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            {complaint.status === "Submitted" && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                <Clock className="h-3 w-3" /> Submitted
+                              </span>
+                            )}
+                            {complaint.status === "Under Review" && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <AlertTriangle className="h-3 w-3" /> Under Review
+                              </span>
+                            )}
+                            {complaint.status === "Resolved" && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="h-3 w-3" /> Resolved
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(complaint.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                             </span>
                           </div>
 
                           <div>
-                            <p className="font-bold text-foreground text-sm">{complaint.subject}</p>
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{complaint.description}</p>
+                            <p className="font-semibold text-foreground text-sm">{complaint.subject}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {complaint.category} • {complaint.direction === "student_to_hostel" ? "Student → Hostel" : "Manager → Student"}
+                            </p>
                           </div>
 
-                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Student:</span>
-                              <span className="font-medium text-foreground">{complaint.studentName} ({complaint.studentPhone || "No phone"})</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Hostel:</span>
-                              <span className="font-medium text-foreground">{complaint.hostelName} (Room {complaint.roomNumber || "N/A"})</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
                             <div>
-                              {complaint.status === "Submitted" && (
-                                <Badge variant="destructive" className="text-[11px] flex items-center gap-1">
-                                  <Clock className="h-3 w-3" /> Submitted
-                                </Badge>
-                              )}
-                              {complaint.status === "Under Review" && (
-                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1">
-                                  <AlertTriangle className="h-3 w-3" /> Under Review
-                                </Badge>
-                              )}
-                              {complaint.status === "Resolved" && (
-                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1">
-                                  <CheckCircle2 className="h-3 w-3" /> Resolved
-                                </Badge>
-                              )}
+                              <span className="font-medium text-foreground">{complaint.studentName}</span>
+                              <span className="text-muted-foreground"> • {complaint.hostelName}</span>
                             </div>
-
                             <Button
                               size="sm"
                               variant="outline"
@@ -786,7 +729,7 @@ export default function DeanDashboardPage() {
                                 setSelectedComplaint(complaint);
                                 setResolutionNotes(complaint.resolutionNotes || "");
                               }}
-                              className="h-8 text-xs font-semibold"
+                              className="h-7 text-xs font-medium px-2.5"
                             >
                               Investigate
                             </Button>
@@ -801,14 +744,17 @@ export default function DeanDashboardPage() {
           </TabsContent>
 
           {/* TAB 2: STUDENT VERIFICATION QUEUE */}
-          <TabsContent value="verifications" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold">Institutional Credential Verification</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Manual inspection of admission letters and student ID cards to grant protected resident access.
-                </CardDescription>
-              </CardHeader>
+          <TabsContent value="verifications" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
+                <div>
+                  <CardTitle className="text-base font-bold">Student Verification Queue</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Inspect university admission letters and student ID cards to grant protected resident status.
+                  </CardDescription>
+                </div>
+              </div>
+
               <CardContent className="p-0">
                 {verifications.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
@@ -821,41 +767,55 @@ export default function DeanDashboardPage() {
                     {/* Desktop Table View */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-100/60">
+                        <TableHeader className="bg-slate-50 border-b border-border/60">
                           <TableRow>
-                            <TableHead>Student Name</TableHead>
-                            <TableHead>Institution & ID Number</TableHead>
+                            <TableHead className="w-32">Status</TableHead>
+                            <TableHead>Student</TableHead>
+                            <TableHead>Institution</TableHead>
                             <TableHead>Admission Letter</TableHead>
                             <TableHead>Student ID Card</TableHead>
-                            <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {verifications.map((item) => (
                             <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
-                                <p className="text-xs text-muted-foreground">{item.email}</p>
-                                <p className="text-xs text-muted-foreground font-mono">{item.phone}</p>
+                              <TableCell className="py-3">
+                                {item.status === "pending" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    Pending Review
+                                  </span>
+                                )}
+                                {item.status === "verified" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Verified
+                                  </span>
+                                )}
+                                {item.status === "rejected" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                    Rejected
+                                  </span>
+                                )}
                               </TableCell>
 
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-xs">
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-sm">{item.fullName}</p>
+                                <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.studentIdNumber}</p>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <span className="text-xs text-foreground font-medium">
                                   {item.institution || "AAMUSTED"}
-                                </p>
-                                <Badge variant="outline" className="font-mono text-[11px] mt-0.5">
-                                  {item.studentIdNumber}
-                                </Badge>
+                                </span>
                               </TableCell>
 
-                              <TableCell>
+                              <TableCell className="py-3">
                                 {item.admissionLetterUrl ? (
                                   <a
                                     href={item.admissionLetterUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
+                                    className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
                                   >
                                     <Eye className="h-3.5 w-3.5" /> View Letter
                                   </a>
@@ -864,13 +824,13 @@ export default function DeanDashboardPage() {
                                 )}
                               </TableCell>
 
-                              <TableCell>
+                              <TableCell className="py-3">
                                 {item.studentIdCardUrl ? (
                                   <a
                                     href={item.studentIdCardUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
+                                    className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
                                   >
                                     <Eye className="h-3.5 w-3.5" /> View ID Card
                                   </a>
@@ -879,32 +839,14 @@ export default function DeanDashboardPage() {
                                 )}
                               </TableCell>
 
-                              <TableCell>
-                                {item.status === "pending" && (
-                                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px]">
-                                    Pending Review
-                                  </Badge>
-                                )}
-                                {item.status === "verified" && (
-                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px]">
-                                    Verified
-                                  </Badge>
-                                )}
-                                {item.status === "rejected" && (
-                                  <Badge variant="destructive" className="text-[11px]">
-                                    Rejected
-                                  </Badge>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="text-right">
+                              <TableCell className="py-3 text-right">
                                 {item.status === "pending" ? (
                                   <div className="flex justify-end gap-2">
                                     <Button
                                       size="sm"
                                       onClick={() => handleVerifyStudent(item.id, "verified")}
                                       disabled={actionLoading}
-                                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
                                     >
                                       Approve
                                     </Button>
@@ -916,7 +858,7 @@ export default function DeanDashboardPage() {
                                         setRejectDialogOpen(true);
                                       }}
                                       disabled={actionLoading}
-                                      className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                                      className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
                                     >
                                       Reject
                                     </Button>
@@ -936,15 +878,27 @@ export default function DeanDashboardPage() {
                     {/* Mobile Stacked Card View */}
                     <div className="block md:hidden divide-y divide-border/60">
                       {verifications.map((item) => (
-                        <div key={item.id} className="p-4 space-y-3">
+                        <div key={item.id} className="p-4 space-y-2.5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <p className="font-bold text-foreground text-sm">{item.fullName}</p>
-                              <p className="text-xs text-muted-foreground">{item.email} • {item.phone}</p>
+                              <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{item.studentIdNumber} • {item.institution || "AAMUSTED"}</p>
                             </div>
-                            <Badge variant="outline" className="font-mono text-[11px]">
-                              {item.studentIdNumber}
-                            </Badge>
+                            {item.status === "pending" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                Pending
+                              </span>
+                            )}
+                            {item.status === "verified" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Verified
+                              </span>
+                            )}
+                            {item.status === "rejected" && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                                Rejected
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-4 text-xs">
@@ -953,7 +907,7 @@ export default function DeanDashboardPage() {
                                 href={item.admissionLetterUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"
+                                className="inline-flex items-center gap-1 text-primary font-medium hover:underline"
                               >
                                 <Eye className="h-3.5 w-3.5" /> View Letter
                               </a>
@@ -965,7 +919,7 @@ export default function DeanDashboardPage() {
                                 href={item.studentIdCardUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"
+                                className="inline-flex items-center gap-1 text-primary font-medium hover:underline"
                               >
                                 <Eye className="h-3.5 w-3.5" /> View ID Card
                               </a>
@@ -974,54 +928,30 @@ export default function DeanDashboardPage() {
                             )}
                           </div>
 
-                          <div className="flex items-center justify-between pt-1">
-                            <div>
-                              {item.status === "pending" && (
-                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px]">
-                                  Pending Review
-                                </Badge>
-                              )}
-                              {item.status === "verified" && (
-                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px]">
-                                  Verified
-                                </Badge>
-                              )}
-                              {item.status === "rejected" && (
-                                <Badge variant="destructive" className="text-[11px]">
-                                  Rejected
-                                </Badge>
-                              )}
+                          {item.status === "pending" && (
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedVerification(item);
+                                  setRejectDialogOpen(true);
+                                }}
+                                disabled={actionLoading}
+                                className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                              >
+                                Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleVerifyStudent(item.id, "verified")}
+                                disabled={actionLoading}
+                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                              >
+                                Approve
+                              </Button>
                             </div>
-
-                            {item.status === "pending" ? (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleVerifyStudent(item.id, "verified")}
-                                  disabled={actionLoading}
-                                  className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedVerification(item);
-                                    setRejectDialogOpen(true);
-                                  }}
-                                  disabled={actionLoading}
-                                  className="h-8 text-xs text-destructive hover:bg-destructive/10"
-                                >
-                                  Reject
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
-                              </span>
-                            )}
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1032,70 +962,69 @@ export default function DeanDashboardPage() {
           </TabsContent>
 
           {/* TAB 3: PLACEMENTS OVERVIEW */}
-          <TabsContent value="placements" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold">Hostel Placements & Occupancy Density</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Real-time bed allocation and resident distribution across registered accommodations.
-                </CardDescription>
-              </CardHeader>
+          <TabsContent value="placements" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
+                <div>
+                  <CardTitle className="text-base font-bold">Hostel Placements & Density</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Bed allocation and residential capacity across accredited accommodations.
+                  </CardDescription>
+                </div>
+              </div>
+
               <CardContent className="p-0">
                 {/* Desktop Table View */}
                 <div className="hidden md:block overflow-x-auto">
                   <Table>
-                    <TableHeader className="bg-slate-100/60">
+                    <TableHeader className="bg-slate-50 border-b border-border/60">
                       <TableRow>
-                        <TableHead>Hostel Name</TableHead>
+                        <TableHead className="w-32">Status</TableHead>
+                        <TableHead>Hostel Name & Location</TableHead>
                         <TableHead>Campus Zone</TableHead>
-                        <TableHead>Room Types</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Rating</TableHead>
+                        <TableHead>Room Inventory</TableHead>
+                        <TableHead className="text-right">Rating</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {hostels.map((h) => (
                         <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
-                          <TableCell>
-                            <p className="font-semibold text-foreground text-sm">{h.name}</p>
+                          <TableCell className="py-3">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                h.availability === "Available"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : h.availability === "Limited"
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                              }`}
+                            >
+                              {h.availability || "Available"}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-3">
+                            <p className="font-medium text-foreground text-sm">{h.name}</p>
                             <p className="text-xs text-muted-foreground">{h.location}</p>
                           </TableCell>
 
-                          <TableCell>
+                          <TableCell className="py-3">
                             <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
                           </TableCell>
 
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
+                          <TableCell className="py-3">
+                            <div className="text-xs text-muted-foreground">
                               {h.roomTypes && h.roomTypes.length > 0 ? (
-                                h.roomTypes.map((rt: any, idx: number) => (
-                                  <Badge key={idx} variant="secondary" className="text-[10px]">
-                                    {rt.name} (GH₵{rt.price?.toLocaleString()})
-                                  </Badge>
-                                ))
+                                <span>{h.roomTypes.map((rt: any) => rt.name).join(", ")}</span>
                               ) : (
-                                <span className="text-xs text-muted-foreground">Standard Inventory</span>
+                                <span>Standard Inventory</span>
                               )}
                             </div>
                           </TableCell>
 
-                          <TableCell>
-                            <Badge
-                              className={`text-[10px] ${
-                                h.availability === "Available"
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : h.availability === "Limited"
-                                  ? "bg-amber-100 text-amber-800 border-amber-300"
-                                  : "bg-rose-100 text-rose-800 border-rose-300"
-                              }`}
-                            >
-                              {h.availability || "Available"}
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="flex items-center gap-1 text-xs font-bold text-foreground">
-                              ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
+                          <TableCell className="py-3 text-right">
+                            <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                              <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
                               <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
                             </div>
                           </TableCell>
@@ -1111,36 +1040,24 @@ export default function DeanDashboardPage() {
                     <div key={h.id} className="p-4 space-y-2">
                       <div className="flex justify-between items-start gap-2">
                         <div>
-                          <p className="font-bold text-foreground text-sm">{h.name}</p>
+                          <p className="font-semibold text-foreground text-sm">{h.name}</p>
                           <p className="text-xs text-muted-foreground">{h.location} • {h.institution || "AAMUSTED"}</p>
                         </div>
-                        <Badge
-                          className={`text-[10px] ${
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                             h.availability === "Available"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               : h.availability === "Limited"
-                              ? "bg-amber-100 text-amber-800 border-amber-300"
-                              : "bg-rose-100 text-rose-800 border-rose-300"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : "bg-rose-50 text-rose-700 border border-rose-200"
                           }`}
                         >
                           {h.availability || "Available"}
-                        </Badge>
+                        </span>
                       </div>
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <div className="flex flex-wrap gap-1">
-                          {h.roomTypes && h.roomTypes.length > 0 ? (
-                            h.roomTypes.map((rt: any, idx: number) => (
-                              <Badge key={idx} variant="secondary" className="text-[10px]">
-                                {rt.name} (GH₵{rt.price?.toLocaleString()})
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Standard Inventory</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-foreground shrink-0">
-                          ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
-                        </div>
+                      <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
+                        <span>{h.roomTypes?.length || 0} room type(s)</span>
+                        <span className="font-semibold text-foreground">★ {h.rating ? h.rating.toFixed(1) : "4.5"}</span>
                       </div>
                     </div>
                   ))}
