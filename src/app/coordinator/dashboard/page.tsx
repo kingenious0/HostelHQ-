@@ -10,6 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
@@ -43,70 +50,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// Mock Fallback Pending Hostels if DB is empty
-const INITIAL_MOCK_PENDING_HOSTELS: Hostel[] = [
-  {
-    id: "pend_hostel_01",
-    name: "Golden Jubilee Student Villa",
-    location: "Tanoso, Kumasi (~8 min walk to AAMUSTED Main Gate)",
-    institution: "AAMUSTED",
-    rating: 0,
-    numberOfReviews: 0,
-    availability: "Available",
-    amenities: ["Self-Contained Bathrooms", "24/7 Water Supply", "Security Fence", "Study Desks", "Free Wi-Fi"],
-    images: [
-      "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800&auto=format&fit=crop&q=80",
-      "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=800&auto=format&fit=crop&q=80",
-    ],
-    description: "Newly constructed modern student villa with dedicated borehole water reservoir, 24-hour manned physical security, CCTV coverage, and quiet study quarters.",
-    priceRange: { min: 3800, max: 4600 },
-    roomTypes: [
-      { id: "rt_pend_1", name: "2 in a Room (En-Suite)", price: 4600, availability: "Available", capacity: 2 },
-      { id: "rt_pend_2", name: "4 in a Room (Standard)", price: 3800, availability: "Available", capacity: 4 },
-    ],
-    reviews: [],
-    status: "pending",
-    submittedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-    createdBy: {
-      userId: "usr_mgr_stephen",
-      fullName: "Stephen Amankwah",
-      email: "s.amankwah@hostels.gh",
-      role: "manager",
-      createdAt: new Date().toISOString(),
-    },
-  },
-  {
-    id: "pend_hostel_02",
-    name: "Unity Haven Annex",
-    location: "Denkyembuoso, Near Victory Church",
-    institution: "AAMUSTED",
-    rating: 0,
-    numberOfReviews: 0,
-    availability: "Available",
-    amenities: ["Borehole & Polytank", "Gated Compound", "Prepaid Metering", "Spacious Rooms"],
-    images: [
-      "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop&q=80",
-    ],
-    description: "Serene student lodge tailored for serious academic focus. High water pressure, private electricity sub-meters for transparent billing.",
-    priceRange: { min: 3200, max: 4000 },
-    roomTypes: [
-      { id: "rt_pend_3", name: "3 in a Room", price: 3200, availability: "Available", capacity: 3 },
-      { id: "rt_pend_4", name: "2 in a Room", price: 4000, availability: "Available", capacity: 2 },
-    ],
-    reviews: [],
-    status: "pending",
-    submittedAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-    createdBy: {
-      userId: "usr_mgr_mary",
-      fullName: "Mary Adomako",
-      email: "mary.adomako@gmail.com",
-      role: "manager",
-      createdAt: new Date().toISOString(),
-    },
-  },
-];
-
-// Mock Rooms with Pending Price Changes for the Price-Change Hook
+// Room with pending price changes for tariff revisions
 interface RoomWithPendingPrice {
   hostelId: string;
   hostelName: string;
@@ -119,33 +63,6 @@ interface RoomWithPendingPrice {
   requestedAt: string;
   requestedBy: string;
 }
-
-const INITIAL_MOCK_PENDING_PRICES: RoomWithPendingPrice[] = [
-  {
-    hostelId: "hostel_doku_01",
-    hostelName: "Doku Kaakyire Hostel",
-    roomId: "room_101",
-    roomNumber: "A-101",
-    roomTypeName: "2 in a Room",
-    currentPrice: 4200,
-    pendingPrice: 4500,
-    reason: "New inverter solar backup installation and ceiling fans",
-    requestedAt: new Date(Date.now() - 3600000 * 14).toISOString(),
-    requestedBy: "Kwame Boateng (Manager)",
-  },
-  {
-    hostelId: "hostel_frontline_02",
-    hostelName: "Frontline Executive Lodge",
-    roomId: "room_204",
-    roomNumber: "B-204",
-    roomTypeName: "Single Executive Room",
-    currentPrice: 5800,
-    pendingPrice: 6200,
-    reason: "Upgraded AC units and private study desk furnishings",
-    requestedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-    requestedBy: "Akwasi Owusu (Manager)",
-  },
-];
 
 export default function CoordinatorDashboardPage() {
   const router = useRouter();
@@ -163,11 +80,12 @@ export default function CoordinatorDashboardPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Price-Change Hook State
-  const [pendingPrices, setPendingPrices] = useState<RoomWithPendingPrice[]>(INITIAL_MOCK_PENDING_PRICES);
+  const [pendingPrices, setPendingPrices] = useState<RoomWithPendingPrice[]>([]);
 
   // Active / Approved Hostels State
   const [approvedHostels, setApprovedHostels] = useState<Hostel[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState<string>("all");
   const [loadingData, setLoadingData] = useState(true);
 
   // Role Authentication Guard
@@ -222,18 +140,21 @@ export default function CoordinatorDashboardPage() {
         fetchHostelsAction(),
       ]);
 
-      if (pendRes.success && pendRes.data && pendRes.data.length > 0) {
+      if (pendRes.success && pendRes.data) {
         setPendingHostels(pendRes.data);
       } else {
-        setPendingHostels(INITIAL_MOCK_PENDING_HOSTELS);
+        setPendingHostels([]);
       }
 
       if (approvedRes.success && approvedRes.data) {
         setApprovedHostels(approvedRes.data);
+      } else {
+        setApprovedHostels([]);
       }
     } catch (err) {
       console.error("Error loading coordinator data:", err);
-      setPendingHostels(INITIAL_MOCK_PENDING_HOSTELS);
+      setPendingHostels([]);
+      setApprovedHostels([]);
     } finally {
       setLoadingData(false);
     }
@@ -388,12 +309,15 @@ export default function CoordinatorDashboardPage() {
 
   const filteredApproved = approvedHostels.filter((h) => {
     const q = searchQuery.toLowerCase();
-    return (
+    const matchesSearch =
       !q ||
       h.name.toLowerCase().includes(q) ||
       h.location.toLowerCase().includes(q) ||
-      h.institution?.toLowerCase().includes(q)
-    );
+      h.institution?.toLowerCase().includes(q);
+    const matchesAvailability =
+      availabilityFilter === "all" ||
+      (h.availability || "Available").toLowerCase() === availabilityFilter.toLowerCase();
+    return matchesSearch && matchesAvailability;
   });
 
   if (loadingAuth) {
@@ -412,204 +336,220 @@ export default function CoordinatorDashboardPage() {
       <Header />
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
-        {/* Executive Banner */}
-        <div className="mb-8 bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 rounded-2xl p-5 sm:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-emerald-200 border border-white/20">
-              <Shield className="h-3.5 w-3.5" />
-              Campus Housing Office • Operations & Accreditation
+        {/* Low-Profile Utility Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Hostel Accreditation & Operations
+              </h1>
+              <Badge variant="outline" className="text-xs font-semibold text-emerald-700 bg-emerald-50 border-emerald-200">
+                Coordinator Console
+              </Badge>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Hostel Accreditation & Operations
-            </h1>
-            <p className="text-sm text-emerald-100/80 max-w-2xl">
-              Accredit private student hostels, review room tariff revision requests, and ensure compliance with university housing standards.
+            <p className="text-xs text-muted-foreground mt-1">
+              Accredit private student hostels, review room tariff revisions, and maintain the campus housing directory.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadData}
-              disabled={loadingData}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loadingData ? "animate-spin" : ""}`} />
-              Refresh Registry
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loadingData}
+            className="h-9 px-3 text-xs font-semibold self-start sm:self-auto"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingData ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card className="border border-border/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Pending Accreditations
               </CardTitle>
               <Clock className="h-4 w-4 text-amber-500" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-amber-600">{pendingHostels.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Hostels submitted awaiting inspection</p>
+              <p className="text-xs text-muted-foreground mt-1">Filings awaiting inspection</p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Tariff Revision Queue
+                Tariff Revisions
               </CardTitle>
               <DollarSign className="h-4 w-4 text-blue-600" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-foreground">{pendingPrices.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Room tariff adjustments pending review</p>
+              <p className="text-xs text-muted-foreground mt-1">Tariff adjustments in queue</p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Accredited Hostels
               </CardTitle>
               <Building2 className="h-4 w-4 text-emerald-600" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-emerald-600">{approvedHostels.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Live in university housing registry</p>
+              <p className="text-xs text-muted-foreground mt-1">Active in university registry</p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Safety Standards
+                Safety Audits
               </CardTitle>
               <CheckCircle2 className="h-4 w-4 text-teal-600" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-foreground">100%</div>
-              <p className="text-xs text-muted-foreground mt-1">Audited physical facility verification</p>
+              <p className="text-xs text-muted-foreground mt-1">Standard facility compliance</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs */}
+        {/* Underline Tabs */}
         <Tabs defaultValue="pending" className="space-y-6">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="bg-slate-200/80 p-1 rounded-xl flex whitespace-nowrap min-w-max">
-              <TabsTrigger value="pending" className="rounded-lg font-semibold flex items-center gap-2">
+          <div className="border-b border-border/60 overflow-x-auto">
+            <TabsList className="bg-transparent h-auto p-0 gap-6 flex whitespace-nowrap min-w-max border-b-0">
+              <TabsTrigger
+                value="pending"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
+              >
                 <Clock className="h-4 w-4" />
-                Registration Approval Queue
+                Registration Queue
                 {pendingHostels.length > 0 && (
-                  <Badge className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-amber-500">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                     {pendingHostels.length}
-                  </Badge>
+                  </span>
                 )}
               </TabsTrigger>
 
-              <TabsTrigger value="priceHooks" className="rounded-lg font-semibold flex items-center gap-2">
+              <TabsTrigger
+                value="priceHooks"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
+              >
                 <TrendingUp className="h-4 w-4" />
-                Tariff Revision Requests
+                Tariff Revisions
                 {pendingPrices.length > 0 && (
-                  <Badge className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
                     {pendingPrices.length}
-                  </Badge>
+                  </span>
                 )}
               </TabsTrigger>
 
-              <TabsTrigger value="accredited" className="rounded-lg font-semibold flex items-center gap-2">
+              <TabsTrigger
+                value="accredited"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
+              >
                 <Building2 className="h-4 w-4" />
-                Accredited Directory ({approvedHostels.length})
+                Accredited Directory
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">
+                  {approvedHostels.length}
+                </span>
               </TabsTrigger>
             </TabsList>
           </div>
 
           {/* TAB 1: REGISTRATION APPROVAL QUEUE */}
-          <TabsContent value="pending" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold">New Hostel Registration Filings</CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Carefully examine building specifications, room pricing, and amenities before accrediting for student occupancy.
-                </CardDescription>
-              </CardHeader>
+          <TabsContent value="pending" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
+                <div>
+                  <CardTitle className="text-base font-bold">New Hostel Registration Filings</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Examine building specifications, room inventory, and safety compliance before accrediting for students.
+                  </CardDescription>
+                </div>
+              </div>
+
               <CardContent className="p-0">
                 {pendingHostels.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
+                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
                     <p className="font-semibold text-foreground">Zero pending registration filings</p>
-                    <p className="text-xs">All submitted student accommodations have been evaluated.</p>
+                    <p className="text-xs">All submitted student accommodations have been audited.</p>
                   </div>
                 ) : (
                   <>
                     {/* Desktop Table View */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-100/60">
+                        <TableHeader className="bg-slate-50 border-b border-border/60">
                           <TableRow>
+                            <TableHead className="w-32">Status</TableHead>
                             <TableHead>Hostel Name & Location</TableHead>
                             <TableHead>Submitted By</TableHead>
                             <TableHead>Room Types & Tariffs</TableHead>
-                            <TableHead>Submission Date</TableHead>
+                            <TableHead>Date Filed</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {pendingHostels.map((hostel) => (
                             <TableRow key={hostel.id} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell className="max-w-xs">
-                                <p className="font-semibold text-foreground text-sm">{hostel.name}</p>
-                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                  <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                                  {hostel.location}
-                                </p>
-                                <Badge variant="outline" className="text-[10px] mt-1 font-normal">
-                                  Campus: {hostel.institution || "AAMUSTED"}
-                                </Badge>
+                              <TableCell className="py-3">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  Pending Inspection
+                                </span>
                               </TableCell>
 
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-xs">
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-sm">{hostel.name}</p>
+                                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                  <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  {hostel.location} • {hostel.institution || "AAMUSTED"}
+                                </p>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-xs">
                                   {hostel.createdBy?.fullName || "Private Manager"}
                                 </p>
                                 <p className="text-xs text-muted-foreground">{hostel.createdBy?.email}</p>
                               </TableCell>
 
-                              <TableCell>
-                                <div className="space-y-1">
+                              <TableCell className="py-3">
+                                <div className="space-y-0.5">
                                   {hostel.roomTypes && hostel.roomTypes.length > 0 ? (
                                     hostel.roomTypes.map((rt, idx) => (
-                                      <div key={idx} className="text-xs flex items-center gap-2">
+                                      <div key={idx} className="text-xs flex items-center gap-1.5 text-muted-foreground">
                                         <span className="font-medium text-foreground">{rt.name}:</span>
-                                        <span className="text-emerald-600 font-semibold font-mono">
+                                        <span className="font-semibold text-emerald-600 font-mono">
                                           GH₵{rt.price?.toLocaleString()}
                                         </span>
                                       </div>
                                     ))
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">Pricing provided upon inspection</span>
+                                    <span className="text-xs text-muted-foreground">Pricing provided on inspection</span>
                                   )}
                                 </div>
                               </TableCell>
 
-                              <TableCell>
-                                <span className="text-xs text-muted-foreground">
-                                  {hostel.submittedAt
-                                    ? new Date(hostel.submittedAt).toLocaleDateString()
-                                    : "Recently"}
-                                </span>
+                              <TableCell className="py-3 text-xs text-muted-foreground">
+                                {hostel.submittedAt
+                                  ? new Date(hostel.submittedAt).toLocaleDateString()
+                                  : "Recently"}
                               </TableCell>
 
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
+                              <TableCell className="py-3 text-right">
+                                <div className="flex justify-end gap-1.5">
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => setSelectedHostel(hostel)}
-                                    className="h-8 text-xs font-semibold"
+                                    className="h-8 text-xs font-medium"
                                   >
                                     <Eye className="h-3.5 w-3.5 mr-1" /> Inspect
                                   </Button>
@@ -617,7 +557,7 @@ export default function CoordinatorDashboardPage() {
                                     size="sm"
                                     onClick={() => handleApproveHostel(hostel)}
                                     disabled={actionLoading}
-                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                                   >
                                     <Check className="h-3.5 w-3.5 mr-1" /> Approve
                                   </Button>
@@ -644,57 +584,53 @@ export default function CoordinatorDashboardPage() {
                     {/* Mobile Stacked Card View */}
                     <div className="block md:hidden divide-y divide-border/60">
                       {pendingHostels.map((hostel) => (
-                        <div key={hostel.id} className="p-4 space-y-3">
+                        <div key={hostel.id} className="p-4 space-y-2.5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <p className="font-bold text-foreground text-sm">{hostel.name}</p>
+                              <p className="font-semibold text-foreground text-sm">{hostel.name}</p>
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <MapPin className="h-3 w-3 shrink-0" />
-                                {hostel.location}
+                                {hostel.location} • {hostel.institution || "AAMUSTED"}
                               </p>
                             </div>
-                            <Badge variant="outline" className="text-[10px] shrink-0 font-normal">
-                              {hostel.institution || "AAMUSTED"}
-                            </Badge>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                              Pending
+                            </span>
                           </div>
 
-                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs space-y-1.5">
-                            <div className="text-muted-foreground">
-                              Manager: <span className="font-semibold text-foreground">{hostel.createdBy?.fullName || "Private Manager"}</span>
+                          <div className="text-xs text-muted-foreground space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <div>
+                              Manager: <span className="font-medium text-foreground">{hostel.createdBy?.fullName || "Private Manager"}</span>
                             </div>
-                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            <div>
                               {hostel.roomTypes && hostel.roomTypes.length > 0 ? (
-                                hostel.roomTypes.map((rt, idx) => (
-                                  <Badge key={idx} variant="secondary" className="text-[10px] font-normal">
-                                    {rt.name}: <span className="font-semibold text-emerald-700 ml-1 font-mono">GH₵{rt.price?.toLocaleString()}</span>
-                                  </Badge>
-                                ))
+                                <span>{hostel.roomTypes.map((rt) => `${rt.name} (GH₵${rt.price?.toLocaleString()})`).join(", ")}</span>
                               ) : (
-                                <span className="text-[11px] text-muted-foreground">Pricing provided upon inspection</span>
+                                <span>Standard Pricing</span>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                          <div className="flex items-center justify-between gap-2 pt-1">
                             <span className="text-[11px] text-muted-foreground">
-                              Filed: {hostel.submittedAt ? new Date(hostel.submittedAt).toLocaleDateString() : "Recently"}
+                              {hostel.submittedAt ? new Date(hostel.submittedAt).toLocaleDateString() : "Recently"}
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setSelectedHostel(hostel)}
-                                className="h-8 text-xs font-semibold flex-1 sm:flex-none"
+                                className="h-7 text-xs px-2"
                               >
-                                <Eye className="h-3.5 w-3.5 mr-1" /> Inspect
+                                <Eye className="h-3 w-3 mr-1" /> Inspect
                               </Button>
                               <Button
                                 size="sm"
                                 onClick={() => handleApproveHostel(hostel)}
                                 disabled={actionLoading}
-                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex-1 sm:flex-none"
+                                className="h-7 text-xs px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                               >
-                                <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                                <Check className="h-3 w-3 mr-1" /> Approve
                               </Button>
                               <Button
                                 size="sm"
@@ -704,9 +640,9 @@ export default function CoordinatorDashboardPage() {
                                   setRejectDialogOpen(true);
                                 }}
                                 disabled={actionLoading}
-                                className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                                className="h-7 text-xs px-2 text-destructive hover:bg-destructive/10"
                               >
-                                <XCircle className="h-3.5 w-3.5" />
+                                <XCircle className="h-3 w-3" />
                               </Button>
                             </div>
                           </div>
@@ -720,34 +656,32 @@ export default function CoordinatorDashboardPage() {
           </TabsContent>
 
           {/* TAB 2: TARIFF REVISION REQUESTS */}
-          <TabsContent value="priceHooks" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">
-                    Tariff Revision
-                  </Badge>
-                  <CardTitle className="text-lg font-bold">Room Tariff Revision Requests</CardTitle>
+          <TabsContent value="priceHooks" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
+                <div>
+                  <CardTitle className="text-base font-bold">Room Tariff Revision Requests</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Review and authorize manager-requested room price adjustments before updates reflect live.
+                  </CardDescription>
                 </div>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Review manager-requested room tariff adjustments before updates reflect live to students.
-                </CardDescription>
-              </CardHeader>
+              </div>
+
               <CardContent className="p-0">
                 {pendingPrices.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
+                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
                     <p className="font-semibold text-foreground">Zero pending tariff revisions</p>
-                    <p className="text-xs">No price revision requests currently awaiting coordinator authorization.</p>
+                    <p className="text-xs">No price adjustment requests currently awaiting coordinator authorization.</p>
                   </div>
                 ) : (
                   <>
                     {/* Desktop Table */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-100/60">
+                        <TableHeader className="bg-slate-50 border-b border-border/60">
                           <TableRow>
-                            <TableHead>Hostel & Room Number</TableHead>
+                            <TableHead>Hostel & Room</TableHead>
                             <TableHead>Room Type</TableHead>
                             <TableHead>Current Tariff</TableHead>
                             <TableHead>Requested Tariff</TableHead>
@@ -758,43 +692,41 @@ export default function CoordinatorDashboardPage() {
                         <TableBody>
                           {pendingPrices.map((item, idx) => (
                             <TableRow key={idx} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell>
-                                <p className="font-semibold text-foreground text-sm">{item.hostelName}</p>
-                                <Badge variant="outline" className="font-mono text-xs mt-0.5">
-                                  Room {item.roomNumber}
-                                </Badge>
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-sm">{item.hostelName}</p>
+                                <p className="text-xs text-muted-foreground">Room {item.roomNumber}</p>
                               </TableCell>
 
-                              <TableCell>
+                              <TableCell className="py-3">
                                 <span className="text-xs font-medium text-foreground">{item.roomTypeName}</span>
                               </TableCell>
 
-                              <TableCell>
-                                <span className="text-xs font-semibold text-muted-foreground line-through">
+                              <TableCell className="py-3">
+                                <span className="text-xs text-muted-foreground line-through">
                                   GH₵{item.currentPrice.toLocaleString()}
                                 </span>
                               </TableCell>
 
-                              <TableCell>
-                                <span className="text-sm font-extrabold text-blue-700">
+                              <TableCell className="py-3">
+                                <span className="text-xs font-bold text-blue-700">
                                   GH₵{item.pendingPrice.toLocaleString()}
                                 </span>
-                                <div className="text-[10px] text-emerald-600 font-semibold">
-                                  +GH₵{(item.pendingPrice - item.currentPrice).toLocaleString()} (+{Math.round(((item.pendingPrice - item.currentPrice) / item.currentPrice) * 100)}%)
-                                </div>
+                                <span className="ml-1 text-[11px] text-emerald-600 font-medium">
+                                  (+{Math.round(((item.pendingPrice - item.currentPrice) / item.currentPrice) * 100)}%)
+                                </span>
                               </TableCell>
 
-                              <TableCell className="max-w-xs">
-                                <p className="text-xs text-foreground font-medium">{item.reason || "Annual indexation"}</p>
+                              <TableCell className="py-3 max-w-xs">
+                                <p className="text-xs text-foreground">{item.reason || "Annual indexation"}</p>
                                 <p className="text-[11px] text-muted-foreground mt-0.5">By {item.requestedBy}</p>
                               </TableCell>
 
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
+                              <TableCell className="py-3 text-right">
+                                <div className="flex justify-end gap-1.5">
                                   <Button
                                     size="sm"
                                     onClick={() => handleApprovePriceChange(item)}
-                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                                   >
                                     Authorize
                                   </Button>
@@ -817,30 +749,25 @@ export default function CoordinatorDashboardPage() {
                     {/* Mobile Stacked Cards */}
                     <div className="block md:hidden divide-y divide-border/60">
                       {pendingPrices.map((item, idx) => (
-                        <div key={idx} className="p-4 space-y-3">
+                        <div key={idx} className="p-4 space-y-2.5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <p className="font-bold text-foreground text-sm">{item.hostelName}</p>
-                              <Badge variant="outline" className="font-mono text-[11px] mt-0.5">
-                                Room {item.roomNumber} • {item.roomTypeName}
-                              </Badge>
+                              <p className="font-semibold text-foreground text-sm">{item.hostelName}</p>
+                              <p className="text-xs text-muted-foreground">Room {item.roomNumber} • {item.roomTypeName}</p>
                             </div>
                             <div className="text-right">
                               <span className="text-xs text-muted-foreground line-through block">
                                 GH₵{item.currentPrice.toLocaleString()}
                               </span>
-                              <span className="text-sm font-extrabold text-blue-700 block font-mono">
+                              <span className="text-xs font-bold text-blue-700 font-mono">
                                 GH₵{item.pendingPrice.toLocaleString()}
-                              </span>
-                              <span className="text-[10px] text-emerald-600 font-semibold">
-                                +{Math.round(((item.pendingPrice - item.currentPrice) / item.currentPrice) * 100)}%
                               </span>
                             </div>
                           </div>
 
                           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs space-y-0.5">
                             <p className="text-muted-foreground">
-                              <span className="font-semibold text-foreground">Justification:</span> {item.reason || "Annual indexation"}
+                              <span className="font-medium text-foreground">Justification:</span> {item.reason || "Annual indexation"}
                             </p>
                             <p className="text-[11px] text-muted-foreground">Requested by {item.requestedBy}</p>
                           </div>
@@ -849,7 +776,7 @@ export default function CoordinatorDashboardPage() {
                             <Button
                               size="sm"
                               onClick={() => handleApprovePriceChange(item)}
-                              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex-1 sm:flex-none"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex-1 sm:flex-none"
                             >
                               Authorize
                             </Button>
@@ -857,7 +784,7 @@ export default function CoordinatorDashboardPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleRejectPriceChange(item)}
-                              className="h-8 text-xs text-destructive hover:bg-destructive/10 flex-1 sm:flex-none"
+                              className="h-7 text-xs text-destructive hover:bg-destructive/10 flex-1 sm:flex-none"
                             >
                               Decline
                             </Button>
@@ -872,112 +799,144 @@ export default function CoordinatorDashboardPage() {
           </TabsContent>
 
           {/* TAB 3: ACCREDITED DIRECTORY */}
-          <TabsContent value="accredited" className="space-y-4">
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-lg font-bold">Approved University Accommodations</CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Publicly visible listings that have satisfied university building safety and pricing standards.
-                    </CardDescription>
-                  </div>
+          <TabsContent value="accredited" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card rounded-t-xl">
+                <div>
+                  <CardTitle className="text-base font-bold">Approved University Accommodations</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Accredited listings meeting campus safety, sanitation, and tariff standards.
+                  </CardDescription>
+                </div>
 
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
                   <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
-                      placeholder="Search directory..."
+                      placeholder="Search hostel or location..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 h-9 text-xs"
+                      className="pl-8 h-8 text-xs bg-background"
                     />
                   </div>
+
+                  <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+                    <SelectTrigger className="h-8 text-xs w-full sm:w-36 bg-background">
+                      <SelectValue placeholder="Availability" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Availability</SelectItem>
+                      <SelectItem value="available">Available</SelectItem>
+                      <SelectItem value="limited">Limited</SelectItem>
+                      <SelectItem value="full">Fully Booked</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </CardHeader>
+              </div>
+
               <CardContent className="p-0">
-                {/* Desktop Table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-100/60">
-                      <TableRow>
-                        <TableHead>Hostel Name</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Price Range</TableHead>
-                        <TableHead>Availability</TableHead>
-                        <TableHead>Rating</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                {filteredApproved.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
+                    <Building2 className="h-8 w-8 text-slate-300 mx-auto" />
+                    <p className="font-semibold text-foreground">No accredited hostels found</p>
+                    <p className="text-xs">
+                      {searchQuery || availabilityFilter !== "all"
+                        ? "Try adjusting your search or availability filter."
+                        : "Approved hostels will appear here once accredited."}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50 border-b border-border/60">
+                          <TableRow>
+                            <TableHead className="w-32">Status</TableHead>
+                            <TableHead>Hostel Name & Location</TableHead>
+                            <TableHead>Campus Zone</TableHead>
+                            <TableHead>Price Range</TableHead>
+                            <TableHead className="text-right">Rating</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredApproved.map((h) => (
+                            <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
+                              <TableCell className="py-3">
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    h.availability === "Available"
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : h.availability === "Limited"
+                                      ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                      : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  }`}
+                                >
+                                  {h.availability || "Available"}
+                                </span>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <p className="font-medium text-foreground text-sm">{h.name}</p>
+                                <p className="text-xs text-muted-foreground">{h.location}</p>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <span className="text-xs font-semibold text-foreground font-mono">
+                                  GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
+                                </span>
+                              </TableCell>
+
+                              <TableCell className="py-3 text-right">
+                                <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                                  <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
+                                  <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Card Stack */}
+                    <div className="block md:hidden divide-y divide-border/60">
                       {filteredApproved.map((h) => (
-                        <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
-                          <TableCell>
-                            <p className="font-semibold text-foreground text-sm">{h.name}</p>
-                            <p className="text-xs text-muted-foreground">{h.institution || "AAMUSTED"}</p>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">{h.location}</span>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="text-xs font-semibold text-foreground font-mono">
-                              GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <Badge
-                              className={`text-[10px] ${
+                        <div key={h.id} className="p-4 space-y-2">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <p className="font-semibold text-foreground text-sm">{h.name}</p>
+                              <p className="text-xs text-muted-foreground">{h.institution || "AAMUSTED"} • {h.location}</p>
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                 h.availability === "Available"
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-amber-100 text-amber-800 border-amber-300"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : h.availability === "Limited"
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
                               }`}
                             >
                               {h.availability || "Available"}
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="text-xs font-bold text-foreground">
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
+                            <span className="font-mono font-semibold text-foreground">
+                              GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
+                            </span>
+                            <span className="font-semibold text-foreground">
                               ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
                             </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile Card Stack */}
-                <div className="block md:hidden divide-y divide-border/60">
-                  {filteredApproved.map((h) => (
-                    <div key={h.id} className="p-4 space-y-2">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <p className="font-bold text-foreground text-sm">{h.name}</p>
-                          <p className="text-xs text-muted-foreground">{h.institution || "AAMUSTED"} • {h.location}</p>
+                          </div>
                         </div>
-                        <Badge
-                          className={`text-[10px] ${
-                            h.availability === "Available"
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : "bg-amber-100 text-amber-800 border-amber-300"
-                          }`}
-                        >
-                          {h.availability || "Available"}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="font-mono font-semibold text-foreground">
-                          GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
-                        </span>
-                        <span className="font-bold text-foreground">
-                          ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
-                        </span>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

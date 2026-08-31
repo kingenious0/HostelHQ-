@@ -55,32 +55,26 @@ interface ExecutiveMetricsData {
   };
 }
 
-// Fallback high-level aggregates
-const INITIAL_METRICS_DATA: ExecutiveMetricsData = {
+// Initial zero-state aggregates
+const EMPTY_METRICS_DATA: ExecutiveMetricsData = {
   summary: {
-    totalHostels: 18,
-    verifiedHostels: 18,
-    accommodatedStudents: 412,
-    totalComplaints: 24,
-    resolvedComplaints: 19,
-    underReviewComplaints: 4,
-    submittedComplaints: 1,
-    resolutionRate: 79,
-    totalVerifications: 530,
-    approvedVerifications: 498,
-    pendingVerifications: 32,
-    verificationRate: 94,
+    totalHostels: 0,
+    verifiedHostels: 0,
+    accommodatedStudents: 0,
+    totalComplaints: 0,
+    resolvedComplaints: 0,
+    underReviewComplaints: 0,
+    submittedComplaints: 0,
+    resolutionRate: 0,
+    totalVerifications: 0,
+    approvedVerifications: 0,
+    pendingVerifications: 0,
+    verificationRate: 0,
   },
-  categoryBreakdown: [
-    { category: "Sanitation & Water", count: 9, percentage: 38 },
-    { category: "Maintenance & Repairs", count: 6, percentage: 25 },
-    { category: "Pricing & Overcharging", count: 4, percentage: 17 },
-    { category: "Security & Safety", count: 3, percentage: 12 },
-    { category: "Conduct & Quiet Hours", count: 2, percentage: 8 },
-  ],
+  categoryBreakdown: [],
   directionBreakdown: {
-    studentToHostel: 19,
-    managerToStudent: 5,
+    studentToHostel: 0,
+    managerToStudent: 0,
   },
 };
 
@@ -92,7 +86,7 @@ export default function ExecutiveDashboardPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  const [metrics, setMetrics] = useState<ExecutiveMetricsData>(INITIAL_METRICS_DATA);
+  const [metrics, setMetrics] = useState<ExecutiveMetricsData>(EMPTY_METRICS_DATA);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
 
   // Role Authentication Guard (pro_vc, vc, admin)
@@ -144,19 +138,13 @@ export default function ExecutiveDashboardPage() {
     try {
       const res = await fetchExecutiveMetricsAction();
       if (res.success && res.data) {
-        // Merge with non-zero defaults to ensure healthy chart rendering if DB is young
-        const s = res.data.summary;
-        if (s.totalHostels > 0 || s.totalComplaints > 0) {
-          setMetrics(res.data);
-        } else {
-          setMetrics(INITIAL_METRICS_DATA);
-        }
+        setMetrics(res.data);
       } else {
-        setMetrics(INITIAL_METRICS_DATA);
+        setMetrics(EMPTY_METRICS_DATA);
       }
     } catch (err) {
       console.error("Failed to load executive metrics:", err);
-      setMetrics(INITIAL_METRICS_DATA);
+      setMetrics(EMPTY_METRICS_DATA);
     } finally {
       setLoadingMetrics(false);
     }
@@ -187,76 +175,76 @@ export default function ExecutiveDashboardPage() {
       <Header />
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
-        {/* Vice-Chancellor Executive Crest Banner */}
-        <div className="mb-8 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl p-5 sm:p-8 text-white shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border border-white/10">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-xs font-semibold text-amber-300 border border-amber-500/30">
-              <Landmark className="h-3.5 w-3.5" />
-              {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"} • Campus Housing Oversight
+        {/* Low-Profile Utility Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Housing Oversight Executive Dashboard
+              </h1>
+              <Badge variant="outline" className="text-xs font-semibold text-amber-700 bg-amber-50 border-amber-200">
+                <Landmark className="h-3 w-3 mr-1" />
+                {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"}
+              </Badge>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Housing Oversight Executive Dashboard
-            </h1>
-            <p className="text-sm text-slate-300 max-w-2xl">
-              Strategic intelligence on campus accommodation capacity, occupancy rates, tariff trends, and student dispute resolution across institutional zones.
+            <p className="text-xs text-muted-foreground mt-1">
+              High-level strategic intelligence on campus housing capacity, occupancy, and residential welfare.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadMetrics}
-              disabled={loadingMetrics}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loadingMetrics ? "animate-spin" : ""}`} />
-              Refresh Analytics
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadMetrics}
+            disabled={loadingMetrics}
+            className="h-9 px-3 text-xs font-semibold self-start sm:self-auto"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingMetrics ? "animate-spin" : ""}`} />
+            Refresh Analytics
+          </Button>
         </div>
 
         {/* Aggregate KPI Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Total Registered Hostels
               </CardTitle>
               <Building2 className="h-4 w-4 text-primary" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-foreground">{summary.totalHostels}</div>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 inline" />
-                {summary.verifiedHostels} fully accredited under university charter
+                {summary.verifiedHostels} accredited under charter
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Students Accommodated
               </CardTitle>
               <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-blue-700">{summary.accommodatedStudents}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Confirmed residential placements this academic year
+                Confirmed residential placements
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Total Complaints Volume
+                Disputes & Complaints
               </CardTitle>
               <ShieldAlert className="h-4 w-4 text-amber-500" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-foreground">{summary.totalComplaints}</div>
               {summary.totalComplaints === 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -270,14 +258,14 @@ export default function ExecutiveDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Verification Rate
               </CardTitle>
               <Award className="h-4 w-4 text-teal-600" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-emerald-600">{summary.verificationRate}%</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {summary.approvedVerifications} verified student resident IDs
@@ -287,40 +275,35 @@ export default function ExecutiveDashboardPage() {
         </div>
 
         {/* Executive Analytics Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Chart Card 1: Leading Complaint Categories */}
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <div className="p-4 border-b border-border/50 flex items-center justify-between">
+              <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
-                  Leading Grievance Categories & Trend
+                  Leading Grievance Categories
                 </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  Aggregate Distribution
-                </Badge>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  Distribution of student-hostel friction points across accommodation zones.
+                </CardDescription>
               </div>
-              <CardDescription className="text-xs text-muted-foreground">
-                Statistical breakdown of student-hostel friction points across all university-zoned accommodations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            </div>
+            <CardContent className="p-4 space-y-4">
               {categoryBreakdown.length === 0 || summary.totalComplaints === 0 ? (
-                <div className="py-10 text-center space-y-3">
-                  <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                    <BarChart3 className="h-6 w-6" />
+                <div className="py-12 text-center space-y-2">
+                  <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-400">
+                    <BarChart3 className="h-5 w-5" />
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">No complaints recorded yet</p>
-                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                      Dispute categories and trend distributions will automatically populate here as student or management reports are filed.
-                    </p>
-                  </div>
+                  <p className="text-xs font-semibold text-foreground">No grievances recorded</p>
+                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                    Dispute trends will automatically populate here as student or hostel reports are submitted.
+                  </p>
                 </div>
               ) : (
                 categoryBreakdown.map((item, idx) => (
                   <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold">
+                    <div className="flex justify-between text-xs font-medium">
                       <span className="text-foreground">{item.category}</span>
                       <span className="text-muted-foreground">
                         {item.count} reports ({item.percentage}%)
@@ -337,65 +320,62 @@ export default function ExecutiveDashboardPage() {
           </Card>
 
           {/* Chart Card 2: Dispute Direction & Resolution Health */}
-          <Card className="border-border/60 shadow-sm bg-white">
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          <Card className="border border-border/60 shadow-xs bg-white">
+            <div className="p-4 border-b border-border/50 flex items-center justify-between">
+              <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <PieChart className="h-4 w-4 text-indigo-600" />
                   Dispute Origin & Resolution Status
                 </CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  Dean Directorate Feed
-                </Badge>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  Resident-initiated reports vs management-initiated policy notices.
+                </CardDescription>
               </div>
-              <CardDescription className="text-xs text-muted-foreground">
-                Aggregate balance between resident-initiated complaints and management-initiated policy notices.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+            </div>
+            <CardContent className="p-4 space-y-5">
               {/* Origin Split */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-blue-50/70 border border-blue-200/60 rounded-xl p-4 text-center">
-                  <p className="text-[11px] font-bold uppercase text-blue-700">Student → Hostel</p>
-                  <p className="text-2xl font-extrabold text-blue-900 mt-1">
+                <div className="bg-slate-50 border border-border/60 rounded-xl p-3 text-center">
+                  <p className="text-[11px] font-bold uppercase text-muted-foreground">Student → Hostel</p>
+                  <p className="text-2xl font-extrabold text-foreground mt-1">
                     {directionBreakdown.studentToHostel}
                   </p>
-                  <p className="text-[10px] text-blue-600 mt-0.5">
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
                     Facilities, utilities & fees
                   </p>
                 </div>
 
-                <div className="bg-purple-50/70 border border-purple-200/60 rounded-xl p-4 text-center">
-                  <p className="text-[11px] font-bold uppercase text-purple-700">Manager → Student</p>
-                  <p className="text-2xl font-extrabold text-purple-900 mt-1">
+                <div className="bg-slate-50 border border-border/60 rounded-xl p-3 text-center">
+                  <p className="text-[11px] font-bold uppercase text-muted-foreground">Manager → Student</p>
+                  <p className="text-2xl font-extrabold text-foreground mt-1">
                     {directionBreakdown.managerToStudent}
                   </p>
-                  <p className="text-[10px] text-purple-600 mt-0.5">
-                    Conduct & curfew compliance
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Conduct & quiet hours
                   </p>
                 </div>
               </div>
 
               {/* Status Breakdown Bar */}
-              <div className="space-y-2 pt-2">
-                <div className="flex justify-between text-xs font-semibold">
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between text-xs font-medium">
                   <span className="text-muted-foreground">Resolution Efficiency</span>
                   {summary.totalComplaints === 0 ? (
-                    <span className="text-slate-500 font-semibold">No Disputes</span>
+                    <span className="text-muted-foreground font-semibold">No Disputes</span>
                   ) : (
                     <span className="text-emerald-700 font-bold">{summary.resolutionRate}% Closed</span>
                   )}
                 </div>
 
                 {summary.totalComplaints === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-center space-y-1">
+                  <div className="rounded-xl border border-dashed border-border/60 bg-slate-50/50 p-4 text-center space-y-1">
                     <CheckCircle2 className="h-5 w-5 text-emerald-600 mx-auto" />
-                    <p className="text-xs font-semibold text-slate-700">No disputes recorded yet</p>
-                    <p className="text-[11px] text-muted-foreground">All hostels operating without active grievances.</p>
+                    <p className="text-xs font-semibold text-slate-700">No active grievances</p>
+                    <p className="text-[11px] text-muted-foreground">All hostels operating without unresolved complaints.</p>
                   </div>
                 ) : (
                   <>
-                    <div className="w-full bg-slate-100 rounded-full h-3 flex overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 flex overflow-hidden">
                       <div
                         style={{ width: `${summary.resolutionRate}%` }}
                         className="bg-emerald-500 h-full"
@@ -425,18 +405,16 @@ export default function ExecutiveDashboardPage() {
         </div>
 
         {/* Institutional Governance Notice */}
-        <Card className="border-blue-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 p-5 sm:p-6 rounded-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="h-6 w-6 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-foreground">
-                  Data Governance & Student Privacy Compliance
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  In strict compliance with university institutional policy, this executive console is restricted to aggregate analytical totals. Individual resident medical details, admission records, and specific dispute transcripts are sequestered under the statutory jurisdiction of the Dean of Students.
-                </p>
-              </div>
+        <Card className="border border-border/60 bg-slate-50/60 p-4 sm:p-5 rounded-xl">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-foreground">
+                Data Governance & Student Privacy Compliance
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                In strict compliance with university policy, this executive console displays aggregate analytical totals. Individual resident medical records, admission documents, and dispute transcripts are kept under the statutory jurisdiction of the Dean of Students.
+              </p>
             </div>
           </div>
         </Card>

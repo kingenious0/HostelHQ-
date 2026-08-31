@@ -52,103 +52,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-// Mock Fallback Complaints if DB is fresh
-const INITIAL_MOCK_COMPLAINTS: Complaint[] = [
-  {
-    id: "comp_101",
-    direction: "student_to_hostel",
-    status: "Submitted",
-    category: "Sanitation & Water",
-    subject: "Continuous Water Shortage in Block B",
-    description: "Water has not flowed on the 2nd floor for 4 days. Students have to carry buckets from the ground floor pump before attending 8 AM lectures.",
-    studentId: "stu_kofi_01",
-    studentName: "Kofi Mensah",
-    studentEmail: "k.mensah@st.aamusted.edu.gh",
-    studentPhone: "+233 24 555 0192",
-    hostelId: "hostel_doku_01",
-    hostelName: "Doku Kaakyire Hostel",
-    managerId: "mgr_kwame_99",
-    managerName: "Kwame Boateng",
-    managerPhone: "+233 50 123 4567",
-    roomId: "room_b204",
-    roomNumber: "B-204",
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    id: "comp_102",
-    direction: "manager_to_student",
-    status: "Under Review",
-    category: "Conduct & Policy",
-    subject: "Repeated Noise Disturbance After Curfew",
-    description: "Occupant in Room A-102 continues playing high-volume sound systems past the university housing 10:00 PM quiet hours despite two written warnings.",
-    studentId: "stu_ama_02",
-    studentName: "Ama Serwaa",
-    studentEmail: "a.serwaa@st.aamusted.edu.gh",
-    studentPhone: "+233 20 888 4411",
-    hostelId: "hostel_doku_01",
-    hostelName: "Doku Kaakyire Hostel",
-    managerId: "mgr_kwame_99",
-    managerName: "Kwame Boateng",
-    managerPhone: "+233 50 123 4567",
-    roomId: "room_a102",
-    roomNumber: "A-102",
-    createdAt: new Date(Date.now() - 3600000 * 26).toISOString(),
-  },
-  {
-    id: "comp_103",
-    direction: "student_to_hostel",
-    status: "Resolved",
-    category: "Pricing & Overcharging",
-    subject: "Unauthorized Electricity Utility Surcharge",
-    description: "Management requested an additional GH₵ 250 fee per student for meter recharge, which violates the approved all-inclusive tenancy agreement.",
-    studentId: "stu_emmanuel_03",
-    studentName: "Emmanuel Osei",
-    studentEmail: "e.osei@st.aamusted.edu.gh",
-    studentPhone: "+233 27 999 3322",
-    hostelId: "hostel_frontline_02",
-    hostelName: "Frontline Executive Lodge",
-    managerId: "mgr_akwasi_88",
-    managerName: "Akwasi Owusu",
-    managerPhone: "+233 54 888 1122",
-    roomId: "room_c12",
-    roomNumber: "C-12",
-    resolutionNotes: "Dean of Students intervened. Management acknowledged the clause and refunded the collected utility surcharges back to affected students.",
-    createdAt: new Date(Date.now() - 3600000 * 72).toISOString(),
-    resolvedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-    resolvedBy: "Prof. S. Donkor (Dean of Students)",
-  },
-];
-
-// Mock Fallback Student Verifications if DB is fresh
-const INITIAL_MOCK_VERIFICATIONS: StudentVerification[] = [
-  {
-    id: "verif_201",
-    userId: "user_stu_301",
-    fullName: "Akosua Frimpong",
-    email: "a.frimpong@st.aamusted.edu.gh",
-    phone: "+233 24 112 3344",
-    studentIdNumber: "AAM/2024/7741",
-    institution: "AAMUSTED - Kumasi Campus",
-    admissionLetterUrl: "https://images.unsplash.com/photo-1584697964190-71c45f479a37?w=800&auto=format&fit=crop&q=80",
-    studentIdCardUrl: "https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80",
-    status: "pending",
-    submittedAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-  },
-  {
-    id: "verif_202",
-    userId: "user_stu_302",
-    fullName: "David Nana Kwame",
-    email: "d.kwame@st.aamusted.edu.gh",
-    phone: "+233 55 443 2211",
-    studentIdNumber: "AAM/2023/1189",
-    institution: "AAMUSTED - Kumasi Campus",
-    admissionLetterUrl: "https://images.unsplash.com/photo-1584697964190-71c45f479a37?w=800&auto=format&fit=crop&q=80",
-    studentIdCardUrl: "https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80",
-    status: "pending",
-    submittedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-  },
-];
-
 export default function DeanDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -229,25 +132,28 @@ export default function DeanDashboardPage() {
         fetchHostelsAction(),
       ]);
 
-      if (compRes.success && compRes.data && compRes.data.length > 0) {
+      if (compRes.success && compRes.data) {
         setComplaints(compRes.data);
       } else {
-        setComplaints(INITIAL_MOCK_COMPLAINTS);
+        setComplaints([]);
       }
 
-      if (verifRes.success && verifRes.data && verifRes.data.length > 0) {
+      if (verifRes.success && verifRes.data) {
         setVerifications(verifRes.data);
       } else {
-        setVerifications(INITIAL_MOCK_VERIFICATIONS);
+        setVerifications([]);
       }
 
       if (hostelRes.success && hostelRes.data) {
         setHostels(hostelRes.data);
+      } else {
+        setHostels([]);
       }
     } catch (err) {
       console.error("Failed to load dean data:", err);
-      setComplaints(INITIAL_MOCK_COMPLAINTS);
-      setVerifications(INITIAL_MOCK_VERIFICATIONS);
+      setComplaints([]);
+      setVerifications([]);
+      setHostels([]);
     } finally {
       setLoadingData(false);
     }
