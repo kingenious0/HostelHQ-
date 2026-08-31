@@ -53,11 +53,13 @@ import {
   createStaffInviteAction,
   fetchStaffInvitesAction,
   revokeStaffInviteAction,
+} from '@/app/actions/staff-invite';
+import {
   type StaffInvite,
   type StaffRole,
   STAFF_ROLE_TITLES,
   STAFF_ROLE_DESCRIPTIONS,
-} from '@/app/actions/staff-invite';
+} from '@/lib/staff';
 
 type Hostel = {
   id: string;

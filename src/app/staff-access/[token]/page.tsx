@@ -16,8 +16,8 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import {
   validateStaffInviteAction,
   completeStaffRegistrationAction,
-  type StaffRole,
 } from "@/app/actions/staff-invite";
+import { type StaffRole } from "@/lib/staff";
 import {
   Shield,
   ShieldCheck,
