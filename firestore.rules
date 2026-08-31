@@ -102,5 +102,13 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update, delete: if isAdmin();
     }
+
+    // Complaints & Grievances (Dean of Students arbitration)
+    match /complaints/{complaintId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
   }
 }

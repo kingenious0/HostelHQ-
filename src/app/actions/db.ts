@@ -363,20 +363,90 @@ export async function rejectPendingHostelAction(hostelId: string, reason?: strin
   }
 }
 
-export async function fetchComplaintsAction(filter?: { status?: string; direction?: string }) {
+export async function fetchComplaintsAction(filter?: {
+  status?: string;
+  direction?: string;
+  hostelId?: string;
+  managerId?: string;
+}) {
   try {
-    const data = await dynamoService.listComplaints(filter);
-    return { success: true, data };
+    let data: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        data = await dynamoService.listComplaints(filter);
+      } catch (dynamoErr) {
+        console.warn("dynamoService.listComplaints error, falling back to Firestore:", dynamoErr);
+      }
+    }
+
+    // If DynamoDB is not configured or returned no records, fall back to Firestore
+    if (!data || data.length === 0) {
+      try {
+        const compCol = collection(db, "complaints");
+        const snap = await getDocs(compCol);
+        data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn("Firestore fetch complaints fallback note:", fsErr);
+      }
+    }
+
+    // Apply filters if needed
+    if (filter?.status) {
+      data = data.filter((c: any) => c.status === filter.status);
+    }
+    if (filter?.direction) {
+      data = data.filter((c: any) => c.direction === filter.direction);
+    }
+    if (filter?.hostelId) {
+      data = data.filter((c: any) => c.hostelId === filter.hostelId);
+    }
+    if (filter?.managerId) {
+      data = data.filter((c: any) => c.managerId === filter.managerId);
+    }
+
+    // Sort descending by createdAt
+    data.sort((a: any, b: any) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return { success: true, data: data || [] };
   } catch (error: any) {
     console.error("fetchComplaintsAction error:", error);
-    return { success: false, error: error.message || "Failed to fetch complaints" };
+    return { success: true, data: [], error: error.message || "Failed to fetch complaints" };
   }
 }
 
 export async function submitComplaintAction(complaintData: any) {
   try {
-    const data = await dynamoService.saveComplaint(complaintData);
-    return { success: true, data };
+    const complaintId = complaintData.id || `complaint_${Date.now()}`;
+    const payload = {
+      ...complaintData,
+      id: complaintId,
+      status: complaintData.status || "Submitted",
+      createdAt: complaintData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Dual-write to Firestore
+    try {
+      await setDoc(doc(db, "complaints", complaintId), payload, { merge: true });
+    } catch (fsErr) {
+      console.warn("Firestore complaints write note:", fsErr);
+    }
+
+    // 2. Dual-write to DynamoDB if configured
+    let saved = payload;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        saved = await dynamoService.saveComplaint(payload);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB saveComplaint note:", dynamoErr);
+      }
+    }
+
+    return { success: true, data: saved };
   } catch (error: any) {
     console.error("submitComplaintAction error:", error);
     return { success: false, error: error.message || "Failed to submit complaint" };
@@ -390,8 +460,33 @@ export async function updateComplaintStatusAction(
   resolvedBy?: string
 ) {
   try {
-    const data = await dynamoService.updateComplaintStatus(complaintId, status, notes, resolvedBy);
-    return { success: true, data };
+    const updates: Record<string, any> = {
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    if (notes) updates.resolutionNotes = notes;
+    if (status === "Resolved") {
+      updates.resolvedAt = new Date().toISOString();
+      if (resolvedBy) updates.resolvedBy = resolvedBy;
+    }
+
+    // 1. Dual-write to Firestore
+    try {
+      await updateDoc(doc(db, "complaints", complaintId), updates);
+    } catch (fsErr) {
+      console.warn("Firestore update complaint note:", fsErr);
+    }
+
+    // 2. Dual-write to DynamoDB if configured
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        await dynamoService.updateComplaintStatus(complaintId, status, notes, resolvedBy);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB updateComplaintStatus note:", dynamoErr);
+      }
+    }
+
+    return { success: true };
   } catch (error: any) {
     console.error("updateComplaintStatusAction error:", error);
     return { success: false, error: error.message || "Failed to update complaint status" };

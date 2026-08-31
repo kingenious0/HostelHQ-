@@ -13,14 +13,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert } from 'lucide-react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert, CheckCircle2, Scale, Gavel } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { collection, query, where, onSnapshot, getDocs, Timestamp, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
-import { Hostel, RoomType, Room, type ComplaintCategory } from '@/lib/data';
-import { submitComplaintAction } from '@/app/actions/db';
+import { Hostel, RoomType, Room, type Complaint, type ComplaintCategory, type ComplaintStatus, type ComplaintDirection } from '@/lib/data';
+import { submitComplaintAction, fetchComplaintsAction } from '@/app/actions/db';
 import { BookingsChart } from '@/components/bookings-chart';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -141,55 +141,124 @@ export default function ManagerDashboard() {
     const [visitSearch, setVisitSearch] = useState('');
     const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
 
-    // Tenant Misconduct Report state (Manager -> Student complaint to Dean)
-    const [misconductDialogOpen, setMisconductDialogOpen] = useState(false);
-    const [misconductBooking, setMisconductBooking] = useState<Booking | null>(null);
-    const [misconductCategory, setMisconductCategory] = useState<ComplaintCategory>('Conduct & Policy');
-    const [misconductSubject, setMisconductSubject] = useState('');
-    const [misconductDescription, setMisconductDescription] = useState('');
-    const [misconductSubmitting, setMisconductSubmitting] = useState(false);
+    // Disputes & Incident Reports state (Complaints by students against managed hostels + Incident reports by manager)
+    const [complaints, setComplaints] = useState<Complaint[]>([]);
+    const [loadingComplaints, setLoadingComplaints] = useState(true);
+    const [complaintFilter, setComplaintFilter] = useState<'all' | 'against_hostel' | 'filed_by_me'>('all');
+    const [complaintStatusFilter, setComplaintStatusFilter] = useState<string>('all');
+    const [complaintSearch, setComplaintSearch] = useState('');
+    const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+    const [complaintDetailOpen, setComplaintDetailOpen] = useState(false);
 
-    const handleOpenMisconductDialog = (booking: Booking) => {
-        setMisconductBooking(booking);
-        setMisconductCategory('Conduct & Policy');
-        setMisconductSubject('');
-        setMisconductDescription('');
-        setMisconductDialogOpen(true);
+    // Incident Report Dialog state (Manager -> Student complaint to Dean)
+    const [reportDialogOpen, setReportDialogOpen] = useState(false);
+    const [reportHostelId, setReportHostelId] = useState<string>('');
+    const [reportStudentName, setReportStudentName] = useState<string>('');
+    const [reportStudentPhone, setReportStudentPhone] = useState<string>('');
+    const [reportStudentEmail, setReportStudentEmail] = useState<string>('');
+    const [reportRoomNumber, setReportRoomNumber] = useState<string>('');
+    const [reportCategory, setReportCategory] = useState<ComplaintCategory>('Conduct & Policy');
+    const [reportSubject, setReportSubject] = useState('');
+    const [reportDescription, setReportDescription] = useState('');
+    const [reportSubmitting, setReportSubmitting] = useState(false);
+
+    const loadComplaints = async (hostelIdsList?: string[]) => {
+        if (!currentUser) return;
+        setLoadingComplaints(true);
+        try {
+            const res = await fetchComplaintsAction();
+            if (res.success && Array.isArray(res.data)) {
+                const currentHostelIds = hostelIdsList || hostels.map(h => h.id);
+                const relevant = res.data.filter((c: Complaint) => {
+                    const isMyHostel = currentHostelIds.length > 0 && currentHostelIds.includes(c.hostelId);
+                    const isMyReport = c.managerId === currentUser.uid;
+                    return isMyHostel || isMyReport;
+                });
+                setComplaints(relevant);
+            } else {
+                setComplaints([]);
+            }
+        } catch (err) {
+            console.error('Error fetching complaints for manager:', err);
+            setComplaints([]);
+        } finally {
+            setLoadingComplaints(false);
+        }
     };
 
-    const handleSubmitMisconduct = async (e: React.FormEvent) => {
+    const handleOpenMisconductDialog = (booking: Booking) => {
+        setReportHostelId(booking.hostelId);
+        setReportStudentName(booking.studentDetails?.fullName || '');
+        setReportStudentPhone(booking.studentDetails?.phoneNumber || '');
+        setReportStudentEmail(booking.studentDetails?.email || '');
+        setReportRoomNumber(booking.roomNumber || '');
+        setReportCategory('Conduct & Policy');
+        setReportSubject('');
+        setReportDescription('');
+        setReportDialogOpen(true);
+    };
+
+    const handleOpenNewReport = () => {
+        setReportHostelId(hostels[0]?.id || '');
+        setReportStudentName('');
+        setReportStudentPhone('');
+        setReportStudentEmail('');
+        setReportRoomNumber('');
+        setReportCategory('Conduct & Policy');
+        setReportSubject('');
+        setReportDescription('');
+        setReportDialogOpen(true);
+    };
+
+    const handleSubmitReport = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!misconductBooking || !currentUser) return;
-        if (!misconductSubject.trim() || !misconductDescription.trim()) {
+        if (!currentUser) return;
+        if (!reportHostelId) {
             toast({
-                title: 'Missing fields',
-                description: 'Please provide both a subject and a detailed incident description.',
-                variant: 'destructive'
+                title: 'Please select a hostel',
+                description: 'Select which hostel this incident occurred at.',
+                variant: 'destructive',
+            });
+            return;
+        }
+        if (!reportStudentName.trim()) {
+            toast({
+                title: 'Student name required',
+                description: 'Please specify the student tenant name.',
+                variant: 'destructive',
+            });
+            return;
+        }
+        if (!reportSubject.trim() || !reportDescription.trim()) {
+            toast({
+                title: 'Missing required fields',
+                description: 'Please provide both a subject and a detailed incident report.',
+                variant: 'destructive',
             });
             return;
         }
 
-        setMisconductSubmitting(true);
+        setReportSubmitting(true);
         try {
-            const hostel = hostels.find((h) => h.id === misconductBooking.hostelId);
+            const hostel = hostels.find((h) => h.id === reportHostelId);
             const hostelName = hostel?.name || 'Managed Hostel';
-            const studentName = misconductBooking.studentDetails?.fullName || 'Student Tenant';
+            const studentName = reportStudentName.trim();
 
             const res = await submitComplaintAction({
                 direction: 'manager_to_student',
                 status: 'Submitted',
-                category: misconductCategory,
-                subject: misconductSubject.trim(),
-                description: misconductDescription.trim(),
-                studentId: misconductBooking.studentId || `student_${Date.now()}`,
+                category: reportCategory,
+                subject: reportSubject.trim(),
+                description: reportDescription.trim(),
+                studentId: `student_${Date.now()}`,
                 studentName,
-                studentEmail: misconductBooking.studentDetails?.email || '',
-                studentPhone: misconductBooking.studentDetails?.phoneNumber || '',
-                hostelId: misconductBooking.hostelId,
+                studentEmail: reportStudentEmail.trim() || undefined,
+                studentPhone: reportStudentPhone.trim() || undefined,
+                hostelId: reportHostelId,
                 hostelName,
                 managerId: currentUser.uid,
                 managerName: currentUser.displayName || 'Hostel Manager',
-                roomNumber: misconductBooking.roomNumber || undefined,
+                roomNumber: reportRoomNumber.trim() || undefined,
                 createdAt: new Date().toISOString(),
             });
 
@@ -198,10 +267,15 @@ export default function ManagerDashboard() {
                     title: 'Report Submitted to Dean of Students',
                     description: `Your incident report regarding ${studentName} has been routed to the Dean's office.`,
                 });
-                setMisconductDialogOpen(false);
+                setReportDialogOpen(false);
                 setBookingDetailOpen(false);
-                setMisconductSubject('');
-                setMisconductDescription('');
+                setReportSubject('');
+                setReportDescription('');
+                setReportStudentName('');
+                setReportStudentPhone('');
+                setReportStudentEmail('');
+                setReportRoomNumber('');
+                await loadComplaints();
             } else {
                 toast({
                     title: 'Submission Failed',
@@ -216,7 +290,7 @@ export default function ManagerDashboard() {
                 variant: 'destructive',
             });
         } finally {
-            setMisconductSubmitting(false);
+            setReportSubmitting(false);
         }
     };
 
@@ -277,6 +351,7 @@ export default function ManagerDashboard() {
             }));
 
             setHostels(fetchedHostels);
+            loadComplaints(fetchedHostels.map(h => h.id));
 
             if (fetchedHostels.length > 0) {
                 const hostelIds = fetchedHostels.map(h => h.id);
@@ -1044,6 +1119,57 @@ export default function ManagerDashboard() {
         return true;
     });
 
+    // Complaints analytics & filtering
+    const againstHostelCount = complaints.filter(c => c.direction === 'student_to_hostel').length;
+    const filedByMeCount = complaints.filter(c => c.direction === 'manager_to_student').length;
+    const pendingComplaintsCount = complaints.filter(c => c.status !== 'Resolved').length;
+
+    const filteredComplaints = complaints.filter((c) => {
+        if (complaintFilter === 'against_hostel' && c.direction !== 'student_to_hostel') return false;
+        if (complaintFilter === 'filed_by_me' && c.direction !== 'manager_to_student') return false;
+        if (complaintStatusFilter !== 'all' && c.status !== complaintStatusFilter) return false;
+
+        if (complaintSearch.trim()) {
+            const query = complaintSearch.toLowerCase().trim();
+            const studentMatch = c.studentName?.toLowerCase().includes(query);
+            const hostelMatch = c.hostelName?.toLowerCase().includes(query);
+            const subjectMatch = c.subject?.toLowerCase().includes(query);
+            const categoryMatch = c.category?.toLowerCase().includes(query);
+            const roomMatch = c.roomNumber?.toLowerCase().includes(query);
+            return studentMatch || hostelMatch || subjectMatch || categoryMatch || roomMatch;
+        }
+        return true;
+    });
+
+    const complaintStatusBadge = (status: ComplaintStatus) => {
+        switch (status) {
+            case 'Submitted':
+                return (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        Submitted
+                    </span>
+                );
+            case 'Under Review':
+                return (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        Under Review
+                    </span>
+                );
+            case 'Resolved':
+                return (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        Resolved
+                    </span>
+                );
+            default:
+                return (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        {status}
+                    </span>
+                );
+        }
+    };
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -1427,6 +1553,246 @@ export default function ManagerDashboard() {
                                         );
                                     })}
                                 </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Disputes & Incident Reports section */}
+                    <Card className="mb-8 border-border/80 shadow-sm">
+                        <CardHeader>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                                            <Scale className="h-5 w-5 text-primary" />
+                                            Hostel Disputes & Incident Reports
+                                        </CardTitle>
+                                        {pendingComplaintsCount > 0 && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200">
+                                                {pendingComplaintsCount} Active
+                                            </span>
+                                        )}
+                                    </div>
+                                    <CardDescription className="text-sm mt-1">
+                                        Review grievances filed by student tenants against your hostels, track Dean of Students arbitrations, or submit incident reports.
+                                    </CardDescription>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleOpenNewReport}
+                                        className="h-9 px-3.5 text-xs font-semibold gap-1.5 shadow-sm"
+                                    >
+                                        <PlusCircle className="h-4 w-4" />
+                                        File Incident Report
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Direction Tabs & Search / Filter Controls */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t mt-4">
+                                <div className="flex flex-wrap gap-2">
+                                    {[
+                                        { id: 'all', label: `All (${complaints.length})` },
+                                        { id: 'against_hostel', label: `Student Grievances (${againstHostelCount})` },
+                                        { id: 'filed_by_me', label: `My Reports to Dean (${filedByMeCount})` },
+                                    ].map((tab) => (
+                                        <Button
+                                            key={tab.id}
+                                            type="button"
+                                            size="sm"
+                                            variant={complaintFilter === tab.id ? 'default' : 'outline'}
+                                            onClick={() => setComplaintFilter(tab.id as any)}
+                                            className="text-xs h-8 px-3"
+                                        >
+                                            {tab.label}
+                                        </Button>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                    <div className="relative w-full sm:w-56">
+                                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search disputes..."
+                                            value={complaintSearch}
+                                            onChange={(e) => setComplaintSearch(e.target.value)}
+                                            className="pl-8 text-xs h-8"
+                                        />
+                                    </div>
+                                    <Select value={complaintStatusFilter} onValueChange={setComplaintStatusFilter}>
+                                        <SelectTrigger className="w-[130px] text-xs h-8">
+                                            <SelectValue placeholder="All Statuses" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
+                                            <SelectItem value="Submitted" className="text-xs">Submitted</SelectItem>
+                                            <SelectItem value="Under Review" className="text-xs">Under Review</SelectItem>
+                                            <SelectItem value="Resolved" className="text-xs">Resolved</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </CardHeader>
+
+                        <CardContent>
+                            {loadingComplaints ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : filteredComplaints.length === 0 ? (
+                                <div className="text-center py-12 border border-dashed rounded-xl bg-slate-50/50 dark:bg-slate-900/20">
+                                    <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No active disputes or reports</p>
+                                    <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                                        {complaintSearch || complaintStatusFilter !== 'all' || complaintFilter !== 'all'
+                                            ? 'No disputes or reports matched your current filters.'
+                                            : 'Grievances filed by student tenants or incident reports you submit to the Dean of Students office will appear here.'}
+                                    </p>
+                                    <div className="mt-4">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={handleOpenNewReport}
+                                            className="text-xs h-8 gap-1.5"
+                                        >
+                                            <FileText className="h-3.5 w-3.5" />
+                                            Submit Tenant Incident Report
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Desktop Table View */}
+                                    <div className="hidden md:block overflow-x-auto rounded-xl border border-border/60">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                                    <TableHead className="text-xs font-semibold">Subject & Category</TableHead>
+                                                    <TableHead className="text-xs font-semibold">Hostel & Room</TableHead>
+                                                    <TableHead className="text-xs font-semibold">Student / Tenant</TableHead>
+                                                    <TableHead className="text-xs font-semibold">Direction</TableHead>
+                                                    <TableHead className="text-xs font-semibold">Status</TableHead>
+                                                    <TableHead className="text-xs font-semibold">Filed Date</TableHead>
+                                                    <TableHead className="text-xs font-semibold text-right">Action</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredComplaints.map((c) => (
+                                                    <TableRow key={c.id} className="hover:bg-muted/20 transition-colors">
+                                                        <TableCell className="py-3">
+                                                            <div className="font-semibold text-xs text-foreground max-w-[220px] truncate">
+                                                                {c.subject}
+                                                            </div>
+                                                            <div className="text-[11px] text-muted-foreground">
+                                                                {c.category}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="py-3">
+                                                            <div className="text-xs font-medium text-foreground">
+                                                                {c.hostelName || 'Managed Hostel'}
+                                                            </div>
+                                                            {c.roomNumber && (
+                                                                <div className="text-[11px] text-muted-foreground">
+                                                                    Room {c.roomNumber}
+                                                                </div>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="py-3">
+                                                            <div className="text-xs font-medium text-foreground">
+                                                                {c.studentName || 'Student'}
+                                                            </div>
+                                                            {c.studentPhone && (
+                                                                <div className="text-[11px] font-mono text-muted-foreground">
+                                                                    {c.studentPhone}
+                                                                </div>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="py-3">
+                                                            <span className="text-[11px] font-medium text-muted-foreground">
+                                                                {c.direction === 'student_to_hostel' ? 'Student → Hostel' : 'Manager → Tenant'}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="py-3">
+                                                            {complaintStatusBadge(c.status)}
+                                                        </TableCell>
+                                                        <TableCell className="py-3 text-xs text-muted-foreground whitespace-nowrap">
+                                                            {c.createdAt ? format(new Date(c.createdAt), 'dd MMM yyyy') : '—'}
+                                                        </TableCell>
+                                                        <TableCell className="py-3 text-right">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setSelectedComplaint(c);
+                                                                    setComplaintDetailOpen(true);
+                                                                }}
+                                                                className="text-xs h-7 px-2.5 font-medium"
+                                                            >
+                                                                <Eye className="h-3 w-3 mr-1" />
+                                                                Review
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+
+                                    {/* Mobile Stacked Card View */}
+                                    <div className="grid gap-3 md:hidden">
+                                        {filteredComplaints.map((c) => (
+                                            <div
+                                                key={c.id}
+                                                className="p-3.5 rounded-xl border border-border/70 bg-card hover:border-primary/40 transition-colors space-y-2.5 shadow-sm"
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <h4 className="text-xs font-semibold text-foreground line-clamp-1">{c.subject}</h4>
+                                                        <p className="text-[11px] text-muted-foreground">{c.category}</p>
+                                                    </div>
+                                                    {complaintStatusBadge(c.status)}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 text-[11px] bg-muted/30 p-2 rounded-lg">
+                                                    <div>
+                                                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Hostel / Room</span>
+                                                        <span className="font-medium text-foreground">{c.hostelName}</span>
+                                                        {c.roomNumber && <span className="text-muted-foreground block">Rm {c.roomNumber}</span>}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Student / Tenant</span>
+                                                        <span className="font-medium text-foreground">{c.studentName}</span>
+                                                        {c.studentPhone && <span className="text-muted-foreground font-mono block">{c.studentPhone}</span>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                                                    <span>{c.direction === 'student_to_hostel' ? 'Student → Hostel' : 'Manager → Tenant'}</span>
+                                                    <span>{c.createdAt ? format(new Date(c.createdAt), 'dd MMM yyyy') : ''}</span>
+                                                </div>
+
+                                                <div className="pt-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            setSelectedComplaint(c);
+                                                            setComplaintDetailOpen(true);
+                                                        }}
+                                                        className="w-full text-xs h-8 font-medium gap-1"
+                                                    >
+                                                        <Eye className="h-3 w-3" />
+                                                        Review Dispute Details
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                         </CardContent>
                     </Card>
@@ -2257,8 +2623,8 @@ export default function ManagerDashboard() {
                     </DialogContent>
                 </Dialog>
 
-                {/* Tenant Misconduct Report Dialog (Manager -> Student to Dean of Students) */}
-                <Dialog open={misconductDialogOpen} onOpenChange={setMisconductDialogOpen}>
+                {/* Incident Report Submission Dialog (Manager -> Student to Dean of Students) */}
+                <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
                     <DialogContent className="max-w-lg rounded-2xl">
                         <DialogHeader>
                             <div className="flex items-center gap-2">
@@ -2266,30 +2632,100 @@ export default function ManagerDashboard() {
                                     <ShieldAlert className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <DialogTitle className="text-lg font-bold">Report Tenant Misconduct</DialogTitle>
+                                    <DialogTitle className="text-lg font-bold">File Incident Report to Dean</DialogTitle>
                                     <DialogDescription className="text-xs">
-                                        Formal incident reporting to the Dean of Students regarding student behavior.
+                                        Formal report routed directly to the Dean of Students office for review and arbitration.
                                     </DialogDescription>
                                 </div>
                             </div>
                         </DialogHeader>
 
-                        {misconductBooking && (
-                            <div className="p-3 bg-muted/40 rounded-xl text-xs space-y-1">
-                                <p><span className="font-semibold">Student:</span> {misconductBooking.studentDetails?.fullName || 'N/A'}</p>
-                                <p><span className="font-semibold">Room:</span> {misconductBooking.roomNumber ? `Room ${misconductBooking.roomNumber}` : 'N/A'}</p>
-                                <p><span className="font-semibold">Contact:</span> {misconductBooking.studentDetails?.phoneNumber || 'N/A'}</p>
-                            </div>
-                        )}
-
-                        <form onSubmit={handleSubmitMisconduct} className="space-y-4 pt-1">
+                        <form onSubmit={handleSubmitReport} className="space-y-4 pt-1">
+                            {/* Hostel selector */}
                             <div className="space-y-1.5">
-                                <Label htmlFor="misconduct-category" className="text-xs font-semibold">Incident Category</Label>
+                                <Label htmlFor="report-hostel" className="text-xs font-semibold">Target Hostel</Label>
+                                {hostels.length > 1 ? (
+                                    <Select
+                                        value={reportHostelId}
+                                        onValueChange={(val) => setReportHostelId(val)}
+                                    >
+                                        <SelectTrigger id="report-hostel" className="h-10 rounded-xl">
+                                            <SelectValue placeholder="Select hostel" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {hostels.map((h) => (
+                                                <SelectItem key={h.id} value={h.id}>
+                                                    {h.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <Input
+                                        id="report-hostel"
+                                        value={hostels[0]?.name || 'Managed Hostel'}
+                                        disabled
+                                        className="h-10 rounded-xl bg-muted"
+                                    />
+                                )}
+                            </div>
+
+                            {/* Tenant details */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="report-student-name" className="text-xs font-semibold">Student / Tenant Name *</Label>
+                                    <Input
+                                        id="report-student-name"
+                                        placeholder="e.g. Kwesi Mensah"
+                                        value={reportStudentName}
+                                        onChange={(e) => setReportStudentName(e.target.value)}
+                                        required
+                                        className="h-10 rounded-xl"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="report-room" className="text-xs font-semibold">Room Number (Optional)</Label>
+                                    <Input
+                                        id="report-room"
+                                        placeholder="e.g. B-104"
+                                        value={reportRoomNumber}
+                                        onChange={(e) => setReportRoomNumber(e.target.value)}
+                                        className="h-10 rounded-xl"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="report-phone" className="text-xs font-semibold">Student Phone (Optional)</Label>
+                                    <Input
+                                        id="report-phone"
+                                        placeholder="e.g. 0244123456"
+                                        value={reportStudentPhone}
+                                        onChange={(e) => setReportStudentPhone(e.target.value)}
+                                        className="h-10 rounded-xl"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="report-email" className="text-xs font-semibold">Student Email (Optional)</Label>
+                                    <Input
+                                        id="report-email"
+                                        type="email"
+                                        placeholder="e.g. student@st.ug.edu.gh"
+                                        value={reportStudentEmail}
+                                        onChange={(e) => setReportStudentEmail(e.target.value)}
+                                        className="h-10 rounded-xl"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="report-category" className="text-xs font-semibold">Incident Category</Label>
                                 <Select
-                                    value={misconductCategory}
-                                    onValueChange={(val: any) => setMisconductCategory(val)}
+                                    value={reportCategory}
+                                    onValueChange={(val: any) => setReportCategory(val)}
                                 >
-                                    <SelectTrigger id="misconduct-category" className="h-10 rounded-xl">
+                                    <SelectTrigger id="report-category" className="h-10 rounded-xl">
                                         <SelectValue placeholder="Select Category" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2297,31 +2733,32 @@ export default function ManagerDashboard() {
                                         <SelectItem value="Maintenance & Repairs">Property Damage / Vandalism</SelectItem>
                                         <SelectItem value="Noise & Disturbance">Noise Disturbance / Parties</SelectItem>
                                         <SelectItem value="Security & Safety">Security & Unauthorized Guests</SelectItem>
-                                        <SelectItem value="Pricing & Overcharging">Non-Payment / Default</SelectItem>
+                                        <SelectItem value="Pricing & Overcharging">Non-Payment / Rent Default</SelectItem>
+                                        <SelectItem value="Sanitation & Water">Sanitation Violations</SelectItem>
                                         <SelectItem value="Other">Other Infractions</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="misconduct-subject" className="text-xs font-semibold">Incident Summary / Subject</Label>
+                                <Label htmlFor="report-subject" className="text-xs font-semibold">Incident Summary / Subject *</Label>
                                 <Input
-                                    id="misconduct-subject"
-                                    placeholder="e.g. Unauthorized room subletting and noise complaints"
-                                    value={misconductSubject}
-                                    onChange={(e) => setMisconductSubject(e.target.value)}
+                                    id="report-subject"
+                                    placeholder="e.g. Unauthorized room subletting and disruptive noise"
+                                    value={reportSubject}
+                                    onChange={(e) => setReportSubject(e.target.value)}
                                     required
                                     className="h-10 rounded-xl"
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="misconduct-desc" className="text-xs font-semibold">Detailed Incident Report</Label>
+                                <Label htmlFor="report-desc" className="text-xs font-semibold">Detailed Incident Report *</Label>
                                 <Textarea
-                                    id="misconduct-desc"
-                                    placeholder="Provide a thorough, factual account of what happened, date/time, and any evidence..."
-                                    value={misconductDescription}
-                                    onChange={(e) => setMisconductDescription(e.target.value)}
+                                    id="report-desc"
+                                    placeholder="Provide a thorough, factual account of what happened, date/time, witnesses, and any previous warnings given..."
+                                    value={reportDescription}
+                                    onChange={(e) => setReportDescription(e.target.value)}
                                     rows={4}
                                     required
                                     className="rounded-xl resize-none"
@@ -2330,7 +2767,7 @@ export default function ManagerDashboard() {
 
                             <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-xl text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2">
                                 <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                                <span>This formal misconduct filing goes directly to the Dean of Students office for institutional review and arbitration.</span>
+                                <span>This formal filing is routed to the Dean of Students office for institutional review and arbitration. False reports may be subject to administrative review.</span>
                             </div>
 
                             <DialogFooter className="gap-2 sm:gap-0 pt-2">
@@ -2338,17 +2775,17 @@ export default function ManagerDashboard() {
                                     type="button"
                                     variant="outline"
                                     className="rounded-xl"
-                                    onClick={() => setMisconductDialogOpen(false)}
-                                    disabled={misconductSubmitting}
+                                    onClick={() => setReportDialogOpen(false)}
+                                    disabled={reportSubmitting}
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     type="submit"
                                     className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold"
-                                    disabled={misconductSubmitting}
+                                    disabled={reportSubmitting}
                                 >
-                                    {misconductSubmitting ? (
+                                    {reportSubmitting ? (
                                         <>
                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                             Submitting Report...
@@ -2359,6 +2796,171 @@ export default function ManagerDashboard() {
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Dispute & Grievance Review Dialog (Detail Modal) */}
+                <Dialog open={complaintDetailOpen} onOpenChange={setComplaintDetailOpen}>
+                    <DialogContent className="max-w-lg rounded-2xl">
+                        <DialogHeader>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Badge variant="outline" className="text-xs font-normal">
+                                            {selectedComplaint?.category}
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground">
+                                            {selectedComplaint?.direction === 'student_to_hostel'
+                                                ? 'Student → Hostel'
+                                                : 'Manager → Tenant'}
+                                        </span>
+                                    </div>
+                                    <DialogTitle className="text-lg font-bold">
+                                        {selectedComplaint?.subject || 'Dispute Details'}
+                                    </DialogTitle>
+                                    <DialogDescription className="text-xs">
+                                        {selectedComplaint?.hostelName}
+                                        {selectedComplaint?.roomNumber ? ` • Room ${selectedComplaint.roomNumber}` : ''}
+                                        {selectedComplaint?.createdAt ? ` • Filed ${format(new Date(selectedComplaint.createdAt), 'dd MMM yyyy, h:mm a')}` : ''}
+                                    </DialogDescription>
+                                </div>
+                                {selectedComplaint && (
+                                    <Badge
+                                        variant="outline"
+                                        className={`text-xs font-semibold shrink-0 ${
+                                            selectedComplaint.status === 'Resolved'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                                : selectedComplaint.status === 'Under Review'
+                                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300'
+                                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
+                                        }`}
+                                    >
+                                        {selectedComplaint.status}
+                                    </Badge>
+                                )}
+                            </div>
+                        </DialogHeader>
+
+                        {selectedComplaint && (
+                            <div className="space-y-4 pt-2">
+                                {/* Direction guidance banner */}
+                                <div className={`p-3 rounded-xl text-xs border ${
+                                    selectedComplaint.direction === 'student_to_hostel'
+                                        ? 'bg-blue-50/60 border-blue-200/60 text-blue-900 dark:bg-blue-950/30 dark:text-blue-300'
+                                        : 'bg-rose-50/60 border-rose-200/60 text-rose-900 dark:bg-rose-950/30 dark:text-rose-300'
+                                }`}>
+                                    <p className="font-semibold">
+                                        {selectedComplaint.direction === 'student_to_hostel'
+                                            ? 'Grievance filed by student tenant regarding your hostel'
+                                            : 'Incident / misconduct report filed by you to the Dean of Students'}
+                                    </p>
+                                    <p className="text-[11px] opacity-90 mt-0.5">
+                                        {selectedComplaint.direction === 'student_to_hostel'
+                                            ? 'Please review the details below. You can contact the student directly via phone or WhatsApp to address the issue.'
+                                            : 'This matter is currently on record with the Dean of Students office for disciplinary or administrative oversight.'}
+                                    </p>
+                                </div>
+
+                                {/* Student Contact Card */}
+                                <div className="p-3 bg-muted/40 rounded-xl text-xs space-y-2 border border-border/50">
+                                    <div className="flex items-center justify-between">
+                                        <p className="font-semibold text-foreground">
+                                            Student / Tenant: <span className="font-normal">{selectedComplaint.studentName}</span>
+                                        </p>
+                                        {selectedComplaint.roomNumber && (
+                                            <Badge variant="secondary" className="text-[11px]">
+                                                Room {selectedComplaint.roomNumber}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-muted-foreground">
+                                        {selectedComplaint.studentPhone && (
+                                            <p className="flex items-center gap-1">
+                                                <Phone className="h-3 w-3" /> {selectedComplaint.studentPhone}
+                                            </p>
+                                        )}
+                                        {selectedComplaint.studentEmail && (
+                                            <p className="truncate">Email: {selectedComplaint.studentEmail}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Contact buttons if student phone exists */}
+                                    {selectedComplaint.studentPhone && (
+                                        <div className="flex gap-2 pt-1">
+                                            <a
+                                                href={`tel:${selectedComplaint.studentPhone}`}
+                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-200 transition-colors"
+                                            >
+                                                <PhoneCall className="w-3 h-3" />
+                                                Call Student
+                                            </a>
+                                            <a
+                                                href={`https://wa.me/${selectedComplaint.studentPhone.replace(/\D/g, '').replace(/^0/, '233')}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] text-xs font-semibold border border-[#25D366]/30 transition-colors"
+                                            >
+                                                <MessageSquare className="w-3 h-3" />
+                                                WhatsApp Student
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Full Description */}
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-semibold text-muted-foreground">Detailed Description</Label>
+                                    <div className="p-3 bg-background border rounded-xl text-xs whitespace-pre-wrap leading-relaxed">
+                                        {selectedComplaint.description}
+                                    </div>
+                                </div>
+
+                                {/* Dean Arbitration Section */}
+                                <div className="space-y-1.5 pt-1">
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <Scale className="h-3.5 w-3.5 text-primary" />
+                                        <span>Dean of Students Arbitration</span>
+                                    </div>
+
+                                    {selectedComplaint.resolutionNotes ? (
+                                        <div className="p-3 bg-emerald-50/50 border border-emerald-200/70 dark:bg-emerald-950/20 dark:border-emerald-800/50 rounded-xl text-xs space-y-1">
+                                            <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                                                Dean&apos;s Directives & Findings:
+                                            </p>
+                                            <p className="text-emerald-800 dark:text-emerald-300 whitespace-pre-wrap">
+                                                {selectedComplaint.resolutionNotes}
+                                            </p>
+                                            {selectedComplaint.resolvedAt && (
+                                                <p className="text-[11px] text-muted-foreground pt-1">
+                                                    Resolved: {format(new Date(selectedComplaint.resolvedAt), 'dd MMM yyyy')}
+                                                    {selectedComplaint.resolvedBy ? ` by ${selectedComplaint.resolvedBy}` : ''}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="p-3 bg-muted/30 border border-border/50 rounded-xl text-xs text-muted-foreground flex items-start gap-2">
+                                            <Clock className="h-4 w-4 shrink-0 mt-0.5" />
+                                            <span>
+                                                {selectedComplaint.status === 'Under Review'
+                                                    ? 'The Dean of Students office is currently reviewing this matter and actively arbitrating.'
+                                                    : 'This grievance has been submitted and is in queue for review by the Dean of Students office.'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <DialogFooter className="pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setComplaintDetailOpen(false)}
+                                className="rounded-xl"
+                            >
+                                Close
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </main>
