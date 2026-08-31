@@ -195,13 +195,13 @@ export default function CoordinatorDashboardPage() {
             return;
           }
         } else {
-          // Allow dev simulation if email matches
-          if (user.email?.includes("coord") || user.email?.includes("admin")) {
-            setUserRole("hostel_coordinator");
-          } else {
-            router.replace("/");
-            return;
-          }
+          toast({
+            title: "Access Denied",
+            description: "No authorized profile found. This console is restricted.",
+            variant: "destructive",
+          });
+          router.replace("/");
+          return;
         }
       } catch (err) {
         console.error("Coordinator auth error:", err);

@@ -194,13 +194,13 @@ export default function DeanDashboardPage() {
             return;
           }
         } else {
-          // Allow dev simulation if email indicates dean
-          if (user.email?.includes("dean") || user.email?.includes("admin")) {
-            setUserRole("dean");
-          } else {
-            router.replace("/");
-            return;
-          }
+          toast({
+            title: "Access Denied",
+            description: "No authorized profile found. This console is restricted.",
+            variant: "destructive",
+          });
+          router.replace("/");
+          return;
         }
       } catch (err) {
         console.error("Auth check failed:", err);

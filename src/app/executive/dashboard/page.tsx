@@ -120,13 +120,13 @@ export default function ExecutiveDashboardPage() {
             return;
           }
         } else {
-          // Allow dev simulation if email indicates executive or admin
-          if (user.email?.includes("vc") || user.email?.includes("exec") || user.email?.includes("admin")) {
-            setUserRole("pro_vc");
-          } else {
-            router.replace("/");
-            return;
-          }
+          toast({
+            title: "Access Denied",
+            description: "No authorized profile found. This executive dashboard is restricted.",
+            variant: "destructive",
+          });
+          router.replace("/");
+          return;
         }
       } catch (err) {
         console.error("Executive auth error:", err);

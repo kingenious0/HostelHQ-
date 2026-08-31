@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,9 +14,11 @@ import {
   DollarSign, BarChart, Users, CheckCircle, XCircle, Loader2, Trash2, Repeat,
   UserCheck, UserX, Wifi, Bed, Bath, Star, MessageSquare, FileText, Shield,
   Settings, Building, ShieldCheck, GraduationCap, Eye, ExternalLink, FileCheck,
-  AlertCircle, Filter, Search, AlertTriangle, Clock, CheckCircle2
+  AlertCircle, Filter, Search, AlertTriangle, Clock, CheckCircle2, KeyRound,
+  Copy, Check, Link2, UserPlus2, Sparkles, RefreshCw, Lock
 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, Timestamp, getDocs, updateDoc, writeBatch, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -26,7 +29,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { ably } from '@/lib/ably';
@@ -38,6 +48,15 @@ import { format } from 'date-fns';
 import { notifyAdminsOfNewHostelSubmission, notifyCreatorOfHostelStatus } from '@/app/actions/sms';
 import { getAdminPaystackBalance } from '@/app/actions/payouts';
 import { saveHostelAction, fetchStudentVerificationsAction, updateStudentVerificationStatusAction } from '@/app/actions/db';
+import {
+  createStaffInviteAction,
+  fetchStaffInvitesAction,
+  revokeStaffInviteAction,
+  type StaffInvite,
+  type StaffRole,
+  STAFF_ROLE_TITLES,
+  STAFF_ROLE_DESCRIPTIONS,
+} from '@/app/actions/staff-invite';
 
 type Hostel = {
   id: string;
@@ -115,6 +134,150 @@ export default function AdminDashboard() {
   const [verifActionLoading, setVerifActionLoading] = useState(false);
   const [verificationFilter, setVerificationFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
   const [verificationSearch, setVerificationSearch] = useState('');
+
+  // Router & Auth Guard
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Staff Invites Management State
+  const [staffInvites, setStaffInvites] = useState<StaffInvite[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [isStaffInviteDialogOpen, setIsStaffInviteDialogOpen] = useState(false);
+  const [selectedStaffRole, setSelectedStaffRole] = useState<StaffRole>('dean');
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [newlyCreatedInvite, setNewlyCreatedInvite] = useState<{ inviteUrl: string; tempEmail: string; role: StaffRole; roleTitle: string } | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+  const [userManagementTab, setUserManagementTab] = useState<'users' | 'invites'>('users');
+
+  // Admin Auth & Role Guard
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (!user) {
+        setAuthLoading(false);
+        router.replace('/login');
+        return;
+      }
+
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (!snap.exists() || snap.data()?.role !== 'admin') {
+          toast({
+            title: 'Access Denied',
+            description: 'This console requires system administrator privileges.',
+            variant: 'destructive',
+          });
+          router.replace('/');
+          return;
+        }
+      } catch (err) {
+        console.error('Admin auth verification error:', err);
+      } finally {
+        setAuthLoading(false);
+      }
+    });
+
+    return () => unsubAuth();
+  }, [router, toast]);
+
+  // Load Staff Invites
+  const loadStaffInvites = async () => {
+    setLoadingInvites(true);
+    try {
+      const res = await fetchStaffInvitesAction();
+      if (res.success && res.data) {
+        setStaffInvites(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load staff invites:', err);
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStaffInvites();
+  }, []);
+
+  const handleGenerateStaffInvite = async () => {
+    setGeneratingInvite(true);
+    try {
+      const adminName = auth.currentUser?.displayName || 'System Administrator';
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await createStaffInviteAction({
+        role: selectedStaffRole,
+        adminName,
+        adminUid: auth.currentUser?.uid,
+        baseUrl: origin,
+      });
+
+      if (res.success && res.data) {
+        setNewlyCreatedInvite({
+          inviteUrl: res.data.inviteUrl,
+          tempEmail: res.data.tempEmail,
+          role: res.data.role,
+          roleTitle: res.data.roleTitle,
+        });
+        toast({
+          title: 'Staff Invite Link Generated! 🔗',
+          description: `Single-use link for ${res.data.roleTitle} is ready to copy and share.`,
+        });
+        loadStaffInvites();
+      } else {
+        toast({
+          title: 'Generation Failed',
+          description: res.error || 'Could not generate invite link.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
+  const handleRevokeStaffInvite = async (token: string) => {
+    try {
+      const res = await revokeStaffInviteAction(token, auth.currentUser?.displayName || 'Administrator');
+      if (res.success) {
+        toast({
+          title: 'Invite Revoked',
+          description: 'This invitation link has been permanently invalidated.',
+        });
+        loadStaffInvites();
+      } else {
+        toast({
+          title: 'Failed to Revoke',
+          description: res.error || 'Could not revoke invitation.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCopyLink = (url: string, id: string) => {
+    if (typeof navigator !== 'undefined') {
+      navigator.clipboard.writeText(url);
+      setCopiedTokenId(id);
+      toast({
+        title: 'Link Copied! 📋',
+        description: 'Staff onboarding link copied to clipboard.',
+      });
+      setTimeout(() => setCopiedTokenId(null), 2500);
+    }
+  };
 
   useEffect(() => {
     // Real-time pending hostels
@@ -809,7 +972,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Security & Management */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mb-8">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8">
             <Card className="bg-gradient-to-br from-primary/5 to-transparent border-primary/20 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-3 opacity-10">
                 <DollarSign className="h-24 w-24 text-primary" />
@@ -919,6 +1082,37 @@ export default function AdminDashboard() {
                   {pendingVerificationsCount > 0 && (
                     <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-semibold">
                       {pendingVerificationsCount} pending
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Staff Invites</CardTitle>
+                <KeyRound className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Generate 24h role-locked single-use links for Dean, Coord, and VC.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setUserManagementTab('invites');
+                      const el = document.getElementById('user-management-section');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                      setIsStaffInviteDialogOpen(true);
+                    }}
+                    className="bg-primary text-white hover:bg-primary/90"
+                  >
+                    Create Invite
+                  </Button>
+                  {staffInvites.filter(i => !i.used && !i.revoked && new Date(i.expiresAt).getTime() > Date.now()).length > 0 && (
+                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-semibold">
+                      {staffInvites.filter(i => !i.used && !i.revoked && new Date(i.expiresAt).getTime() > Date.now()).length} active
                     </Badge>
                   )}
                 </div>
@@ -1333,92 +1527,295 @@ export default function AdminDashboard() {
             </Card>
 
 
-            <Card>
+            <Card id="user-management-section">
               <CardHeader>
-                <CardTitle className="text-sm font-medium">User Management</CardTitle>
-                <CardDescription>View all registered users and manage their roles.</CardDescription>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      User Management & Staff Access
+                    </CardTitle>
+                    <CardDescription>
+                      Manage registered platform users or generate single-use, role-locked staff invite links.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setNewlyCreatedInvite(null);
+                      setIsStaffInviteDialogOpen(true);
+                    }}
+                    className="bg-primary text-white hover:bg-primary/90 gap-1.5 shadow-sm text-xs"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Generate Staff Invite Link
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Full Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.length > 0 ? (
-                      [
-                        { label: 'Admins', items: admins },
-                        { label: 'Managers', items: managers },
-                        { label: 'Institutional Staff', items: institutionalStaff },
-                        { label: 'Students', items: students },
-                      ].map(group =>
-                        group.items.length > 0 ? (
-                          <React.Fragment key={`group-${group.label}`}>
-                            <TableRow>
-                              <TableCell colSpan={4} className="bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                {group.label}
-                              </TableCell>
-                            </TableRow>
-                            {group.items.map(user => (
-                              <TableRow key={user.id}>
-                                <TableCell className="font-medium">{user.fullName}</TableCell>
-                                <TableCell>{user.email}</TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="capitalize">
-                                    {user.role}
-                                  </Badge>
+                {/* Section Toggle */}
+                <div className="flex items-center gap-2 border-b border-border/60 pb-3 mb-4">
+                  <Button
+                    variant={userManagementTab === 'users' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setUserManagementTab('users')}
+                    className="text-xs h-8"
+                  >
+                    Registered Users ({users.length})
+                  </Button>
+                  <Button
+                    variant={userManagementTab === 'invites' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      setUserManagementTab('invites');
+                      loadStaffInvites();
+                    }}
+                    className="text-xs h-8 gap-1.5"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                    Staff Access Invites
+                    {staffInvites.filter(i => !i.used && !i.revoked && new Date(i.expiresAt).getTime() > Date.now()).length > 0 && (
+                      <Badge className="ml-1 bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] px-1.5 py-0">
+                        {staffInvites.filter(i => !i.used && !i.revoked && new Date(i.expiresAt).getTime() > Date.now()).length} active
+                      </Badge>
+                    )}
+                  </Button>
+                  {userManagementTab === 'invites' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 ml-auto"
+                      onClick={loadStaffInvites}
+                      disabled={loadingInvites}
+                      title="Refresh invites list"
+                    >
+                      <RefreshCw className={cn("h-3.5 w-3.5", loadingInvites && "animate-spin text-primary")} />
+                    </Button>
+                  )}
+                </div>
+
+                {userManagementTab === 'users' ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Full Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.length > 0 ? (
+                        [
+                          { label: 'Admins', items: admins },
+                          { label: 'Managers', items: managers },
+                          { label: 'Institutional Staff', items: institutionalStaff },
+                          { label: 'Students', items: students },
+                        ].map(group =>
+                          group.items.length > 0 ? (
+                            <React.Fragment key={`group-${group.label}`}>
+                              <TableRow>
+                                <TableCell colSpan={4} className="bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {group.label}
                                 </TableCell>
+                              </TableRow>
+                              {group.items.map(user => (
+                                <TableRow key={user.id}>
+                                  <TableCell className="font-medium">{user.fullName}</TableCell>
+                                  <TableCell>{user.email}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="capitalize">
+                                      {user.role}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => toggleUserRole(user)}
+                                        disabled={processingId === user.id || user.role === 'admin'}
+                                        title={`Toggle ${user.role === 'student' ? 'Hostel Manager' : 'Student'}`}
+                                      >
+                                        {processingId === user.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : user.role === 'student' ? (
+                                          <UserCheck className="h-4 w-4 text-blue-500" />
+                                        ) : (
+                                          <UserX className="h-4 w-4 text-orange-500" />
+                                        )}
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => handleDeleteUser(user)}
+                                        disabled={processingId === user.id || user.role === 'admin'}
+                                        title="Delete user"
+                                      >
+                                        {processingId === user.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </React.Fragment>
+                          ) : null
+                        )
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center h-24">
+                            No users found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div>
+                    {loadingInvites ? (
+                      <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground text-sm">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Loading staff invitation records...
+                      </div>
+                    ) : staffInvites.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed rounded-lg bg-slate-50/50">
+                        <KeyRound className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                        <h4 className="font-semibold text-slate-800 text-sm">No Staff Invites Generated Yet</h4>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                          Click "Generate Staff Invite Link" above to provision a 24-hour single-use onboarding URL for university officials.
+                        </p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Target Role</TableHead>
+                            <TableHead>Tracking Identifier</TableHead>
+                            <TableHead>Status & Validity</TableHead>
+                            <TableHead>Created</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {staffInvites.map((invite) => {
+                            const isExpired = new Date(invite.expiresAt).getTime() <= Date.now();
+                            const isActive = !invite.used && !invite.revoked && !isExpired;
+                            const hoursRemaining = Math.max(0, Math.ceil((new Date(invite.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)));
+                            const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}/staff-access/${invite.token}` : `/staff-access/${invite.token}`;
+
+                            return (
+                              <TableRow key={invite.id}>
+                                <TableCell>
+                                  <div className="space-y-0.5">
+                                    <Badge
+                                      variant={
+                                        invite.role === 'admin'
+                                          ? 'default'
+                                          : invite.role === 'dean'
+                                          ? 'secondary'
+                                          : 'outline'
+                                      }
+                                      className="font-medium capitalize text-xs"
+                                    >
+                                      {invite.roleTitle || STAFF_ROLE_TITLES[invite.role] || invite.role}
+                                    </Badge>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      By: {invite.createdBy || 'Admin'}
+                                    </p>
+                                  </div>
+                                </TableCell>
+
+                                <TableCell>
+                                  <code className="text-xs font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
+                                    {invite.tempEmail}
+                                  </code>
+                                </TableCell>
+
+                                <TableCell>
+                                  {invite.revoked ? (
+                                    <Badge variant="destructive" className="text-[11px]">Revoked</Badge>
+                                  ) : invite.used ? (
+                                    <div className="space-y-0.5">
+                                      <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[11px]">
+                                        Account Created
+                                      </Badge>
+                                      {invite.registeredEmail && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                          {invite.registeredEmail}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : isExpired ? (
+                                    <Badge variant="secondary" className="text-[11px] text-muted-foreground">
+                                      Expired (24h)
+                                    </Badge>
+                                  ) : (
+                                    <div className="space-y-0.5">
+                                      <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[11px]">
+                                        Active
+                                      </Badge>
+                                      <p className="text-[11px] text-emerald-700 font-medium">
+                                        Expires in ~{hoursRemaining}h
+                                      </p>
+                                    </div>
+                                  )}
+                                </TableCell>
+
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {invite.createdAt ? format(new Date(invite.createdAt), 'MMM d, h:mm a') : 'N/A'}
+                                </TableCell>
+
                                 <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => toggleUserRole(user)}
-                                      disabled={processingId === user.id || user.role === 'admin'}
-                                      title={`Toggle ${user.role === 'student' ? 'Hostel Manager' : 'Student'}`}
-                                    >
-                                      {processingId === user.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : user.role === 'student' ? (
-                                        <UserCheck className="h-4 w-4 text-blue-500" />
-                                      ) : (
-                                        <UserX className="h-4 w-4 text-orange-500" />
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={() => handleDeleteUser(user)}
-                                      disabled={processingId === user.id || user.role === 'admin'}
-                                      title="Delete user"
-                                    >
-                                      {processingId === user.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="h-4 w-4" />
-                                      )}
-                                    </Button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {isActive && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 text-xs gap-1"
+                                          onClick={() => handleCopyLink(inviteUrl, invite.id)}
+                                        >
+                                          {copiedTokenId === invite.id ? (
+                                            <>
+                                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                              Copied
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Copy className="h-3.5 w-3.5" />
+                                              Copy Link
+                                            </>
+                                          )}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => handleRevokeStaffInvite(invite.token)}
+                                          title="Revoke this invite immediately"
+                                        >
+                                          Revoke
+                                        </Button>
+                                      </>
+                                    )}
+                                    {!isActive && (
+                                      <span className="text-xs text-muted-foreground italic">Closed</span>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
-                            ))}
-                          </React.Fragment>
-                        ) : null
-                      )
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center h-24">
-                          No users found.
-                        </TableCell>
-                      </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     )}
-                  </TableBody>
-                </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1599,6 +1996,184 @@ export default function AdminDashboard() {
               Confirm Rejection
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* STAFF ACCESS INVITATION GENERATOR DIALOG */}
+      <Dialog open={isStaffInviteDialogOpen} onOpenChange={setIsStaffInviteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-bold font-headline">
+                  Generate Staff Invite Link
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Creates a secure, single-use onboarding URL valid strictly for 24 hours.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {newlyCreatedInvite ? (
+            <div className="space-y-4 py-3">
+              <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-semibold text-sm">Invitation Link Ready to Dispatch</h4>
+                  <p className="text-xs text-emerald-800">
+                    The role is securely pre-locked to <strong>{newlyCreatedInvite.roleTitle}</strong>. Send this link to the university official.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Onboarding Link (Single-Use, 24h Expiry)
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={newlyCreatedInvite.inviteUrl}
+                    className="font-mono text-xs bg-slate-50 selection:bg-primary/20"
+                  />
+                  <Button
+                    size="sm"
+                    className="gap-1 text-xs shrink-0"
+                    onClick={() => handleCopyLink(newlyCreatedInvite.inviteUrl, 'modal')}
+                  >
+                    {copiedTokenId === 'modal' ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-300" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy Link
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200 text-xs space-y-1.5 text-slate-600">
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="text-muted-foreground">Internal Tracking Label:</span>
+                  <span className="font-medium text-slate-800">{newlyCreatedInvite.tempEmail}</span>
+                </div>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="text-muted-foreground">Single-Use Security:</span>
+                  <span className="font-medium text-emerald-700">Burns immediately upon signup</span>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNewlyCreatedInvite(null);
+                  }}
+                  className="text-xs"
+                >
+                  Generate Another
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setIsStaffInviteDialogOpen(false)}
+                  className="text-xs"
+                >
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-5 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="staff-role-select" className="text-xs font-semibold text-slate-700">
+                  Select Administrative Target Role
+                </Label>
+                <Select
+                  value={selectedStaffRole}
+                  onValueChange={(val) => setSelectedStaffRole(val as StaffRole)}
+                >
+                  <SelectTrigger id="staff-role-select" className="text-sm">
+                    <SelectValue placeholder="Choose administrative role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dean">
+                      <div className="font-medium">Dean of Students</div>
+                    </SelectItem>
+                    <SelectItem value="hostel_coordinator">
+                      <div className="font-medium">University Hostel Coordinator</div>
+                    </SelectItem>
+                    <SelectItem value="pro_vc">
+                      <div className="font-medium">Pro-Vice-Chancellor</div>
+                    </SelectItem>
+                    <SelectItem value="vc">
+                      <div className="font-medium">Vice-Chancellor</div>
+                    </SelectItem>
+                    <SelectItem value="admin">
+                      <div className="font-medium">System Administrator</div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Dynamic Role Description */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg text-xs space-y-1.5">
+                <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  {STAFF_ROLE_TITLES[selectedStaffRole]}
+                </div>
+                <p className="text-muted-foreground leading-relaxed">
+                  {STAFF_ROLE_DESCRIPTIONS[selectedStaffRole]}
+                </p>
+              </div>
+
+              {/* Security Protocol Notice */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-md text-xs text-blue-900 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong>Zero-Email Input:</strong> No email is required from the administrator. The system automatically provisions an unguessable token. The recipient sets up their permanent university email and password upon opening the link.
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsStaffInviteDialogOpen(false)}
+                  disabled={generatingInvite}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleGenerateStaffInvite}
+                  disabled={generatingInvite}
+                  className="text-xs font-semibold gap-1.5"
+                >
+                  {generatingInvite ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="h-4 w-4" />
+                      Generate 24h Invite Link
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
