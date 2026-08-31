@@ -11,11 +11,21 @@ import type { Hostel, RoomType, Review, AppUser, Visit, Complaint, StudentVerifi
 // ============================================================================
 // ID & Key Helpers
 // ============================================================================
+export const cleanHostelId = (id?: string): string => {
+  if (!id) return "";
+  return id
+    .replace(/^HOSTEL#/i, "")
+    .replace(/^PENDING_HOSTEL#/i, "")
+    .replace(/^HOSTEL#/i, "")
+    .replace(/^PENDING_HOSTEL#/i, "")
+    .trim();
+};
+
 export const formatKey = {
-  hostel: (id: string) => ({ id: `HOSTEL#${id}`, entityType: "HOSTEL" }),
-  pendingHostel: (id: string) => ({ id: `PENDING_HOSTEL#${id}`, entityType: "PENDING_HOSTEL" }),
-  room: (hostelId: string, roomId: string) => ({ id: `ROOM#${hostelId}#${roomId}`, entityType: "ROOM" }),
-  pendingRoom: (hostelId: string, roomId: string) => ({ id: `ROOM#${hostelId}#${roomId}`, entityType: "PENDING_ROOM" }),
+  hostel: (id: string) => ({ id: `HOSTEL#${cleanHostelId(id)}`, entityType: "HOSTEL" }),
+  pendingHostel: (id: string) => ({ id: `PENDING_HOSTEL#${cleanHostelId(id)}`, entityType: "PENDING_HOSTEL" }),
+  room: (hostelId: string, roomId: string) => ({ id: `ROOM#${cleanHostelId(hostelId)}#${roomId}`, entityType: "ROOM" }),
+  pendingRoom: (hostelId: string, roomId: string) => ({ id: `ROOM#${cleanHostelId(hostelId)}#${roomId}`, entityType: "PENDING_ROOM" }),
   student: (id: string) => ({ id: `STUDENT#${id}`, entityType: "STUDENT" }),
   admin: (id: string) => ({ id: `ADMIN#${id}`, entityType: "ADMIN" }),
   manager: (id: string) => ({ id: `MANAGER#${id}`, entityType: "MANAGER" }),
@@ -40,21 +50,27 @@ export const formatKey = {
 // ============================================================================
 
 export async function getHostelById(hostelId: string): Promise<Hostel | null> {
-  const { id, entityType } = formatKey.hostel(hostelId);
-  const hostelDoc = await getItem<any>(id, entityType);
+  const cleanId = cleanHostelId(hostelId);
+  const { id, entityType } = formatKey.hostel(cleanId);
+  let hostelDoc = await getItem<any>(id, entityType);
+
+  // Robust fallback: if hostel was previously saved with compound key
+  if (!hostelDoc) {
+    hostelDoc = await getItem<any>(`HOSTEL#PENDING_HOSTEL#${cleanId}`, entityType);
+  }
 
   if (!hostelDoc) {
     return null;
   }
 
   // Fetch rooms for this hostel
-  let rooms = await getRoomsByHostelId(hostelId);
+  let rooms = await getRoomsByHostelId(cleanId);
   if (rooms.length === 0 && Array.isArray(hostelDoc.roomTypes) && hostelDoc.roomTypes.length > 0) {
     rooms = hostelDoc.roomTypes;
   }
 
   // Fetch approved reviews for this hostel
-  const reviews = await getApprovedReviewsByHostelId(hostelId);
+  const reviews = await getApprovedReviewsByHostelId(cleanId);
 
   const prices = rooms.map((r) => r.price).filter((p) => typeof p === "number" && !isNaN(p));
   const priceRange = {
@@ -122,9 +138,12 @@ export async function listHostels(options: {
   });
 
   let enrichedHostels: Hostel[] = rawHostels.map((h) => {
-    const realId = h.originalId || h.id.replace("HOSTEL#", "");
+    const realId = cleanHostelId(h.originalId || h.id);
     const hostelRooms = allRooms
-      .filter((r) => r.parentId === realId || r.hostelId === realId)
+      .filter((r) => {
+        const cleanParent = cleanHostelId(r.parentId || r.hostelId);
+        return cleanParent === realId;
+      })
       .map((r) => ({
         id: r.originalId || r.id.split("#")[2] || r.id,
         name: r.name,
@@ -137,7 +156,7 @@ export async function listHostels(options: {
     const finalRooms = hostelRooms.length > 0 ? hostelRooms : (Array.isArray(h.roomTypes) ? h.roomTypes : []);
 
     const hostelReviews = allReviews
-      .filter((rev) => rev.hostelId === realId)
+      .filter((rev) => cleanHostelId(rev.hostelId) === realId)
       .map((rev) => ({
         id: rev.originalId || rev.id.replace("REVIEW#", ""),
         studentId: rev.studentId,
@@ -172,6 +191,7 @@ export async function listHostels(options: {
     return {
       ...h,
       id: realId,
+      originalId: realId,
       roomTypes: finalRooms,
       roomTypeTags,
       availability,
@@ -200,15 +220,17 @@ export async function listHostels(options: {
 }
 
 export async function getRoomsByHostelId(hostelId: string): Promise<RoomType[]> {
+  const cleanId = cleanHostelId(hostelId);
   const rooms = await scanEntities<any>({
     entityType: "ROOM",
-    filterExpression: "#parentId = :hostelId OR #hostelId = :hostelId",
+    filterExpression: "#parentId = :hostelId OR #hostelId = :hostelId OR #parentId = :legacyHostelId OR #hostelId = :legacyHostelId",
     expressionAttributeNames: {
       "#parentId": "parentId",
       "#hostelId": "hostelId",
     },
     expressionAttributeValues: {
-      ":hostelId": hostelId,
+      ":hostelId": cleanId,
+      ":legacyHostelId": `PENDING_HOSTEL#${cleanId}`,
     },
   });
 
@@ -223,10 +245,11 @@ export async function getRoomsByHostelId(hostelId: string): Promise<RoomType[]> 
 }
 
 export async function saveHostel(
-  hostelData: Omit<Hostel, "reviews"> & { id?: string },
+  hostelData: Omit<Hostel, "reviews"> & { id?: string; originalId?: string },
   isPending: boolean = false
 ): Promise<Hostel> {
-  const hostelId = hostelData.id || `hostel_${Date.now()}`;
+  const rawId = hostelData.id || hostelData.originalId || `hostel_${Date.now()}`;
+  const hostelId = cleanHostelId(rawId);
   const key = isPending ? formatKey.pendingHostel(hostelId) : formatKey.hostel(hostelId);
 
   const { roomTypes = [], ...mainHostelData } = hostelData;
@@ -267,6 +290,7 @@ export async function saveHostel(
   return {
     ...itemToSave,
     id: hostelId,
+    originalId: hostelId,
     roomTypes,
     reviews: [],
   } as unknown as Hostel;
@@ -277,21 +301,23 @@ export async function updateHostel(
   updates: Partial<Hostel>,
   isPending: boolean = false
 ): Promise<Hostel | null> {
-  const key = isPending ? formatKey.pendingHostel(hostelId) : formatKey.hostel(hostelId);
+  const cleanId = cleanHostelId(hostelId);
+  const key = isPending ? formatKey.pendingHostel(cleanId) : formatKey.hostel(cleanId);
   const updated = await updateItem<any>(key.id, key.entityType, updates);
   if (!updated) return null;
-  return { ...updated, id: hostelId } as Hostel;
+  return { ...updated, id: cleanId, originalId: cleanId } as Hostel;
 }
 
 export async function deleteHostel(hostelId: string, isPending: boolean = false): Promise<boolean> {
-  const key = isPending ? formatKey.pendingHostel(hostelId) : formatKey.hostel(hostelId);
+  const cleanId = cleanHostelId(hostelId);
+  const key = isPending ? formatKey.pendingHostel(cleanId) : formatKey.hostel(cleanId);
   await deleteItem(key.id, key.entityType);
 
   // Also delete associated rooms
-  const rooms = await getRoomsByHostelId(hostelId);
+  const rooms = await getRoomsByHostelId(cleanId);
   if (rooms.length > 0) {
     const deleteKeys = rooms.map((r) =>
-      isPending ? formatKey.pendingRoom(hostelId, r.id!) : formatKey.room(hostelId, r.id!)
+      isPending ? formatKey.pendingRoom(cleanId, r.id!) : formatKey.room(cleanId, r.id!)
     );
     await batchWrite({ deleteKeys });
   }
@@ -580,29 +606,34 @@ export async function listPendingHostels(): Promise<Hostel[]> {
   });
   return pending.map((h) => ({
     ...h,
-    id: h.originalId || h.id.replace("PENDING_HOSTEL#", ""),
+    id: cleanHostelId(h.originalId || h.id),
+    originalId: cleanHostelId(h.originalId || h.id),
     status: h.status || "pending",
   })) as Hostel[];
 }
 
 export async function approvePendingHostel(hostelId: string, approvedBy?: string): Promise<Hostel | null> {
-  const pendingKey = formatKey.pendingHostel(hostelId);
+  const cleanId = cleanHostelId(hostelId);
+  const pendingKey = formatKey.pendingHostel(cleanId);
   const pendingData = await getItem<any>(pendingKey.id, pendingKey.entityType);
   if (!pendingData) return null;
 
   const liveHostel = {
     ...pendingData,
+    id: cleanId,
+    originalId: cleanId,
     status: "approved",
     approvedAt: new Date().toISOString(),
     approvedBy: approvedBy || "Hostel Coordinator",
   };
   await saveHostel(liveHostel, false);
-  await deleteHostel(hostelId, true);
-  return liveHostel as Hostel;
+  await deleteHostel(cleanId, true);
+  return { ...liveHostel, id: cleanId, originalId: cleanId } as Hostel;
 }
 
 export async function rejectPendingHostel(hostelId: string, reason?: string): Promise<boolean> {
-  const pendingKey = formatKey.pendingHostel(hostelId);
+  const cleanId = cleanHostelId(hostelId);
+  const pendingKey = formatKey.pendingHostel(cleanId);
   await updateItem(pendingKey.id, pendingKey.entityType, {
     status: "rejected",
     rejectionReason: reason || "Requirements not met",

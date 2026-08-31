@@ -344,32 +344,40 @@ const convertTimestamps = (data: any) => {
 
 
 export async function getHostel(hostelId: string): Promise<Hostel | null> {
+    if (!hostelId) return null;
+    const cleanId = hostelId
+        .replace(/^HOSTEL#/i, "")
+        .replace(/^PENDING_HOSTEL#/i, "")
+        .replace(/^HOSTEL#/i, "")
+        .replace(/^PENDING_HOSTEL#/i, "")
+        .trim();
+
     // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
     if (typeof window !== 'undefined') {
         try {
             const { fetchHostelByIdAction } = await import('@/app/actions/db');
-            const res = await fetchHostelByIdAction(hostelId);
+            const res = await fetchHostelByIdAction(cleanId);
             if (res.success && res.data) {
                 return res.data;
             }
         } catch (e) {
-            console.warn(`[Data Layer] DynamoDB server action fetchHostelByIdAction failed for ${hostelId}, trying Firestore backup:`, e);
+            console.warn(`[Data Layer] DynamoDB server action fetchHostelByIdAction failed for ${cleanId}, trying Firestore backup:`, e);
         }
     } else {
         try {
             const { getHostelById } = await import('./dynamodb-service');
-            const dynamoHostel = await getHostelById(hostelId);
+            const dynamoHostel = await getHostelById(cleanId);
             if (dynamoHostel) {
                 return dynamoHostel;
             }
         } catch (e) {
-            console.warn(`[Data Layer] DynamoDB primary getHostel failed for ${hostelId}, trying Firestore backup:`, e);
+            console.warn(`[Data Layer] DynamoDB primary getHostel failed for ${cleanId}, trying Firestore backup:`, e);
         }
     }
 
     // 2. SECONDARY: Firestore Backup / Fallback
     try {
-        const hostelDocRef = doc(db, 'hostels', hostelId);
+        const hostelDocRef = doc(db, 'hostels', cleanId);
         const hostelDoc = await getDoc(hostelDocRef);
 
         if (hostelDoc.exists()) {

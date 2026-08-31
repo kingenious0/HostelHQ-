@@ -1564,20 +1564,53 @@ export default function HostelDetailPage() {
     const [loading, setLoading] = useState(true);
     const [appUser, setAppUser] = useState<AppUser | null>(null);
     const [authChecked, setAuthChecked] = useState(false);
+    const router = useRouter();
     const routeParams = useParams();
-    const id = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
+    const rawId = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
 
     useEffect(() => {
+        let isMounted = true;
         const fetchHostelData = async () => {
-            if (id) {
-                const hostelData = await getHostel(id);
-                if (hostelData) {
-                    setHostel(hostelData);
-                } else {
-                    notFound();
+            let targetId = rawId || "";
+
+            // Recover clean ID if browser URL contains a fragment (e.g. /hostels/PENDING_HOSTEL#hostel_123)
+            if (typeof window !== "undefined") {
+                const hash = window.location.hash;
+                if (hash && (hash.includes("hostel_") || hash.length > 5)) {
+                    const extractedId = hash.replace(/^#/, "");
+                    if (extractedId && extractedId !== targetId) {
+                        targetId = extractedId;
+                        router.replace(`/hostels/${extractedId}`);
+                    }
                 }
             }
-            setLoading(false);
+
+            const cleanId = targetId
+                .replace(/^HOSTEL#/i, "")
+                .replace(/^PENDING_HOSTEL#/i, "")
+                .replace(/^HOSTEL#/i, "")
+                .replace(/^PENDING_HOSTEL#/i, "")
+                .trim();
+
+            if (cleanId && cleanId !== "PENDING_HOSTEL") {
+                try {
+                    const hostelData = await getHostel(cleanId);
+                    if (isMounted) {
+                        if (hostelData) {
+                            setHostel(hostelData);
+                        } else {
+                            notFound();
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error loading hostel data:", e);
+                    if (isMounted) notFound();
+                }
+            } else if (cleanId === "PENDING_HOSTEL") {
+                if (isMounted) notFound();
+            }
+
+            if (isMounted) setLoading(false);
         };
         fetchHostelData();
 
@@ -1587,40 +1620,47 @@ export default function HostelDetailPage() {
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data();
-                    setAppUser({
-                        uid: user.uid,
-                        email: user.email!,
-                        fullName: userData.fullName,
-                        role: userData.role,
-                        profileImage: userData.profileImage, // Fetch profile image
-                    });
-                } else {
-                    // If user not in 'users', check 'pendingUsers'
-                    const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
-                    const pendingUserDocSnap = await getDoc(pendingUserDocRef);
-                    if (pendingUserDocSnap.exists()) {
-                        const userData = pendingUserDocSnap.data();
+                    if (isMounted) {
                         setAppUser({
                             uid: user.uid,
                             email: user.email!,
                             fullName: userData.fullName,
                             role: userData.role,
-                            profileImage: userData.profileImage, // Fetch profile image
+                            profileImage: userData.profileImage,
                         });
+                    }
+                } else {
+                    const pendingUserDocRef = doc(db, "pendingUsers", user.uid);
+                    const pendingUserDocSnap = await getDoc(pendingUserDocRef);
+                    if (pendingUserDocSnap.exists()) {
+                        const userData = pendingUserDocSnap.data();
+                        if (isMounted) {
+                            setAppUser({
+                                uid: user.uid,
+                                email: user.email!,
+                                fullName: userData.fullName,
+                                role: userData.role,
+                                profileImage: userData.profileImage,
+                            });
+                        }
                     } else {
-                        setAppUser(null);
+                        if (isMounted) setAppUser(null);
                     }
                 }
             } else {
-                setAppUser(null);
+                if (isMounted) setAppUser(null);
             }
-            setAuthChecked(true);
+            if (isMounted) setAuthChecked(true);
         });
-        return () => unsubscribe();
-    }, [id]);
+
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
+    }, [rawId, router]);
 
 
-    if (loading || !authChecked) {
+    if (loading) {
         return (
             <div className="flex flex-col min-h-screen">
                 <Header />
