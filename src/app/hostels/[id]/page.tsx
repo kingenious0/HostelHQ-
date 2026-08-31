@@ -8,7 +8,7 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, Eye, Sparkles, Building, Info, ShieldAlert, Compass } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -89,6 +89,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [shareCopied, setShareCopied] = useState(false);
     const [shareMenuOpen, setShareMenuOpen] = useState(false);
     const [roomsDialogOpen, setRoomsDialogOpen] = useState(false);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [lightboxImages, setLightboxImages] = useState<string[]>([]);
     const [selectedRating, setSelectedRating] = useState('5');
     const [draftReview, setDraftReview] = useState('');
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
@@ -251,6 +254,36 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const primaryImages = hostel.images?.length ? hostel.images : ['/AAMUSTED-Full-shot.jpeg'];
+
+    const openLightbox = (index: number, customImages?: string[]) => {
+        const imgs = customImages || (primaryImages.length > 0 ? primaryImages : ['/AAMUSTED-Full-shot.jpeg']);
+        setLightboxImages(imgs);
+        setActiveImageIndex(Math.max(0, Math.min(index, imgs.length - 1)));
+        setLightboxOpen(true);
+    };
+
+    useEffect(() => {
+        if (!lightboxOpen) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setLightboxOpen(false);
+            } else if (e.key === 'ArrowLeft') {
+                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : (lightboxImages.length > 0 ? lightboxImages.length - 1 : 0)));
+            } else if (e.key === 'ArrowRight') {
+                setActiveImageIndex((prev) => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
+            }
+        };
+
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = originalOverflow;
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [lightboxOpen, lightboxImages.length]);
 
     const roomInventory = useMemo<RoomInventoryItem[]>(() => {
         const rooms = (hostel as any)?.rooms;
@@ -682,35 +715,48 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 <div className="hidden md:grid md:grid-cols-4 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
                     {/* Hero Image (Left 2 cols, 2 rows) */}
                     <div
-                        className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted"
-                        onClick={() => setRoomsDialogOpen(true)}
+                        className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted group/hero"
+                        onClick={() => openLightbox(0)}
+                        title="Click to view photo"
                     >
                         <Image
                             src={images[0]}
                             alt={`${hostel.name} main photo`}
                             fill
-                            className="object-cover transition-transform duration-700 group-hover:scale-105"
+                            className="object-cover transition-transform duration-700 group-hover/hero:scale-105"
                             priority
                             sizes="(max-width: 1024px) 50vw, 50vw"
                         />
+                        <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                            <span className="opacity-0 group-hover/hero:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
+                                <Eye className="w-3.5 h-3.5" /> Click to View Photo
+                            </span>
+                        </div>
                     </div>
 
                     {/* 4 Thumbnails (Right 2 cols, 2x2) */}
                     {Array.from({ length: 4 }).map((_, i) => {
                         const img = images[i + 1] || images[0];
+                        const imgIndex = i + 1 < images.length ? i + 1 : 0;
                         return (
                             <div
                                 key={i}
-                                className="relative cursor-pointer overflow-hidden bg-muted"
-                                onClick={() => setRoomsDialogOpen(true)}
+                                className="relative cursor-pointer overflow-hidden bg-muted group/thumb"
+                                onClick={() => openLightbox(imgIndex)}
+                                title="Click to view photo"
                             >
                                 <Image
                                     src={img}
                                     alt={`${hostel.name} detail photo ${i + 2}`}
                                     fill
-                                    className="object-cover transition-transform duration-700 hover:scale-110"
+                                    className="object-cover transition-transform duration-700 group-hover/thumb:scale-110"
                                     sizes="(max-width: 1024px) 25vw, 25vw"
                                 />
+                                <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                    <span className="opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg">
+                                        <Eye className="w-3 h-3" /> View
+                                    </span>
+                                </div>
                             </div>
                         );
                     })}
@@ -719,7 +765,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => setRoomsDialogOpen(true)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setRoomsDialogOpen(true);
+                        }}
                         className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
                     >
                         <Grid className="h-4 w-4" />
@@ -728,7 +777,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 </div>
 
                 {/* Mobile Gallery Layout */}
-                <div className="md:hidden relative h-[280px] sm:h-[340px] rounded-2xl overflow-hidden group">
+                <div
+                    className="md:hidden relative h-[280px] sm:h-[340px] rounded-2xl overflow-hidden group cursor-pointer"
+                    onClick={() => openLightbox(0)}
+                >
                     <Image
                         src={images[0]}
                         alt={hostel.name}
@@ -744,14 +796,20 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <span>1 / {images.length} photos</span>
                     </div>
 
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setRoomsDialogOpen(true)}
-                        className="absolute bottom-4 right-4 bg-white/90 text-black hover:bg-white text-xs font-bold rounded-xl shadow-md"
-                    >
-                        View Photos
-                    </Button>
+                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="bg-white/90 text-black hover:bg-white text-xs font-bold rounded-xl shadow-md gap-1"
+                        >
+                            <Grid className="h-3.5 w-3.5" />
+                            All ({images.length})
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Full Photos Dialog */}
@@ -760,18 +818,31 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <DialogHeader className="mb-4">
                             <DialogTitle className="text-2xl font-bold font-headline">{hostel.name} — Photo Gallery</DialogTitle>
                             <DialogDescription>
-                                High resolution photos of bedrooms, common study rooms, and amenities.
+                                High resolution photos of bedrooms, common study rooms, and amenities. Click any image to view in fullscreen.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {images.map((img, index) => (
-                                <div key={index} className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-border/50 bg-muted">
+                                <div
+                                    key={index}
+                                    className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-border/50 bg-muted cursor-pointer group"
+                                    onClick={() => {
+                                        setRoomsDialogOpen(false);
+                                        openLightbox(index);
+                                    }}
+                                    title="Click to view full photo"
+                                >
                                     <Image
                                         src={img}
                                         alt={`${hostel.name} photo ${index + 1}`}
                                         fill
-                                        className="object-cover"
+                                        className="object-cover transition-transform duration-500 group-hover:scale-105"
                                     />
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                                            <Eye className="w-3.5 h-3.5" /> View Photo
+                                        </span>
+                                    </div>
                                     <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md">
                                         Photo {index + 1}
                                     </div>
@@ -969,13 +1040,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             className="rounded-3xl border border-border/70 bg-card/60 backdrop-blur-sm p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between"
                                         >
                                             <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center w-full md:w-auto">
-                                                <div className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted">
+                                                <div
+                                                    className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted cursor-pointer group"
+                                                    onClick={() => openLightbox(0, [roomImg, ...primaryImages.filter((img) => img !== roomImg)])}
+                                                    title="Click to view photo"
+                                                >
                                                     <Image
                                                         src={roomImg}
                                                         alt={room.name}
                                                         fill
-                                                        className="object-cover"
+                                                        className="object-cover transition-transform duration-500 group-hover:scale-105"
                                                     />
+                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                                                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
+                                                            <Eye className="w-3 h-3" /> View
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-2.5">
@@ -1554,6 +1634,148 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                     </div>
                 </div>
             </div>
+
+            {/* Fullscreen Interactive Photo Viewer / Lightbox */}
+            {lightboxOpen && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col justify-between select-none animate-in fade-in duration-200"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Hostel Photo Viewer"
+                    onClick={() => setLightboxOpen(false)}
+                >
+                    {/* Top Control Bar */}
+                    <div
+                        className="flex items-center justify-between p-4 md:px-8 md:py-5 z-30 bg-gradient-to-b from-black/80 to-transparent shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div>
+                                <h3 className="text-white font-bold text-sm md:text-base font-headline truncate max-w-[220px] sm:max-w-xs md:max-w-md">
+                                    {hostel.name}
+                                </h3>
+                                <p className="text-white/70 text-xs font-medium">
+                                    Photo {activeImageIndex + 1} of {lightboxImages.length}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLightboxOpen(false);
+                                    setRoomsDialogOpen(true);
+                                }}
+                                className="hidden sm:flex rounded-xl bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs gap-1.5 h-9"
+                            >
+                                <Grid className="h-3.5 w-3.5" />
+                                All Photos Grid
+                            </Button>
+                            <button
+                                type="button"
+                                aria-label="Close photo viewer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLightboxOpen(false);
+                                }}
+                                className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Center Large Image with Navigation Arrows */}
+                    <div
+                        className="relative flex-1 w-full flex items-center justify-center p-2 sm:p-4 md:p-8 min-h-0"
+                        onClick={() => setLightboxOpen(false)}
+                    >
+                        {/* Previous Button */}
+                        {lightboxImages.length > 1 && (
+                            <button
+                                type="button"
+                                aria-label="Previous photo"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : lightboxImages.length - 1));
+                                }}
+                                className="absolute left-2 sm:left-4 md:left-8 top-1/2 -translate-y-1/2 z-30 h-10 w-10 md:h-14 md:w-14 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 shadow-2xl cursor-pointer"
+                            >
+                                <ChevronLeft className="h-5 w-5 md:h-7 md:w-7" />
+                            </button>
+                        )}
+
+                        {/* Image Frame */}
+                        <div
+                            className="relative w-full max-w-6xl h-full flex items-center justify-center"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Image
+                                src={lightboxImages[activeImageIndex] || '/AAMUSTED-Full-shot.jpeg'}
+                                alt={`${hostel.name} full photo ${activeImageIndex + 1}`}
+                                fill
+                                className="object-contain"
+                                priority
+                                sizes="(max-width: 1280px) 95vw, 1200px"
+                            />
+                        </div>
+
+                        {/* Next Button */}
+                        {lightboxImages.length > 1 && (
+                            <button
+                                type="button"
+                                aria-label="Next photo"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveImageIndex((prev) => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
+                                }}
+                                className="absolute right-2 sm:right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 h-10 w-10 md:h-14 md:w-14 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 shadow-2xl cursor-pointer"
+                            >
+                                <ChevronRight className="h-5 w-5 md:h-7 md:w-7" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Bottom Thumbnail Strip */}
+                    {lightboxImages.length > 1 && (
+                        <div
+                            className="p-3 md:p-5 z-30 bg-gradient-to-t from-black/90 to-transparent shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="max-w-4xl mx-auto flex items-center justify-center gap-2 md:gap-3 overflow-x-auto py-1 px-4">
+                                {lightboxImages.map((img, i) => (
+                                    <button
+                                        key={i}
+                                        type="button"
+                                        aria-label={`Go to photo ${i + 1}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveImageIndex(i);
+                                        }}
+                                        className={cn(
+                                            "relative h-12 w-16 md:h-16 md:w-24 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer",
+                                            i === activeImageIndex
+                                                ? "border-primary ring-2 ring-primary/40 scale-105 opacity-100 shadow-lg"
+                                                : "border-white/20 opacity-50 hover:opacity-100 hover:scale-100"
+                                        )}
+                                    >
+                                        <Image
+                                            src={img}
+                                            alt={`Thumbnail ${i + 1}`}
+                                            fill
+                                            className="object-cover"
+                                            sizes="96px"
+                                        />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
