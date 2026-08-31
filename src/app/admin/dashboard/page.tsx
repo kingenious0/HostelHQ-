@@ -187,11 +187,29 @@ export default function AdminDashboard() {
     setLoadingInvites(true);
     try {
       const res = await fetchStaffInvitesAction();
-      if (res.success && res.data) {
+      if (res && res.success && res.data && res.data.length > 0) {
         setStaffInvites(res.data);
+        return;
+      }
+      // Direct Firestore fallback
+      try {
+        const snap = await getDocs(query(collection(db, 'staff_invites'), orderBy('createdAt', 'desc')));
+        const invites = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffInvite));
+        setStaffInvites(invites);
+      } catch {
+        const snap = await getDocs(collection(db, 'staff_invites'));
+        const invites = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffInvite));
+        setStaffInvites(invites);
       }
     } catch (err) {
-      console.error('Failed to load staff invites:', err);
+      console.warn('Could not load staff invites from action, using client Firestore fallback:', err);
+      try {
+        const snap = await getDocs(collection(db, 'staff_invites'));
+        const invites = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffInvite));
+        setStaffInvites(invites);
+      } catch (fallbackErr) {
+        console.error('Failed to load staff invites:', fallbackErr);
+      }
     } finally {
       setLoadingInvites(false);
     }
@@ -343,20 +361,58 @@ export default function AdminDashboard() {
     const loadVerifications = async () => {
       try {
         const res = await fetchStudentVerificationsAction();
-        if (res.success && res.data) {
+        if (res && res.success && res.data && res.data.length > 0) {
           setVerifications(res.data);
+          return;
+        }
+        // Direct Firestore fallback
+        try {
+          const snap = await getDocs(query(collection(db, 'studentVerifications'), orderBy('submittedAt', 'desc')));
+          const verifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentVerification));
+          setVerifications(verifs);
+        } catch {
+          const snap = await getDocs(collection(db, 'studentVerifications'));
+          const verifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentVerification));
+          setVerifications(verifs);
         }
       } catch (err) {
-        console.error("Failed to load student verifications:", err);
+        console.warn("Could not load verifications from action, using client Firestore fallback:", err);
+        try {
+          const snap = await getDocs(collection(db, 'studentVerifications'));
+          const verifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as StudentVerification));
+          setVerifications(verifs);
+        } catch (fallbackErr) {
+          console.error("Failed to load student verifications:", fallbackErr);
+        }
       }
     };
     loadVerifications();
+
+    // Real-time staff invites listener
+    const unsubInvites = onSnapshot(collection(db, 'staff_invites'), (snapshot) => {
+      const invitesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffInvite));
+      invitesData.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setStaffInvites(invitesData);
+    }, (err) => {
+      console.warn("staff_invites real-time listener notice:", err.message);
+    });
+
+    // Real-time student verifications listener
+    const unsubVerifs = onSnapshot(collection(db, 'studentVerifications'), (snapshot) => {
+      const verifsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentVerification));
+      verifsData.sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
+      setStudentVerifications(verifsData);
+    }, (err) => {
+      console.warn("studentVerifications real-time listener notice:", err.message);
+    });
 
     return () => {
       unsubPending();
       unsubApproved();
       unsubUsers();
       unsubReviews();
+      unsubInvites();
+      unsubVerifs();
     };
   }, []);
 

@@ -310,7 +310,7 @@ export default function SignupPage() {
                 verificationStatus: 'verified',
             };
 
-            if (selectedRole === 'student') {
+            if ((selectedRole as string) === 'student') {
                 if (studentIndexNumber.trim()) {
                     userData.studentIndexNumber = studentIndexNumber.trim();
                 }
@@ -318,7 +318,7 @@ export default function SignupPage() {
                 if (department) userData.department = department;
             }
 
-            if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
+            if ((selectedRole as string) === 'hostel_manager' && selectedManagerHostelId) {
                 userData.managedHostelId = selectedManagerHostelId;
             }
 

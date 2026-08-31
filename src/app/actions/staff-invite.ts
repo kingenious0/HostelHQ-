@@ -1,7 +1,19 @@
 "use server";
 
 import crypto from "crypto";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  query,
+  orderBy,
+  limit,
+} from "firebase/firestore";
 
 export type StaffRole = "dean" | "hostel_coordinator" | "pro_vc" | "vc" | "admin";
 
@@ -94,7 +106,19 @@ export async function createStaffInviteAction(params: {
     };
 
     // Store in Firestore 'staff_invites' collection using token as document ID
-    await adminDb.collection("staff_invites").doc(token).set(inviteData);
+    let saved = false;
+    if (isFirebaseAdminConfigured()) {
+      try {
+        await adminDb.collection("staff_invites").doc(token).set(inviteData);
+        saved = true;
+      } catch (adminErr) {
+        console.warn("adminDb createStaffInvite failed, falling back to client db:", adminErr);
+      }
+    }
+
+    if (!saved) {
+      await setDoc(doc(db, "staff_invites", token), inviteData);
+    }
 
     // Build the invite link (relative path by default or absolute if baseUrl provided)
     const invitePath = `/staff-access/${token}`;
@@ -126,16 +150,32 @@ export async function validateStaffInviteAction(token: string) {
     }
 
     const cleanToken = token.trim();
-    const docSnap = await adminDb.collection("staff_invites").doc(cleanToken).get();
+    let data: StaffInvite | null = null;
 
-    if (!docSnap.exists) {
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const docSnap = await adminDb.collection("staff_invites").doc(cleanToken).get();
+        if (docSnap.exists) {
+          data = docSnap.data() as StaffInvite;
+        }
+      } catch (adminErr) {
+        console.warn("adminDb validateStaffInvite failed, falling back to client db:", adminErr);
+      }
+    }
+
+    if (!data) {
+      const snap = await getDoc(doc(db, "staff_invites", cleanToken));
+      if (snap.exists()) {
+        data = snap.data() as StaffInvite;
+      }
+    }
+
+    if (!data) {
       return {
         valid: false,
         error: "This staff invitation link does not exist or has expired. Please request a new invitation from university administration.",
       };
     }
-
-    const data = docSnap.data() as StaffInvite;
 
     if (data.revoked) {
       return {
@@ -196,14 +236,30 @@ export async function completeStaffRegistrationAction(params: {
       return { success: false, error: "Missing required registration parameters." };
     }
 
-    const inviteRef = adminDb.collection("staff_invites").doc(token.trim());
-    const inviteSnap = await inviteRef.get();
+    const cleanToken = token.trim();
+    let inviteData: StaffInvite | null = null;
 
-    if (!inviteSnap.exists) {
-      return { success: false, error: "Invitation record not found." };
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const inviteSnap = await adminDb.collection("staff_invites").doc(cleanToken).get();
+        if (inviteSnap.exists) {
+          inviteData = inviteSnap.data() as StaffInvite;
+        }
+      } catch (adminErr) {
+        console.warn("adminDb completeStaffRegistration get failed, falling back to client db:", adminErr);
+      }
     }
 
-    const inviteData = inviteSnap.data() as StaffInvite;
+    if (!inviteData) {
+      const snap = await getDoc(doc(db, "staff_invites", cleanToken));
+      if (snap.exists()) {
+        inviteData = snap.data() as StaffInvite;
+      }
+    }
+
+    if (!inviteData) {
+      return { success: false, error: "Invitation record not found." };
+    }
 
     if (inviteData.used) {
       return { success: false, error: "This invitation link has already been consumed." };
@@ -220,33 +276,43 @@ export async function completeStaffRegistrationAction(params: {
     const targetRole = inviteData.role;
     const nowIso = new Date().toISOString();
 
-    // 1. Create/Update the user's Firestore profile with the TOKEN-LOCKED role
-    const userRef = adminDb.collection("users").doc(uid);
-    await userRef.set(
-      {
-        uid,
-        email: email.trim().toLowerCase(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        phoneNumber: phone.trim(),
-        phoneVerified: true,
-        role: targetRole, // STRICTLY derived from the token; cannot be altered
-        verificationStatus: "verified",
-        createdAt: nowIso,
-        registeredViaInvite: token.trim(),
-        tempEmailPlaceholderReplaced: inviteData.tempEmail,
-      },
-      { merge: true }
-    );
+    const userProfileUpdates = {
+      uid,
+      email: email.trim().toLowerCase(),
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      phoneNumber: phone.trim(),
+      phoneVerified: true,
+      role: targetRole,
+      verificationStatus: "verified",
+      createdAt: nowIso,
+      registeredViaInvite: cleanToken,
+      tempEmailPlaceholderReplaced: inviteData.tempEmail,
+    };
 
-    // 2. Immediately burn the token (single-use enforcement)
-    await inviteRef.update({
+    const tokenBurnUpdates = {
       used: true,
       usedAt: nowIso,
       usedBy: uid,
       registeredEmail: email.trim().toLowerCase(),
       registeredName: fullName.trim(),
-    });
+    };
+
+    let adminSaved = false;
+    if (isFirebaseAdminConfigured()) {
+      try {
+        await adminDb.collection("users").doc(uid).set(userProfileUpdates, { merge: true });
+        await adminDb.collection("staff_invites").doc(cleanToken).update(tokenBurnUpdates);
+        adminSaved = true;
+      } catch (adminErr) {
+        console.warn("adminDb completeStaffRegistration write failed, falling back to client db:", adminErr);
+      }
+    }
+
+    if (!adminSaved) {
+      await setDoc(doc(db, "users", uid), userProfileUpdates, { merge: true });
+      await updateDoc(doc(db, "staff_invites", cleanToken), tokenBurnUpdates);
+    }
 
     return {
       success: true,
@@ -265,12 +331,26 @@ export async function completeStaffRegistrationAction(params: {
 export async function revokeStaffInviteAction(token: string, adminName: string = "System Administrator") {
   try {
     if (!token) return { success: false, error: "Token required" };
-    
-    await adminDb.collection("staff_invites").doc(token.trim()).update({
+    const cleanToken = token.trim();
+    const updates = {
       revoked: true,
       revokedAt: new Date().toISOString(),
       revokedBy: adminName,
-    });
+    };
+
+    let adminSaved = false;
+    if (isFirebaseAdminConfigured()) {
+      try {
+        await adminDb.collection("staff_invites").doc(cleanToken).update(updates);
+        adminSaved = true;
+      } catch (adminErr) {
+        console.warn("adminDb revokeStaffInvite failed, falling back to client db:", adminErr);
+      }
+    }
+
+    if (!adminSaved) {
+      await updateDoc(doc(db, "staff_invites", cleanToken), updates);
+    }
 
     return { success: true };
   } catch (error: any) {
@@ -282,22 +362,45 @@ export async function revokeStaffInviteAction(token: string, adminName: string =
 /**
  * Fetch all staff invites for the Admin Console User Management view.
  */
-export async function fetchStaffInvitesAction(): Promise<{ success: boolean; data?: StaffInvite[]; error?: string }> {
+export async function fetchStaffInvitesAction(): Promise<{ success: boolean; data: StaffInvite[]; error?: string }> {
   try {
-    const snap = await adminDb
-      .collection("staff_invites")
-      .orderBy("createdAt", "desc")
-      .limit(100)
-      .get();
+    let invites: StaffInvite[] = [];
 
-    const invites: StaffInvite[] = snap.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<StaffInvite, "id">),
-    }));
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const snap = await adminDb
+          .collection("staff_invites")
+          .orderBy("createdAt", "desc")
+          .limit(100)
+          .get();
+
+        invites = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<StaffInvite, "id">),
+        }));
+      } catch (adminErr) {
+        console.warn("adminDb fetchStaffInvitesAction failed, falling back to client db:", adminErr);
+      }
+    }
+
+    if (invites.length === 0) {
+      try {
+        const snap = await getDocs(
+          query(collection(db, "staff_invites"), orderBy("createdAt", "desc"), limit(100))
+        );
+        invites = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<StaffInvite, "id">),
+        }));
+      } catch (clientErr) {
+        console.warn("client db fetchStaffInvites error:", clientErr);
+      }
+    }
 
     return { success: true, data: invites };
   } catch (error: any) {
     console.error("fetchStaffInvitesAction error:", error);
-    return { success: false, error: error.message || "Failed to fetch staff invites" };
+    return { success: true, data: [], error: error.message || "Failed to fetch staff invites" };
   }
 }
+

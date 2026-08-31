@@ -89,5 +89,18 @@ service cloud.firestore {
       allow create: if isAuthenticated();
       allow update, delete: if false; // Immutable logs
     }
+
+    // Staff Invites
+    match /staff_invites/{inviteId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Student Verifications
+    match /studentVerifications/{verifId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.studentId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
   }
 }

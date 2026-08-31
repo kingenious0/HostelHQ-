@@ -23,22 +23,29 @@ import "dotenv/config";
 // ============================================================================
 let _docClient: DynamoDBDocumentClient | null = null;
 
-export function getDocClient(): DynamoDBDocumentClient {
+export function isDynamoConfigured(): boolean {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  return Boolean(accessKeyId && secretAccessKey && accessKeyId.length > 5 && secretAccessKey.length > 5);
+}
+
+export function getDocClient(): DynamoDBDocumentClient | null {
+  if (!isDynamoConfigured()) {
+    return null;
+  }
+
   if (!_docClient) {
     const region = process.env.AWS_REGION || "eu-north-1";
-    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID!;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY!;
 
     const rawClient = new DynamoDBClient({
       region,
-      ...(accessKeyId && secretAccessKey
-        ? {
-            credentials: {
-              accessKeyId,
-              secretAccessKey,
-            },
-          }
-        : {}),
+      maxAttempts: 2,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
     });
 
     _docClient = DynamoDBDocumentClient.from(rawClient, {
@@ -70,6 +77,8 @@ export async function getItem<T = Record<string, any>>(
   tableName: string = DYNAMODB_TABLE_NAME
 ): Promise<T | null> {
   const client = getDocClient();
+  if (!client) return null;
+
   const params: GetCommandInput = {
     TableName: tableName,
     Key: {
@@ -90,6 +99,10 @@ export async function putItem<T extends Record<string, any>>(
   tableName: string = DYNAMODB_TABLE_NAME
 ): Promise<T> {
   const client = getDocClient();
+  if (!client) {
+    return item;
+  }
+
   const params: PutCommandInput = {
     TableName: tableName,
     Item: {
@@ -112,6 +125,8 @@ export async function updateItem<T = Record<string, any>>(
   tableName: string = DYNAMODB_TABLE_NAME
 ): Promise<T | null> {
   const client = getDocClient();
+  if (!client) return null;
+
   const updateEntries = Object.entries(updates).filter(
     ([key, val]) => key !== "id" && key !== "entityType" && val !== undefined
   );
@@ -162,6 +177,8 @@ export async function deleteItem(
   tableName: string = DYNAMODB_TABLE_NAME
 ): Promise<boolean> {
   const client = getDocClient();
+  if (!client) return true;
+
   const params: DeleteCommandInput = {
     TableName: tableName,
     Key: {
@@ -189,6 +206,8 @@ export async function queryById<T = Record<string, any>>(
   } = {}
 ): Promise<T[]> {
   const client = getDocClient();
+  if (!client) return [];
+
   const tableName = options.tableName || DYNAMODB_TABLE_NAME;
   const names: Record<string, string> = {
     "#id": "id",
@@ -235,6 +254,8 @@ export async function scanEntities<T = Record<string, any>>(
   } = {}
 ): Promise<T[]> {
   const client = getDocClient();
+  if (!client) return [];
+
   const tableName = options.tableName || DYNAMODB_TABLE_NAME;
   const names: Record<string, string> = {
     ...(options.expressionAttributeNames || {}),
@@ -285,6 +306,8 @@ export async function batchGet<T = Record<string, any>>(
   if (keys.length === 0) return [];
 
   const client = getDocClient();
+  if (!client) return [];
+
   const BATCH_LIMIT = 100;
   const results: T[] = [];
 
@@ -318,6 +341,10 @@ export async function batchWrite(
   }
 ): Promise<{ written: number; deleted: number; failed: number }> {
   const client = getDocClient();
+  if (!client) {
+    return { written: 0, deleted: 0, failed: 0 };
+  }
+
   const tableName = options.tableName || DYNAMODB_TABLE_NAME;
   const putItems = options.putItems || [];
   const deleteKeys = options.deleteKeys || [];

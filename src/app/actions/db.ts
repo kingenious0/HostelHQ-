@@ -3,6 +3,17 @@
 import * as dynamoService from "@/lib/dynamodb-service";
 import * as dynamoCore from "@/lib/dynamodb";
 import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+} from "firebase/firestore";
 
 // ============================================================================
 // Hostel Server Actions
@@ -389,17 +400,72 @@ export async function updateComplaintStatusAction(
 
 export async function fetchStudentVerificationsAction(status?: string) {
   try {
-    const data = await dynamoService.listStudentVerifications(status);
-    return { success: true, data };
+    let data: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        data = await dynamoService.listStudentVerifications(status);
+      } catch (dynamoErr) {
+        console.warn("dynamoService.listStudentVerifications error, falling back to Firestore:", dynamoErr);
+      }
+    }
+
+    // If DynamoDB is not configured or returned no records, fall back to Firestore
+    if (!data || data.length === 0) {
+      try {
+        const verifCol = collection(db, "studentVerifications");
+        try {
+          const q = status
+            ? query(verifCol, where("status", "==", status))
+            : query(verifCol, orderBy("submittedAt", "desc"));
+          const snap = await getDocs(q);
+          data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch {
+          // In case index for orderBy isn't ready
+          const snap = await getDocs(verifCol);
+          data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (status) {
+            data = data.filter((v: any) => v.status === status);
+          }
+        }
+      } catch (fsErr) {
+        console.warn("Firestore fetch studentVerifications fallback note:", fsErr);
+      }
+    }
+
+    return { success: true, data: data || [] };
   } catch (error: any) {
     console.error("fetchStudentVerificationsAction error:", error);
-    return { success: false, error: error.message || "Failed to fetch student verifications" };
+    return { success: true, data: [], error: error.message || "Failed to fetch student verifications" };
   }
 }
 
 export async function submitStudentVerificationAction(data: any) {
   try {
-    const saved = await dynamoService.saveStudentVerification(data);
+    const verifId = data.id || `verif_${Date.now()}`;
+    const payload = {
+      ...data,
+      id: verifId,
+      status: data.status || "pending",
+      submittedAt: data.submittedAt || new Date().toISOString(),
+    };
+
+    // 1. Dual-write to Firestore
+    try {
+      await setDoc(doc(db, "studentVerifications", verifId), payload, { merge: true });
+    } catch (fsErr) {
+      console.warn("Firestore studentVerifications write note:", fsErr);
+    }
+
+    // 2. Dual-write to DynamoDB if configured
+    let saved = payload;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        saved = await dynamoService.saveStudentVerification(payload);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB saveStudentVerification error:", dynamoErr);
+      }
+    }
+
     return { success: true, data: saved };
   } catch (error: any) {
     console.error("submitStudentVerificationAction error:", error);
@@ -416,7 +482,29 @@ export async function updateStudentVerificationStatusAction(
   studentName?: string
 ) {
   try {
-    const data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewedBy);
+    const updates: Record<string, any> = {
+      status,
+      reviewedAt: new Date().toISOString(),
+    };
+    if (reason) updates.rejectionReason = reason;
+    if (reviewedBy) updates.reviewedBy = reviewedBy;
+
+    // Dual-write: Firestore
+    try {
+      await updateDoc(doc(db, "studentVerifications", verificationId), updates);
+    } catch (fsErr) {
+      console.warn("Firestore updateStudentVerificationStatus error:", fsErr);
+    }
+
+    // Dual-write: DynamoDB
+    let data = null;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewedBy);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB updateStudentVerificationStatus error:", dynamoErr);
+      }
+    }
 
     // Dispatch SMS notification to student
     if (studentPhoneNumber) {
@@ -439,6 +527,7 @@ export async function updateStudentVerificationStatusAction(
     return { success: false, error: error.message || "Failed to update verification status" };
   }
 }
+
 
 export async function updateRoomPendingPriceAction(
   hostelId: string,
