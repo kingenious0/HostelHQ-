@@ -308,8 +308,8 @@ export default function DeanDashboardPage() {
         status,
         reason,
         deanName,
-        verif?.phoneNumber,
-        verif?.studentName
+        verif?.phone,
+        verif?.fullName
       );
 
       if (res.success) {
@@ -400,27 +400,27 @@ export default function DeanDashboardPage() {
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
         {/* Executive Banner */}
-        <div className="mb-8 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="mb-8 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 sm:p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-blue-200 border border-white/20">
               <Shield className="h-3.5 w-3.5" />
-              University Directorate • Operational Housing Affairs
+              Student Affairs • Welfare & Housing
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Dean of Students Console
+              Dean of Students Housing Console
             </h1>
             <p className="text-sm text-blue-100/80 max-w-2xl">
-              Centralized arbitration for student-hostel disputes, institutional credential verification, and housing placements oversight.
+              Arbitrate student-hostel disputes, verify student admission credentials, and oversee residential welfare.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={loadDashboardData}
               disabled={loadingData}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loadingData ? "animate-spin" : ""}`} />
               Refresh Feed
@@ -438,7 +438,7 @@ export default function DeanDashboardPage() {
               <ShieldAlert className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-foreground">
+              <div className="text-2xl sm:text-3xl font-black text-foreground">
                 {submittedComplaintsCount + underReviewComplaintsCount}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -455,7 +455,7 @@ export default function DeanDashboardPage() {
               <UserCheck className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-foreground">{pendingVerificationsCount}</div>
+              <div className="text-2xl sm:text-3xl font-black text-foreground">{pendingVerificationsCount}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 Pending admission letter & ID inspections
               </p>
@@ -470,7 +470,7 @@ export default function DeanDashboardPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-emerald-600">
+              <div className="text-2xl sm:text-3xl font-black text-emerald-600">
                 {complaints.filter((c) => c.status === "Resolved").length}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Settled with formal dean intervention</p>
@@ -485,7 +485,7 @@ export default function DeanDashboardPage() {
               <Building className="h-4 w-4 text-indigo-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-foreground">{hostels.length}</div>
+              <div className="text-2xl sm:text-3xl font-black text-foreground">{hostels.length}</div>
               <p className="text-xs text-muted-foreground mt-1">Under official university zoning</p>
             </CardContent>
           </Card>
@@ -493,32 +493,34 @@ export default function DeanDashboardPage() {
 
         {/* Dashboard Tabs */}
         <Tabs defaultValue="complaints" className="space-y-6">
-          <TabsList className="bg-slate-200/80 p-1 rounded-xl">
-            <TabsTrigger value="complaints" className="rounded-lg font-semibold flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Two-Way Complaints Inbox
-              {submittedComplaintsCount > 0 && (
-                <Badge variant="destructive" className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full">
-                  {submittedComplaintsCount}
-                </Badge>
-              )}
-            </TabsTrigger>
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="bg-slate-200/80 p-1 rounded-xl flex whitespace-nowrap min-w-max">
+              <TabsTrigger value="complaints" className="rounded-lg font-semibold flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Two-Way Complaints Inbox
+                {submittedComplaintsCount > 0 && (
+                  <Badge variant="destructive" className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full">
+                    {submittedComplaintsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
 
-            <TabsTrigger value="verifications" className="rounded-lg font-semibold flex items-center gap-2">
-              <FileCheck className="h-4 w-4" />
-              Student Verification Queue
-              {pendingVerificationsCount > 0 && (
-                <Badge className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600">
-                  {pendingVerificationsCount}
-                </Badge>
-              )}
-            </TabsTrigger>
+              <TabsTrigger value="verifications" className="rounded-lg font-semibold flex items-center gap-2">
+                <FileCheck className="h-4 w-4" />
+                Student Verification Queue
+                {pendingVerificationsCount > 0 && (
+                  <Badge className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600">
+                    {pendingVerificationsCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
 
-            <TabsTrigger value="placements" className="rounded-lg font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Placements & Density
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger value="placements" className="rounded-lg font-semibold flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Placements & Density
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* TAB 1: TWO-WAY COMPLAINTS INBOX */}
           <TabsContent value="complaints" className="space-y-4">
@@ -534,7 +536,7 @@ export default function DeanDashboardPage() {
 
                   <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                     {/* Search Input */}
-                    <div className="relative flex-1 sm:w-64">
+                    <div className="relative flex-1 sm:w-64 min-w-[200px]">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
                         placeholder="Search student, hostel, issue..."
@@ -545,12 +547,12 @@ export default function DeanDashboardPage() {
                     </div>
 
                     {/* Direction Filter */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs">
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs overflow-x-auto">
                       <Button
                         size="sm"
                         variant={directionFilter === "all" ? "default" : "ghost"}
                         onClick={() => setDirectionFilter("all")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         All
                       </Button>
@@ -558,7 +560,7 @@ export default function DeanDashboardPage() {
                         size="sm"
                         variant={directionFilter === "student_to_hostel" ? "default" : "ghost"}
                         onClick={() => setDirectionFilter("student_to_hostel")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         Student → Hostel
                       </Button>
@@ -566,19 +568,19 @@ export default function DeanDashboardPage() {
                         size="sm"
                         variant={directionFilter === "manager_to_student" ? "default" : "ghost"}
                         onClick={() => setDirectionFilter("manager_to_student")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         Manager → Student
                       </Button>
                     </div>
 
                     {/* Status Filter */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs">
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-border/40 text-xs overflow-x-auto">
                       <Button
                         size="sm"
                         variant={statusFilter === "all" ? "default" : "ghost"}
                         onClick={() => setStatusFilter("all")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         All
                       </Button>
@@ -586,7 +588,7 @@ export default function DeanDashboardPage() {
                         size="sm"
                         variant={statusFilter === "Submitted" ? "default" : "ghost"}
                         onClick={() => setStatusFilter("Submitted")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         Submitted
                       </Button>
@@ -594,7 +596,7 @@ export default function DeanDashboardPage() {
                         size="sm"
                         variant={statusFilter === "Under Review" ? "default" : "ghost"}
                         onClick={() => setStatusFilter("Under Review")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         Reviewing
                       </Button>
@@ -602,7 +604,7 @@ export default function DeanDashboardPage() {
                         size="sm"
                         variant={statusFilter === "Resolved" ? "default" : "ghost"}
                         onClick={() => setStatusFilter("Resolved")}
-                        className="h-7 text-xs px-2.5"
+                        className="h-7 text-xs px-2.5 shrink-0"
                       >
                         Resolved
                       </Button>
@@ -619,102 +621,180 @@ export default function DeanDashboardPage() {
                     <p className="text-xs">There are no reports matching the selected filters.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-100/60">
-                        <TableRow>
-                          <TableHead className="w-28">Direction</TableHead>
-                          <TableHead>Subject & Category</TableHead>
-                          <TableHead>Student Context</TableHead>
-                          <TableHead>Hostel / Manager</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredComplaints.map((complaint) => (
-                          <TableRow key={complaint.id} className="hover:bg-slate-50/80 transition-colors">
-                            <TableCell>
+                  <>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-100/60">
+                          <TableRow>
+                            <TableHead className="w-28">Direction</TableHead>
+                            <TableHead>Subject & Category</TableHead>
+                            <TableHead>Student Context</TableHead>
+                            <TableHead>Hostel / Manager</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredComplaints.map((complaint) => (
+                            <TableRow key={complaint.id} className="hover:bg-slate-50/80 transition-colors">
+                              <TableCell>
+                                {complaint.direction === "student_to_hostel" ? (
+                                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
+                                    <GraduationCap className="h-3 w-3" />
+                                    Stu → Hostel
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
+                                    <Building className="h-3 w-3" />
+                                    Mgr → Student
+                                  </Badge>
+                                )}
+                                <div className="text-[10px] text-muted-foreground mt-1">
+                                  {new Date(complaint.createdAt).toLocaleDateString()}
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="max-w-xs">
+                                <p className="font-semibold text-foreground text-sm line-clamp-1">
+                                  {complaint.subject}
+                                </p>
+                                <Badge variant="outline" className="text-[10px] font-normal mt-0.5">
+                                  {complaint.category}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                  {complaint.description}
+                                </p>
+                              </TableCell>
+
+                              <TableCell>
+                                <p className="font-semibold text-foreground text-xs">{complaint.studentName}</p>
+                                <p className="text-[11px] text-muted-foreground">{complaint.studentEmail}</p>
+                                <p className="text-[11px] text-muted-foreground font-mono">{complaint.studentPhone}</p>
+                              </TableCell>
+
+                              <TableCell>
+                                <p className="font-semibold text-foreground text-xs">{complaint.hostelName}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Room: <span className="font-medium text-foreground">{complaint.roomNumber || "N/A"}</span>
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Mgr: {complaint.managerName || "Assigned"} ({complaint.managerPhone || "On file"})
+                                </p>
+                              </TableCell>
+
+                              <TableCell>
+                                {complaint.status === "Submitted" && (
+                                  <Badge variant="destructive" className="text-[11px] flex items-center gap-1 w-fit">
+                                    <Clock className="h-3 w-3" /> Submitted
+                                  </Badge>
+                                )}
+                                {complaint.status === "Under Review" && (
+                                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1 w-fit">
+                                    <AlertTriangle className="h-3 w-3" /> Under Review
+                                  </Badge>
+                                )}
+                                {complaint.status === "Resolved" && (
+                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1 w-fit">
+                                    <CheckCircle2 className="h-3 w-3" /> Resolved
+                                  </Badge>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="text-right">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedComplaint(complaint);
+                                    setResolutionNotes(complaint.resolutionNotes || "");
+                                  }}
+                                  className="h-8 text-xs font-semibold"
+                                >
+                                  Investigate
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Stacked Card View */}
+                    <div className="block md:hidden divide-y divide-border/60">
+                      {filteredComplaints.map((complaint) => (
+                        <div key={complaint.id} className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               {complaint.direction === "student_to_hostel" ? (
-                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
-                                  <GraduationCap className="h-3 w-3" />
-                                  Stu → Hostel
+                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold flex items-center gap-1">
+                                  <GraduationCap className="h-3 w-3" /> Stu → Hostel
                                 </Badge>
                               ) : (
-                                <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[11px] font-semibold flex items-center gap-1 w-fit">
-                                  <Building className="h-3 w-3" />
-                                  Mgr → Student
+                                <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-semibold flex items-center gap-1">
+                                  <Building className="h-3 w-3" /> Mgr → Student
                                 </Badge>
                               )}
-                              <div className="text-[10px] text-muted-foreground mt-1">
-                                {new Date(complaint.createdAt).toLocaleDateString()}
-                              </div>
-                            </TableCell>
-
-                            <TableCell className="max-w-xs">
-                              <p className="font-semibold text-foreground text-sm line-clamp-1">
-                                {complaint.subject}
-                              </p>
-                              <Badge variant="outline" className="text-[10px] font-normal mt-0.5">
+                              <Badge variant="outline" className="text-[10px] font-normal">
                                 {complaint.category}
                               </Badge>
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                {complaint.description}
-                              </p>
-                            </TableCell>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0">
+                              {new Date(complaint.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
 
-                            <TableCell>
-                              <p className="font-semibold text-foreground text-xs">{complaint.studentName}</p>
-                              <p className="text-[11px] text-muted-foreground">{complaint.studentEmail}</p>
-                              <p className="text-[11px] text-muted-foreground font-mono">{complaint.studentPhone}</p>
-                            </TableCell>
+                          <div>
+                            <p className="font-bold text-foreground text-sm">{complaint.subject}</p>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{complaint.description}</p>
+                          </div>
 
-                            <TableCell>
-                              <p className="font-semibold text-foreground text-xs">{complaint.hostelName}</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                Room: <span className="font-medium text-foreground">{complaint.roomNumber || "N/A"}</span>
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">
-                                Mgr: {complaint.managerName || "Assigned"} ({complaint.managerPhone || "On file"})
-                              </p>
-                            </TableCell>
+                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Student:</span>
+                              <span className="font-medium text-foreground">{complaint.studentName} ({complaint.studentPhone || "No phone"})</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Hostel:</span>
+                              <span className="font-medium text-foreground">{complaint.hostelName} (Room {complaint.roomNumber || "N/A"})</span>
+                            </div>
+                          </div>
 
-                            <TableCell>
+                          <div className="flex items-center justify-between pt-1">
+                            <div>
                               {complaint.status === "Submitted" && (
-                                <Badge variant="destructive" className="text-[11px] flex items-center gap-1 w-fit">
+                                <Badge variant="destructive" className="text-[11px] flex items-center gap-1">
                                   <Clock className="h-3 w-3" /> Submitted
                                 </Badge>
                               )}
                               {complaint.status === "Under Review" && (
-                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1 w-fit">
+                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] flex items-center gap-1">
                                   <AlertTriangle className="h-3 w-3" /> Under Review
                                 </Badge>
                               )}
                               {complaint.status === "Resolved" && (
-                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1 w-fit">
+                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px] flex items-center gap-1">
                                   <CheckCircle2 className="h-3 w-3" /> Resolved
                                 </Badge>
                               )}
-                            </TableCell>
+                            </div>
 
-                            <TableCell className="text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedComplaint(complaint);
-                                  setResolutionNotes(complaint.resolutionNotes || "");
-                                }}
-                                className="h-8 text-xs font-semibold"
-                              >
-                                Investigate
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedComplaint(complaint);
+                                setResolutionNotes(complaint.resolutionNotes || "");
+                              }}
+                              className="h-8 text-xs font-semibold"
+                            >
+                              Investigate
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -731,72 +811,171 @@ export default function DeanDashboardPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {verifications.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-sm">
-                    <UserCheck className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                    No verification records currently pending.
+                  <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
+                    <UserCheck className="h-8 w-8 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-foreground">Zero pending verifications</p>
+                    <p className="text-xs">All uploaded student admission documents have been processed.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-slate-100/60">
-                        <TableRow>
-                          <TableHead>Student Name</TableHead>
-                          <TableHead>Institution & ID Number</TableHead>
-                          <TableHead>Admission Letter</TableHead>
-                          <TableHead>Student ID Card</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {verifications.map((item) => (
-                          <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                            <TableCell>
-                              <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
-                              <p className="text-xs text-muted-foreground">{item.email}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{item.phone}</p>
-                            </TableCell>
+                  <>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-100/60">
+                          <TableRow>
+                            <TableHead>Student Name</TableHead>
+                            <TableHead>Institution & ID Number</TableHead>
+                            <TableHead>Admission Letter</TableHead>
+                            <TableHead>Student ID Card</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {verifications.map((item) => (
+                            <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                              <TableCell>
+                                <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
+                                <p className="text-xs text-muted-foreground">{item.email}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{item.phone}</p>
+                              </TableCell>
 
-                            <TableCell>
-                              <p className="font-semibold text-foreground text-xs">
-                                {item.institution || "AAMUSTED"}
-                              </p>
-                              <Badge variant="outline" className="font-mono text-[11px] mt-0.5">
-                                {item.studentIdNumber}
-                              </Badge>
-                            </TableCell>
+                              <TableCell>
+                                <p className="font-semibold text-foreground text-xs">
+                                  {item.institution || "AAMUSTED"}
+                                </p>
+                                <Badge variant="outline" className="font-mono text-[11px] mt-0.5">
+                                  {item.studentIdNumber}
+                                </Badge>
+                              </TableCell>
 
-                            <TableCell>
-                              {item.admissionLetterUrl ? (
-                                <a
-                                  href={item.admissionLetterUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
-                                >
-                                  <Eye className="h-3.5 w-3.5" /> View Letter
-                                </a>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Not provided</span>
-                              )}
-                            </TableCell>
+                              <TableCell>
+                                {item.admissionLetterUrl ? (
+                                  <a
+                                    href={item.admissionLetterUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" /> View Letter
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Not provided</span>
+                                )}
+                              </TableCell>
 
-                            <TableCell>
-                              {item.studentIdCardUrl ? (
-                                <a
-                                  href={item.studentIdCardUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
-                                >
-                                  <Eye className="h-3.5 w-3.5" /> View ID Card
-                                </a>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Not provided</span>
-                              )}
-                            </TableCell>
+                              <TableCell>
+                                {item.studentIdCardUrl ? (
+                                  <a
+                                    href={item.studentIdCardUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" /> View ID Card
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Not provided</span>
+                                )}
+                              </TableCell>
 
-                            <TableCell>
+                              <TableCell>
+                                {item.status === "pending" && (
+                                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px]">
+                                    Pending Review
+                                  </Badge>
+                                )}
+                                {item.status === "verified" && (
+                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[11px]">
+                                    Verified
+                                  </Badge>
+                                )}
+                                {item.status === "rejected" && (
+                                  <Badge variant="destructive" className="text-[11px]">
+                                    Rejected
+                                  </Badge>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="text-right">
+                                {item.status === "pending" ? (
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleVerifyStudent(item.id, "verified")}
+                                      disabled={actionLoading}
+                                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setSelectedVerification(item);
+                                        setRejectDialogOpen(true);
+                                      }}
+                                      disabled={actionLoading}
+                                      className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                                    >
+                                      Reject
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile Stacked Card View */}
+                    <div className="block md:hidden divide-y divide-border/60">
+                      {verifications.map((item) => (
+                        <div key={item.id} className="p-4 space-y-3">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <p className="font-bold text-foreground text-sm">{item.fullName}</p>
+                              <p className="text-xs text-muted-foreground">{item.email} • {item.phone}</p>
+                            </div>
+                            <Badge variant="outline" className="font-mono text-[11px]">
+                              {item.studentIdNumber}
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs">
+                            {item.admissionLetterUrl ? (
+                              <a
+                                href={item.admissionLetterUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"
+                              >
+                                <Eye className="h-3.5 w-3.5" /> View Letter
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">No Letter</span>
+                            )}
+                            {item.studentIdCardUrl ? (
+                              <a
+                                href={item.studentIdCardUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-primary font-semibold hover:underline"
+                              >
+                                <Eye className="h-3.5 w-3.5" /> View ID Card
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">No ID Card</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <div>
                               {item.status === "pending" && (
                                 <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[11px]">
                                   Pending Review
@@ -812,43 +991,41 @@ export default function DeanDashboardPage() {
                                   Rejected
                                 </Badge>
                               )}
-                            </TableCell>
+                            </div>
 
-                            <TableCell className="text-right">
-                              {item.status === "pending" ? (
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleVerifyStudent(item.id, "verified")}
-                                    disabled={actionLoading}
-                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                                  >
-                                    Approve
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setSelectedVerification(item);
-                                      setRejectDialogOpen(true);
-                                    }}
-                                    disabled={actionLoading}
-                                    className="h-8 text-xs text-destructive hover:bg-destructive/10"
-                                  >
-                                    Reject
-                                  </Button>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                            {item.status === "pending" ? (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleVerifyStudent(item.id, "verified")}
+                                  disabled={actionLoading}
+                                  className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedVerification(item);
+                                    setRejectDialogOpen(true);
+                                  }}
+                                  disabled={actionLoading}
+                                  className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -864,7 +1041,8 @@ export default function DeanDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                   <Table>
                     <TableHeader className="bg-slate-100/60">
                       <TableRow>
@@ -925,6 +1103,47 @@ export default function DeanDashboardPage() {
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+
+                {/* Mobile Card Stack */}
+                <div className="block md:hidden divide-y divide-border/60">
+                  {hostels.map((h) => (
+                    <div key={h.id} className="p-4 space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <p className="font-bold text-foreground text-sm">{h.name}</p>
+                          <p className="text-xs text-muted-foreground">{h.location} • {h.institution || "AAMUSTED"}</p>
+                        </div>
+                        <Badge
+                          className={`text-[10px] ${
+                            h.availability === "Available"
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : h.availability === "Limited"
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : "bg-rose-100 text-rose-800 border-rose-300"
+                          }`}
+                        >
+                          {h.availability || "Available"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <div className="flex flex-wrap gap-1">
+                          {h.roomTypes && h.roomTypes.length > 0 ? (
+                            h.roomTypes.map((rt: any, idx: number) => (
+                              <Badge key={idx} variant="secondary" className="text-[10px]">
+                                {rt.name} (GH₵{rt.price?.toLocaleString()})
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Standard Inventory</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-foreground shrink-0">
+                          ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

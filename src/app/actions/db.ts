@@ -93,7 +93,7 @@ export async function fetchUserAction(userId: string) {
 
 export async function fetchUsersByRoleAction(role: string) {
   try {
-    const users = await dynamoService.listUsersByRole(role);
+    const users = await dynamoService.listUsersByRole(role as any);
     return { success: true, data: users };
   } catch (error: any) {
     console.error("fetchUsersByRoleAction error:", error);
@@ -418,11 +418,11 @@ export async function fetchStudentVerificationsAction(status?: string) {
             ? query(verifCol, where("status", "==", status))
             : query(verifCol, orderBy("submittedAt", "desc"));
           const snap = await getDocs(q);
-          data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
         } catch {
           // In case index for orderBy isn't ready
           const snap = await getDocs(verifCol);
-          data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
           if (status) {
             data = data.filter((v: any) => v.status === status);
           }
@@ -599,11 +599,11 @@ export async function fetchExecutiveMetricsAction() {
           resolvedComplaints,
           underReviewComplaints,
           submittedComplaints,
-          resolutionRate: totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 100,
+          resolutionRate: totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0,
           totalVerifications,
           approvedVerifications,
           pendingVerifications,
-          verificationRate: totalVerifications > 0 ? Math.round((approvedVerifications / totalVerifications) * 100) : 100,
+          verificationRate: totalVerifications > 0 ? Math.round((approvedVerifications / totalVerifications) * 100) : 0,
         },
         categoryBreakdown,
         directionBreakdown: {

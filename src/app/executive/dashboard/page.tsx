@@ -188,27 +188,27 @@ export default function ExecutiveDashboardPage() {
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
         {/* Vice-Chancellor Executive Crest Banner */}
-        <div className="mb-8 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl p-6 sm:p-8 text-white shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border border-white/10">
+        <div className="mb-8 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl p-5 sm:p-8 text-white shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border border-white/10">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-xs font-semibold text-amber-300 border border-amber-500/30">
               <Landmark className="h-3.5 w-3.5" />
-              Office of the {isVC ? "Vice-Chancellor" : "Pro-Vice-Chancellor"} • High-Level Directorate
+              {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"} • Campus Housing Oversight
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Institutional Accommodation & Welfare Dashboard
+              Housing Oversight Executive Dashboard
             </h1>
             <p className="text-sm text-slate-300 max-w-2xl">
-              High-level strategic briefing on university housing capacity, student welfare dispute volumes, and institutional accreditation compliance.
+              Strategic intelligence on campus accommodation capacity, occupancy rates, tariff trends, and student dispute resolution across institutional zones.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={loadMetrics}
               disabled={loadingMetrics}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 w-full sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loadingMetrics ? "animate-spin" : ""}`} />
               Refresh Analytics
@@ -226,7 +226,7 @@ export default function ExecutiveDashboardPage() {
               <Building2 className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-extrabold text-foreground">{summary.totalHostels}</div>
+              <div className="text-2xl sm:text-3xl font-black text-foreground">{summary.totalHostels}</div>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 inline" />
                 {summary.verifiedHostels} fully accredited under university charter
@@ -242,7 +242,7 @@ export default function ExecutiveDashboardPage() {
               <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-extrabold text-blue-700">{summary.accommodatedStudents}</div>
+              <div className="text-2xl sm:text-3xl font-black text-blue-700">{summary.accommodatedStudents}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 Confirmed residential placements this academic year
               </p>
@@ -257,10 +257,16 @@ export default function ExecutiveDashboardPage() {
               <ShieldAlert className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-extrabold text-foreground">{summary.totalComplaints}</div>
-              <p className="text-xs text-emerald-600 font-semibold mt-1">
-                {summary.resolutionRate}% resolved by Dean Directorate
-              </p>
+              <div className="text-2xl sm:text-3xl font-black text-foreground">{summary.totalComplaints}</div>
+              {summary.totalComplaints === 0 ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Zero active disputes recorded
+                </p>
+              ) : (
+                <p className="text-xs text-emerald-600 font-semibold mt-1">
+                  {summary.resolutionRate}% resolved by Dean's Office
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -272,7 +278,7 @@ export default function ExecutiveDashboardPage() {
               <Award className="h-4 w-4 text-teal-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-extrabold text-emerald-600">{summary.verificationRate}%</div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-600">{summary.verificationRate}%</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {summary.approvedVerifications} verified student resident IDs
               </p>
@@ -299,20 +305,34 @@ export default function ExecutiveDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {categoryBreakdown.map((item, idx) => (
-                <div key={idx} className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-foreground">{item.category}</span>
-                    <span className="text-muted-foreground">
-                      {item.count} reports ({item.percentage}%)
-                    </span>
+              {categoryBreakdown.length === 0 || summary.totalComplaints === 0 ? (
+                <div className="py-10 text-center space-y-3">
+                  <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                    <BarChart3 className="h-6 w-6" />
                   </div>
-                  <Progress
-                    value={item.percentage}
-                    className="h-2 rounded-full bg-slate-100"
-                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">No complaints recorded yet</p>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                      Dispute categories and trend distributions will automatically populate here as student or management reports are filed.
+                    </p>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                categoryBreakdown.map((item, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-foreground">{item.category}</span>
+                      <span className="text-muted-foreground">
+                        {item.count} reports ({item.percentage}%)
+                      </span>
+                    </div>
+                    <Progress
+                      value={item.percentage}
+                      className="h-2 rounded-full bg-slate-100"
+                    />
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
@@ -360,37 +380,52 @@ export default function ExecutiveDashboardPage() {
               <div className="space-y-2 pt-2">
                 <div className="flex justify-between text-xs font-semibold">
                   <span className="text-muted-foreground">Resolution Efficiency</span>
-                  <span className="text-emerald-700 font-bold">{summary.resolutionRate}% Closed</span>
+                  {summary.totalComplaints === 0 ? (
+                    <span className="text-slate-500 font-semibold">No Disputes</span>
+                  ) : (
+                    <span className="text-emerald-700 font-bold">{summary.resolutionRate}% Closed</span>
+                  )}
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-3 flex overflow-hidden">
-                  <div
-                    style={{ width: `${summary.resolutionRate}%` }}
-                    className="bg-emerald-500 h-full"
-                    title={`Resolved: ${summary.resolvedComplaints}`}
-                  />
-                  <div
-                    style={{ width: `${100 - summary.resolutionRate}%` }}
-                    className="bg-amber-400 h-full"
-                    title={`Under Review / Submitted: ${summary.underReviewComplaints + summary.submittedComplaints}`}
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-                    {summary.resolvedComplaints} Resolved
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
-                    {summary.underReviewComplaints + summary.submittedComplaints} In Active Review
-                  </span>
-                </div>
+
+                {summary.totalComplaints === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-center space-y-1">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-700">No disputes recorded yet</p>
+                    <p className="text-[11px] text-muted-foreground">All hostels operating without active grievances.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-full bg-slate-100 rounded-full h-3 flex overflow-hidden">
+                      <div
+                        style={{ width: `${summary.resolutionRate}%` }}
+                        className="bg-emerald-500 h-full"
+                        title={`Resolved: ${summary.resolvedComplaints}`}
+                      />
+                      <div
+                        style={{ width: `${100 - summary.resolutionRate}%` }}
+                        className="bg-amber-400 h-full"
+                        title={`Under Review / Submitted: ${summary.underReviewComplaints + summary.submittedComplaints}`}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+                        {summary.resolvedComplaints} Resolved
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+                        {summary.underReviewComplaints + summary.submittedComplaints} In Active Review
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Institutional Governance Notice */}
-        <Card className="border-blue-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 p-6 rounded-2xl">
+        <Card className="border-blue-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 p-5 sm:p-6 rounded-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <ShieldCheck className="h-6 w-6 text-primary shrink-0 mt-0.5" />
