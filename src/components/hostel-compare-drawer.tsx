@@ -120,6 +120,12 @@ export function HostelCompareDrawer() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mt-2">
             {shortlist.map((hostel) => {
+              const cleanId = (hostel.originalId || hostel.id || "")
+                .replace(/^HOSTEL#/i, "")
+                .replace(/^PENDING_HOSTEL#/i, "")
+                .replace(/^HOSTEL#/i, "")
+                .replace(/^PENDING_HOSTEL#/i, "")
+                .trim();
               const minPrice = hostel.priceRange?.min || (hostel.roomTypes?.[0]?.price ?? 0);
               const maxPrice = hostel.priceRange?.max || minPrice;
 
@@ -248,7 +254,7 @@ export function HostelCompareDrawer() {
 
                   {/* Direct Action Button */}
                   <Button asChild className="w-full mt-auto rounded-2xl h-11 bg-primary text-white font-bold text-xs gap-2">
-                    <Link href={`/hostels/${hostel.id}`}>
+                    <Link href={`/hostels/${cleanId || hostel.id}`}>
                       View Details & Request Visit
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>

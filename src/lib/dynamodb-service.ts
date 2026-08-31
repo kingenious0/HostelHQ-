@@ -314,12 +314,28 @@ export async function deleteHostel(hostelId: string, isPending: boolean = false)
   await deleteItem(key.id, key.entityType);
 
   // Also delete associated rooms
-  const rooms = await getRoomsByHostelId(cleanId);
-  if (rooms.length > 0) {
-    const deleteKeys = rooms.map((r) =>
-      isPending ? formatKey.pendingRoom(cleanId, r.id!) : formatKey.room(cleanId, r.id!)
-    );
-    await batchWrite({ deleteKeys });
+  const targetEntityType = isPending ? "PENDING_ROOM" : "ROOM";
+  try {
+    const rooms = await scanEntities<any>({
+      entityType: targetEntityType,
+      filterExpression: "#parentId = :hostelId OR #hostelId = :hostelId",
+      expressionAttributeNames: {
+        "#parentId": "parentId",
+        "#hostelId": "hostelId",
+      },
+      expressionAttributeValues: {
+        ":hostelId": cleanId,
+      },
+    });
+    if (rooms.length > 0) {
+      const deleteKeys = rooms.map((r) => ({
+        id: r.id,
+        entityType: r.entityType || targetEntityType,
+      }));
+      await batchWrite({ deleteKeys });
+    }
+  } catch (err) {
+    console.warn("Room cleanup during hostel delete warning:", err);
   }
 
   return true;

@@ -129,7 +129,7 @@ export async function listBanks(country: string = 'ghana'): Promise<PaystackBank
 
         return json.data;
     } catch (error) {
-        handleNetworkError(error, "listing banks");
+        throw handleNetworkError(error, "listing banks");
     }
 }
 
@@ -152,7 +152,7 @@ export async function createTransferRecipient(payload: TransferRecipientPayload)
 
         return json.data;
     } catch (error) {
-        handleNetworkError(error, "creating transfer recipient");
+        throw handleNetworkError(error, "creating transfer recipient");
     }
 }
 
@@ -175,7 +175,7 @@ export async function initiateTransfer(payload: InitiateTransferPayload) {
 
         return json.data;
     } catch (error) {
-        handleNetworkError(error, "initiating transfer");
+        throw handleNetworkError(error, "initiating transfer");
     }
 }
 
@@ -198,7 +198,7 @@ export async function initiateBulkTransfer(payload: InitiateBulkTransferPayload)
 
         return json.data;
     } catch (error) {
-        handleNetworkError(error, "initiating bulk transfer");
+        throw handleNetworkError(error, "initiating bulk transfer");
     }
 }
 
@@ -221,6 +221,6 @@ export async function checkPaystackBalance() {
 
         return json.data; // Returns array of balances (different currencies)
     } catch (error) {
-        handleNetworkError(error, "checking balance");
+        throw handleNetworkError(error, "checking balance");
     }
 }

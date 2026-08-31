@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   fetchPendingHostelsAction,
@@ -253,6 +253,37 @@ export default function CoordinatorDashboardPage() {
       const res = await approvePendingHostelAction(hostel.id, coordName);
 
       if (res.success) {
+        // Also synchronize approval to Firestore
+        try {
+          const targetId = hostel.id.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+          const hostelRef = doc(db, "hostels", targetId);
+          await setDoc(
+            hostelRef,
+            {
+              ...hostel,
+              id: targetId,
+              status: "approved",
+              verified: true,
+              approvedAt: new Date().toISOString(),
+              approvedBy: coordName,
+            },
+            { merge: true }
+          );
+
+          // Also update matching requests in hostelRequests
+          const reqsQuery = query(collection(db, "hostelRequests"), where("hostelId", "==", targetId));
+          const reqsSnap = await getDocs(reqsQuery);
+          for (const reqDoc of reqsSnap.docs) {
+            await updateDoc(reqDoc.ref, {
+              status: "approved",
+              approvedAt: new Date().toISOString(),
+              approvedBy: coordName,
+            });
+          }
+        } catch (fErr) {
+          console.warn("Firestore sync during approval warning:", fErr);
+        }
+
         setPendingHostels((prev) => prev.filter((h) => h.id !== hostel.id));
         setApprovedHostels((prev) => [hostel, ...prev]);
         toast({
@@ -285,6 +316,33 @@ export default function CoordinatorDashboardPage() {
       const res = await rejectPendingHostelAction(hostelId, reason);
 
       if (res.success) {
+        // Also synchronize rejection to Firestore
+        try {
+          const targetId = hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+          const hostelRef = doc(db, "hostels", targetId);
+          await setDoc(
+            hostelRef,
+            {
+              status: "rejected",
+              rejectionReason: reason,
+              rejectedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+
+          const reqsQuery = query(collection(db, "hostelRequests"), where("hostelId", "==", targetId));
+          const reqsSnap = await getDocs(reqsQuery);
+          for (const reqDoc of reqsSnap.docs) {
+            await updateDoc(reqDoc.ref, {
+              status: "rejected",
+              rejectionReason: reason,
+              rejectedAt: new Date().toISOString(),
+            });
+          }
+        } catch (fErr) {
+          console.warn("Firestore sync during rejection warning:", fErr);
+        }
+
         setPendingHostels((prev) => prev.filter((h) => h.id !== hostelId));
         toast({
           title: "Hostel Registration Rejected",

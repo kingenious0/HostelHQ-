@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { uploadImage } from "@/lib/cloudinary";
 import { RoomType, Hostel } from "@/lib/data";
@@ -293,18 +293,16 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
     setIsEnhancing(true);
     try {
       const enhanced = await enhanceHostelDescription({
-        name: hostelName,
-        currentDescription: description,
-        amenities: selectedAmenities,
-        location: locationData.address || nearbyLandmarks,
-        roomTypes: roomTypes.map((rt) => ({
-          name: rt.name || "Standard Room",
-          price: rt.price || 0,
-        })),
+        photosDataUris: photoPreviews.length > 0 ? photoPreviews : [],
+        gpsLocation: locationData.lat && locationData.lng ? `${locationData.lat}, ${locationData.lng}` : "Near Campus",
+        nearbyLandmarks: nearbyLandmarks.trim() || locationData.address || "Near University Campus",
+        amenities: selectedAmenities.join(", "),
+        roomFeatures: roomTypes.map((rt) => `${rt.name} (GH₵${rt.price})`).join(", "),
+        currentDescription: description.trim() || `${hostelName} student accommodation.`,
       });
 
-      if (enhanced) {
-        setDescription(enhanced);
+      if (enhanced?.enhancedDescription) {
+        setDescription(enhanced.enhancedDescription);
         toast({
           title: "Description Enhanced",
           description: "AI polished your description for student appeal.",
@@ -455,8 +453,11 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       const maxPrice = Math.max(...roomTypes.map((r) => r.price || 0));
 
       const isPending = mode === "manager";
+      const hostelId = `hostel_${Date.now()}`;
 
       const hostelPayload: any = {
+        id: hostelId,
+        originalId: hostelId,
         name: hostelName.trim(),
         location: locationData.address || nearbyLandmarks,
         institution,
@@ -501,18 +502,29 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       // 2. Save directly to primary DynamoDB via Server Action
       await saveHostelAction(hostelPayload, isPending);
 
-      // 3. Sync to Firestore for real-time manager & admin UI listeners
-      const docRef = await addDoc(collection(db, "hostels"), {
+      // 3. Sync to Firestore with identical ID for real-time manager, admin & fallback listeners
+      await setDoc(doc(db, "hostels", hostelId), {
         ...hostelPayload,
         createdAt: serverTimestamp(),
       });
 
+      // Also persist roomTypes subcollection for Firestore fallback compatibility
+      if (Array.isArray(hostelPayload.roomTypes)) {
+        for (const rt of hostelPayload.roomTypes) {
+          try {
+            await setDoc(doc(db, "hostels", hostelId, "roomTypes", rt.id), rt);
+          } catch (rtErr) {
+            console.warn("Subcollection room write warning:", rtErr);
+          }
+        }
+      }
+
       // If manager mode, also log a hostel request entry for tracking
       if (mode === "manager") {
         await addDoc(collection(db, "hostelRequests"), {
-          hostelId: docRef.id,
+          hostelId: hostelId,
           hostelName: hostelName.trim(),
-          location: locationData.address,
+          location: locationData.address || nearbyLandmarks,
           managerId: currentUser.uid,
           managerEmail: currentUser.email,
           status: "pending",

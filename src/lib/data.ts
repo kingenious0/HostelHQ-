@@ -377,14 +377,31 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
     // 2. SECONDARY: Firestore Backup / Fallback
     try {
-        const hostelDocRef = doc(db, 'hostels', cleanId);
-        const hostelDoc = await getDoc(hostelDocRef);
+        let hostelDoc = await getDoc(doc(db, 'hostels', cleanId));
+        let resolvedDocId = cleanId;
+
+        if (!hostelDoc.exists()) {
+            // Also try searching for documents where id or originalId equals cleanId
+            const idQuery = query(collection(db, 'hostels'), where('id', '==', cleanId));
+            const idSnap = await getDocs(idQuery);
+            if (!idSnap.empty) {
+                hostelDoc = idSnap.docs[0];
+                resolvedDocId = hostelDoc.id;
+            } else {
+                const origQuery = query(collection(db, 'hostels'), where('originalId', '==', cleanId));
+                const origSnap = await getDocs(origQuery);
+                if (!origSnap.empty) {
+                    hostelDoc = origSnap.docs[0];
+                    resolvedDocId = hostelDoc.id;
+                }
+            }
+        }
 
         if (hostelDoc.exists()) {
             const data = hostelDoc.data();
             
             // Fetch room types from subcollection
-            const roomTypesCollectionRef = collection(db, 'hostels', hostelId, 'roomTypes');
+            const roomTypesCollectionRef = collection(db, 'hostels', resolvedDocId, 'roomTypes');
             const roomTypesSnapshot = await getDocs(roomTypesCollectionRef);
             let roomTypes = roomTypesSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as RoomType));
 
@@ -393,7 +410,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             }
 
             // Fetch physical numbered rooms from subcollection (if any)
-            const roomsCollectionRef = collection(db, 'hostels', hostelId, 'rooms');
+            const roomsCollectionRef = collection(db, 'hostels', resolvedDocId, 'rooms');
             const roomsSnapshot = await getDocs(roomsCollectionRef);
             const rooms = roomsSnapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as Room));
             
@@ -402,7 +419,7 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
             try {
                 const reviewsQuery = query(
                     collection(db, 'reviews'), 
-                    where('hostelId', '==', hostelId),
+                    where('hostelId', '==', cleanId),
                     orderBy('createdAt', 'desc')
                 );
                 const reviewsSnapshot = await getDocs(reviewsQuery);
@@ -435,7 +452,8 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
                 : (typeof data.coordinates?.lng === 'number' ? data.coordinates.lng : null);
             
             return convertTimestamps({ 
-                id: hostelDoc.id, 
+                id: cleanId, 
+                originalId: cleanId,
                 ...data, 
                 roomTypes,
                 rooms,
@@ -451,8 +469,8 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
         console.error("Error fetching hostel from firestore: ", e);
     }
 
-    console.log("Falling back to static hostel data for hostelId: ", hostelId);
-    const staticHostel = staticHostels.find(h => h.id === hostelId);
+    console.log("Falling back to static hostel data for hostelId: ", cleanId);
+    const staticHostel = staticHostels.find(h => h.id === cleanId || h.id === hostelId);
     if (staticHostel) {
         return { ...staticHostel, numberOfReviews: 0, reviews: [] };
     }

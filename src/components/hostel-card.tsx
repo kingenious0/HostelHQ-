@@ -52,8 +52,14 @@ const deriveCapacityFromName = (name?: string) => {
 
 export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const cleanId = (hostel.originalId || hostel.id || "")
+    .replace(/^HOSTEL#/i, "")
+    .replace(/^PENDING_HOSTEL#/i, "")
+    .replace(/^HOSTEL#/i, "")
+    .replace(/^PENDING_HOSTEL#/i, "")
+    .trim();
   const { isShortlisted, toggleShortlist } = useShortlist();
-  const shortlisted = isShortlisted(hostel.id);
+  const shortlisted = isShortlisted(cleanId || hostel.id);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -203,7 +209,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
           </div>
 
           {/* Hostel Name */}
-          <Link href={`/hostels/${hostel.id}`} className="block">
+          <Link href={`/hostels/${cleanId}`} className="block">
             <CardTitle className="text-xl font-headline font-extrabold text-foreground mb-1 leading-snug group-hover:text-primary transition-colors line-clamp-1">
               {hostel.name}
             </CardTitle>
@@ -251,7 +257,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
             </div>
 
             <Button asChild size="sm" className="rounded-xl h-10 px-4 font-bold bg-primary text-white hover:bg-primary/90 text-xs shadow-sm gap-1">
-              <Link href={`/hostels/${hostel.id}`}>
+              <Link href={`/hostels/${cleanId}`}>
                 View Details
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
