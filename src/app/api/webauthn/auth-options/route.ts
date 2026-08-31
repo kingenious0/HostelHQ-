@@ -69,10 +69,21 @@ export async function POST(req: NextRequest) {
 
     const options = await generateAuthenticationOptions(opts);
 
-    return NextResponse.json({
+    const { signWebAuthnChallenge } = await import('@/lib/auth-tokens');
+    const response = NextResponse.json({
       success: true,
       options,
     });
+
+    response.cookies.set('webauthn_auth_challenge', signWebAuthnChallenge(options.challenge, 'auth'), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 300,
+    });
+
+    return response;
   } catch (error: any) {
     console.error('WebAuthn authentication options error:', error);
     return NextResponse.json(

@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
+import { verifyPasswordResetToken } from '@/lib/auth-tokens';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, newPassword } = await req.json();
+    const { userId, newPassword, resetToken } = await req.json();
 
     if (!userId || !newPassword) {
       return NextResponse.json(
         { success: false, error: 'User ID and new password are required' },
         { status: 400 }
+      );
+    }
+
+    if (!resetToken) {
+      return NextResponse.json(
+        { success: false, error: 'Authorization error: Password reset token is missing' },
+        { status: 401 }
+      );
+    }
+
+    // Cryptographically verify that the resetToken is valid, unexpired, and issued for this user
+    const tokenVerification = verifyPasswordResetToken(resetToken, userId);
+    if (!tokenVerification.valid) {
+      return NextResponse.json(
+        { success: false, error: tokenVerification.error || 'Invalid or expired password reset token. Please request a new OTP.' },
+        { status: 403 }
       );
     }
 

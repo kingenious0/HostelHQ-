@@ -1,14 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Ably from 'ably';
+import { getAuthenticatedUser } from '@/lib/auth-guard';
 
 export async function GET(req: NextRequest) {
   const ablyApiKey = process.env.ABLY_SERVER_KEY;
-  // IMPORTANT: The Ably library on the client will send the clientId it was configured with.
-  // We MUST use this clientId to generate the token.
-  const url = new URL(req.url);
-  const clientId = url.searchParams.get('clientId') || 'anonymous';
-
 
   if (!ablyApiKey) {
     return NextResponse.json(
@@ -22,12 +18,32 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Derive client identity from verified session rather than client-supplied param
+  const user = await getAuthenticatedUser(req);
+  const clientId = user ? user.uid : 'anonymous';
+
+  // Determine scoped capabilities
+  let capability: Record<string, string[]>;
+  if (user?.role === 'admin') {
+    capability = { '*': ['subscribe', 'publish', 'presence', 'history'] };
+  } else if (user) {
+    capability = {
+      [`user:${user.uid}:*`]: ['subscribe', 'publish', 'presence'],
+      'public:*': ['subscribe', 'presence'],
+      'notifications:*': ['subscribe'],
+    };
+  } else {
+    // Unauthenticated anonymous visitors can only subscribe to public updates
+    capability = {
+      'public:*': ['subscribe'],
+    };
+  }
+
   // Instantiate the client *inside* the handler for serverless environments.
   const client = new Ably.Rest(ablyApiKey);
   const tokenRequestData = await client.auth.createTokenRequest({ 
-    clientId: clientId,
-    // Add capabilities for the client
-    capability: { '*': ['subscribe', 'publish', 'presence', 'history'] }
+    clientId,
+    capability,
   });
 
   return NextResponse.json(tokenRequestData);

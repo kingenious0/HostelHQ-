@@ -201,6 +201,8 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
+import { requireAuth } from "@/lib/auth-guard";
+
 /**
  * Verify Paystack Transaction and Process Booking (Securely on Server)
  * - Verifies transaction with Paystack
@@ -213,6 +215,12 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
     if (!secretKey) return { success: false, message: "Server misconfiguration" };
 
     try {
+        // 0. Enforce Server-Side Caller Authorization
+        const caller = await requireAuth();
+        if (caller.uid !== studentId && caller.role !== 'admin') {
+            return { success: false, message: "Forbidden: You can only confirm bookings for your own account." };
+        }
+
         // 1. Verify Transaction
         const verifyResponse = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
             headers: { Authorization: `Bearer ${secretKey}` }
@@ -220,12 +228,24 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
         const verifyData = await verifyResponse.json();
 
         if (!verifyData.status || verifyData.data.status !== 'success') {
-            return { success: false, message: "Payment verification failed." };
+            return { success: false, message: "Payment verification failed or transaction not successful." };
+        }
+
+        // Verify transaction metadata to ensure payment wasn't created for a different hostel
+        const metadata = verifyData.data.metadata || {};
+        if (metadata.hostel_id && metadata.hostel_id !== hostelId) {
+            return { success: false, message: "Security error: Payment was not initialized for this hostel." };
+        }
+        if (metadata.student_id && metadata.student_id !== studentId && caller.role !== 'admin') {
+            return { success: false, message: "Security error: Payment was initialized for a different student." };
         }
 
         const amountPaid = verifyData.data.amount; // In Pesewas
+        if (!amountPaid || amountPaid <= 0) {
+            return { success: false, message: "Invalid payment amount received." };
+        }
 
-        // 2. Check if booking already exists for this reference
+        // 2. Check if booking already exists for this reference (Idempotency Check)
         const bookingQuery = await adminDb.collection('bookings')
             .where('paymentReference', '==', reference)
             .get();

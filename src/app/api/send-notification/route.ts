@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { getMessaging } from 'firebase-admin/messaging';
+import { requireAuth } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ interface NotificationPayload {
 
 export async function POST(request: NextRequest) {
   try {
+    const caller = await requireAuth(request);
     const payload: NotificationPayload = await request.json();
     
     const { userId, title, body, url, icon, tag } = payload;
@@ -23,6 +25,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields: userId, title, body' },
         { status: 400 }
+      );
+    }
+
+    if (
+      caller.uid !== userId &&
+      !['admin', 'manager', 'dean', 'coordinator', 'executive'].includes(caller.role || '')
+    ) {
+      return NextResponse.json(
+        { error: 'Unauthorized: You do not have permission to send notifications to this user.' },
+        { status: 403 }
       );
     }
 

@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase';
 import { adminAuth } from '@/lib/firebase-admin';
 import { collection, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
 import { verifyOTP, formatPhoneNumber } from '@/lib/wigal';
+import { generatePasswordResetToken } from '@/lib/auth-tokens';
 
 export async function POST(req: NextRequest) {
   try {
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Find corresponding user in Firestore if they exist
     let customToken: string | null = null;
+    let resetToken: string | null = null;
     let userProfile: any = null;
 
     try {
@@ -101,6 +103,9 @@ export async function POST(req: NextRequest) {
         customToken = await adminAuth.createCustomToken(userDoc.id, {
           role: userData.role || 'student',
         });
+
+        // Generate signed password reset token valid for 15 minutes
+        resetToken = generatePasswordResetToken(userDoc.id, formattedPhone);
       }
     } catch (authError) {
       console.error('Error generating custom token in verify-otp:', authError);
@@ -110,6 +115,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: 'OTP verified successfully',
       customToken,
+      resetToken,
       user: userProfile,
     });
   } catch (error: any) {

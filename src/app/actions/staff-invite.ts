@@ -23,6 +23,8 @@ import {
   ALLOWED_STAFF_ROLES,
 } from "@/lib/staff";
 
+import { requireRole } from "@/lib/auth-guard";
+
 /**
  * Generate a new role-locked, time-limited (24 hours) staff invitation link.
  * Initiated strictly by an authenticated administrator.
@@ -35,7 +37,10 @@ export async function createStaffInviteAction(params: {
   baseUrl?: string;
 }) {
   try {
-    const { role, adminName = "System Administrator", adminUid, baseUrl } = params;
+    const admin = await requireRole(['admin']);
+    const { role, baseUrl } = params;
+    const adminName = admin.fullName || "System Administrator";
+    const adminUid = admin.uid;
 
     if (!ALLOWED_STAFF_ROLES.includes(role)) {
       return { success: false, error: `Invalid role selected: ${role}` };
@@ -298,12 +303,14 @@ export async function completeStaffRegistrationAction(params: {
  */
 export async function revokeStaffInviteAction(token: string, adminName: string = "System Administrator") {
   try {
+    const admin = await requireRole(['admin']);
     if (!token) return { success: false, error: "Token required" };
     const cleanToken = token.trim();
+    const effectiveAdminName = admin.fullName || adminName;
     const updates = {
       revoked: true,
       revokedAt: new Date().toISOString(),
-      revokedBy: adminName,
+      revokedBy: effectiveAdminName,
     };
 
     let adminSaved = false;
@@ -332,6 +339,7 @@ export async function revokeStaffInviteAction(token: string, adminName: string =
  */
 export async function fetchStaffInvitesAction(): Promise<{ success: boolean; data: StaffInvite[]; error?: string }> {
   try {
+    await requireRole(['admin']);
     let invites: StaffInvite[] = [];
 
     if (isFirebaseAdminConfigured()) {

@@ -1,13 +1,22 @@
 'use server';
 
 import { sendSMS as wigalSendSMS } from '@/lib/wigal';
+import { requireAuth, requireRole } from '@/lib/auth-guard';
 
 /**
  * Server Action to send an SMS via Wigal.
- * This keeps the Node.js modules (dns, etc.) on the server side.
+ * Secured: Requires authenticated session.
  */
 export async function sendSMS(phoneNumber: string, message: string) {
     try {
+        const caller = await requireAuth();
+        if (caller.role !== 'admin') {
+            const callerPhone = caller.phone ? caller.phone.replace(/[^0-9]/g, '') : '';
+            const destPhone = phoneNumber.replace(/[^0-9]/g, '');
+            if (callerPhone && !destPhone.endsWith(callerPhone.slice(-9))) {
+                throw new Error('Unauthorized: You can only dispatch notifications to your verified phone number.');
+            }
+        }
         return await wigalSendSMS(phoneNumber, message);
     } catch (error: any) {
         console.error('Error in sendSMS server action:', error);
@@ -23,13 +32,10 @@ export async function sendSMS(phoneNumber: string, message: string) {
  * We call wait for the response from the API or call wigal directly.
  */
 export async function notifyAdminsOfNewHostelSubmission(hostelName: string, submittedBy: string) {
-    // Since this is a server action, we can just call the wigal library
-    // But to stay consistent with existing logic, we'll use a message template
-    const message = `🏠 HOSTELHQ: New hostel submission alert!\n\nHostel: ${hostelName}\nSubmitted by: ${submittedBy}\nAction required: Please review and approve/reject in admin dashboard.\n\nLogin: https://hostel-hq.vercel.app/admin/dashboard`;
-
     try {
-        // We'll need to get admin phones. Usually better to do this in a lib,
-        // but we can import from firebase here.
+        await requireRole(['manager', 'admin']);
+        const message = `🏠 HOSTELHQ: New hostel submission alert!\n\nHostel: ${hostelName}\nSubmitted by: ${submittedBy}\nAction required: Please review and approve/reject in admin dashboard.\n\nLogin: https://hostel-hq.vercel.app/admin/dashboard`;
+
         const { db } = await import('@/lib/firebase');
         const { collection, query, where, getDocs } = await import('firebase/firestore');
 
@@ -64,20 +70,21 @@ export async function notifyCreatorOfHostelStatus(
     status: 'approved' | 'rejected',
     reason?: string
 ) {
-    const statusText = status === 'approved' ? '✅ APPROVED' : '❌ REJECTED';
-    const actionText = status === 'approved' ? 'is now live on the platform' : 'was not approved';
-
-    let message = `🏠 HOSTELHQ: Your hostel status update\n\nHostel: ${hostelName}\nStatus: ${statusText}\nYour hostel ${actionText}`;
-
-    if (status === 'rejected' && reason) {
-        message += `\n\nReason: ${reason}`;
-    }
-
-    if (status === 'approved') {
-        message += `\n\nStudents can now book visits and secure rooms at your hostel!`;
-    }
-
     try {
+        await requireRole(['admin', 'dean', 'coordinator']);
+        const statusText = status === 'approved' ? '✅ APPROVED' : '❌ REJECTED';
+        const actionText = status === 'approved' ? 'is now live on the platform' : 'was not approved';
+
+        let message = `🏠 HOSTELHQ: Your hostel status update\n\nHostel: ${hostelName}\nStatus: ${statusText}\nYour hostel ${actionText}`;
+
+        if (status === 'rejected' && reason) {
+            message += `\n\nReason: ${reason}`;
+        }
+
+        if (status === 'approved') {
+            message += `\n\nStudents can now book visits and secure rooms at your hostel!`;
+        }
+
         return await wigalSendSMS(creatorPhone, message);
     } catch (error: any) {
         console.error('Error notifying creator:', error);

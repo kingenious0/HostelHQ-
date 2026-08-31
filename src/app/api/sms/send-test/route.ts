@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth-guard';
 
 export async function POST(request: NextRequest) {
+  try {
+    await requireRole(['admin'], request);
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   try {
     const { phone, message, adminName } = await request.json();
 

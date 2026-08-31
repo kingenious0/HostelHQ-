@@ -55,13 +55,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const expectedChallenge = credential.response.clientDataJSON 
-      ? JSON.parse(atob(credential.response.clientDataJSON)).challenge
-      : null;
+    // Verify challenge from the server-signed HttpOnly cookie
+    const { verifyWebAuthnChallenge } = await import('@/lib/auth-tokens');
+    const cookieVal = req.cookies.get('webauthn_auth_challenge')?.value;
+    const expectedChallenge = cookieVal ? verifyWebAuthnChallenge(cookieVal, 'auth') : null;
 
     if (!expectedChallenge) {
       return NextResponse.json(
-        { success: false, error: 'Invalid challenge' },
+        { success: false, error: 'Authentication challenge expired or invalid. Please retry.' },
         { status: 400 }
       );
     }
@@ -85,10 +86,12 @@ export async function POST(req: NextRequest) {
         lastBiometricAuth: new Date().toISOString(),
       });
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         verified: true,
       });
+      res.cookies.set('webauthn_auth_challenge', '', { maxAge: 0, path: '/' });
+      return res;
     } else {
       return NextResponse.json(
         { success: false, verified: false, error: 'Authentication failed' },

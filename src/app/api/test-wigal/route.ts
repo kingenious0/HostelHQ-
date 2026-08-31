@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth-guard';
 
 /**
  * Test route to verify Wigal API configuration
@@ -6,9 +7,18 @@ import { NextRequest, NextResponse } from 'next/server';
  * 
  * Usage: GET /api/test-wigal
  * 
- * Note: This is for development/testing only. Remove or secure this route in production.
+ * Note: Restricted to admin role only.
  */
 export async function GET(req: NextRequest) {
+  try {
+    await requireRole(['admin'], req);
+  } catch {
+    return NextResponse.json(
+      { error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   // Security check - only allow in development
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json(

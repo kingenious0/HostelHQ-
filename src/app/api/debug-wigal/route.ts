@@ -1,6 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth-guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  try {
+    await requireRole(['admin'], req);
+  } catch {
+    return NextResponse.json(
+      { error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   return NextResponse.json({
     wigalApiKey: !!process.env.WIGAL_API_KEY,
     wigalUsername: !!process.env.WIGAL_USERNAME,

@@ -29,16 +29,18 @@ export async function POST(request: Request) {
       `Email: ${email || 'N/A'}`,
       `Phone: ${phone || 'N/A'}`,
       `Topic: ${topic || 'N/A'}`,
-      '',
       'Message:',
       message || 'N/A',
     ];
 
-    const safeFullName = fullName || 'N/A';
-    const safeEmail = email || 'N/A';
-    const safePhone = phone || 'N/A';
-    const safeTopic = topic || 'N/A';
-    const safeMessage = message || 'N/A';
+    const escapeHtml = (str: string) =>
+      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+    const safeFullName = escapeHtml(fullName || 'N/A');
+    const safeEmail = escapeHtml(email || 'N/A');
+    const safePhone = escapeHtml(phone || 'N/A');
+    const safeTopic = escapeHtml(topic || 'N/A');
+    const safeMessage = escapeHtml(message || 'N/A');
 
     const html = `
       <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: #f5f3f7; padding: 24px;">

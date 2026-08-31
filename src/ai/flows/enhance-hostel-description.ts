@@ -38,9 +38,12 @@ export type EnhanceHostelDescriptionOutput = z.infer<
   typeof EnhanceHostelDescriptionOutputSchema
 >;
 
+import { requireRole } from '@/lib/auth-guard';
+
 export async function enhanceHostelDescription(
   input: EnhanceHostelDescriptionInput
 ): Promise<EnhanceHostelDescriptionOutput> {
+  await requireRole(['manager', 'admin']);
   return enhanceHostelDescriptionFlow(input);
 }
 

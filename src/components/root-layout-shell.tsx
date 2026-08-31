@@ -43,12 +43,33 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     FOOTER_HIDDEN_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
     isRoomDetailsPage;
 
-  // Track user authentication status
+  // Track user authentication status and synchronize session cookie for server-side authorization
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsLoggedIn(!!user);
+    // Import onIdTokenChanged dynamically or from firebase/auth
+    let unsubToken: (() => void) | undefined;
+    import("firebase/auth").then(({ onIdTokenChanged }) => {
+      unsubToken = onIdTokenChanged(auth, async (user: any) => {
+        setIsLoggedIn(!!user);
+        if (typeof document !== "undefined") {
+          const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+          const secureFlag = isHttps ? "; Secure" : "";
+          if (user) {
+            try {
+              const token = await user.getIdToken();
+              document.cookie = `__session=${encodeURIComponent(token)}; path=/; max-age=3600; SameSite=Lax${secureFlag}`;
+            } catch (tokenErr) {
+              console.warn("Failed to retrieve ID token:", tokenErr);
+            }
+          } else {
+            document.cookie = `__session=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
+          }
+        }
+      });
     });
-    return () => unsubscribe();
+
+    return () => {
+      if (unsubToken) unsubToken();
+    };
   }, []);
 
   return (

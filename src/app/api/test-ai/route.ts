@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth-guard';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  try {
+    await requireRole(['admin'], request);
+  } catch {
+    return NextResponse.json(
+      { error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   try {
     // Test basic Genkit import
     const { ai } = await import('@/ai/genkit');
@@ -26,6 +36,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    await requireRole(['admin'], request);
+  } catch {
+    return NextResponse.json(
+      { error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await request.json();
     

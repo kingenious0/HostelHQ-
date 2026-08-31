@@ -26,6 +26,7 @@ export default function ForgotPasswordPage() {
     const [resendCooldown, setResendCooldown] = useState(0);
     const [userId, setUserId] = useState('');
     const [authEmail, setAuthEmail] = useState('');
+    const [resetToken, setResetToken] = useState('');
     const { toast } = useToast();
     const router = useRouter();
 
@@ -56,7 +57,7 @@ export default function ForgotPasswordPage() {
                 setAuthEmail(data.authEmail);
                 setStep('otp');
                 setResendCooldown(60);
-                toast({ title: "OTP Sent", description: "Check your phone for the verification code." });
+                toast({ title: "Code Sent", description: "A 6-digit verification code was sent to your phone." });
 
                 const timer = setInterval(() => {
                     setResendCooldown((prev) => {
@@ -68,10 +69,10 @@ export default function ForgotPasswordPage() {
                     });
                 }, 1000);
             } else {
-                toast({ title: "Error", description: data.error || "Failed to send OTP.", variant: "destructive" });
+                toast({ title: "Error", description: data.error || "Failed to send reset code.", variant: "destructive" });
             }
         } catch (error: any) {
-            toast({ title: "Error", description: "Network error. Please try again.", variant: "destructive" });
+            toast({ title: "Error", description: "Failed to connect to service.", variant: "destructive" });
         } finally {
             setIsLoading(false);
         }
@@ -95,6 +96,9 @@ export default function ForgotPasswordPage() {
             const data = await response.json();
 
             if (data.success) {
+                if (data.resetToken) {
+                    setResetToken(data.resetToken);
+                }
                 setStep('newPassword');
                 toast({ title: "Verified", description: "OTP verified successfully!" });
             } else {
@@ -123,7 +127,7 @@ export default function ForgotPasswordPage() {
             const response = await fetch('/api/auth/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, newPassword }),
+                body: JSON.stringify({ userId, newPassword, resetToken }),
             });
 
             const data = await response.json();

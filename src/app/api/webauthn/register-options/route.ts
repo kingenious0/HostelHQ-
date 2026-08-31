@@ -70,10 +70,21 @@ export async function POST(req: NextRequest) {
 
     const options = await generateRegistrationOptions(opts);
     
-    return NextResponse.json({
+    const { signWebAuthnChallenge } = await import('@/lib/auth-tokens');
+    const response = NextResponse.json({
       success: true,
       options,
     });
+
+    response.cookies.set('webauthn_reg_challenge', signWebAuthnChallenge(options.challenge, 'register'), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 300,
+    });
+
+    return response;
   } catch (error: any) {
     console.error('WebAuthn registration options error:', error);
     return NextResponse.json(

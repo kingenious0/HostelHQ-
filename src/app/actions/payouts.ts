@@ -11,6 +11,8 @@ import {
 import { doc, getDoc, updateDoc, addDoc, collection, query, where, getDocs, Timestamp, runTransaction, writeBatch, setDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
+import { requireAuth, requireRole } from "@/lib/auth-guard";
+
 // TYPES
 
 export type PayoutRequest = {
@@ -37,6 +39,11 @@ export type PayoutRequest = {
  */
 export async function registerPaystackRecipient(userId: string, name: string, accountNumber: string, bankCode: string) {
     try {
+        const caller = await requireAuth();
+        if (caller.uid !== userId && caller.role !== 'admin') {
+            return { success: false, message: "Forbidden: Cannot register payout details for another user." };
+        }
+
         // 1. Create Recipient on Paystack
         const recipientData = await createTransferRecipient({
             type: 'mobile_money',
@@ -71,6 +78,11 @@ export async function registerPaystackRecipient(userId: string, name: string, ac
  */
 export async function getUserWalletBalance(userId: string) {
     try {
+        const caller = await requireAuth();
+        if (caller.uid !== userId && caller.role !== 'admin') {
+            return { balance: 0, currency: 'GHS', error: "Forbidden: Cannot access another user's wallet balance." };
+        }
+
         const userRef = doc(db, 'users', userId);
         const userSnap = await getDoc(userRef);
 
@@ -112,6 +124,7 @@ export async function getSystemSettings() {
 
 export async function setPayoutAutoApprove(enabled: boolean) {
     try {
+        await requireRole(['admin']);
         const docRef = doc(db, 'system_settings', 'payouts');
         await setDoc(docRef, { autoApprove: enabled }, { merge: true });
         revalidatePath('/admin/payouts');
@@ -129,6 +142,14 @@ export async function setPayoutAutoApprove(enabled: boolean) {
  */
 export async function requestWithdrawal(userId: string, amount: number, paymentDetails?: { network: string, number: string }) {
     try {
+        const caller = await requireAuth();
+        if (caller.uid !== userId && caller.role !== 'admin') {
+            return { success: false, message: "Forbidden: Cannot request withdrawal for another user." };
+        }
+        if (!['manager', 'admin'].includes(caller.role)) {
+            return { success: false, message: "Forbidden: Only hostel managers or administrators can request payouts." };
+        }
+
         // 1. Check Auto-Approve Setting
         const settings = await getSystemSettings();
         const autoApprove = settings?.autoApprove || false;
@@ -284,6 +305,7 @@ export async function requestWithdrawal(userId: string, amount: number, paymentD
  */
 export async function getPendingWithdrawals() {
     try {
+        await requireRole(['admin']);
         const q = query(
             collection(db, 'payout_requests'),
             where('status', '==', 'pending')
@@ -301,6 +323,7 @@ export async function getPendingWithdrawals() {
  */
 export async function processWithdrawalAction(requestId: string) {
     try {
+        await requireRole(['admin']);
         // 1. Fetch Request
         const requestRef = doc(db, 'payout_requests', requestId);
         const requestSnap = await getDoc(requestRef);
@@ -354,6 +377,7 @@ export async function processWithdrawalAction(requestId: string) {
  */
 export async function rejectWithdrawalAction(requestId: string, reason: string) {
     try {
+        await requireRole(['admin']);
         await runTransaction(db, async (transaction) => {
             const requestRef = doc(db, 'payout_requests', requestId);
             const requestDoc = await transaction.get(requestRef);
@@ -396,6 +420,7 @@ export async function rejectWithdrawalAction(requestId: string, reason: string) 
  */
 export async function processBulkWithdrawalAction(requestIds: string[]) {
     try {
+        await requireRole(['admin']);
         if (!requestIds.length) return { success: false, message: "No requests selected" };
 
         const validRequestIds = [];
@@ -489,6 +514,7 @@ export async function processBulkWithdrawalAction(requestIds: string[]) {
  */
 export async function getAdminPaystackBalance() {
     try {
+        await requireRole(['admin']);
         const balances = await checkPaystackBalance();
         const ghsBalance = balances.find((b: any) => b.currency === 'GHS');
         return {
@@ -508,6 +534,7 @@ export async function getAdminPaystackBalance() {
  */
 export async function processAdminWithdrawal(amount: number, paymentDetails: { network: string, number: string }) {
     try {
+        await requireRole(['admin']);
         // 1. Validate Input
         if (amount <= 0) throw new Error("Invalid amount");
         if (!paymentDetails.number || !paymentDetails.network) throw new Error("Missing payment details");

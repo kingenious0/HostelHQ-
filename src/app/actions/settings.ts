@@ -4,6 +4,8 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { revalidatePath } from "next/cache";
 
+import { requireRole } from "@/lib/auth-guard";
+
 export type PaystackSettings = {
     mode: 'test' | 'live';
     testPublicKey: string;
@@ -14,6 +16,7 @@ export type PaystackSettings = {
 
 export async function getPaystackSettings(): Promise<PaystackSettings | null> {
     try {
+        await requireRole(['admin']);
         const doc = await adminDb.collection('system_settings').doc('paystack').get();
         if (doc.exists) {
             return doc.data() as PaystackSettings;
@@ -27,6 +30,7 @@ export async function getPaystackSettings(): Promise<PaystackSettings | null> {
 
 export async function updatePaystackSettings(settings: PaystackSettings) {
     try {
+        await requireRole(['admin']);
         await adminDb.collection('system_settings').doc('paystack').set({
             ...settings,
             updatedAt: new Date().toISOString()

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth-guard';
 
 export async function POST(request: NextRequest) {
+  try {
+    await requireAuth(request);
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized: Authentication required.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { to, message, type } = await request.json();
 

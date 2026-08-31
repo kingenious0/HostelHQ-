@@ -62,15 +62,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Extract challenge from the credential response
-    // During signup, user might not exist in Firestore yet, so we get challenge from the credential
-    const expectedChallenge = credential.response.clientDataJSON 
-      ? JSON.parse(atob(credential.response.clientDataJSON)).challenge
-      : null;
+    // Verify challenge from the server-signed HttpOnly cookie
+    const { verifyWebAuthnChallenge } = await import('@/lib/auth-tokens');
+    const cookieVal = req.cookies.get('webauthn_reg_challenge')?.value;
+    const expectedChallenge = cookieVal ? verifyWebAuthnChallenge(cookieVal, 'register') : null;
 
     if (!expectedChallenge) {
       return NextResponse.json(
-        { success: false, error: 'Invalid challenge' },
+        { success: false, error: 'Registration challenge expired or invalid. Please retry.' },
         { status: 400 }
       );
     }
@@ -119,21 +118,23 @@ export async function POST(req: NextRequest) {
         if (existing.exists()) {
           await updateDoc(userRef, {
             biometricCredential,
-            biometricSetupDate: new Date().toISOString(),
-            hasBiometric: true,
+            biometricCredentialId: biometricCredential.id,
+            biometricCredentialData: biometricCredential,
+            hasBiometricAuth: true,
+            updatedAt: new Date().toISOString(),
           });
-        } else {
-          console.log('User doc does not exist yet; client will attach credential during signup:', userId);
         }
-      } catch (checkError) {
-        console.warn('Skipping immediate user update; will attach during signup. Reason:', checkError);
+      } catch (dbError) {
+        console.warn('Could not update user document with biometric credential:', dbError);
       }
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         verified: true,
         credential: biometricCredential,
       });
+      res.cookies.set('webauthn_reg_challenge', '', { maxAge: 0, path: '/' });
+      return res;
     } else {
       console.error('WebAuthn verification failed:', {
         verified: verification.verified,

@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth-guard';
 
 /**
  * Debug route to check if environment variables are loaded
- * This helps identify if env vars are accessible in the API route context
- * 
- * Usage: GET /api/debug-env
- * 
- * Note: Only use this in development. Remove in production or add authentication.
+ * Restricted to authenticated Admins only.
  */
 export async function GET(req: NextRequest) {
+  try {
+    await requireRole(['admin'], req);
+  } catch {
+    return NextResponse.json(
+      { error: 'Unauthorized: Admin access required.' },
+      { status: 403 }
+    );
+  }
+
   // Only allow in development
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json(

@@ -4,6 +4,7 @@ import * as dynamoService from "@/lib/dynamodb-service";
 import * as dynamoCore from "@/lib/dynamodb";
 import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
 import { db } from "@/lib/firebase";
+import { requireAuth, requireRole } from "@/lib/auth-guard";
 import {
   collection,
   doc,
@@ -49,6 +50,10 @@ export async function fetchHostelByIdAction(hostelId: string) {
 
 export async function saveHostelAction(hostelData: Omit<Hostel, "reviews"> & { id?: string }, isPending: boolean = false) {
   try {
+    const caller = await requireRole(["manager", "admin"]);
+    if (caller.role === "manager") {
+      (hostelData as any).managerId = caller.uid;
+    }
     const saved = await dynamoService.saveHostel(hostelData, isPending);
     return { success: true, data: saved };
   } catch (error: any) {
@@ -59,6 +64,13 @@ export async function saveHostelAction(hostelData: Omit<Hostel, "reviews"> & { i
 
 export async function updateHostelAction(hostelId: string, updates: Partial<Hostel>, isPending: boolean = false) {
   try {
+    const caller = await requireAuth();
+    if (caller.role !== "admin") {
+      const existing = await dynamoService.getHostelById(hostelId);
+      if (!existing || existing.managerId !== caller.uid) {
+        throw new Error("Unauthorized: You do not have permission to update this hostel.");
+      }
+    }
     const updated = await dynamoService.updateHostel(hostelId, updates, isPending);
     return { success: true, data: updated };
   } catch (error: any) {
@@ -69,6 +81,13 @@ export async function updateHostelAction(hostelId: string, updates: Partial<Host
 
 export async function deleteHostelAction(hostelId: string, isPending: boolean = false) {
   try {
+    const caller = await requireAuth();
+    if (caller.role !== "admin") {
+      const existing = await dynamoService.getHostelById(hostelId);
+      if (!existing || existing.managerId !== caller.uid) {
+        throw new Error("Unauthorized: You do not have permission to delete this hostel.");
+      }
+    }
     await dynamoService.deleteHostel(hostelId, isPending);
     return { success: true };
   } catch (error: any) {
@@ -93,6 +112,7 @@ export async function fetchUserAction(userId: string) {
 
 export async function fetchUsersByRoleAction(role: string) {
   try {
+    await requireRole(["admin", "dean", "coordinator", "executive"]);
     const users = await dynamoService.listUsersByRole(role as any);
     return { success: true, data: users };
   } catch (error: any) {
@@ -103,6 +123,14 @@ export async function fetchUsersByRoleAction(role: string) {
 
 export async function saveUserAction(user: AppUser) {
   try {
+    const caller = await requireAuth();
+    if (caller.uid !== user.id && caller.role !== "admin") {
+      throw new Error("Unauthorized: You can only update your own user profile.");
+    }
+    // Prevent non-admins from self-escalating roles
+    if (caller.role !== "admin" && user.role && user.role !== caller.role) {
+      user.role = caller.role as any;
+    }
     const saved = await dynamoService.saveUser(user);
     return { success: true, data: saved };
   } catch (error: any) {
@@ -127,6 +155,10 @@ export async function fetchBookingByIdAction(bookingId: string) {
 
 export async function fetchBookingsByStudentAction(studentId: string) {
   try {
+    const caller = await requireAuth();
+    if (caller.uid !== studentId && !["admin", "manager", "dean", "coordinator"].includes(caller.role || "")) {
+      throw new Error("Unauthorized: You can only view your own bookings.");
+    }
     const bookings = await dynamoService.listBookingsByStudent(studentId);
     return { success: true, data: bookings };
   } catch (error: any) {
@@ -137,6 +169,13 @@ export async function fetchBookingsByStudentAction(studentId: string) {
 
 export async function fetchBookingsByHostelAction(hostelId: string) {
   try {
+    const caller = await requireRole(["manager", "admin", "dean", "coordinator", "executive"]);
+    if (caller.role === "manager") {
+      const hostel = await dynamoService.getHostelById(hostelId);
+      if (hostel && hostel.managerId && hostel.managerId !== caller.uid) {
+        throw new Error("Unauthorized: You can only view bookings for your own hostels.");
+      }
+    }
     const bookings = await dynamoService.listBookingsByHostel(hostelId);
     return { success: true, data: bookings };
   } catch (error: any) {
@@ -147,6 +186,11 @@ export async function fetchBookingsByHostelAction(hostelId: string) {
 
 export async function createBookingAction(bookingData: any) {
   try {
+    const caller = await requireAuth();
+    if (bookingData.studentId && caller.uid !== bookingData.studentId && caller.role !== "admin") {
+      throw new Error("Unauthorized: You can only create bookings for yourself.");
+    }
+    bookingData.studentId = caller.uid;
     const booking = await dynamoService.saveBooking(bookingData);
     return { success: true, data: booking };
   } catch (error: any) {
@@ -157,6 +201,18 @@ export async function createBookingAction(bookingData: any) {
 
 export async function updateBookingStatusAction(bookingId: string, status: string) {
   try {
+    const caller = await requireAuth();
+    const existing = await dynamoService.getBookingById(bookingId);
+    if (!existing) {
+      throw new Error("Booking not found");
+    }
+    if (
+      caller.role !== "admin" &&
+      caller.uid !== existing.studentId &&
+      !["manager", "dean", "coordinator"].includes(caller.role || "")
+    ) {
+      throw new Error("Unauthorized: You cannot modify this booking.");
+    }
     const updated = await dynamoService.updateBookingStatus(bookingId, status);
     return { success: true, data: updated };
   } catch (error: any) {
@@ -181,6 +237,10 @@ export async function fetchVisitByIdAction(visitId: string) {
 
 export async function fetchVisitsByStudentAction(studentId: string) {
   try {
+    const caller = await requireAuth();
+    if (caller.uid !== studentId && caller.role !== "admin") {
+      throw new Error("Unauthorized: You can only view your own visits.");
+    }
     const visits = await dynamoService.listVisitsByStudent(studentId);
     return { success: true, data: visits };
   } catch (error: any) {
@@ -191,6 +251,10 @@ export async function fetchVisitsByStudentAction(studentId: string) {
 
 export async function fetchVisitsByManagerAction(managerId: string) {
   try {
+    const caller = await requireAuth();
+    if (caller.uid !== managerId && caller.role !== "admin") {
+      throw new Error("Unauthorized: You can only view visits for your hostels.");
+    }
     const visits = await dynamoService.listVisitsByManager(managerId);
     return { success: true, data: visits };
   } catch (error: any) {
@@ -201,6 +265,13 @@ export async function fetchVisitsByManagerAction(managerId: string) {
 
 export async function fetchVisitsByHostelAction(hostelId: string) {
   try {
+    const caller = await requireRole(["manager", "admin", "dean", "coordinator"]);
+    if (caller.role === "manager") {
+      const hostel = await dynamoService.getHostelById(hostelId);
+      if (hostel && hostel.managerId && hostel.managerId !== caller.uid) {
+        throw new Error("Unauthorized: You can only view visits for your own hostel.");
+      }
+    }
     const visits = await dynamoService.listVisitsByHostel(hostelId);
     return { success: true, data: visits };
   } catch (error: any) {
@@ -211,6 +282,8 @@ export async function fetchVisitsByHostelAction(hostelId: string) {
 
 export async function createVisitAction(visitData: any) {
   try {
+    const caller = await requireAuth();
+    visitData.studentId = caller.uid;
     const visit = await dynamoService.saveVisit(visitData);
     return { success: true, data: visit };
   } catch (error: any) {
@@ -221,6 +294,7 @@ export async function createVisitAction(visitData: any) {
 
 export async function updateVisitStatusAction(visitId: string, status: string) {
   try {
+    await requireRole(["manager", "admin"]);
     const updated = await dynamoService.updateVisitStatus(visitId, status);
     return { success: true, data: updated };
   } catch (error: any) {
@@ -245,6 +319,7 @@ export async function fetchReviewsByHostelAction(hostelId: string) {
 
 export async function fetchPendingReviewsAction() {
   try {
+    await requireRole(["admin"]);
     const reviews = await dynamoService.listPendingReviews();
     return { success: true, data: reviews };
   } catch (error: any) {
@@ -255,6 +330,9 @@ export async function fetchPendingReviewsAction() {
 
 export async function createReviewAction(reviewData: any) {
   try {
+    const caller = await requireAuth();
+    reviewData.userId = caller.uid;
+    reviewData.status = "pending"; // force pending verification
     const review = await dynamoService.saveReview(reviewData);
     return { success: true, data: review };
   } catch (error: any) {
@@ -265,6 +343,7 @@ export async function createReviewAction(reviewData: any) {
 
 export async function updateReviewStatusAction(reviewId: string, status: "approved" | "pending") {
   try {
+    await requireRole(["admin"]);
     const updated = await dynamoService.updateReviewStatus(reviewId, status);
     return { success: true, data: updated };
   } catch (error: any) {
@@ -274,67 +353,12 @@ export async function updateReviewStatusAction(reviewId: string, status: "approv
 }
 
 // ============================================================================
-// Generic Low-Level Server Action (for flexible queries)
-// ============================================================================
-
-export async function executeDynamoQueryAction(params: {
-  operation: "get" | "put" | "update" | "delete" | "scan";
-  id?: string;
-  entityType?: string;
-  item?: Record<string, any>;
-  updates?: Record<string, any>;
-  filterExpression?: string;
-  expressionAttributeNames?: Record<string, string>;
-  expressionAttributeValues?: Record<string, any>;
-}) {
-  try {
-    switch (params.operation) {
-      case "get":
-        if (!params.id || !params.entityType) throw new Error("Missing id or entityType for get");
-        return { success: true, data: await dynamoCore.getItem(params.id, params.entityType) };
-
-      case "put":
-        if (!params.item) throw new Error("Missing item for put");
-        return { success: true, data: await dynamoCore.putItem(params.item) };
-
-      case "update":
-        if (!params.id || !params.entityType || !params.updates)
-          throw new Error("Missing parameters for update");
-        return {
-          success: true,
-          data: await dynamoCore.updateItem(params.id, params.entityType, params.updates),
-        };
-
-      case "delete":
-        if (!params.id || !params.entityType) throw new Error("Missing id or entityType for delete");
-        return { success: true, data: await dynamoCore.deleteItem(params.id, params.entityType) };
-
-      case "scan":
-        return {
-          success: true,
-          data: await dynamoCore.scanEntities({
-            entityType: params.entityType,
-            filterExpression: params.filterExpression,
-            expressionAttributeNames: params.expressionAttributeNames,
-            expressionAttributeValues: params.expressionAttributeValues,
-          }),
-        };
-
-      default:
-        throw new Error(`Unsupported operation: ${params.operation}`);
-    }
-  } catch (error: any) {
-    console.error(`executeDynamoQueryAction (${params.operation}) error:`, error);
-    return { success: false, error: error.message };
-  }
-}
-
-// ============================================================================
 // Administrative Server Actions (Dean, Coordinator, Executive)
 // ============================================================================
 
 export async function fetchPendingHostelsAction() {
   try {
+    await requireRole(["admin", "dean", "coordinator", "executive"]);
     const data = await dynamoService.listPendingHostels();
     return { success: true, data };
   } catch (error: any) {
@@ -345,7 +369,9 @@ export async function fetchPendingHostelsAction() {
 
 export async function approvePendingHostelAction(hostelId: string, approvedBy?: string) {
   try {
-    const data = await dynamoService.approvePendingHostel(hostelId, approvedBy);
+    const caller = await requireRole(["admin", "dean", "coordinator"]);
+    const reviewer = approvedBy || caller.displayName || caller.email || caller.uid;
+    const data = await dynamoService.approvePendingHostel(hostelId, reviewer);
     return { success: true, data };
   } catch (error: any) {
     console.error("approvePendingHostelAction error:", error);
@@ -355,6 +381,7 @@ export async function approvePendingHostelAction(hostelId: string, approvedBy?: 
 
 export async function rejectPendingHostelAction(hostelId: string, reason?: string) {
   try {
+    await requireRole(["admin", "dean", "coordinator"]);
     const data = await dynamoService.rejectPendingHostel(hostelId, reason);
     return { success: true, data };
   } catch (error: any) {
@@ -370,6 +397,7 @@ export async function fetchComplaintsAction(filter?: {
   managerId?: string;
 }) {
   try {
+    const caller = await requireAuth();
     let data: any[] = [];
     if (dynamoCore.isDynamoConfigured()) {
       try {
@@ -390,7 +418,14 @@ export async function fetchComplaintsAction(filter?: {
       }
     }
 
-    // Apply filters if needed
+    // Role-based filtering to prevent data leakage between users
+    if (caller.role === "student") {
+      data = data.filter((c: any) => c.submittedBy === caller.uid || c.studentId === caller.uid);
+    } else if (caller.role === "manager") {
+      data = data.filter((c: any) => c.managerId === caller.uid || c.submittedBy === caller.uid);
+    }
+
+    // Apply explicit filters if needed
     if (filter?.status) {
       data = data.filter((c: any) => c.status === filter.status);
     }
@@ -414,16 +449,18 @@ export async function fetchComplaintsAction(filter?: {
     return { success: true, data: data || [] };
   } catch (error: any) {
     console.error("fetchComplaintsAction error:", error);
-    return { success: true, data: [], error: error.message || "Failed to fetch complaints" };
+    return { success: false, data: [], error: error.message || "Failed to fetch complaints" };
   }
 }
 
 export async function submitComplaintAction(complaintData: any) {
   try {
+    const caller = await requireAuth();
     const complaintId = complaintData.id || `complaint_${Date.now()}`;
     const payload = {
       ...complaintData,
       id: complaintId,
+      submittedBy: caller.uid, // enforce authenticated caller as author
       status: complaintData.status || "Submitted",
       createdAt: complaintData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -460,6 +497,8 @@ export async function updateComplaintStatusAction(
   resolvedBy?: string
 ) {
   try {
+    const caller = await requireRole(["manager", "dean", "coordinator", "admin"]);
+    const reviewer = resolvedBy || caller.displayName || caller.email || caller.uid;
     const updates: Record<string, any> = {
       status,
       updatedAt: new Date().toISOString(),
@@ -467,7 +506,7 @@ export async function updateComplaintStatusAction(
     if (notes) updates.resolutionNotes = notes;
     if (status === "Resolved") {
       updates.resolvedAt = new Date().toISOString();
-      if (resolvedBy) updates.resolvedBy = resolvedBy;
+      updates.resolvedBy = reviewer;
     }
 
     // 1. Dual-write to Firestore
@@ -480,7 +519,7 @@ export async function updateComplaintStatusAction(
     // 2. Dual-write to DynamoDB if configured
     if (dynamoCore.isDynamoConfigured()) {
       try {
-        await dynamoService.updateComplaintStatus(complaintId, status, notes, resolvedBy);
+        await dynamoService.updateComplaintStatus(complaintId, status, notes, reviewer);
       } catch (dynamoErr) {
         console.warn("DynamoDB updateComplaintStatus note:", dynamoErr);
       }
@@ -495,6 +534,7 @@ export async function updateComplaintStatusAction(
 
 export async function fetchStudentVerificationsAction(status?: string) {
   try {
+    await requireRole(["admin", "dean", "coordinator"]);
     let data: any[] = [];
     if (dynamoCore.isDynamoConfigured()) {
       try {
@@ -530,17 +570,19 @@ export async function fetchStudentVerificationsAction(status?: string) {
     return { success: true, data: data || [] };
   } catch (error: any) {
     console.error("fetchStudentVerificationsAction error:", error);
-    return { success: true, data: [], error: error.message || "Failed to fetch student verifications" };
+    return { success: false, data: [], error: error.message || "Failed to fetch student verifications" };
   }
 }
 
 export async function submitStudentVerificationAction(data: any) {
   try {
+    const caller = await requireAuth();
     const verifId = data.id || `verif_${Date.now()}`;
     const payload = {
       ...data,
       id: verifId,
-      status: data.status || "pending",
+      userId: caller.uid, // enforce authenticated user ID
+      status: "pending", // enforce pending status on submission
       submittedAt: data.submittedAt || new Date().toISOString(),
     };
 
@@ -577,12 +619,14 @@ export async function updateStudentVerificationStatusAction(
   studentName?: string
 ) {
   try {
+    const caller = await requireRole(["admin", "dean", "coordinator"]);
+    const reviewer = reviewedBy || caller.displayName || caller.email || caller.uid;
     const updates: Record<string, any> = {
       status,
       reviewedAt: new Date().toISOString(),
+      reviewedBy: reviewer,
     };
     if (reason) updates.rejectionReason = reason;
-    if (reviewedBy) updates.reviewedBy = reviewedBy;
 
     // Dual-write: Firestore
     try {
@@ -595,7 +639,7 @@ export async function updateStudentVerificationStatusAction(
     let data = null;
     if (dynamoCore.isDynamoConfigured()) {
       try {
-        data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewedBy);
+        data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewer);
       } catch (dynamoErr) {
         console.warn("DynamoDB updateStudentVerificationStatus error:", dynamoErr);
       }
@@ -630,6 +674,13 @@ export async function updateRoomPendingPriceAction(
   pendingPrice: number
 ) {
   try {
+    const caller = await requireRole(["manager", "admin"]);
+    if (caller.role === "manager") {
+      const hostel = await dynamoService.getHostelById(hostelId);
+      if (!hostel || hostel.managerId !== caller.uid) {
+        throw new Error("Unauthorized: You can only update room prices for your own hostels.");
+      }
+    }
     const data = await dynamoService.updateRoomPendingPrice(hostelId, roomId, pendingPrice);
     return { success: true, data };
   } catch (error: any) {
@@ -640,6 +691,7 @@ export async function updateRoomPendingPriceAction(
 
 export async function fetchExecutiveMetricsAction() {
   try {
+    await requireRole(["admin", "executive", "dean", "coordinator"]);
     // Strictly aggregate metrics only — NO individual records returned
     const [hostels, bookings, complaints, verifications] = await Promise.all([
       dynamoService.listHostels(),
