@@ -167,7 +167,7 @@ export async function listHostels(options: {
         status: rev.status || "approved",
       })) as Review[];
 
-    const prices = finalRooms.map((r) => r.price).filter((p) => typeof p === "number" && !isNaN(p));
+    const prices = finalRooms.map((r: any) => r.price).filter((p: any) => typeof p === "number" && !isNaN(p));
     const priceRange = {
       min: prices.length > 0 ? Math.min(...prices) : (typeof h.priceRange?.min === "number" ? h.priceRange.min : 0),
       max: prices.length > 0 ? Math.max(...prices) : (typeof h.priceRange?.max === "number" ? h.priceRange.max : 0),
