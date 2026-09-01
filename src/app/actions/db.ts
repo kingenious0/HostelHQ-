@@ -8,9 +8,11 @@ import { requireAuth, requireRole } from "@/lib/auth-guard";
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
+  addDoc,
   query,
   where,
   orderBy,
@@ -764,4 +766,106 @@ export async function fetchExecutiveMetricsAction() {
     return { success: false, error: error.message || "Failed to fetch executive metrics" };
   }
 }
+
+// ============================================================================
+// Visit Management Server Actions
+// ============================================================================
+
+/**
+ * Server Action for Hostel Managers to decline a student visit request
+ */
+export async function declineVisitRequestAction(payload: {
+  visitId: string;
+  reason?: string;
+}) {
+  try {
+    const caller = await requireRole(["manager", "admin"]);
+    const { visitId, reason } = payload;
+    if (!visitId) {
+      return { success: false, error: "Visit ID is required" };
+    }
+
+    const visitRef = doc(db, "visits", visitId);
+    const visitSnap = await getDoc(visitRef);
+    if (!visitSnap.exists()) {
+      return { success: false, error: "Visit request not found" };
+    }
+    const visitData = visitSnap.data();
+
+    // Verify manager authorization if caller is manager
+    if (caller.role === "manager" && visitData.managerId && visitData.managerId !== caller.uid) {
+      const hostelSnap = await getDoc(doc(db, "hostels", visitData.hostelId));
+      if (hostelSnap.exists() && hostelSnap.data().managerId !== caller.uid) {
+        return { success: false, error: "Unauthorized to decline this visit request" };
+      }
+    }
+
+    const declineReasonText = reason?.trim() || "Hostel manager declined the inspection request";
+
+    await updateDoc(visitRef, {
+      status: "declined",
+      declineReason: declineReasonText,
+      updatedAt: new Date().toISOString(),
+      declinedBy: caller.uid,
+    });
+
+    // Notify student via in-app notification
+    if (visitData.studentId) {
+      try {
+        await addDoc(collection(db, "users", visitData.studentId, "notifications"), {
+          title: "Visit Request Declined",
+          message: `Your visit request for ${visitData.hostelName || "the hostel"} was declined: ${declineReasonText}`,
+          type: "visit_status",
+          data: { visitId, status: "declined", reason: declineReasonText },
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (notifErr) {
+        console.warn("Could not save in-app notification for declined visit:", notifErr);
+      }
+    }
+
+    return { success: true, message: "Visit request declined successfully" };
+  } catch (error: any) {
+    console.error("declineVisitRequestAction error:", error);
+    return { success: false, error: error.message || "Failed to decline visit request" };
+  }
+}
+
+/**
+ * Server Action for Students to mark their completed hostel room inspection
+ */
+export async function completeVisitByStudentAction(visitId: string) {
+  try {
+    const caller = await requireAuth();
+    if (!visitId) {
+      return { success: false, error: "Visit ID is required" };
+    }
+
+    const visitRef = doc(db, "visits", visitId);
+    const visitSnap = await getDoc(visitRef);
+    if (!visitSnap.exists()) {
+      return { success: false, error: "Visit record not found" };
+    }
+
+    const visitData = visitSnap.data();
+    if (visitData.studentId && visitData.studentId !== caller.uid && caller.role !== "admin") {
+      return { success: false, error: "Forbidden: You can only complete your own visits" };
+    }
+
+    await updateDoc(visitRef, {
+      status: "completed",
+      studentCompleted: true,
+      completedBy: "student",
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    return { success: true, message: "Visit marked as completed successfully" };
+  } catch (error: any) {
+    console.error("completeVisitByStudentAction error:", error);
+    return { success: false, error: error.message || "Failed to complete visit" };
+  }
+}
+
 

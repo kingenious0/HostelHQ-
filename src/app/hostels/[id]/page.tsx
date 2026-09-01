@@ -23,6 +23,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc, orderBy } from 'firebase/firestore';
+import { completeVisitByStudentAction } from '@/app/actions/db';
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -97,6 +98,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [lightboxImages, setLightboxImages] = useState<string[]>([]);
     const [selectedRating, setSelectedRating] = useState('5');
     const [draftReview, setDraftReview] = useState('');
+    const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
     const { isShortlisted, toggleShortlist } = useShortlist();
     const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
@@ -393,6 +395,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         router.push(`/login?redirect=/hostels/${hostel.id}`);
     };
 
+    const handleStudentCompleteVisit = async (visitId: string) => {
+        setCompletingVisitId(visitId);
+        try {
+            const res = await completeVisitByStudentAction(visitId);
+            if (res.success) {
+                setExistingVisit((prev: any) => prev ? { ...prev, status: 'completed', studentCompleted: true } : prev);
+                toast({
+                    title: "Inspection Completed!",
+                    description: "You've marked this visit complete. You can now securely reserve your room.",
+                });
+            } else {
+                toast({
+                    title: "Update Failed",
+                    description: res.error || "Could not complete visit.",
+                    variant: "destructive",
+                });
+            }
+        } catch (err: any) {
+            toast({
+                title: "Update Failed",
+                description: err.message || "Failed to mark visit complete.",
+                variant: "destructive",
+            });
+        } finally {
+            setCompletingVisitId(null);
+        }
+    };
+
     const getVisitButton = (room: RoomType) => {
         if (!currentUser) {
             return (
@@ -459,18 +489,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </Button>
                 );
             }
-            // If visit exists but not completed, show Track Visit
+            // If visit exists but not completed, allow student to mark visited or view
             if (existingVisit.status !== 'cancelled') {
                 return (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => router.push('/my-bookings?tab=visits')}
-                    >
-                        <Ticket className="mr-1.5 h-3.5 w-3.5" />
-                        View Visits
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs border-emerald-500/60 text-emerald-700 hover:bg-emerald-50 font-semibold"
+                            onClick={() => handleStudentCompleteVisit(existingVisit.id)}
+                            disabled={completingVisitId === existingVisit.id}
+                        >
+                            {completingVisitId === existingVisit.id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                                <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" />
+                            )}
+                            Mark Visited
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => router.push('/my-bookings?tab=visits')}
+                        >
+                            <Ticket className="mr-1 h-3 w-3" />
+                            View
+                        </Button>
+                    </div>
                 );
             }
         }
@@ -552,16 +598,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
         if (existingVisit && existingVisit.status !== 'cancelled') {
             return (
-                <Button
-                    onClick={() => router.push('/my-bookings?tab=visits')}
-                    className={cn(
-                        "flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
-                        buttonHeight
-                    )}
-                >
-                    <Ticket className="h-4 w-4" />
-                    View Visits
-                </Button>
+                <div className="flex-1 flex gap-2">
+                    <Button
+                        onClick={() => handleStudentCompleteVisit(existingVisit.id)}
+                        disabled={completingVisitId === existingVisit.id}
+                        className={cn(
+                            "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                            buttonHeight
+                        )}
+                    >
+                        {completingVisitId === existingVisit.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        Mark Visit Completed
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => router.push('/my-bookings?tab=visits')}
+                        className={cn(
+                            "px-4 rounded-xl border-border/80 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5",
+                            buttonHeight
+                        )}
+                    >
+                        <Ticket className="h-4 w-4" />
+                        Visits
+                    </Button>
+                </div>
             );
         }
 

@@ -30,6 +30,9 @@ import {
   fetchHostelsAction,
 } from "@/app/actions/db";
 import type { Complaint, StudentVerification, ComplaintStatus, ComplaintDirection } from "@/lib/data";
+import { ComplaintDetailModal } from "@/components/dashboard/ComplaintDetailModal";
+import { StudentVerificationQueue } from "@/components/dashboard/StudentVerificationQueue";
+import { DocumentViewerModal } from "@/components/ui/DocumentViewerModal";
 import {
   ShieldAlert,
   CheckCircle2,
@@ -78,6 +81,14 @@ export default function DeanDashboardPage() {
   // Placements State
   const [hostels, setHostels] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+
+  // Universal Document Viewer state
+  const [docViewerState, setDocViewerState] = useState<{
+    isOpen: boolean;
+    documentUrl?: string | null;
+    title?: string;
+    documentType?: string;
+  }>({ isOpen: false });
 
   // Role Authentication Guard
   useEffect(() => {
@@ -651,220 +662,23 @@ export default function DeanDashboardPage() {
 
           {/* TAB 2: STUDENT VERIFICATION QUEUE */}
           <TabsContent value="verifications" className="space-y-4 pt-2">
-            <Card className="border border-border/60 shadow-xs">
-              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
-                <div>
-                  <CardTitle className="text-base font-bold">Student Verification Queue</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground">
-                    Inspect university admission letters and student ID cards to grant protected resident status.
-                  </CardDescription>
-                </div>
-              </div>
-
-              <CardContent className="p-0">
-                {verifications.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-sm space-y-2">
-                    <UserCheck className="h-8 w-8 text-emerald-500 mx-auto" />
-                    <p className="font-semibold text-foreground">Zero pending verifications</p>
-                    <p className="text-xs">All uploaded student admission documents have been processed.</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Desktop Table View */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <Table>
-                        <TableHeader className="bg-slate-50 border-b border-border/60">
-                          <TableRow>
-                            <TableHead className="w-32">Status</TableHead>
-                            <TableHead>Student</TableHead>
-                            <TableHead>Institution</TableHead>
-                            <TableHead>Admission Letter</TableHead>
-                            <TableHead>Student ID Card</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {verifications.map((item) => (
-                            <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell className="py-3">
-                                {item.status === "pending" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                    Pending Review
-                                  </span>
-                                )}
-                                {item.status === "verified" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    Verified
-                                  </span>
-                                )}
-                                {item.status === "rejected" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                    Rejected
-                                  </span>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="py-3">
-                                <p className="font-medium text-foreground text-sm">{item.fullName}</p>
-                                <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.studentIdNumber}</p>
-                              </TableCell>
-
-                              <TableCell className="py-3">
-                                <span className="text-xs text-foreground font-medium">
-                                  {item.institution || "AAMUSTED"}
-                                </span>
-                              </TableCell>
-
-                              <TableCell className="py-3">
-                                {item.admissionLetterUrl ? (
-                                  <a
-                                    href={item.admissionLetterUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> View Letter
-                                  </a>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Not provided</span>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="py-3">
-                                {item.studentIdCardUrl ? (
-                                  <a
-                                    href={item.studentIdCardUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> View ID Card
-                                  </a>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Not provided</span>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="py-3 text-right">
-                                {item.status === "pending" ? (
-                                  <div className="flex justify-end gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleVerifyStudent(item.id, "verified")}
-                                      disabled={actionLoading}
-                                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setSelectedVerification(item);
-                                        setRejectDialogOpen(true);
-                                      }}
-                                      disabled={actionLoading}
-                                      className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-                                    >
-                                      Reject
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">
-                                    {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
-                                  </span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {/* Mobile Stacked Card View */}
-                    <div className="block md:hidden divide-y divide-border/60">
-                      {verifications.map((item) => (
-                        <div key={item.id} className="p-4 space-y-2.5">
-                          <div className="flex justify-between items-start gap-2">
-                            <div>
-                              <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{item.studentIdNumber} • {item.institution || "AAMUSTED"}</p>
-                            </div>
-                            {item.status === "pending" && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                Pending
-                              </span>
-                            )}
-                            {item.status === "verified" && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                Verified
-                              </span>
-                            )}
-                            {item.status === "rejected" && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                                Rejected
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-4 text-xs">
-                            {item.admissionLetterUrl ? (
-                              <a
-                                href={item.admissionLetterUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary font-medium hover:underline"
-                              >
-                                <Eye className="h-3.5 w-3.5" /> View Letter
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground">No Letter</span>
-                            )}
-                            {item.studentIdCardUrl ? (
-                              <a
-                                href={item.studentIdCardUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary font-medium hover:underline"
-                              >
-                                <Eye className="h-3.5 w-3.5" /> View ID Card
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground">No ID Card</span>
-                            )}
-                          </div>
-
-                          {item.status === "pending" && (
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedVerification(item);
-                                  setRejectDialogOpen(true);
-                                }}
-                                disabled={actionLoading}
-                                className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-                              >
-                                Reject
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleVerifyStudent(item.id, "verified")}
-                                disabled={actionLoading}
-                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                              >
-                                Approve
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <StudentVerificationQueue
+              verifications={verifications}
+              actionLoading={actionLoading}
+              onApprove={(id) => handleVerifyStudent(id, "verified")}
+              onRejectClick={(item) => {
+                setSelectedVerification(item);
+                setRejectDialogOpen(true);
+              }}
+              onOpenDocument={(url, title, docType) => {
+                setDocViewerState({
+                  isOpen: true,
+                  documentUrl: url,
+                  title,
+                  documentType: docType,
+                });
+              }}
+            />
           </TabsContent>
 
           {/* TAB 3: PLACEMENTS OVERVIEW */}
@@ -973,115 +787,17 @@ export default function DeanDashboardPage() {
           </TabsContent>
         </Tabs>
 
-        {/* DIALOG: COMPLAINT DETAIL & STATUS UPDATE */}
-        <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
-          <DialogContent className="max-w-2xl">
-            {selectedComplaint && (
-              <>
-                <DialogHeader>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant="outline" className="text-xs">
-                      {selectedComplaint.category}
-                    </Badge>
-                    <Badge
-                      className={
-                        selectedComplaint.status === "Resolved"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                          : selectedComplaint.status === "Under Review"
-                          ? "bg-amber-100 text-amber-800 border-amber-300"
-                          : "bg-rose-100 text-rose-800 border-rose-300"
-                      }
-                    >
-                      {selectedComplaint.status}
-                    </Badge>
-                  </div>
-                  <DialogTitle className="text-xl font-bold">{selectedComplaint.subject}</DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground">
-                    Lodged on {new Date(selectedComplaint.createdAt).toLocaleString()} • Ref: #{selectedComplaint.id}
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 py-2">
-                  {/* Context Cards Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-border/60">
-                    <div>
-                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Student Record</p>
-                      <p className="font-semibold text-foreground text-sm mt-0.5">{selectedComplaint.studentName}</p>
-                      <p className="text-muted-foreground">{selectedComplaint.studentEmail}</p>
-                      <p className="font-mono text-muted-foreground">{selectedComplaint.studentPhone}</p>
-                    </div>
-
-                    <div>
-                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Hostel & Manager Context</p>
-                      <p className="font-semibold text-foreground text-sm mt-0.5">{selectedComplaint.hostelName}</p>
-                      <p className="text-muted-foreground">
-                        Room Number: <span className="font-medium text-foreground">{selectedComplaint.roomNumber || "N/A"}</span>
-                      </p>
-                      <p className="text-muted-foreground">
-                        Manager: {selectedComplaint.managerName || "On file"} ({selectedComplaint.managerPhone || "N/A"})
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Complaint Description */}
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                      Detailed Narrative of Grievance
-                    </p>
-                    <div className="bg-white p-3 rounded-lg border border-border/60 text-sm text-foreground leading-relaxed">
-                      {selectedComplaint.description}
-                    </div>
-                  </div>
-
-                  {/* Resolution Notes Input */}
-                  <div>
-                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1 block">
-                      Dean Directorate Resolution Findings & Directives
-                    </label>
-                    <Textarea
-                      placeholder="Document arbitrated settlement, agreed timelines, or warnings issued..."
-                      value={resolutionNotes}
-                      onChange={(e) => setResolutionNotes(e.target.value)}
-                      rows={3}
-                      className="text-xs"
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                  {selectedComplaint.status === "Submitted" && (
-                    <Button
-                      variant="outline"
-                      onClick={() => handleUpdateComplaintStatus(selectedComplaint.id, "Under Review", resolutionNotes)}
-                      disabled={actionLoading}
-                      className="border-amber-500 text-amber-700 hover:bg-amber-50 text-xs font-semibold"
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Move to Under Review
-                    </Button>
-                  )}
-
-                  {selectedComplaint.status !== "Resolved" && (
-                    <Button
-                      onClick={() => handleUpdateComplaintStatus(selectedComplaint.id, "Resolved", resolutionNotes)}
-                      disabled={actionLoading}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Mark Dispute Resolved
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="ghost"
-                    onClick={() => setSelectedComplaint(null)}
-                    className="text-xs"
-                  >
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* MODAL: COMPLAINT DETAIL & RESOLUTION */}
+        <ComplaintDetailModal
+          isOpen={!!selectedComplaint}
+          onClose={() => setSelectedComplaint(null)}
+          complaint={selectedComplaint}
+          resolutionNotes={resolutionNotes}
+          onResolutionNotesChange={setResolutionNotes}
+          onUpdateStatus={handleUpdateComplaintStatus}
+          isUpdating={actionLoading}
+          hostels={hostels}
+        />
 
         {/* DIALOG: REJECT STUDENT VERIFICATION */}
         <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
@@ -1129,6 +845,15 @@ export default function DeanDashboardPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Universal Document Viewer Modal */}
+        <DocumentViewerModal
+          isOpen={docViewerState.isOpen}
+          onClose={() => setDocViewerState(prev => ({ ...prev, isOpen: false }))}
+          documentUrl={docViewerState.documentUrl}
+          title={docViewerState.title}
+          documentType={docViewerState.documentType}
+        />
       </main>
     </div>
   );

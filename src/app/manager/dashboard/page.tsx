@@ -28,6 +28,9 @@ import { uploadImage } from '@/lib/cloudinary';
 import { sendSMS } from '@/app/actions/sms';
 import Image from 'next/image';
 import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
+import { VisitRequestCard, type StudentProfileContext } from '@/components/dashboard/VisitRequestCard';
+import { DocumentViewerModal } from '@/components/ui/DocumentViewerModal';
+import { declineVisitRequestAction } from '@/app/actions/db';
 
 type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
     roomTypes: Pick<RoomType, 'id' | 'name' | 'price'>[];
@@ -46,11 +49,16 @@ type Visit = {
     visitDate: string | any;
     visitTime?: string;
     notes?: string;
-    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled' | 'declined';
+    declineReason?: string;
     visitType?: string;
     createdAt?: string | any;
     studentCompleted?: boolean;
     managerPhone?: string;
+    verificationStatus?: string;
+    studentIdCardUrl?: string;
+    idCardUrl?: string;
+    admissionLetterUrl?: string;
 };
 
 type Booking = {
@@ -137,9 +145,16 @@ export default function ManagerDashboard() {
     // In-person Scheduled Visits state
     const [visits, setVisits] = useState<Visit[]>([]);
     const [loadingVisits, setLoadingVisits] = useState(true);
-    const [visitFilter, setVisitFilter] = useState<'all' | 'pending' | 'accepted' | 'completed' | 'cancelled'>('all');
+    const [visitFilter, setVisitFilter] = useState<'all' | 'pending' | 'accepted' | 'completed' | 'cancelled' | 'declined'>('all');
     const [visitSearch, setVisitSearch] = useState('');
     const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
+    const [studentProfiles, setStudentProfiles] = useState<Record<string, StudentProfileContext>>({});
+    const [docViewerState, setDocViewerState] = useState<{
+        isOpen: boolean;
+        documentUrl?: string | null;
+        title?: string;
+        documentType?: string;
+    }>({ isOpen: false });
 
     // Disputes & Incident Reports state (Complaints by students against managed hostels + Incident reports by manager)
     const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -403,6 +418,40 @@ export default function ManagerDashboard() {
                         });
                         setVisits(fetchedVisits);
                         setLoadingVisits(false);
+
+                        // Asynchronously resolve student verification profiles
+                        const sIds = Array.from(new Set(fetchedVisits.map(v => v.studentId).filter(Boolean))) as string[];
+                        if (sIds.length > 0) {
+                            Promise.all(sIds.map(async (sid) => {
+                                try {
+                                    const uSnap = await getDoc(doc(db, 'users', sid));
+                                    if (uSnap.exists()) {
+                                        const uData = uSnap.data() as any;
+                                        return {
+                                            sid,
+                                            profile: {
+                                                verificationStatus: uData.verificationStatus || 'pending',
+                                                studentIdCardUrl: uData.studentIdCardUrl || uData.verificationDocUrl,
+                                                idCardUrl: uData.idCardUrl || uData.verificationDocUrl,
+                                                admissionLetterUrl: uData.admissionLetterUrl,
+                                                email: uData.email,
+                                                phone: uData.phoneNumber || uData.phone,
+                                                fullName: uData.fullName,
+                                            } as StudentProfileContext
+                                        };
+                                    }
+                                } catch (e) {
+                                    console.warn('Error fetching student profile for visit:', e);
+                                }
+                                return null;
+                            })).then((results) => {
+                                const map: Record<string, StudentProfileContext> = {};
+                                results.forEach((r) => {
+                                    if (r) map[r.sid] = r.profile;
+                                });
+                                setStudentProfiles(prev => ({ ...prev, ...map }));
+                            });
+                        }
                     }, (err) => {
                         console.error('Error fetching visits for manager:', err);
                         setLoadingVisits(false);
@@ -1071,9 +1120,25 @@ export default function ManagerDashboard() {
         }
     };
 
-    const handleUpdateVisitStatus = async (visitId: string, newStatus: 'accepted' | 'completed' | 'cancelled') => {
+    const handleUpdateVisitStatus = async (
+        visitId: string,
+        newStatus: 'accepted' | 'completed' | 'cancelled' | 'declined',
+        reason?: string
+    ) => {
         setUpdatingVisitId(visitId);
         try {
+            if (newStatus === 'declined') {
+                const res = await declineVisitRequestAction({ visitId, reason });
+                if (!res.success) {
+                    throw new Error(res.error || 'Failed to decline visit request');
+                }
+                toast({
+                    title: 'Visit Request Declined',
+                    description: 'Student has been notified of the decision.',
+                });
+                return;
+            }
+
             const ref = doc(db, 'visits', visitId);
             const updates: any = {
                 status: newStatus,
@@ -1103,6 +1168,7 @@ export default function ManagerDashboard() {
     const acceptedVisitsCount = visits.filter(v => v.status === 'accepted').length;
     const completedVisitsCount = visits.filter(v => v.status === 'completed').length;
     const cancelledVisitsCount = visits.filter(v => v.status === 'cancelled').length;
+    const declinedVisitsCount = visits.filter(v => v.status === 'declined').length;
 
     const filteredVisits = visits.filter(visit => {
         if (visitFilter !== 'all' && visit.status !== visitFilter) {
@@ -1364,6 +1430,7 @@ export default function ManagerDashboard() {
                                     { id: 'pending', label: `Pending (${pendingVisitsCount})`, alert: pendingVisitsCount > 0 },
                                     { id: 'accepted', label: `Confirmed (${acceptedVisitsCount})` },
                                     { id: 'completed', label: `Completed (${completedVisitsCount})` },
+                                    { id: 'declined', label: `Declined (${declinedVisitsCount})` },
                                     { id: 'cancelled', label: `Cancelled (${cancelledVisitsCount})` },
                                 ].map((tab) => (
                                     <Button
@@ -1397,161 +1464,23 @@ export default function ManagerDashboard() {
                                 </div>
                             ) : (
                                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {filteredVisits.map((visit) => {
-                                        let visitDateFormatted = 'Date not set';
-                                        try {
-                                            if (visit.visitDate) {
-                                                const d = typeof visit.visitDate === 'string'
-                                                    ? new Date(visit.visitDate)
-                                                    : (visit.visitDate.toDate ? visit.visitDate.toDate() : new Date(visit.visitDate));
-                                                visitDateFormatted = format(d, 'EEEE, d MMM yyyy');
-                                            }
-                                        } catch (e) {
-                                            visitDateFormatted = String(visit.visitDate);
-                                        }
-
-                                        const statusBadge = {
-                                            pending: { label: 'Pending Confirmation', className: 'bg-amber-100 text-amber-800 border-amber-300' },
-                                            accepted: { label: 'Confirmed / Accepted', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-                                            completed: { label: 'Visit Completed', className: 'bg-blue-100 text-blue-800 border-blue-300' },
-                                            cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-700 border-gray-300' },
-                                        }[visit.status] || { label: visit.status, className: 'bg-gray-100 text-gray-800' };
-
-                                        const cleanPhone = (visit.studentPhone || '').replace(/[^0-9]/g, '');
-
-                                        return (
-                                            <div
-                                                key={visit.id}
-                                                className="border rounded-xl p-4 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                                            >
-                                                <div>
-                                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                                        <div>
-                                                            <h4 className="font-bold text-sm text-slate-900 leading-tight">
-                                                                {visit.studentName}
-                                                            </h4>
-                                                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                                                                {visit.hostelName || 'Hostel Inspection'}
-                                                                {visit.roomTypeName && ` • ${visit.roomTypeName}`}
-                                                            </p>
-                                                        </div>
-                                                        <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusBadge.className}`}>
-                                                            {statusBadge.label}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/70 rounded-lg p-2.5 my-2.5 border border-slate-100">
-                                                        <div className="flex items-center gap-2">
-                                                            <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                                            <span className="font-medium text-slate-800">{visitDateFormatted}</span>
-                                                        </div>
-                                                        {visit.visitTime && (
-                                                            <div className="flex items-center gap-2">
-                                                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                                <span>{visit.visitTime}</span>
-                                                            </div>
-                                                        )}
-                                                        {visit.studentPhone && (
-                                                            <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
-                                                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                                <span className="font-mono text-[11px]">{visit.studentPhone}</span>
-                                                            </div>
-                                                        )}
-                                                        {visit.studentEmail && (
-                                                            <div className="text-[11px] text-slate-500 truncate">
-                                                                {visit.studentEmail}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {visit.notes && (
-                                                        <p className="text-[11px] italic text-slate-500 bg-amber-50/60 border border-amber-200/50 rounded-md p-2 mb-3">
-                                                            &ldquo;{visit.notes}&rdquo;
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                <div className="pt-2 border-t space-y-2">
-                                                    {/* Contact action buttons */}
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {visit.studentPhone ? (
-                                                            <>
-                                                                <a
-                                                                    href={`tel:${visit.studentPhone}`}
-                                                                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-200 transition-colors"
-                                                                >
-                                                                    <PhoneCall className="w-3 h-3" />
-                                                                    Call
-                                                                </a>
-                                                                <a
-                                                                    href={`https://wa.me/${cleanPhone.startsWith('0') ? '233' + cleanPhone.substring(1) : cleanPhone}`}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] text-xs font-semibold border border-[#25D366]/30 transition-colors"
-                                                                >
-                                                                    <MessageSquare className="w-3 h-3" />
-                                                                    WhatsApp
-                                                                </a>
-                                                            </>
-                                                        ) : (
-                                                            <span className="text-[11px] text-muted-foreground col-span-2">No phone provided</span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Workflow status buttons */}
-                                                    <div className="flex items-center justify-between gap-2 pt-1">
-                                                        {visit.status === 'pending' && (
-                                                            <Button
-                                                                size="sm"
-                                                                type="button"
-                                                                disabled={updatingVisitId === visit.id}
-                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'accepted')}
-                                                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
-                                                            >
-                                                                {updatingVisitId === visit.id ? (
-                                                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                                                                ) : (
-                                                                    <Check className="w-3 h-3 mr-1" />
-                                                                )}
-                                                                Confirm Time
-                                                            </Button>
-                                                        )}
-
-                                                        {visit.status === 'accepted' && (
-                                                            <Button
-                                                                size="sm"
-                                                                type="button"
-                                                                variant="outline"
-                                                                disabled={updatingVisitId === visit.id}
-                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'completed')}
-                                                                className="flex-1 text-xs h-8 border-blue-300 text-blue-700 hover:bg-blue-50"
-                                                            >
-                                                                {updatingVisitId === visit.id ? (
-                                                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                                                                ) : (
-                                                                    <CheckCircle className="w-3 h-3 mr-1 text-blue-600" />
-                                                                )}
-                                                                Mark Completed
-                                                            </Button>
-                                                        )}
-
-                                                        {visit.status !== 'cancelled' && visit.status !== 'completed' && (
-                                                            <Button
-                                                                size="sm"
-                                                                type="button"
-                                                                variant="ghost"
-                                                                disabled={updatingVisitId === visit.id}
-                                                                onClick={() => handleUpdateVisitStatus(visit.id, 'cancelled')}
-                                                                className="text-xs h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
-                                                            >
-                                                                Cancel
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                    {filteredVisits.map((visit) => (
+                                        <VisitRequestCard
+                                            key={visit.id}
+                                            visit={visit}
+                                            studentProfile={studentProfiles[visit.studentId || '']}
+                                            onUpdateStatus={handleUpdateVisitStatus}
+                                            isUpdating={updatingVisitId === visit.id}
+                                            onOpenDocument={(url, title, docType) => {
+                                                setDocViewerState({
+                                                    isOpen: true,
+                                                    documentUrl: url,
+                                                    title,
+                                                    documentType: docType,
+                                                });
+                                            }}
+                                        />
+                                    ))}
                                 </div>
                             )}
                         </CardContent>
@@ -2963,6 +2892,15 @@ export default function ManagerDashboard() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+
+                {/* Universal Document Viewer Modal */}
+                <DocumentViewerModal
+                    isOpen={docViewerState.isOpen}
+                    onClose={() => setDocViewerState(prev => ({ ...prev, isOpen: false }))}
+                    documentUrl={docViewerState.documentUrl}
+                    title={docViewerState.title}
+                    documentType={docViewerState.documentType}
+                />
             </main>
         </div>
     );

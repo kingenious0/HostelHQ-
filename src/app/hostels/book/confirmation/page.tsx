@@ -4,13 +4,15 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, ArrowLeft, Home } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc, increment, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { notifyBookingConfirmed, notifyManagerNewBooking, notifyAdminNewBooking } from "@/lib/notification-service-onesignal";
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { verifyAndProcessBooking } from '@/app/actions/paystack';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 function ConfirmationContent() {
     const router = useRouter();
@@ -21,10 +23,13 @@ function ConfirmationContent() {
     const reference = searchParams.get('reference');
     const trxref = searchParams.get('trxref');
     const bookingType = searchParams.get('bookingType');
+    const visitTypeParam = searchParams.get('visitType') || searchParams.get('visit_type') || 'self';
 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [hasProcessed, setHasProcessed] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -49,16 +54,20 @@ function ConfirmationContent() {
 
         const handleConfirmation = async () => {
             setHasProcessed(true);
+            setIsProcessing(true);
+            setError(null);
 
             if (!hostelId || (!trxref && !reference)) {
-                toast({ title: "Invalid Confirmation Link", description: "Missing required booking details.", variant: "destructive" });
-                router.push('/');
+                const msg = "Missing required booking details in confirmation link.";
+                setError(msg);
+                setIsProcessing(false);
+                toast({ title: "Invalid Confirmation Link", description: msg, variant: "destructive" });
                 return;
             }
 
-            // This is a secure hostel payment (has bookingType=secure OR trxref parameter)
-            if ((bookingType === 'secure' || trxref) && hostelId && !visitTypeParam) {
-                try {
+            try {
+                // This is a secure hostel payment (has bookingType=secure OR trxref parameter)
+                if (bookingType === 'secure' || trxref) {
                     const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
                     if (!userDoc.exists()) throw new Error("Student user record not found.");
 
@@ -69,7 +78,6 @@ function ConfirmationContent() {
                     // Clear the sessionStorage after retrieving
                     sessionStorage.removeItem('pendingBookingData');
 
-
                     // Use Server Action to securely verify transaction, create booking, and update manager wallet
                     const result = await verifyAndProcessBooking(
                         trxref || reference || '',
@@ -79,17 +87,10 @@ function ConfirmationContent() {
                     );
 
                     if (!result.success) {
-                        throw new Error(result.message);
+                        throw new Error(result.message || "Payment verification failed.");
                     }
 
                     const bookingId = result.bookingId;
-
-                    // Re-construct basic data for notifications (client-side)
-                    // Note: We don't have the full bookingRef object here, but we have the ID.
-
-                    // ... Occupancy updates are handled by server action now ...
-
-
 
                     // Get hostel name for notification
                     const hostelDoc = await getDoc(doc(db, 'hostels', hostelId));
@@ -148,30 +149,83 @@ function ConfirmationContent() {
                         description: "Your payment was successful. Redirecting to your invoice...",
                     });
                     router.push(`/hostels/book/success/${bookingId}`);
-
-                } catch (error) {
-                    console.error("Error creating booking record:", error);
-                    toast({ title: "Booking Error", description: "Could not finalize your booking. Please contact support.", variant: 'destructive' });
-                    router.push(`/hostels/${hostelId}`);
+                    return;
                 }
-                return;
-            }
 
-            // Fallback if no valid parameters are found after the initial check
-            toast({ title: "Invalid Confirmation Link", description: "The confirmation link is incomplete.", variant: "destructive" });
-            router.push('/');
+                // Fallback if no valid payment pattern matched
+                throw new Error("Unable to identify payment type. Please verify transaction reference.");
+            } catch (err: any) {
+                console.error("Error confirming booking:", err);
+                const errorMessage = err?.message || "Could not finalize your booking. Please contact support.";
+                setError(errorMessage);
+                toast({ title: "Booking Confirmation Issue", description: errorMessage, variant: 'destructive' });
+            } finally {
+                setIsProcessing(false);
+            }
         };
 
         handleConfirmation();
 
-    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, toast]);
+    }, [currentUser, loadingAuth, hasProcessed, router, hostelId, reference, trxref, bookingType, visitTypeParam, toast]);
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center text-center max-w-md mx-auto p-6 bg-white rounded-3xl border border-border/80 shadow-lg animate-in fade-in zoom-in-95 duration-300">
+                <div className="h-16 w-16 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mb-4 shadow-inner">
+                    <AlertCircle className="h-8 w-8" />
+                </div>
+                <h2 className="text-xl font-bold font-headline text-slate-900 mb-2">Booking Confirmation Issue</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                    {error}
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                    <Button
+                        onClick={() => {
+                            setError(null);
+                            setIsProcessing(true);
+                            setHasProcessed(false);
+                        }}
+                        className="flex-1 rounded-xl h-11 text-xs font-semibold gap-1.5"
+                    >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Try Again
+                    </Button>
+
+                    {hostelId ? (
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="flex-1 rounded-xl h-11 text-xs font-semibold gap-1.5"
+                        >
+                            <Link href={`/hostels/${hostelId}`}>
+                                <ArrowLeft className="h-3.5 w-3.5" />
+                                Return to Hostel
+                            </Link>
+                        </Button>
+                    ) : (
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="flex-1 rounded-xl h-11 text-xs font-semibold gap-1.5"
+                        >
+                            <Link href="/my-bookings">
+                                <Home className="h-3.5 w-3.5" />
+                                My Bookings
+                            </Link>
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col items-center justify-center text-center">
+        <div className="flex flex-col items-center justify-center text-center p-6 max-w-md mx-auto">
             <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
             <h1 className="text-2xl font-bold font-headline mb-2">Finalizing Your Request...</h1>
-            <p className="text-muted-foreground max-w-sm">
-                Your payment was successful. Please wait while we create your booking details. You will be redirected shortly.
+            <p className="text-muted-foreground text-sm max-w-sm">
+                Your payment was processed. Please wait while we verify your transaction and prepare your booking records.
             </p>
         </div>
     );

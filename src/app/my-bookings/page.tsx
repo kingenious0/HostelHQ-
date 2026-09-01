@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
-import { submitComplaintAction } from '@/app/actions/db';
+import { submitComplaintAction, completeVisitByStudentAction } from '@/app/actions/db';
 import type { ComplaintCategory } from '@/lib/data';
 import {
     Loader2,
@@ -835,6 +835,7 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
     const { toast } = useToast();
     const statusInfo = getVisitStatusInfo(visit.status);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
 
     const handleDelete = async () => {
         if (!window.confirm(`Delete visit booking for ${visit.hostelName}?`)) return;
@@ -846,6 +847,33 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
             toast({ title: "Deletion Failed", variant: "destructive" });
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleComplete = async () => {
+        setIsCompleting(true);
+        try {
+            const res = await completeVisitByStudentAction(visit.id);
+            if (res.success) {
+                toast({
+                    title: "Visit Completed!",
+                    description: "You've confirmed your inspection. You can now proceed to reserve your room.",
+                });
+            } else {
+                toast({
+                    title: "Action Failed",
+                    description: res.error || "Could not complete visit.",
+                    variant: "destructive",
+                });
+            }
+        } catch (error: any) {
+            toast({
+                title: "Action Failed",
+                description: error.message || "Failed to mark visit completed.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsCompleting(false);
         }
     };
 
@@ -891,18 +919,52 @@ function VisitCard({ visit }: { visit: EnhancedVisit }) {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 rounded-xl h-9 text-xs border-primary/20 text-primary hover:bg-primary/5"
-                        onClick={() => {
-                            if (isCompleted) router.push(`/invoice/${visit.id}`);
-                            else router.push(`/hostels/${visit.hostelId}`);
-                        }}
-                    >
-                        {isCompleted ? <Receipt className="mr-2 h-3.5 w-3.5" /> : <Eye className="mr-2 h-3.5 w-3.5" />}
-                        {isCompleted ? 'Receipt' : 'View Hostel'}
-                    </Button>
+                    {isCompleted ? (
+                        <>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 rounded-xl h-9 text-xs border-primary/20 text-primary hover:bg-primary/5"
+                                onClick={() => router.push(`/invoice/${visit.id}`)}
+                            >
+                                <Receipt className="mr-1.5 h-3.5 w-3.5" />
+                                Receipt
+                            </Button>
+                            <Button
+                                size="sm"
+                                className="flex-1 rounded-xl h-9 text-xs bg-accent hover:bg-accent/90 text-accent-foreground font-bold"
+                                onClick={() => router.push(`/hostels/${visit.hostelId}`)}
+                            >
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                                Secure Room
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button
+                                size="sm"
+                                className="flex-1 rounded-xl h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                onClick={handleComplete}
+                                disabled={isCompleting}
+                            >
+                                {isCompleting ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                                )}
+                                Mark Completed
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl h-9 text-xs border-primary/20 text-primary hover:bg-primary/5 px-3"
+                                onClick={() => router.push(`/hostels/${visit.hostelId}`)}
+                            >
+                                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                                View
+                            </Button>
+                        </>
+                    )}
                     <Button
                         size="sm"
                         variant="ghost"

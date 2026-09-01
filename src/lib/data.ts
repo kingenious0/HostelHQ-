@@ -115,6 +115,7 @@ export type Complaint = {
   managerId?: string;
   managerName?: string;
   managerPhone?: string;
+  managerEmail?: string;
   roomId?: string;
   roomNumber?: string;
   resolutionNotes?: string;
