@@ -12,6 +12,7 @@ interface NotificationPayload {
   url?: string;
   icon?: string;
   tag?: string;
+  data?: Record<string, any>;
 }
 
 export async function POST(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     const caller = await requireAuth(request);
     const payload: NotificationPayload = await request.json();
     
-    const { userId, title, body, url, icon, tag } = payload;
+    const { userId, title, body, url, icon, tag, data } = payload;
 
     if (!userId || !title || !body) {
       return NextResponse.json(
@@ -28,10 +29,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (
-      caller.uid !== userId &&
-      !['admin', 'manager', 'dean', 'coordinator', 'executive'].includes(caller.role || '')
-    ) {
+    const isSelf = caller.uid === userId;
+    const isStaffCaller = ['admin', 'manager', 'dean', 'coordinator', 'executive'].includes(caller.role || '');
+
+    const allowedTransactionalTypes = [
+      'manager-new-booking',
+      'admin-new-booking',
+      'manager-visit-request',
+      'admin-flagged-review',
+      'admin-new-hostel',
+      'booking-confirmed',
+      'visit-scheduled',
+      'payment-received',
+      'visit_status',
+    ];
+
+    const notificationType = data?.type || tag;
+    const isTransactionalEvent = Boolean(notificationType && allowedTransactionalTypes.includes(notificationType));
+
+    let isAuthorized = isSelf || isStaffCaller || isTransactionalEvent;
+
+    // Fallback: Check if recipient is a staff member (manager, admin, dean)
+    if (!isAuthorized) {
+      try {
+        const recipientDoc = await adminDb.collection('users').doc(userId).get();
+        const recipientRole = recipientDoc.data()?.role;
+        if (['admin', 'manager', 'dean', 'coordinator', 'executive'].includes(recipientRole || '')) {
+          isAuthorized = true;
+        }
+      } catch (err) {
+        console.warn('[FCM] Recipient role verification note:', err);
+      }
+    }
+
+    if (!isAuthorized) {
       return NextResponse.json(
         { error: 'Unauthorized: You do not have permission to send notifications to this user.' },
         { status: 403 }

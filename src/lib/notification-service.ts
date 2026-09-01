@@ -3,6 +3,8 @@
  * Helper functions to send push notifications for various events
  */
 
+import { auth } from '@/lib/firebase';
+
 interface SendNotificationParams {
   userId: string;
   title: string;
@@ -22,11 +24,24 @@ export async function sendNotification(params: SendNotificationParams) {
       url: params.url,
     });
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (typeof window !== 'undefined' && auth?.currentUser) {
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+        }
+      } catch (tokenErr) {
+        console.warn('[NotificationService] Could not attach ID token to request headers:', tokenErr);
+      }
+    }
+
     const response = await fetch('/api/send-notification', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(params),
     });
 
