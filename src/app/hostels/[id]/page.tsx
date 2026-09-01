@@ -2,7 +2,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import Lightbox from 'yet-another-react-lightbox';
+import 'yet-another-react-lightbox/styles.css';
 import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
@@ -255,35 +257,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     const primaryImages = hostel.images?.length ? hostel.images : ['/AAMUSTED-Full-shot.jpeg'];
 
-    const openLightbox = (index: number, customImages?: string[]) => {
+    const openLightbox = useCallback((index: number, customImages?: string[]) => {
         const imgs = customImages || (primaryImages.length > 0 ? primaryImages : ['/AAMUSTED-Full-shot.jpeg']);
         setLightboxImages(imgs);
         setActiveImageIndex(Math.max(0, Math.min(index, imgs.length - 1)));
         setLightboxOpen(true);
-    };
-
-    useEffect(() => {
-        if (!lightboxOpen) return;
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                setLightboxOpen(false);
-            } else if (e.key === 'ArrowLeft') {
-                setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : (lightboxImages.length > 0 ? lightboxImages.length - 1 : 0)));
-            } else if (e.key === 'ArrowRight') {
-                setActiveImageIndex((prev) => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
-            }
-        };
-
-        const originalOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            document.body.style.overflow = originalOverflow;
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [lightboxOpen, lightboxImages.length]);
+    }, [primaryImages]);
 
     const roomInventory = useMemo<RoomInventoryItem[]>(() => {
         const rooms = (hostel as any)?.rooms;
@@ -1635,147 +1614,23 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                 </div>
             </div>
 
-            {/* Fullscreen Interactive Photo Viewer / Lightbox */}
-            {lightboxOpen && (
-                <div
-                    className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col justify-between select-none animate-in fade-in duration-200"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Hostel Photo Viewer"
-                    onClick={() => setLightboxOpen(false)}
-                >
-                    {/* Top Control Bar */}
-                    <div
-                        className="flex items-center justify-between p-4 md:px-8 md:py-5 z-30 bg-gradient-to-b from-black/80 to-transparent shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div>
-                                <h3 className="text-white font-bold text-sm md:text-base font-headline truncate max-w-[220px] sm:max-w-xs md:max-w-md">
-                                    {hostel.name}
-                                </h3>
-                                <p className="text-white/70 text-xs font-medium">
-                                    Photo {activeImageIndex + 1} of {lightboxImages.length}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setLightboxOpen(false);
-                                    setRoomsDialogOpen(true);
-                                }}
-                                className="hidden sm:flex rounded-xl bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs gap-1.5 h-9"
-                            >
-                                <Grid className="h-3.5 w-3.5" />
-                                All Photos Grid
-                            </Button>
-                            <button
-                                type="button"
-                                aria-label="Close photo viewer"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setLightboxOpen(false);
-                                }}
-                                className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Center Large Image with Navigation Arrows */}
-                    <div
-                        className="relative flex-1 w-full flex items-center justify-center p-2 sm:p-4 md:p-8 min-h-0"
-                        onClick={() => setLightboxOpen(false)}
-                    >
-                        {/* Previous Button */}
-                        {lightboxImages.length > 1 && (
-                            <button
-                                type="button"
-                                aria-label="Previous photo"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : lightboxImages.length - 1));
-                                }}
-                                className="absolute left-2 sm:left-4 md:left-8 top-1/2 -translate-y-1/2 z-30 h-10 w-10 md:h-14 md:w-14 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 shadow-2xl cursor-pointer"
-                            >
-                                <ChevronLeft className="h-5 w-5 md:h-7 md:w-7" />
-                            </button>
-                        )}
-
-                        {/* Image Frame */}
-                        <div
-                            className="relative w-full max-w-6xl h-full flex items-center justify-center"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <Image
-                                src={lightboxImages[activeImageIndex] || '/AAMUSTED-Full-shot.jpeg'}
-                                alt={`${hostel.name} full photo ${activeImageIndex + 1}`}
-                                fill
-                                className="object-contain"
-                                priority
-                                sizes="(max-width: 1280px) 95vw, 1200px"
-                            />
-                        </div>
-
-                        {/* Next Button */}
-                        {lightboxImages.length > 1 && (
-                            <button
-                                type="button"
-                                aria-label="Next photo"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveImageIndex((prev) => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
-                                }}
-                                className="absolute right-2 sm:right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 h-10 w-10 md:h-14 md:w-14 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-md border border-white/20 transition-all hover:scale-110 active:scale-95 shadow-2xl cursor-pointer"
-                            >
-                                <ChevronRight className="h-5 w-5 md:h-7 md:w-7" />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Bottom Thumbnail Strip */}
-                    {lightboxImages.length > 1 && (
-                        <div
-                            className="p-3 md:p-5 z-30 bg-gradient-to-t from-black/90 to-transparent shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="max-w-4xl mx-auto flex items-center justify-center gap-2 md:gap-3 overflow-x-auto py-1 px-4">
-                                {lightboxImages.map((img, i) => (
-                                    <button
-                                        key={i}
-                                        type="button"
-                                        aria-label={`Go to photo ${i + 1}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveImageIndex(i);
-                                        }}
-                                        className={cn(
-                                            "relative h-12 w-16 md:h-16 md:w-24 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer",
-                                            i === activeImageIndex
-                                                ? "border-primary ring-2 ring-primary/40 scale-105 opacity-100 shadow-lg"
-                                                : "border-white/20 opacity-50 hover:opacity-100 hover:scale-100"
-                                        )}
-                                    >
-                                        <Image
-                                            src={img}
-                                            alt={`Thumbnail ${i + 1}`}
-                                            fill
-                                            className="object-cover"
-                                            sizes="96px"
-                                        />
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+            {/* YARL Fullscreen Photo Lightbox */}
+            <Lightbox
+                open={lightboxOpen}
+                close={() => setLightboxOpen(false)}
+                index={activeImageIndex}
+                on={{ view: ({ index }) => setActiveImageIndex(index) }}
+                slides={lightboxImages.map((src, i) => ({
+                    src,
+                    alt: `${hostel.name} photo ${i + 1}`,
+                }))}
+                styles={{
+                    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)' },
+                }}
+                carousel={{ finite: false }}
+                controller={{ closeOnBackdropClick: true }}
+                animation={{ fade: 300 }}
+            />
         </div>
     );
 }
