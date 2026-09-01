@@ -321,6 +321,23 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
             }
         });
 
+        // 5. Send Room Secured SMS to Manager & Student
+        try {
+            const { sendRoomSecuredSMSAction } = await import('@/app/actions/sms');
+            await sendRoomSecuredSMSAction({
+                bookingId: bookingRef.id,
+                hostelId,
+                studentId,
+                studentName: bookingData?.studentName,
+                studentPhone: bookingData?.phoneNumber,
+                roomTypeName: bookingData?.roomTypeName,
+                amountPaid,
+                reference,
+            });
+        } catch (smsErr) {
+            console.error("Error sending room secured SMS in verifyAndProcessBooking:", smsErr);
+        }
+
         return { success: true, message: "Booking confirmed successfully", bookingId: bookingRef.id };
 
     } catch (error: any) {

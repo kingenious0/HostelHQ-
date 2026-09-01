@@ -39,9 +39,8 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
-
-// Note: Ably tracking retired from consumer visit flow per university direct-booking model
-// Preserved comment for audit: import { ably } from '@/lib/ably';
+import { sendVisitBookingSMSAction } from '@/app/actions/sms';
+import { notifyVisitScheduled, notifyManagerVisitRequest } from '@/lib/notification-service-onesignal';
 
 const TIME_SLOTS = [
   { value: "09:00 - 12:00", label: "Morning (9:00 AM – 12:00 PM)" },
@@ -188,9 +187,33 @@ export default function BookingVisitPage() {
       setCreatedVisitId(docRef.id);
       setIsSuccess(true);
 
+      const formattedVisitDate = format(visitDate, 'EEE, MMM d, yyyy');
+
+      // 1. Dispatch SMS notification to both manager and student
+      sendVisitBookingSMSAction({
+        visitId: docRef.id,
+        hostelId: id,
+        hostelName: hostel.name,
+        studentName: studentName.trim(),
+        studentPhone: phone.trim(),
+        visitDate: formattedVisitDate,
+        visitTime: visitTimeSlot,
+        roomTypeName: selectedRoom?.name || "General Inspection",
+      }).catch((err) => console.error("Failed to send visit booking SMS:", err));
+
+      // 2. Dispatch push notifications
+      notifyVisitScheduled(currentUser.uid, hostel.name, formattedVisitDate)
+        .catch((err) => console.error("Failed to send student visit push notification:", err));
+
+      const managerId = (hostel as any).managerId;
+      if (managerId) {
+        notifyManagerVisitRequest(managerId, studentName.trim(), hostel.name, docRef.id)
+          .catch((err) => console.error("Failed to send manager visit push notification:", err));
+      }
+
       toast({
         title: "Visit Scheduled Successfully! 🎉",
-        description: `Your free visit to ${hostel.name} has been confirmed.`,
+        description: `Your free visit to ${hostel.name} has been confirmed. Confirmation SMS sent to your phone.`,
       });
     } catch (err: any) {
       console.error("Error creating visit request:", err);
