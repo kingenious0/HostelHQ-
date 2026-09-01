@@ -30,6 +30,7 @@ interface RootLayoutShellProps {
 }
 
 import { MaintenanceGuard } from "@/components/maintenance-guard";
+import { ShortlistProvider } from "@/components/shortlist-context";
 
 export function RootLayoutShell({ children }: RootLayoutShellProps) {
   const pathname = usePathname();
@@ -74,10 +75,12 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
 
   return (
     <MaintenanceGuard>
-      <div className="flex min-h-full flex-col pb-20 md:pb-0">
-        {children}
-        {!hideFooter && <Footer />}
-      </div>
+      <ShortlistProvider>
+        <div className="flex min-h-full flex-col pb-20 md:pb-0">
+          {children}
+          {!hideFooter && <Footer />}
+        </div>
+      </ShortlistProvider>
     </MaintenanceGuard>
   );
 }

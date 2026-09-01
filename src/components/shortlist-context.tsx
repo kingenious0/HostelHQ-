@@ -104,10 +104,15 @@ export function ShortlistProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const defaultContext: ShortlistContextType = {
+  shortlist: [],
+  isShortlisted: () => false,
+  toggleShortlist: () => {},
+  removeFromShortlist: () => {},
+  clearShortlist: () => {},
+};
+
 export function useShortlist() {
   const context = useContext(ShortlistContext);
-  if (!context) {
-    throw new Error("useShortlist must be used within a ShortlistProvider");
-  }
-  return context;
+  return context || defaultContext;
 }

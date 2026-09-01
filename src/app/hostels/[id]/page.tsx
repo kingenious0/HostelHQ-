@@ -10,7 +10,8 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart } from 'lucide-react';
+import { useShortlist } from '@/components/shortlist-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
@@ -96,7 +97,20 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [lightboxImages, setLightboxImages] = useState<string[]>([]);
     const [selectedRating, setSelectedRating] = useState('5');
     const [draftReview, setDraftReview] = useState('');
+    const { isShortlisted, toggleShortlist } = useShortlist();
+    const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
+
+    const activeRoom = useMemo<RoomType | null>(() => {
+        if (hostel.roomTypes && hostel.roomTypes.length > 0) {
+            return hostel.roomTypes[selectedRoomIndex] || hostel.roomTypes[0];
+        }
+        return null;
+    }, [hostel.roomTypes, selectedRoomIndex]);
+
+    const activeRoomType = activeRoom?.name || 'Standard Room';
+    const activeRoomPrice = activeRoom?.price ?? (hostel.priceRange?.min || hostel.price || 0);
+    const activeRoomAvailability = activeRoom?.availability || hostel.availability || 'Available';
 
     useEffect(() => {
         if (!currentUser || !hostel.id) {
@@ -474,60 +488,183 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         );
     };
 
-    // Mobile Sticky Container
-    const renderMobileStickyCTA = () => {
-        const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
+    const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
+
+    const renderPrimaryAction = (size: 'default' | 'lg' = 'default') => {
+        const buttonHeight = size === 'lg' ? "h-14" : "h-12";
+
+        if (!currentUser) {
+            return (
+                <Button
+                    onClick={handleLoginRedirect}
+                    className={cn(
+                        "flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                        buttonHeight
+                    )}
+                >
+                    <Ticket className="h-4 w-4" />
+                    View Visits
+                </Button>
+            );
+        }
+
+        if (hostel.availability === 'Full' || activeRoomAvailability === 'Full') {
+            return (
+                <Button
+                    disabled
+                    variant="secondary"
+                    className={cn("flex-1 rounded-xl text-xs sm:text-sm font-bold", buttonHeight)}
+                >
+                    Room Full
+                </Button>
+            );
+        }
+
+        if (existingBooking) {
+            return (
+                <Button
+                    onClick={() => router.push('/my-bookings')}
+                    className={cn(
+                        "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                        buttonHeight
+                    )}
+                >
+                    <ShieldCheck className="h-4 w-4" />
+                    Hostel Secured ✓
+                </Button>
+            );
+        }
+
+        if (canSecure) {
+            return (
+                <Button
+                    onClick={() => router.push(`/hostels/${hostel.id}/secure${activeRoom?.id ? `?roomTypeId=${activeRoom.id}` : ''}`)}
+                    className={cn(
+                        "flex-1 bg-accent hover:bg-accent/90 text-accent-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                        buttonHeight
+                    )}
+                >
+                    <ShieldCheck className="h-4 w-4" />
+                    Secure Room
+                </Button>
+            );
+        }
+
+        if (existingVisit && existingVisit.status !== 'cancelled') {
+            return (
+                <Button
+                    onClick={() => router.push('/my-bookings?tab=visits')}
+                    className={cn(
+                        "flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                        buttonHeight
+                    )}
+                >
+                    <Ticket className="h-4 w-4" />
+                    View Visits
+                </Button>
+            );
+        }
 
         return (
-            <div className="fixed bottom-0 left-0 right-0 z-40 p-4 lg:hidden bg-background/95 backdrop-blur-xl border-t border-border shadow-2xl animate-in fade-in slide-in-from-bottom-5 duration-300">
-                <div className="container mx-auto flex items-center justify-between gap-4">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Starting from</span>
-                        <div className="flex items-baseline gap-1 text-primary">
-                            <span className="text-xs font-bold">GH₵</span>
-                            <span className="text-xl font-bold">{(hostel.priceRange?.min || hostel.price || 0).toLocaleString()}</span>
-                            <span className="text-[10px] text-muted-foreground">/yr</span>
+            <Button
+                onClick={() => router.push(`/hostels/${hostel.id}/book${activeRoom?.id ? `?roomTypeId=${activeRoom.id}` : ''}`)}
+                className={cn(
+                    "flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2",
+                    buttonHeight
+                )}
+            >
+                <Ticket className="h-4 w-4" />
+                View Visits
+            </Button>
+        );
+    };
+
+    const renderShortlistAction = (size: 'default' | 'lg' = 'default') => {
+        const shortlisted = isShortlisted(hostel.id);
+        const buttonHeight = size === 'lg' ? "h-14" : "h-12";
+
+        return (
+            <Button
+                type="button"
+                variant="outline"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleShortlist(hostel);
+                }}
+                className={cn(
+                    "px-3.5 sm:px-4 rounded-xl border font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0",
+                    buttonHeight,
+                    shortlisted
+                        ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
+                        : "border-border/80 bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                title={shortlisted ? "Saved to shortlist" : "Save to shortlist"}
+            >
+                <Heart className={cn("h-4 w-4 transition-transform", shortlisted && "fill-rose-600 text-rose-600 scale-110")} />
+                <span className="hidden sm:inline">{shortlisted ? "Saved" : "Save to Shortlist"}</span>
+                <span className="sm:hidden">{shortlisted ? "Saved" : "Save"}</span>
+            </Button>
+        );
+    };
+
+    // Grouped Sticky Room Pricing & CTA Card (Above mobile bottom nav)
+    const renderMobileStickyCTA = () => {
+        return (
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 lg:hidden bg-card/95 backdrop-blur-xl border-t border-border/80 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] p-3.5 sm:px-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
+                <div className="max-w-lg mx-auto flex flex-col gap-2">
+                    {/* Top Row: Room Type & Availability */}
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground shrink-0">
+                                Room Type:
+                            </span>
+                            {(hostel.roomTypes?.length ?? 0) > 1 ? (
+                                <Select
+                                    value={String(selectedRoomIndex)}
+                                    onValueChange={(val) => setSelectedRoomIndex(Number(val))}
+                                >
+                                    <SelectTrigger className="h-7 text-xs font-bold px-2.5 py-0 border-border/70 bg-background/80 rounded-lg max-w-[190px] sm:max-w-xs truncate">
+                                        <SelectValue placeholder={activeRoomType} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {hostel.roomTypes?.map((rt, i) => (
+                                            <SelectItem key={rt.id || i} value={String(i)} className="text-xs font-medium">
+                                                {rt.name} (GH₵{rt.price.toLocaleString()}/yr)
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <span className="text-xs font-bold text-foreground truncate">
+                                    {activeRoomType}
+                                </span>
+                            )}
                         </div>
+                        <Badge
+                            variant="outline"
+                            className={cn(
+                                "text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0",
+                                availabilityInfo[activeRoomAvailability]?.className || 'bg-green-100 text-green-800 border-green-200'
+                            )}
+                        >
+                            {activeRoomAvailability}
+                        </Badge>
                     </div>
-                    <div>
-                        {!currentUser ? (
-                            <Button
-                                onClick={handleLoginRedirect}
-                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
-                            >
-                                Request Free Visit
-                            </Button>
-                        ) : hostel.availability === 'Full' ? (
-                            <Button disabled variant="secondary" className="rounded-2xl px-6 text-xs h-11">Hostel Full</Button>
-                        ) : existingBooking ? (
-                            <Button
-                                onClick={() => router.push(`/my-bookings`)}
-                                className="rounded-2xl px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md text-xs h-11"
-                            >
-                                Secured ✓
-                            </Button>
-                        ) : canSecure ? (
-                            <Button
-                                onClick={() => router.push(`/hostels/${hostel.id}/secure`)}
-                                className="rounded-2xl px-6 bg-accent hover:bg-accent/90 text-accent-foreground font-bold shadow-md text-xs h-11"
-                            >
-                                Secure Room
-                            </Button>
-                        ) : (existingVisit && existingVisit.status !== 'completed' && existingVisit.status !== 'cancelled') ? (
-                            <Button
-                                onClick={() => router.push('/my-bookings?tab=visits')}
-                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
-                            >
-                                View Visits
-                            </Button>
-                        ) : (
-                            <Button
-                                onClick={() => router.push(`/hostels/${hostel.id}/book`)}
-                                className="rounded-2xl px-6 bg-primary text-primary-foreground font-bold shadow-md text-xs h-11"
-                            >
-                                Request Free Visit
-                            </Button>
-                        )}
+
+                    {/* Middle Row: Price per year */}
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-xs font-bold text-primary">GH₵</span>
+                        <span className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
+                            {activeRoomPrice.toLocaleString()}
+                        </span>
+                        <span className="text-xs font-semibold text-muted-foreground">/year</span>
+                    </div>
+
+                    {/* Bottom Row: [View Visits] [Save to Shortlist] */}
+                    <div className="flex items-center gap-2 pt-0.5">
+                        {renderPrimaryAction('default')}
+                        {renderShortlistAction('default')}
                     </div>
                 </div>
             </div>
@@ -835,7 +972,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     return (
-        <div className="space-y-8 pb-32 lg:pb-16 relative">
+        <div className="space-y-8 pb-64 sm:pb-60 lg:pb-16 relative">
             {/* Mobile Sticky CTA Bar */}
             {renderMobileStickyCTA()}
 
@@ -1012,16 +1149,31 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <div className="grid gap-5">
                             {(hostel.roomTypes && hostel.roomTypes.length > 0) ? (
                                 hostel.roomTypes.map((room, idx) => {
-                                    const roomImg = room.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
+                                    const isSelected = selectedRoomIndex === idx;
+                                    const roomAny = room as any;
+                                    const roomImg = roomAny.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
+                                    const roomAmenities: string[] = room.roomAmenities || roomAny.amenities || [];
+                                    const bedsNum = Number(room.beds) || 0;
+                                    const capacityNum = Number(room.capacity) || 0;
+
                                     return (
                                         <div
                                             key={room.id || idx}
-                                            className="rounded-3xl border border-border/70 bg-card/60 backdrop-blur-sm p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between"
+                                            onClick={() => setSelectedRoomIndex(idx)}
+                                            className={cn(
+                                                "rounded-3xl border p-5 sm:p-6 transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between cursor-pointer",
+                                                isSelected
+                                                    ? "border-primary bg-primary/[0.04] shadow-md ring-2 ring-primary/40"
+                                                    : "border-border/70 bg-card/60 backdrop-blur-sm shadow-sm hover:border-primary/40 hover:shadow-md"
+                                            )}
                                         >
                                             <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center w-full md:w-auto">
                                                 <div
                                                     className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted cursor-pointer group"
-                                                    onClick={() => openLightbox(0, [roomImg, ...primaryImages.filter((img) => img !== roomImg)])}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openLightbox(0, [roomImg, ...primaryImages.filter((img) => img !== roomImg)]);
+                                                    }}
                                                     title="Click to view photo"
                                                 >
                                                     <Image
@@ -1037,7 +1189,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <div className="flex items-center gap-2.5">
+                                                    <div className="flex items-center gap-2.5 flex-wrap">
                                                         <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
                                                         <Badge
                                                             variant={getRoomAvailabilityVariant(room.availability)}
@@ -1045,17 +1197,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         >
                                                             {room.availability}
                                                         </Badge>
+                                                        {isSelected && (
+                                                            <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                                                                Selected Room
+                                                            </Badge>
+                                                        )}
                                                     </div>
 
                                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-medium">
                                                         {room.capacity && (
                                                             <span className="flex items-center gap-1">
-                                                                <UsersIcon className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{room.capacity > 1 ? 's' : ''}
+                                                                <UsersIcon className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{capacityNum > 1 ? 's' : ''}
                                                             </span>
                                                         )}
                                                         {room.beds && (
                                                             <span className="flex items-center gap-1">
-                                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Bed{room.beds > 1 ? 's' : ''}
+                                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Bed{bedsNum > 1 ? 's' : ''}
                                                             </span>
                                                         )}
                                                         {room.bathrooms && (
@@ -1065,16 +1222,16 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         )}
                                                     </div>
 
-                                                    {room.amenities && room.amenities.length > 0 && (
+                                                    {roomAmenities.length > 0 && (
                                                         <div className="flex flex-wrap gap-1.5 pt-1">
-                                                            {room.amenities.slice(0, 3).map((am, i) => (
+                                                            {roomAmenities.slice(0, 3).map((am, i) => (
                                                                 <span key={i} className="text-[10px] bg-muted px-2 py-0.5 rounded-md text-muted-foreground font-medium">
                                                                     {am}
                                                                 </span>
                                                             ))}
-                                                            {room.amenities.length > 3 && (
+                                                            {roomAmenities.length > 3 && (
                                                                 <span className="text-[10px] text-muted-foreground font-medium self-center">
-                                                                    +{room.amenities.length - 3} more
+                                                                    +{roomAmenities.length - 3} more
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1087,7 +1244,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Annual Rate</p>
                                                     <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
                                                 </div>
-                                                <div>
+                                                <div onClick={(e) => e.stopPropagation()}>
                                                     {getVisitButton(room)}
                                                 </div>
                                             </div>
@@ -1394,31 +1551,73 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 {/* Right Column (Desktop Sticky Booking & Pricing Card) */}
                 <div className="hidden lg:block sticky top-24 self-start space-y-6">
                     <div className="rounded-[2.5rem] p-7 border border-border/70 bg-card/90 backdrop-blur-xl shadow-xl space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Starting from</span>
-                                <div className="flex items-baseline gap-1 text-foreground">
-                                    {renderPrice()}
-                                    <span className="text-xs font-bold text-muted-foreground">/ yr</span>
-                                </div>
+                        {/* Room Type & Availability Header */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                    Room Type
+                                </span>
+                                <Badge
+                                    variant="outline"
+                                    className={cn(
+                                        "text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full",
+                                        availabilityInfo[activeRoomAvailability]?.className || 'bg-green-100 text-green-800 border-green-200'
+                                    )}
+                                >
+                                    {activeRoomAvailability}
+                                </Badge>
                             </div>
-                            <Badge
-                                variant="outline"
-                                className={cn("text-[10px] font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}
-                            >
-                                {currentAvailability.text}
-                            </Badge>
+
+                            {(hostel.roomTypes?.length ?? 0) > 1 ? (
+                                <Select
+                                    value={String(selectedRoomIndex)}
+                                    onValueChange={(val) => setSelectedRoomIndex(Number(val))}
+                                >
+                                    <SelectTrigger className="w-full h-11 text-sm font-bold px-3.5 border-border/80 bg-background/80 rounded-xl">
+                                        <SelectValue placeholder={activeRoomType} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {hostel.roomTypes?.map((rt, i) => (
+                                            <SelectItem key={rt.id || i} value={String(i)} className="text-xs font-semibold">
+                                                {rt.name} — GH₵{rt.price.toLocaleString()}/yr
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <p className="text-base font-extrabold text-foreground font-headline">
+                                    {activeRoomType}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Price per year */}
+                        <div className="rounded-2xl bg-muted/40 border border-border/60 p-4">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                                Price Per Year
+                            </span>
+                            <div className="flex items-baseline gap-1 text-foreground">
+                                <span className="text-sm font-bold text-primary">GH₵</span>
+                                <span className="text-3xl font-extrabold text-foreground tracking-tight">
+                                    {activeRoomPrice.toLocaleString()}
+                                </span>
+                                <span className="text-xs font-semibold text-muted-foreground ml-1">/ year</span>
+                            </div>
                         </div>
 
                         <Separator />
 
-                        {/* Primary Action Button */}
+                        {/* Primary Action Button & Shortlist Action */}
                         <div className="space-y-3">
-                            {getPrimaryCTA()}
+                            <div className="flex items-center gap-2">
+                                {renderPrimaryAction('lg')}
+                                {renderShortlistAction('lg')}
+                            </div>
+
                             {(hostel.roomTypes?.length ?? 0) > 1 && (
                                 <Button
                                     variant="outline"
-                                    className="w-full h-12 rounded-2xl font-bold text-xs"
+                                    className="w-full h-11 rounded-xl font-bold text-xs"
                                     onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                                 >
                                     Compare All {hostel.roomTypes?.length} Room Options
@@ -1471,7 +1670,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 }
 
 function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
+    const router = useRouter();
     const { toast } = useToast();
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+    const images = hostel.images && hostel.images.length > 0
+        ? hostel.images
+        : ['/AAMUSTED-Full-shot.jpeg'];
 
     const handleLoginRedirect = () => {
         toast({
@@ -1499,9 +1705,16 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
     return (
         <div className="grid lg:grid-cols-[1fr_0.42fr] gap-8 lg:gap-16 relative">
             <div className="order-2 lg:order-1 space-y-12">
-                <div className="relative group h-[350px] sm:h-[450px] lg:h-[550px] w-full overflow-hidden rounded-[2.5rem] shadow-2xl">
+                <div 
+                    className="relative group h-[350px] sm:h-[450px] lg:h-[550px] w-full overflow-hidden rounded-[2.5rem] shadow-2xl cursor-pointer"
+                    onClick={() => {
+                        setActiveImageIndex(0);
+                        setLightboxOpen(true);
+                    }}
+                    title="Click to view photo"
+                >
                     <Image
-                        src={hostel.images?.[0] || '/AAMUSTED-Full-shot.jpeg'}
+                        src={images[0]}
                         alt={hostel.name}
                         fill
                         className="object-cover transition-transform duration-1000 group-hover:scale-105"
@@ -1620,7 +1833,7 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                 close={() => setLightboxOpen(false)}
                 index={activeImageIndex}
                 on={{ view: ({ index }) => setActiveImageIndex(index) }}
-                slides={lightboxImages.map((src, i) => ({
+                slides={images.map((src, i) => ({
                     src,
                     alt: `${hostel.name} photo ${i + 1}`,
                 }))}
