@@ -19,7 +19,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { uploadImage } from '@/lib/cloudinary';
@@ -477,6 +477,13 @@ export default function SignupPage() {
                 title: 'Credentials Submitted! 🎓',
                 description: 'Your account is under review by the Administration.',
             });
+
+            // Immediately sign out so pending student does not have an active auth session
+            try {
+                await signOut(auth);
+            } catch (signOutErr) {
+                console.warn('Sign out after signup warning:', signOutErr);
+            }
 
             setStep('pending_confirmation');
         } catch (error: any) {
@@ -1152,7 +1159,10 @@ export default function SignupPage() {
                                     <div className="space-y-3 pt-2">
                                         <Button
                                             type="button"
-                                            onClick={() => router.push('/#all-hostels')}
+                                            onClick={async () => {
+                                                try { await signOut(auth); } catch (_) {}
+                                                router.push('/#all-hostels');
+                                            }}
                                             className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
                                         >
                                             Browse Hostels in Preview Mode
@@ -1162,7 +1172,10 @@ export default function SignupPage() {
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            onClick={() => router.push('/login')}
+                                            onClick={async () => {
+                                                try { await signOut(auth); } catch (_) {}
+                                                router.push('/login');
+                                            }}
                                             className="w-full h-11 rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10 font-semibold text-xs"
                                         >
                                             Return to Sign In

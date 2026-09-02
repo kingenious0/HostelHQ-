@@ -188,6 +188,7 @@ function LoginPageInner() {
 
                 // Intercept pending or rejected student accounts
                 if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                    try { await signOut(auth); } catch (_) {}
                     setUnderReviewData({
                         fullName: displayName || 'Student',
                         studentIndexNumber: userData.studentIndexNumber,
@@ -333,6 +334,7 @@ function LoginPageInner() {
                     displayName = userData.fullName || userData.firstName || 'User';
                     
                     if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                        try { await signOut(auth); } catch (_) {}
                         setUnderReviewData({
                             fullName: displayName || 'Student',
                             studentIndexNumber: userData.studentIndexNumber,
@@ -350,6 +352,7 @@ function LoginPageInner() {
                     }
                 }
             } else if (role === 'student' && (verifyData.user.verificationStatus === 'pending' || verifyData.user.verificationStatus === 'rejected')) {
+                try { await signOut(auth); } catch (_) {}
                 setUnderReviewData({
                     fullName: displayName || 'Student',
                     studentIndexNumber: verifyData.user.studentIndexNumber,
@@ -433,6 +436,20 @@ function LoginPageInner() {
                             const role = userData.role as string | undefined;
                             const displayName = userData.fullName || userData.firstName || '';
                             
+                            if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                                try { await signOut(auth); } catch (_) {}
+                                setUnderReviewData({
+                                    fullName: displayName || 'Student',
+                                    studentIndexNumber: userData.studentIndexNumber,
+                                    submittedAt: userData.createdAt,
+                                    rejectionReason: userData.rejectionReason,
+                                    isRejected: userData.verificationStatus === 'rejected',
+                                });
+                                setShowUnderReviewDialog(true);
+                                setBiometricLoading(false);
+                                return;
+                            }
+
                             toast({ 
                                 title: `Welcome back, ${displayName}!`,
                                 description: 'Biometric verification successful.',
@@ -759,7 +776,12 @@ function LoginPageInner() {
             </main>
 
             {/* Account Under Review / Verification Status Dialog */}
-            <Dialog open={showUnderReviewDialog} onOpenChange={setShowUnderReviewDialog}>
+            <Dialog open={showUnderReviewDialog} onOpenChange={(open) => {
+                if (!open) {
+                    signOut(auth).catch(() => {});
+                    setShowUnderReviewDialog(false);
+                }
+            }}>
                 <DialogContent className="sm:max-w-md bg-slate-900 border border-white/20 text-white rounded-3xl p-6 shadow-2xl">
                     <DialogHeader className="text-center space-y-3">
                         {underReviewData?.isRejected ? (
@@ -821,8 +843,9 @@ function LoginPageInner() {
                     <DialogFooter className="flex flex-col sm:flex-row gap-2 mt-4">
                         <Button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                                 setShowUnderReviewDialog(false);
+                                try { await signOut(auth); } catch (_) {}
                                 router.push('/#all-hostels');
                             }}
                             className="w-full h-10 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 text-xs"
@@ -835,7 +858,8 @@ function LoginPageInner() {
                             variant="outline"
                             onClick={async () => {
                                 setShowUnderReviewDialog(false);
-                                await signOut(auth);
+                                try { await signOut(auth); } catch (_) {}
+                                router.push('/login');
                             }}
                             className="w-full sm:w-auto h-10 rounded-xl bg-white/5 border-white/20 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold"
                         >

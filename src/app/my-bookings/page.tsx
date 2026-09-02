@@ -203,7 +203,14 @@ export default function MyBookingsPage() {
         const userDocRef = doc(db, "users", currentUser.uid);
         const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                const userData = docSnap.data() as AppUser;
+                const userData = docSnap.data() as any;
+
+                if (userData.role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                    firebaseSignOut(auth).catch(() => {});
+                    router.push('/login');
+                    return;
+                }
+
                 setAppUser({
                     uid: currentUser.uid,
                     email: userData.email || currentUser.email!,

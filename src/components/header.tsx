@@ -216,7 +216,7 @@ export function Header() {
   }, [themeMode, applyTheme]);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user: any) => {
       if (user) {
         const ablyClient = ably;
         if (ablyClient?.auth) {
@@ -228,6 +228,16 @@ export function Header() {
         const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap: any) => {
           if (docSnap.exists()) {
             const userData = docSnap.data() as AppUser;
+
+            // Strict security check: Pending or rejected student accounts are NOT allowed active authenticated sessions
+            if (userData.role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+              signOut(auth).catch(() => {});
+              setAppUser(null);
+              setProfileData({});
+              setLoading(false);
+              return;
+            }
+
             const currentUser: AppUser = {
               uid: user.uid,
               email: userData.email || user.email!,
@@ -238,6 +248,7 @@ export function Header() {
               address: userData.address || '',
               bio: userData.bio || '',
               authEmail: userData.authEmail || user.email!, // Store original auth email
+              verificationStatus: userData.verificationStatus,
             };
             setAppUser(currentUser);
             setProfileData(currentUser);
