@@ -12,8 +12,10 @@ import {
   Loader2, MapPin, Users, Bed, ShieldCheck, ArrowLeft, 
   Wifi, Car, Utensils, Tv, Wind, Droplets, Zap, Shield,
   Home, Bath, Coffee, Gamepad2, Dumbbell, Waves,
-  CheckCircle, Star, Phone, Mail, Clock, Calendar
+  CheckCircle, Star, Phone, Mail, Clock, Calendar, Eye
 } from "lucide-react";
+import Lightbox from 'yet-another-react-lightbox';
+import 'yet-another-react-lightbox/styles.css';
 import { getHostel, Hostel, RoomType } from "@/lib/data";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -198,6 +200,8 @@ export default function RoomDetailPage() {
   const [hasCompletedVisit, setHasCompletedVisit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasSecuredHostel, setHasSecuredHostel] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
     const fetch = async () => {
@@ -525,15 +529,27 @@ export default function RoomDetailPage() {
             <div className="lg:col-span-2 space-y-6">
               {/* Hero Image & Basic Info */}
               <Card className="overflow-hidden shadow-lg border-0 bg-white">
-                <div className="relative h-64 md:h-80 w-full">
+                <div 
+                  className="relative h-64 md:h-80 w-full cursor-pointer group"
+                  onClick={() => {
+                    setActiveImageIndex(0);
+                    setLightboxOpen(true);
+                  }}
+                  title="Click to view photo in fullscreen"
+                >
                   <Image
                     src={room.image}
                     alt={room.label}
                     fill
-                    className="object-cover"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                     priority
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="absolute top-4 left-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                      <Eye className="w-3.5 h-3.5" /> View Photo
+                    </span>
+                  </div>
                   <div className="absolute bottom-4 left-4 right-4">
                     <div className="flex items-end justify-between">
                       <div>
@@ -953,6 +969,24 @@ export default function RoomDetailPage() {
       : 'Request Free Visit'}
   </Button>
 </div>
+
+{/* YARL Fullscreen Photo Lightbox for Room Detail */}
+<Lightbox
+  open={lightboxOpen}
+  close={() => setLightboxOpen(false)}
+  index={activeImageIndex}
+  on={{ view: ({ index }) => setActiveImageIndex(index) }}
+  slides={[room.image, ...(hostel.images || []).filter(img => img !== room.image)].map((src, i) => ({
+    src,
+    alt: `${room.label} photo ${i + 1}`,
+  }))}
+  styles={{
+    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+  }}
+  carousel={{ finite: false }}
+  controller={{ closeOnBackdropClick: true }}
+  animation={{ fade: 300 }}
+/>
 </div>
 );
 }

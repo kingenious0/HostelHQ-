@@ -12,6 +12,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import Lightbox from 'yet-another-react-lightbox';
+import 'yet-another-react-lightbox/styles.css';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -57,6 +59,9 @@ export default function RoomsPage() {
   const [genderFilter, setGenderFilter] = useState<string>('');
   const [rentDuration, setRentDuration] = useState<string>('year');
   const [modalRoomType, setModalRoomType] = useState<RoomType | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
   const routeParams = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -650,7 +655,15 @@ export default function RoomsPage() {
                           viewMode === 'list' && "sm:flex-row sm:items-center sm:gap-6"
                         )}
                       >
-                        <div className={cn("relative overflow-hidden bg-muted", viewMode === 'grid' ? "h-52 w-full" : "h-44 sm:w-64 shrink-0")}>
+                        <div 
+                          className={cn("relative overflow-hidden bg-muted cursor-pointer", viewMode === 'grid' ? "h-52 w-full" : "h-44 sm:w-64 shrink-0")}
+                          onClick={() => {
+                            setLightboxImages([room.image, ...(hostel?.images || []).filter(img => img !== room.image)]);
+                            setActiveImageIndex(0);
+                            setLightboxOpen(true);
+                          }}
+                          title="Click to view photo in fullscreen"
+                        >
                           <Image
                             src={room.image}
                             alt={room.label}
@@ -658,6 +671,13 @@ export default function RoomsPage() {
                             className="object-cover transition-transform duration-700 group-hover:scale-105"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
+
+                          {/* Hover indicator */}
+                          <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                              <Eye className="w-3 h-3" /> View
+                            </span>
+                          </div>
 
                           {/* Top badge indicators */}
                           <div className="absolute top-3 left-3 flex gap-2">
@@ -978,6 +998,24 @@ export default function RoomsPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* YARL Fullscreen Photo Lightbox for Rooms Comparison Page */}
+        <Lightbox
+          open={lightboxOpen}
+          close={() => setLightboxOpen(false)}
+          index={activeImageIndex}
+          on={{ view: ({ index }) => setActiveImageIndex(index) }}
+          slides={(lightboxImages.length > 0 ? lightboxImages : (hostel?.images || ['/AAMUSTED-Full-shot.jpeg'])).map((src, i) => ({
+            src,
+            alt: `${hostel?.name || 'Room'} photo ${i + 1}`,
+          }))}
+          styles={{
+            container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+          }}
+          carousel={{ finite: false }}
+          controller={{ closeOnBackdropClick: true }}
+          animation={{ fade: 300 }}
+        />
       </main>
     </div>
   );

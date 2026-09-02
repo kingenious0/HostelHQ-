@@ -1879,6 +1879,24 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     </div>
                 </div>
             </div>
+
+            {/* YARL Fullscreen Photo Lightbox for FullHostelDetails */}
+            <Lightbox
+                open={lightboxOpen}
+                close={() => setLightboxOpen(false)}
+                index={activeImageIndex}
+                on={{ view: ({ index }) => setActiveImageIndex(index) }}
+                slides={(lightboxImages.length > 0 ? lightboxImages : primaryImages).map((src, i) => ({
+                    src,
+                    alt: `${hostel.name} photo ${i + 1}`,
+                }))}
+                styles={{
+                    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+                }}
+                carousel={{ finite: false }}
+                controller={{ closeOnBackdropClick: true }}
+                animation={{ fade: 300 }}
+            />
         </div>
     );
 }
