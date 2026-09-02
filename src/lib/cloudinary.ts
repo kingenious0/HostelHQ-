@@ -33,3 +33,27 @@ export async function uploadImage(file: File): Promise<string> {
   const data = await res.json();
   return data.secure_url; // https://res.cloudinary.com/ ...
 }
+
+// Browser video upload (unsigned) with auto-compression
+export async function uploadVideo(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('api_key', API_KEY);
+  form.append('upload_preset', 'firebase_studio_preset');
+  form.append('folder', 'hostel-videos');
+  form.append('resource_type', 'video');
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
+    { method: 'POST', body: form }
+  );
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    console.error("Cloudinary video upload failed:", errorBody);
+    throw new Error(`Video upload failed: ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  return data.secure_url;
+}

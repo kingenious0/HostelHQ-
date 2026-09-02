@@ -33,12 +33,16 @@ import {
   Camera,
   Layers,
   Sparkle,
+  Film,
+  Video,
+  Play,
+  Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc, collection, addDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { uploadImage } from "@/lib/cloudinary";
+import { uploadImage, uploadVideo } from "@/lib/cloudinary";
 import { RoomType, Hostel } from "@/lib/data";
 import { HostelLocationPicker } from "@/components/hostel-location-picker";
 import { enhanceHostelDescription } from "@/ai/flows/enhance-hostel-description";
@@ -146,8 +150,17 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       numberOfRooms: 1,
       roomNumbers: ["101"],
       roomAmenities: ["Mattress", "Wardrobe", "Ceiling Fan"],
+      images: [],
+      videos: [],
     },
   ]);
+
+  type RoomMediaItem = {
+    file: File;
+    previewUrl: string;
+    type: "image" | "video";
+  };
+  const [roomTypeMedia, setRoomTypeMedia] = useState<Record<number, RoomMediaItem[]>>({});
 
   // Step 4: Amenities & Policies
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
@@ -218,6 +231,8 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         occupancy: 0,
         numberOfRooms: 1,
         roomAmenities: [],
+        images: [],
+        videos: [],
       },
     ]);
   };
@@ -232,6 +247,45 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       return;
     }
     setRoomTypes(roomTypes.filter((_, i) => i !== index));
+    setRoomTypeMedia((prev) => {
+      const next: Record<number, RoomMediaItem[]> = {};
+      let nextIdx = 0;
+      for (let i = 0; i < roomTypes.length; i++) {
+        if (i !== index) {
+          if (prev[i]) {
+            next[nextIdx] = prev[i];
+          }
+          nextIdx++;
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleAddRoomMedia = (roomIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const newItems: RoomMediaItem[] = files.map((file) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        type: file.type.startsWith("video/") ? "video" : "image",
+      }));
+      setRoomTypeMedia((prev) => ({
+        ...prev,
+        [roomIndex]: [...(prev[roomIndex] || []), ...newItems],
+      }));
+    }
+    e.target.value = "";
+  };
+
+  const handleRemoveRoomMedia = (roomIndex: number, mediaIndex: number) => {
+    setRoomTypeMedia((prev) => {
+      const list = prev[roomIndex] || [];
+      return {
+        ...prev,
+        [roomIndex]: list.filter((_, i) => i !== mediaIndex),
+      };
+    });
   };
 
   const toggleRoomNumberForType = (index: number, val: string, checked: boolean) => {
@@ -449,6 +503,43 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         uploadedImageUrls.push(url);
       }
 
+      // 2. Upload per-room-type media (images and videos) to Cloudinary with auto-compression
+      const processedRoomTypes: RoomType[] = [];
+      for (let index = 0; index < roomTypes.length; index++) {
+        const rt = roomTypes[index];
+        const mediaItems = roomTypeMedia[index] || [];
+        const roomImages: string[] = [];
+        const roomVideos: string[] = [];
+
+        for (const item of mediaItems) {
+          try {
+            if (item.type === "video") {
+              const videoUrl = await uploadVideo(item.file);
+              roomVideos.push(videoUrl);
+            } else {
+              const imgUrl = await uploadImage(item.file);
+              roomImages.push(imgUrl);
+            }
+          } catch (uploadErr) {
+            console.warn(`Error uploading media for room ${rt.name || index}:`, uploadErr);
+          }
+        }
+
+        processedRoomTypes.push({
+          id: `rt-${index + 1}-${Date.now()}`,
+          name: rt.name || "Standard Room",
+          price: rt.price || 0,
+          availability: rt.availability || "Available",
+          capacity: rt.capacity || 1,
+          occupancy: rt.occupancy || 0,
+          numberOfRooms: rt.numberOfRooms || 1,
+          roomNumbers: rt.roomNumbers || [],
+          roomAmenities: rt.roomAmenities || [],
+          images: roomImages,
+          videos: roomVideos,
+        });
+      }
+
       const minPrice = Math.min(...roomTypes.map((r) => r.price || 0));
       const maxPrice = Math.max(...roomTypes.map((r) => r.price || 0));
 
@@ -474,17 +565,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         securityAndSafety,
         images: uploadedImageUrls.length > 0 ? uploadedImageUrls : ["/hero-student-housing.jpg"],
         priceRange: { min: minPrice, max: maxPrice },
-        roomTypes: roomTypes.map((rt, index) => ({
-          id: `rt-${index + 1}-${Date.now()}`,
-          name: rt.name || "Standard Room",
-          price: rt.price || 0,
-          availability: rt.availability || "Available",
-          capacity: rt.capacity || 1,
-          occupancy: rt.occupancy || 0,
-          numberOfRooms: rt.numberOfRooms || 1,
-          roomNumbers: rt.roomNumbers || [],
-          roomAmenities: rt.roomAmenities || [],
-        })),
+        roomTypes: processedRoomTypes,
         availability: "Available",
         rating: 5.0,
         reviewCount: 0,
@@ -882,6 +963,91 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
                         })}
                       </div>
                     </div>
+
+                    {/* Room Photos & Video Walkthrough Section */}
+                    <div className="space-y-3 pt-3 border-t border-border/60">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                        <div>
+                          <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <Camera className="h-3.5 w-3.5 text-primary" />
+                            Photos &amp; Walkthrough of this Room Type
+                          </Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Upload photos or videos showing what this &quot;{rt.name || `Room Type #${i + 1}`}&quot; looks like inside (bedding, washroom, study desk).
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 self-start sm:self-auto">
+                          ⚡ Auto-compressed
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-background border border-border/80 hover:border-primary/50 text-xs font-semibold text-foreground hover:bg-primary/5 transition-all shadow-xs">
+                          <Upload className="h-3.5 w-3.5 text-primary" />
+                          <span>Attach Room Photos &amp; Videos</span>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={(e) => handleAddRoomMedia(i, e)}
+                          />
+                        </label>
+                        <span className="text-[11px] text-muted-foreground">
+                          {(roomTypeMedia[i] || []).length} media attached
+                        </span>
+                      </div>
+
+                      {/* Thumbnails Grid */}
+                      {(roomTypeMedia[i] || []).length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-1">
+                          {(roomTypeMedia[i] || []).map((item, mIdx) => (
+                            <div
+                              key={mIdx}
+                              className="relative aspect-video sm:aspect-square rounded-xl overflow-hidden border border-border/80 bg-muted/50 group"
+                            >
+                              {item.type === "video" ? (
+                                <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white p-2">
+                                  <Film className="h-6 w-6 text-primary mb-1" />
+                                  <span className="text-[9px] font-semibold text-white/80 text-center truncate max-w-full">
+                                    Video Walkthrough
+                                  </span>
+                                </div>
+                              ) : (
+                                <Image
+                                  src={item.previewUrl}
+                                  alt={`Room ${i + 1} media ${mIdx + 1}`}
+                                  fill
+                                  className="object-cover"
+                                />
+                              )}
+
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRoomMedia(i, mIdx)}
+                                  className="h-7 w-7 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition-colors shadow-md"
+                                  title="Remove media"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+
+                              {mIdx === 0 && item.type === "image" && (
+                                <span className="absolute bottom-1 left-1 text-[8px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded font-bold shadow-xs">
+                                  Primary Photo
+                                </span>
+                              )}
+                              {item.type === "video" && (
+                                <span className="absolute bottom-1 right-1 text-[8px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold shadow-xs flex items-center gap-0.5">
+                                  <Film className="h-2.5 w-2.5" /> Video
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1083,10 +1249,12 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
                   </div>
                   <div>
                     <span className="text-muted-foreground font-medium">Room Categories:</span>
-                    <p className="font-semibold text-foreground">{roomTypes.length} types</p>
+                    <p className="font-semibold text-foreground">
+                      {roomTypes.length} types ({Object.values(roomTypeMedia).reduce((acc, list) => acc + list.length, 0)} room media)
+                    </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground font-medium">Photos Attached:</span>
+                    <span className="text-muted-foreground font-medium">Hostel Photos:</span>
                     <p className="font-semibold text-foreground">{photos.length} photos</p>
                   </div>
                   <div>

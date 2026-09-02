@@ -10,7 +10,7 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap, Camera, Film, Video } from 'lucide-react';
 import { useShortlist } from '@/components/shortlist-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1215,10 +1215,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 hostel.roomTypes.map((room, idx) => {
                                     const isSelected = selectedRoomIndex === idx;
                                     const roomAny = room as any;
-                                    const roomImg = roomAny.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
+                                    const roomPhotos: string[] = (room.images && room.images.length > 0) ? room.images : [];
+                                    const roomImg = roomPhotos[0] || roomAny.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
                                     const roomAmenities: string[] = room.roomAmenities || roomAny.amenities || [];
                                     const bedsNum = Number(room.beds) || 0;
                                     const capacityNum = Number(room.capacity) || 0;
+                                    const hasRoomVideos = Boolean(room.videos && room.videos.length > 0);
 
                                     return (
                                         <div
@@ -1236,9 +1238,12 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted cursor-pointer group"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        openLightbox(0, [roomImg, ...primaryImages.filter((img) => img !== roomImg)]);
+                                                        const slidesToOpen = roomPhotos.length > 0
+                                                            ? [...roomPhotos, ...primaryImages.filter((img) => !roomPhotos.includes(img))]
+                                                            : [roomImg, ...primaryImages.filter((img) => img !== roomImg)];
+                                                        openLightbox(0, slidesToOpen);
                                                     }}
-                                                    title="Click to view photo"
+                                                    title="Click to view room photos"
                                                 >
                                                     <Image
                                                         src={roomImg}
@@ -1248,9 +1253,21 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
                                                         <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
-                                                            <Eye className="w-3 h-3" /> View
+                                                            <Eye className="w-3 h-3" /> View {roomPhotos.length > 1 ? `(${roomPhotos.length})` : ''}
                                                         </span>
                                                     </div>
+
+                                                    {roomPhotos.length > 1 && (
+                                                        <div className="absolute bottom-1.5 left-1.5 z-10 bg-black/75 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                                                            <Camera className="w-2.5 h-2.5 text-primary" /> {roomPhotos.length}
+                                                        </div>
+                                                    )}
+
+                                                    {hasRoomVideos && (
+                                                        <div className="absolute top-1.5 left-1.5 z-10 bg-indigo-600/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                                                            <Film className="w-2.5 h-2.5" /> Video
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-2.5 flex-wrap">
@@ -1382,6 +1399,38 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             </Button>
                                         </div>
                                     </div>
+
+                                    {/* Room Photos Showcase Strip if Available */}
+                                    {activeRoom.images && activeRoom.images.length > 0 && (
+                                        <div className="space-y-2 pt-1 border-b border-border/60 pb-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                                    <Camera className="h-3.5 w-3.5 text-primary" />
+                                                    Photos of {activeRoom.name} ({activeRoom.images.length})
+                                                </span>
+                                                <span className="text-[11px] text-muted-foreground">Click any photo to enlarge</span>
+                                            </div>
+                                            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+                                                {activeRoom.images.map((imgUrl, pIdx) => (
+                                                    <div
+                                                        key={pIdx}
+                                                        className="relative h-20 w-28 sm:h-24 sm:w-36 rounded-xl overflow-hidden shrink-0 border border-border bg-muted cursor-pointer group shadow-xs"
+                                                        onClick={() => openLightbox(pIdx, activeRoom.images!)}
+                                                    >
+                                                        <Image
+                                                            src={imgUrl}
+                                                            alt={`${activeRoom.name} photo ${pIdx + 1}`}
+                                                            fill
+                                                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                            <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* 3-column responsive grid for Inclusions, Security, and Utilities */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

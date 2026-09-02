@@ -15,6 +15,8 @@ export type RoomType = {
   capacity?: number; // total occupants allowed per room
   numberOfRooms?: number; // number of rooms of this type (optional)
   roomNumbers?: string[]; // explicit physical room numbers for this type (optional)
+  images?: string[]; // Specific photos for this room type
+  videos?: string[]; // Walkthrough videos for this room type
 };
 
 // A physical numbered room inside a hostel. Stored under hostels/{hostelId}/rooms/{roomId}.

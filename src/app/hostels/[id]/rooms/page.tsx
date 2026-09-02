@@ -5,7 +5,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter, CheckCircle2, Clock, ShieldCheck, Sparkles, Building, ChevronRight, Check, Shield, Zap, Droplets, Wind, Home, Eye, Info } from 'lucide-react';
+import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter, CheckCircle2, Clock, ShieldCheck, Sparkles, Building, ChevronRight, Check, Shield, Zap, Droplets, Wind, Home, Eye, Info, Camera, Film, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +39,8 @@ type RoomInventoryItem = {
   capacity: number | null;
   gender: string;
   image: string;
+  images?: string[];
+  videos?: string[];
   roomNumber?: string;
   totalRooms?: number | null;
   amenities?: string[];
@@ -224,6 +226,17 @@ export default function RoomsPage() {
           (roomNumber ? roomOccupancy[`room-${roomNumber}`] : 0) ?? // Then try room number
           room.currentOccupancy ?? // Then try stored occupancy
           0; // Default to 0
+
+        const roomPhotos = (room.images && room.images.length > 0)
+          ? room.images
+          : (matchingType?.images && matchingType.images.length > 0)
+          ? matchingType.images
+          : [];
+        const roomVideos = (room.videos && room.videos.length > 0)
+          ? room.videos
+          : (matchingType?.videos && matchingType.videos.length > 0)
+          ? matchingType.videos
+          : [];
           
         return {
           id,
@@ -233,7 +246,9 @@ export default function RoomsPage() {
           occupancy: occupancyFromBookings,
           capacity: capacity ?? null,
           gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
-          image: room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
+          image: roomPhotos[0] || room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
+          images: roomPhotos,
+          videos: roomVideos,
           roomNumber: roomNumber,
           amenities: rawAmenities,
         };
@@ -262,6 +277,9 @@ export default function RoomsPage() {
         ];
       }
 
+      const typePhotos = (roomType.images && roomType.images.length > 0) ? roomType.images : [];
+      const typeVideos = (roomType.videos && roomType.videos.length > 0) ? roomType.videos : [];
+
       return {
         id: roomTypeId,
         label: roomType.name,
@@ -270,7 +288,9 @@ export default function RoomsPage() {
         occupancy: roomType.occupancy ?? occupancyFromBookings,
         capacity: capacity ?? null,
         gender: hostel.gender || 'Mixed',
-        image: primaryImages[typeIndex % primaryImages.length],
+        image: typePhotos[0] || primaryImages[typeIndex % primaryImages.length],
+        images: typePhotos,
+        videos: typeVideos,
         roomNumber: undefined,
         totalRooms: (roomType as any).numberOfRooms ?? null,
         amenities: rawAmenities,
@@ -658,11 +678,14 @@ export default function RoomsPage() {
                         <div 
                           className={cn("relative overflow-hidden bg-muted cursor-pointer", viewMode === 'grid' ? "h-52 w-full" : "h-44 sm:w-64 shrink-0")}
                           onClick={() => {
-                            setLightboxImages([room.image, ...(hostel?.images || []).filter(img => img !== room.image)]);
+                            const slidesToOpen = (room.images && room.images.length > 0)
+                              ? [...room.images, ...(hostel?.images || []).filter(img => !room.images!.includes(img))]
+                              : [room.image, ...(hostel?.images || []).filter(img => img !== room.image)];
+                            setLightboxImages(slidesToOpen);
                             setActiveImageIndex(0);
                             setLightboxOpen(true);
                           }}
-                          title="Click to view photo in fullscreen"
+                          title="Click to view room photos in fullscreen"
                         >
                           <Image
                             src={room.image}
@@ -675,15 +698,25 @@ export default function RoomsPage() {
                           {/* Hover indicator */}
                           <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                             <span className="bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
-                              <Eye className="w-3 h-3" /> View
+                              <Eye className="w-3 h-3" /> View {room.images && room.images.length > 1 ? `(${room.images.length})` : ''}
                             </span>
                           </div>
 
                           {/* Top badge indicators */}
-                          <div className="absolute top-3 left-3 flex gap-2">
+                          <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
                             <Badge className="bg-background/90 text-foreground backdrop-blur-md border-0 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm">
                               {room.gender === 'Male' ? '♂ Male' : room.gender === 'Female' ? '♀ Female' : 'Mixed'}
                             </Badge>
+                            {room.images && room.images.length > 1 && (
+                              <Badge className="bg-black/75 text-white backdrop-blur-md border-0 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                                <Camera className="w-2.5 h-2.5 text-primary" /> {room.images.length}
+                              </Badge>
+                            )}
+                            {room.videos && room.videos.length > 0 && (
+                              <Badge className="bg-indigo-600/90 text-white backdrop-blur-md border-0 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                                <Film className="w-2.5 h-2.5" /> Video
+                              </Badge>
+                            )}
                           </div>
 
                           {/* Capacity info pill */}

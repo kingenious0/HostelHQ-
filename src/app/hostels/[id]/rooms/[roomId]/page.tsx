@@ -12,7 +12,8 @@ import {
   Loader2, MapPin, Users, Bed, ShieldCheck, ArrowLeft, 
   Wifi, Car, Utensils, Tv, Wind, Droplets, Zap, Shield,
   Home, Bath, Coffee, Gamepad2, Dumbbell, Waves,
-  CheckCircle, Star, Phone, Mail, Clock, Calendar, Eye
+  CheckCircle, Star, Phone, Mail, Clock, Calendar, Eye,
+  Camera, Film, Video, Play, DoorOpen
 } from "lucide-react";
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
@@ -40,6 +41,8 @@ interface RoomInventoryItem {
   capacity: number | null;
   gender: string;
   image: string;
+  images?: string[];
+  videos?: string[];
   totalRooms?: number | null;
   amenities?: string[];
 }
@@ -339,6 +342,17 @@ export default function RoomDetailPage() {
           ];
         }
 
+        const roomPhotos = (found.images && found.images.length > 0)
+          ? found.images
+          : (matchingType?.images && matchingType.images.length > 0)
+          ? matchingType.images
+          : [];
+        const roomVideos = (found.videos && found.videos.length > 0)
+          ? found.videos
+          : (matchingType?.videos && matchingType.videos.length > 0)
+          ? matchingType.videos
+          : [];
+
         return {
           id: found.id ?? `room-${index}`,
           label: formatLabel(found.roomNumber ?? found.number ?? found.name, index),
@@ -347,7 +361,9 @@ export default function RoomDetailPage() {
           occupancy: found.currentOccupancy ?? found.occupancy ?? found.occupants ?? 0,
           capacity: capacity ?? null,
           gender: found.gender ?? found.genderTag ?? (hostel.gender || "Mixed"),
-          image: found.image ?? found.imageUrl ?? primaryImages[index % primaryImages.length],
+          image: roomPhotos[0] || found.image ?? found.imageUrl ?? primaryImages[index % primaryImages.length],
+          images: roomPhotos,
+          videos: roomVideos,
           totalRooms: (matchingType as any)?.numberOfRooms ?? null,
           amenities: rawAmenities,
         };
@@ -370,6 +386,10 @@ export default function RoomDetailPage() {
           'Furniture (Table, Chair)'
         ];
       }
+
+      const typePhotos = (byId.images && byId.images.length > 0) ? byId.images : [];
+      const typeVideos = (byId.videos && byId.videos.length > 0) ? byId.videos : [];
+
       return {
         id: byId.id ?? `roomType-${idx}`,
         label: byId.name,
@@ -378,7 +398,9 @@ export default function RoomDetailPage() {
         occupancy: byId.occupancy ?? 0,
         capacity,
         gender: hostel.gender || "Mixed",
-        image: primaryImages[idx % primaryImages.length],
+        image: typePhotos[0] || primaryImages[idx % primaryImages.length],
+        images: typePhotos,
+        videos: typeVideos,
         totalRooms: (byId as any).numberOfRooms ?? null,
         amenities: rawAmenities,
       };
@@ -583,7 +605,63 @@ export default function RoomDetailPage() {
               {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
             </Badge>
           </div>
+
+          {/* Gallery Thumbnail Row if multiple photos exist */}
+          {room.images && room.images.length > 1 && (
+            <div className="p-3 bg-muted/20 border-t border-border/60 flex items-center gap-2.5 overflow-x-auto scrollbar-none">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1 pl-1">
+                <Camera className="h-3 w-3 text-primary" /> Photos ({room.images.length}):
+              </span>
+              {room.images.map((imgUrl, pIdx) => (
+                <div
+                  key={pIdx}
+                  onClick={() => {
+                    setActiveImageIndex(pIdx);
+                    setLightboxOpen(true);
+                  }}
+                  className={cn(
+                    "relative h-14 w-20 rounded-lg overflow-hidden shrink-0 border-2 cursor-pointer transition-all",
+                    pIdx === 0 ? "border-primary shadow-xs" : "border-border/70 opacity-80 hover:opacity-100 hover:border-primary/50"
+                  )}
+                >
+                  <Image
+                    src={imgUrl}
+                    alt={`Thumbnail ${pIdx + 1}`}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
+
+        {/* Virtual Video Walkthrough Section if present */}
+        {room.videos && room.videos.length > 0 && (
+          <Card className="shadow-lg border-0 bg-white overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+                <Film className="h-5 w-5 text-indigo-600" />
+                Virtual Walkthrough Video
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Take a virtual video tour of this {room.type} before scheduling your in-person visit.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {room.videos.map((vidUrl, vIdx) => (
+                <div key={vIdx} className="rounded-2xl overflow-hidden border border-border bg-black aspect-video relative">
+                  <video
+                    src={vidUrl}
+                    controls
+                    preload="metadata"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Room Details */}
         <Card className="shadow-lg border-0 bg-white">
@@ -976,7 +1054,10 @@ export default function RoomDetailPage() {
   close={() => setLightboxOpen(false)}
   index={activeImageIndex}
   on={{ view: ({ index }) => setActiveImageIndex(index) }}
-  slides={[room.image, ...(hostel.images || []).filter(img => img !== room.image)].map((src, i) => ({
+  slides={[
+    ...(room.images && room.images.length > 0 ? room.images : [room.image]),
+    ...(hostel.images || []).filter(img => !(room.images && room.images.length > 0 ? room.images : [room.image]).includes(img))
+  ].map((src, i) => ({
     src,
     alt: `${room.label} photo ${i + 1}`,
   }))}
