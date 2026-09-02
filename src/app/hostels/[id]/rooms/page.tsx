@@ -13,7 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import Lightbox from 'yet-another-react-lightbox';
+import Zoom from 'yet-another-react-lightbox/plugins/zoom';
+import Counter from 'yet-another-react-lightbox/plugins/counter';
 import 'yet-another-react-lightbox/styles.css';
+import 'yet-another-react-lightbox/plugins/counter.css';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -1042,12 +1045,13 @@ export default function RoomsPage() {
             src,
             alt: `${hostel?.name || 'Room'} photo ${i + 1}`,
           }))}
+          plugins={[Zoom, Counter]}
           styles={{
-            container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+            container: { backgroundColor: '#000000' },
           }}
           carousel={{ finite: false }}
           controller={{ closeOnBackdropClick: true }}
-          animation={{ fade: 300 }}
+          animation={{ fade: 250 }}
         />
       </main>
     </div>

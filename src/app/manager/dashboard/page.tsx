@@ -2554,7 +2554,7 @@ export default function ManagerDashboard() {
 
                 {/* Incident Report Submission Dialog (Manager -> Student to Dean of Students) */}
                 <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
-                    <DialogContent className="max-w-lg rounded-2xl">
+                    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
                         <DialogHeader>
                             <div className="flex items-center gap-2">
                                 <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
@@ -2730,7 +2730,7 @@ export default function ManagerDashboard() {
 
                 {/* Dispute & Grievance Review Dialog (Detail Modal) */}
                 <Dialog open={complaintDetailOpen} onOpenChange={setComplaintDetailOpen}>
-                    <DialogContent className="max-w-lg rounded-2xl">
+                    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
                         <DialogHeader>
                             <div className="flex items-start justify-between gap-3">
                                 <div>

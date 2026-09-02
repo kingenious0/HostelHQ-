@@ -345,3 +345,130 @@ picture {
     print-color-adjust: exact !important;
   }
 }
+
+/* ============================================================
+   Yet-Another-React-Lightbox (YARL) Production Mobile & Desktop Fixes
+   ============================================================ */
+.yarl__portal {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  z-index: 999999 !important; /* Above mobile headers, modals & fixed bottom nav (z-50) */
+  background-color: #000000 !important;
+  opacity: 1 !important;
+  overflow: hidden !important;
+}
+
+.yarl__container {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100vw !important;
+  max-height: 100dvh !important;
+  background-color: #000000 !important;
+  overflow: hidden !important;
+}
+
+/* Ensure carousel expands across all slides and doesn't squeeze on narrow mobile viewports */
+.yarl__carousel {
+  display: flex !important;
+  height: 100% !important;
+  width: calc(100% * var(--yarl__carousel_slides_count, 1)) !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Each slide takes 100% of the viewport container */
+.yarl__slide {
+  flex: 0 0 100vw !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure slide image scales properly with object-fit contain */
+.yarl__slide_image {
+  max-width: 100vw !important;
+  max-height: 85dvh !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  margin: auto !important;
+  display: block !important;
+  border-radius: 6px !important;
+}
+
+/* Navigation buttons styling on mobile & desktop */
+.yarl__navigation_prev,
+.yarl__navigation_next {
+  position: absolute !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  z-index: 50 !important;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 9999px !important;
+  width: 44px !important;
+  height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+.yarl__navigation_prev {
+  left: 12px !important;
+}
+
+.yarl__navigation_next {
+  right: 12px !important;
+}
+
+/* Top toolbar buttons (close X, zoom, etc.) */
+.yarl__toolbar {
+  position: absolute !important;
+  top: 14px !important;
+  right: 14px !important;
+  z-index: 50 !important;
+  display: flex !important;
+  gap: 8px !important;
+}
+
+.yarl__toolbar .yarl__button {
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 9999px !important;
+  width: 42px !important;
+  height: 42px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Counter indicator (e.g. 1 / 5) */
+.yarl__counter {
+  position: absolute !important;
+  top: 18px !important;
+  left: 18px !important;
+  z-index: 50 !important;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  backdrop-filter: blur(8px) !important;
+  padding: 6px 14px !important;
+  border-radius: 9999px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}

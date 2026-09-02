@@ -16,7 +16,10 @@ import {
   Camera, Film, Video, Play, DoorOpen
 } from "lucide-react";
 import Lightbox from 'yet-another-react-lightbox';
+import Zoom from 'yet-another-react-lightbox/plugins/zoom';
+import Counter from 'yet-another-react-lightbox/plugins/counter';
 import 'yet-another-react-lightbox/styles.css';
+import 'yet-another-react-lightbox/plugins/counter.css';
 import { getHostel, Hostel, RoomType } from "@/lib/data";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -1061,12 +1064,13 @@ export default function RoomDetailPage() {
     src,
     alt: `${room.label} photo ${i + 1}`,
   }))}
+  plugins={[Zoom, Counter]}
   styles={{
-    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+    container: { backgroundColor: '#000000' },
   }}
   carousel={{ finite: false }}
   controller={{ closeOnBackdropClick: true }}
-  animation={{ fade: 300 }}
+  animation={{ fade: 250 }}
 />
 </div>
 );

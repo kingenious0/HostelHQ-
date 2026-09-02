@@ -4,7 +4,10 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Lightbox from 'yet-another-react-lightbox';
+import Zoom from 'yet-another-react-lightbox/plugins/zoom';
+import Counter from 'yet-another-react-lightbox/plugins/counter';
 import 'yet-another-react-lightbox/styles.css';
+import 'yet-another-react-lightbox/plugins/counter.css';
 import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
@@ -1939,12 +1942,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     src,
                     alt: `${hostel.name} photo ${i + 1}`,
                 }))}
+                plugins={[Zoom, Counter]}
                 styles={{
-                    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: 99999 },
+                    container: { backgroundColor: '#000000' },
                 }}
                 carousel={{ finite: false }}
                 controller={{ closeOnBackdropClick: true }}
-                animation={{ fade: 300 }}
+                animation={{ fade: 250 }}
             />
         </div>
     );
@@ -2118,12 +2122,13 @@ function LimitedHostelDetails({ hostel }: { hostel: Hostel }) {
                     src,
                     alt: `${hostel.name} photo ${i + 1}`,
                 }))}
+                plugins={[Zoom, Counter]}
                 styles={{
-                    container: { backgroundColor: 'rgba(0, 0, 0, 0.95)' },
+                    container: { backgroundColor: '#000000' },
                 }}
                 carousel={{ finite: false }}
                 controller={{ closeOnBackdropClick: true }}
-                animation={{ fade: 300 }}
+                animation={{ fade: 250 }}
             />
         </div>
     );
