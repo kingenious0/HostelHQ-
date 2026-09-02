@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -31,56 +29,15 @@ import {
   Loader2,
   AlertTriangle,
   Mail,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isToday, isTomorrow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { declineVisitRequestAction } from "@/app/actions/db";
-export { VisitRequestRow } from "./VisitRequestRow";
+import { type StudentProfileContext, type VisitRequestCardProps } from "./VisitRequestCard";
 
-export interface StudentProfileContext {
-  verificationStatus?: "verified" | "pending" | "rejected" | "unverified";
-  studentIdCardUrl?: string;
-  idCardUrl?: string;
-  admissionLetterUrl?: string;
-  email?: string;
-  phone?: string;
-  fullName?: string;
-}
-
-export interface VisitRequestCardProps {
-  visit: {
-    id: string;
-    hostelId: string;
-    hostelName?: string;
-    studentId?: string;
-    studentName: string;
-    studentEmail?: string;
-    studentPhone?: string;
-    roomTypeId?: string | null;
-    roomTypeName?: string;
-    visitDate: string | any;
-    visitTime?: string;
-    notes?: string;
-    status: "pending" | "accepted" | "completed" | "cancelled" | "declined" | string;
-    declineReason?: string;
-    createdAt?: string | any;
-    studentCompleted?: boolean;
-    verificationStatus?: string;
-    studentIdCardUrl?: string;
-    idCardUrl?: string;
-    admissionLetterUrl?: string;
-  };
-  studentProfile?: StudentProfileContext;
-  onUpdateStatus?: (
-    visitId: string,
-    newStatus: "accepted" | "completed" | "cancelled" | "declined",
-    reason?: string
-  ) => Promise<void>;
-  isUpdating?: boolean;
-  onOpenDocument?: (url: string, title: string, docType: "id_card" | "admission_letter") => void;
-}
-
-export function VisitRequestCard({
+export function VisitRequestRow({
   visit,
   studentProfile,
   onUpdateStatus,
@@ -88,21 +45,35 @@ export function VisitRequestCard({
   onOpenDocument,
 }: VisitRequestCardProps) {
   const { toast } = useToast();
+  const [isExpanded, setIsExpanded] = useState(false);
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [isSubmittingDecline, setIsSubmittingDecline] = useState(false);
 
   // Parse and format visit date safely
+  let dateObj: Date | null = null;
   let visitDateFormatted = "Date not set";
+  let monthFormatted = "DATE";
+  let dayFormatted = "--";
+  let isDateToday = false;
+  let isDateTomorrow = false;
+
   try {
     if (visit.visitDate) {
-      const d =
+      dateObj =
         typeof visit.visitDate === "string"
           ? new Date(visit.visitDate)
           : visit.visitDate.toDate
           ? visit.visitDate.toDate()
           : new Date(visit.visitDate);
-      visitDateFormatted = format(d, "EEEE, d MMM yyyy");
+
+      if (dateObj && !isNaN(dateObj.getTime())) {
+        visitDateFormatted = format(dateObj, "EEEE, d MMM yyyy");
+        monthFormatted = format(dateObj, "MMM").toUpperCase();
+        dayFormatted = format(dateObj, "dd");
+        isDateToday = isToday(dateObj);
+        isDateTomorrow = isTomorrow(dateObj);
+      }
     }
   } catch (e) {
     visitDateFormatted = String(visit.visitDate);
@@ -133,28 +104,34 @@ export function VisitRequestCard({
   // Status badge config
   const statusBadge = {
     pending: {
-      label: "Pending Confirmation",
+      label: "Pending",
       className: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300",
+      dotColor: "bg-amber-500",
     },
     accepted: {
-      label: "Confirmed / Accepted",
+      label: "Confirmed",
       className: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300",
+      dotColor: "bg-emerald-500",
     },
     completed: {
-      label: "Visit Completed",
+      label: "Completed",
       className: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300",
+      dotColor: "bg-blue-500",
     },
     declined: {
       label: "Declined",
       className: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300",
+      dotColor: "bg-rose-500",
     },
     cancelled: {
       label: "Cancelled",
       className: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300",
+      dotColor: "bg-slate-400",
     },
   }[visit.status] || {
     label: visit.status,
     className: "bg-slate-100 text-slate-800",
+    dotColor: "bg-slate-400",
   };
 
   const handleConfirmDecline = async () => {
@@ -190,88 +167,168 @@ export function VisitRequestCard({
   };
 
   return (
-    <>
-      <Card className="border rounded-2xl p-4 bg-white shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden">
-        <div>
-          {/* Header Row: Student Name, Hostel, and Verification Badge */}
-          <div className="flex items-start justify-between gap-2 mb-2.5">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h4 className="font-bold text-sm text-slate-900 leading-tight truncate">
-                  {visit.studentName}
-                </h4>
-
-                {/* Student Verification Badge */}
-                {verificationStatus === "verified" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                    Verified Student
-                  </span>
-                ) : verificationStatus === "pending" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                    <Clock3 className="w-3 h-3 text-amber-600 shrink-0" />
-                    Pending Verification
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-300">
-                    <ShieldAlert className="w-3 h-3 text-slate-500 shrink-0" />
-                    Unverified
-                  </span>
-                )}
-              </div>
-
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {visit.hostelName || "Hostel Inspection"}
-                {visit.roomTypeName && ` • ${visit.roomTypeName}`}
-              </p>
+    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+      visit.status === "pending"
+        ? "bg-amber-50/20 border-amber-200/90 shadow-xs"
+        : "bg-white border-slate-200/90 hover:border-slate-300 shadow-xs"
+    }`}>
+      {/* Main Compact Row */}
+      <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+        {/* Date Block */}
+        <div className="shrink-0 flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-slate-100/90 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-center overflow-hidden">
+          {isDateToday ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-emerald-600 text-white font-bold">
+              <span className="text-[9px] uppercase tracking-wider leading-none">NOW</span>
+              <span className="text-xs font-extrabold leading-tight">TODAY</span>
             </div>
+          ) : isDateTomorrow ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-blue-600 text-white font-bold">
+              <span className="text-[9px] uppercase tracking-wider leading-none">NEXT</span>
+              <span className="text-xs font-extrabold leading-tight">TMRW</span>
+            </div>
+          ) : (
+            <>
+              <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider leading-none pt-0.5">
+                {monthFormatted}
+              </span>
+              <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">
+                {dayFormatted}
+              </span>
+            </>
+          )}
+        </div>
 
-            {/* Visit Status Badge */}
+        {/* Center: Student, Hostel & Status Information */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate leading-tight">
+              {visit.studentName}
+            </h4>
+            {verificationStatus === "verified" ? (
+              <span title="Verified Student" className="inline-flex items-center text-emerald-600">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </span>
+            ) : verificationStatus === "pending" ? (
+              <span title="Pending Verification" className="inline-flex items-center text-amber-600">
+                <Clock3 className="w-3.5 h-3.5" />
+              </span>
+            ) : null}
+
+            {/* Compact Status Dot / Pill */}
             <span
-              className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${statusBadge.className}`}
+              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${statusBadge.className}`}
             >
+              <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dotColor}`} />
               {statusBadge.label}
             </span>
           </div>
 
-          {/* Schedule & Contact Details */}
-          <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/80 rounded-xl p-2.5 my-2 border border-slate-100">
+          {/* Subtitle: Hostel & Room */}
+          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+            <span className="font-medium text-slate-700 dark:text-slate-300">
+              {visit.hostelName || "Hostel"}
+            </span>
+            {visit.roomTypeName && <span> • {visit.roomTypeName}</span>}
+            {visit.visitTime && <span> • <Clock className="inline w-3 h-3 text-slate-400 ml-0.5 mr-0.5 -mt-0.5" />{visit.visitTime}</span>}
+          </p>
+        </div>
+
+        {/* Quick Action Controls (Right) */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Direct Call Icon Button */}
+          {rawPhone ? (
+            <a
+              href={`tel:${cleanPhone}`}
+              title="Call Student"
+              className="h-8 w-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 flex items-center justify-center transition-colors border border-emerald-200/80"
+            >
+              <PhoneCall className="w-3.5 h-3.5" />
+            </a>
+          ) : null}
+
+          {/* Direct WhatsApp Icon Button */}
+          {rawPhone ? (
+            <a
+              href={`https://wa.me/${whatsappPhone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="WhatsApp Student"
+              className="h-8 w-8 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] flex items-center justify-center transition-colors border border-[#25D366]/30"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </a>
+          ) : null}
+
+          {/* If Pending: Quick 1-Tap Confirm Button */}
+          {visit.status === "pending" && (
+            <Button
+              size="sm"
+              type="button"
+              disabled={isUpdating}
+              onClick={() => onUpdateStatus && onUpdateStatus(visit.id, "accepted")}
+              title="Confirm Inspection"
+              className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl gap-1 shadow-xs"
+            >
+              {isUpdating ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">Confirm</span>
+            </Button>
+          )}
+
+          {/* Expand / Collapse Chevron Toggle */}
+          <Button
+            size="icon"
+            variant="ghost"
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? "Collapse Details" : "Expand Details"}
+            className="h-8 w-8 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Expandable Details Drawer */}
+      {isExpanded && (
+        <div className="px-3.5 pb-3.5 pt-1 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-xs space-y-2.5 animate-in fade-in-50 duration-150">
+          {/* Schedule Date & Phone / Email Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-slate-600 dark:text-slate-400">
             <div className="flex items-center gap-2">
               <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="font-medium text-slate-800">{visitDateFormatted}</span>
+              <span>{visitDateFormatted} {visit.visitTime ? `at ${visit.visitTime}` : ""}</span>
             </div>
-            {visit.visitTime && (
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{visit.visitTime}</span>
-              </div>
-            )}
             {rawPhone && (
-              <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60">
+              <div className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span className="font-mono text-[11px]">{rawPhone}</span>
               </div>
             )}
             {(visit.studentEmail || studentProfile?.email) && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
                 <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="text-[11px] text-slate-500 truncate">
-                  {visit.studentEmail || studentProfile?.email}
-                </span>
+                <span className="text-[11px] truncate">{visit.studentEmail || studentProfile?.email}</span>
               </div>
             )}
           </div>
 
-          {/* Notes if provided */}
+          {/* Student Notes */}
           {visit.notes && (
-            <p className="text-[11px] italic text-slate-600 bg-amber-50/70 border border-amber-200/60 rounded-lg p-2 mb-2.5">
+            <div className="text-[11px] italic text-slate-600 dark:text-slate-300 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 rounded-lg p-2">
               &ldquo;{visit.notes}&rdquo;
-            </p>
+            </div>
           )}
 
           {/* Decline Reason if already declined */}
           {visit.status === "declined" && visit.declineReason && (
-            <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 mb-2.5 flex items-start gap-1.5">
+            <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 flex items-start gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-500" />
               <div>
                 <span className="font-semibold">Decline Reason:</span> {visit.declineReason}
@@ -279,8 +336,8 @@ export function VisitRequestCard({
             </div>
           )}
 
-          {/* Quick-action buttons: View Student Credentials in Universal Document Viewer */}
-          <div className="grid grid-cols-2 gap-1.5 mb-2.5 pt-1">
+          {/* Student Credential Inspection Buttons */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <Button
               type="button"
               size="sm"
@@ -295,10 +352,10 @@ export function VisitRequestCard({
                   );
                 }
               }}
-              className={`h-7 px-2 text-[10px] font-semibold rounded-lg border-slate-200 flex items-center justify-center gap-1 ${
+              className={`h-7 px-2 text-[10px] font-semibold rounded-lg border-slate-200 flex items-center justify-center gap-1.5 ${
                 !idCardUrl
                   ? "opacity-50 cursor-not-allowed bg-slate-50 text-slate-400"
-                  : "hover:bg-primary/5 text-slate-700 hover:text-primary hover:border-primary/30"
+                  : "hover:bg-primary/5 text-slate-700 hover:text-primary"
               }`}
             >
               <FileText className="w-3 h-3 text-primary" />
@@ -319,50 +376,19 @@ export function VisitRequestCard({
                   );
                 }
               }}
-              className={`h-7 px-2 text-[10px] font-semibold rounded-lg border-slate-200 flex items-center justify-center gap-1 ${
+              className={`h-7 px-2 text-[10px] font-semibold rounded-lg border-slate-200 flex items-center justify-center gap-1.5 ${
                 !admissionLetterUrl
                   ? "opacity-50 cursor-not-allowed bg-slate-50 text-slate-400"
-                  : "hover:bg-primary/5 text-slate-700 hover:text-primary hover:border-primary/30"
+                  : "hover:bg-primary/5 text-slate-700 hover:text-primary"
               }`}
             >
               <FileCheck className="w-3 h-3 text-emerald-600" />
               <span>{admissionLetterUrl ? "View Letter" : "No Letter"}</span>
             </Button>
           </div>
-        </div>
 
-        {/* Action Controls Footer */}
-        <div className="pt-2 border-t border-slate-100 space-y-2">
-          {/* Direct Call and WhatsApp Pill Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            {rawPhone ? (
-              <>
-                <a
-                  href={`tel:${cleanPhone}`}
-                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold border border-emerald-200/80 transition-colors"
-                >
-                  <PhoneCall className="w-3 h-3" />
-                  Call
-                </a>
-                <a
-                  href={`https://wa.me/${whatsappPhone}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] text-xs font-semibold border border-[#25D366]/30 transition-colors"
-                >
-                  <MessageSquare className="w-3 h-3" />
-                  WhatsApp
-                </a>
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground col-span-2 text-center py-1">
-                No student contact provided
-              </span>
-            )}
-          </div>
-
-          {/* Workflow Status Action Buttons */}
-          <div className="flex items-center justify-between gap-1.5 pt-0.5">
+          {/* Full Workflow Action Buttons inside Expanded Drawer */}
+          <div className="flex items-center gap-2 pt-1">
             {visit.status === "pending" && (
               <>
                 <Button
@@ -373,11 +399,11 @@ export function VisitRequestCard({
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 rounded-xl font-semibold shadow-xs"
                 >
                   {isUpdating ? (
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                    <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
                   ) : (
-                    <Check className="w-3 h-3 mr-1" />
+                    <Check className="w-3.5 h-3.5 mr-1.5" />
                   )}
-                  Confirm Time
+                  Confirm Inspection Time
                 </Button>
 
                 <Button
@@ -386,7 +412,7 @@ export function VisitRequestCard({
                   variant="outline"
                   disabled={isUpdating}
                   onClick={() => setDeclineDialogOpen(true)}
-                  className="h-8 px-2.5 text-xs rounded-xl font-semibold text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                  className="h-8 px-3 text-xs rounded-xl font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
                 >
                   Decline
                 </Button>
@@ -404,9 +430,9 @@ export function VisitRequestCard({
                   className="flex-1 text-xs h-8 rounded-xl font-semibold border-blue-300 text-blue-700 hover:bg-blue-50"
                 >
                   {isUpdating ? (
-                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                    <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
                   ) : (
-                    <CheckCircle2 className="w-3 h-3 mr-1 text-blue-600" />
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
                   )}
                   Mark Completed
                 </Button>
@@ -417,26 +443,17 @@ export function VisitRequestCard({
                   variant="ghost"
                   disabled={isUpdating}
                   onClick={() => setDeclineDialogOpen(true)}
-                  className="h-8 px-2 text-xs rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                  className="h-8 px-3 text-xs rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                 >
                   Decline
                 </Button>
               </>
             )}
-
-            {visit.status !== "pending" &&
-              visit.status !== "accepted" &&
-              visit.status !== "cancelled" &&
-              visit.status !== "declined" && (
-                <span className="text-[11px] text-muted-foreground w-full text-center py-1">
-                  Inspection finalized
-                </span>
-              )}
           </div>
         </div>
-      </Card>
+      )}
 
-      {/* Decline Visit Request Confirmation Dialog */}
+      {/* Decline Confirmation Dialog */}
       <Dialog open={declineDialogOpen} onOpenChange={setDeclineDialogOpen}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -456,11 +473,11 @@ export function VisitRequestCard({
           </DialogHeader>
 
           <div className="space-y-2 py-2">
-            <Label htmlFor="decline-reason" className="text-xs font-semibold text-slate-700">
+            <Label htmlFor="decline-reason-row" className="text-xs font-semibold text-slate-700">
               Reason for Declining (Optional)
             </Label>
             <Textarea
-              id="decline-reason"
+              id="decline-reason-row"
               placeholder="e.g. Room fully booked, scheduled maintenance, manager unavailable at this time..."
               value={declineReason}
               onChange={(e) => setDeclineReason(e.target.value)}
@@ -497,6 +514,6 @@ export function VisitRequestCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

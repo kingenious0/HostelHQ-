@@ -12,8 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert, CheckCircle2, Scale, Gavel } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Loader2, AlertTriangle, DollarSign, Home, BarChart, Building2, PlusCircle, Trash2, CheckCircle, XCircle, Eye, FileText, User as UserIcon, Phone, Calendar, Clock, Check, MessageSquare, PhoneCall, Search, ShieldAlert, CheckCircle2, Scale, Gavel, List, LayoutGrid, SlidersHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -28,7 +28,7 @@ import { uploadImage } from '@/lib/cloudinary';
 import { sendSMS } from '@/app/actions/sms';
 import Image from 'next/image';
 import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
-import { VisitRequestCard, type StudentProfileContext } from '@/components/dashboard/VisitRequestCard';
+import { VisitRequestCard, VisitRequestRow, type StudentProfileContext } from '@/components/dashboard/VisitRequestCard';
 import { DocumentViewerModal } from '@/components/ui/DocumentViewerModal';
 import { declineVisitRequestAction } from '@/app/actions/db';
 
@@ -149,6 +149,10 @@ export default function ManagerDashboard() {
     const [visitSearch, setVisitSearch] = useState('');
     const [updatingVisitId, setUpdatingVisitId] = useState<string | null>(null);
     const [studentProfiles, setStudentProfiles] = useState<Record<string, StudentProfileContext>>({});
+    const [visitViewMode, setVisitViewMode] = useState<'list' | 'carousel' | 'grid'>('list');
+    const [showAllVisits, setShowAllVisits] = useState(false);
+    const [carouselIndex, setCarouselIndex] = useState(0);
+    const carouselRef = useRef<HTMLDivElement>(null);
     const [docViewerState, setDocViewerState] = useState<{
         isOpen: boolean;
         documentUrl?: string | null;
@@ -1393,9 +1397,9 @@ export default function ManagerDashboard() {
                     {/* Scheduled In-Person Visits Section */}
                     <Card className="mb-8 border-border shadow-sm">
                         <CardHeader>
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                 <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <CardTitle className="text-xl font-bold flex items-center gap-2">
                                             <Calendar className="h-5 w-5 text-emerald-600" />
                                             Scheduled Student In-Person Visits
@@ -1410,21 +1414,67 @@ export default function ManagerDashboard() {
                                         Students who scheduled a free in-person room inspection directly with you. Use 1-click Call or WhatsApp to confirm their arrival time.
                                     </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="relative w-full md:w-64">
+
+                                {/* Controls: View Mode Switcher & Search Bar */}
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    {/* View Mode Toggle */}
+                                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setVisitViewMode('list'); setShowAllVisits(false); }}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all ${
+                                                visitViewMode === 'list'
+                                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                            title="Compact Agenda List View"
+                                        >
+                                            <List className="w-3.5 h-3.5" />
+                                            <span>List</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setVisitViewMode('carousel'); setShowAllVisits(false); }}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all ${
+                                                visitViewMode === 'carousel'
+                                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                            title="Horizontal Swipe Carousel"
+                                        >
+                                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                                            <span>Swipe</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setVisitViewMode('grid'); setShowAllVisits(false); }}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all ${
+                                                visitViewMode === 'grid'
+                                                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                            title="Expanded Cards Grid"
+                                        >
+                                            <LayoutGrid className="w-3.5 h-3.5" />
+                                            <span>Cards</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Search Input */}
+                                    <div className="relative w-full sm:w-56 md:w-64">
                                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                         <Input
                                             placeholder="Search student or hostel..."
                                             value={visitSearch}
                                             onChange={(e) => setVisitSearch(e.target.value)}
-                                            className="pl-8 text-xs h-9"
+                                            className="pl-8 text-xs h-9 rounded-xl"
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Filter Tabs */}
-                            <div className="flex flex-wrap gap-2 pt-2 border-t mt-3">
+                            {/* Filter Tabs - Horizontally scrollable on mobile */}
+                            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-2.5 border-t mt-3 text-xs">
                                 {[
                                     { id: 'all', label: `All (${visits.length})` },
                                     { id: 'pending', label: `Pending (${pendingVisitsCount})`, alert: pendingVisitsCount > 0 },
@@ -1438,8 +1488,8 @@ export default function ManagerDashboard() {
                                         type="button"
                                         size="sm"
                                         variant={visitFilter === tab.id ? 'default' : 'outline'}
-                                        onClick={() => setVisitFilter(tab.id as any)}
-                                        className={`text-xs h-7 px-2.5 ${tab.alert && visitFilter !== tab.id ? 'border-amber-400 text-amber-700 bg-amber-50/50' : ''}`}
+                                        onClick={() => { setVisitFilter(tab.id as any); setShowAllVisits(false); }}
+                                        className={`text-xs h-7 px-2.5 shrink-0 rounded-lg ${tab.alert && visitFilter !== tab.id ? 'border-amber-400 text-amber-700 bg-amber-50/50' : ''}`}
                                     >
                                         {tab.label}
                                     </Button>
@@ -1462,10 +1512,11 @@ export default function ManagerDashboard() {
                                             : 'When students request a free in-person room inspection for your hostels, they will appear right here.'}
                                     </p>
                                 </div>
-                            ) : (
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {filteredVisits.map((visit) => (
-                                        <VisitRequestCard
+                            ) : visitViewMode === 'list' ? (
+                                /* Compact Agenda List View */
+                                <div className="space-y-2">
+                                    {(showAllVisits ? filteredVisits : filteredVisits.slice(0, 5)).map((visit) => (
+                                        <VisitRequestRow
                                             key={visit.id}
                                             visit={visit}
                                             studentProfile={studentProfiles[visit.studentId || '']}
@@ -1481,6 +1532,151 @@ export default function ManagerDashboard() {
                                             }}
                                         />
                                     ))}
+
+                                    {filteredVisits.length > 5 && (
+                                        <div className="pt-2">
+                                            {!showAllVisits ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setShowAllVisits(true)}
+                                                    className="w-full text-xs h-9 rounded-xl border-dashed border-slate-300 hover:border-emerald-300 hover:bg-emerald-50/50 text-slate-700 hover:text-emerald-800 gap-1.5"
+                                                >
+                                                    <ChevronDown className="w-4 h-4" />
+                                                    Show All {filteredVisits.length} Visits ({filteredVisits.length - 5} more)
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    onClick={() => setShowAllVisits(false)}
+                                                    className="w-full text-xs h-8 rounded-xl text-slate-500 hover:text-slate-700 gap-1.5"
+                                                >
+                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                    Show Fewer Visits
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : visitViewMode === 'carousel' ? (
+                                /* Horizontal Swipe Carousel View */
+                                <div className="relative">
+                                    <div
+                                        ref={carouselRef}
+                                        className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-none py-1 px-0.5 scroll-smooth"
+                                        onScroll={(e) => {
+                                            const target = e.currentTarget;
+                                            const cardWidth = target.querySelector('div')?.offsetWidth || 300;
+                                            const index = Math.round(target.scrollLeft / cardWidth);
+                                            setCarouselIndex(Math.min(Math.max(0, index), filteredVisits.length - 1));
+                                        }}
+                                    >
+                                        {filteredVisits.map((visit) => (
+                                            <div key={visit.id} className="w-[86vw] max-w-[340px] shrink-0 snap-center">
+                                                <VisitRequestCard
+                                                    visit={visit}
+                                                    studentProfile={studentProfiles[visit.studentId || '']}
+                                                    onUpdateStatus={handleUpdateVisitStatus}
+                                                    isUpdating={updatingVisitId === visit.id}
+                                                    onOpenDocument={(url, title, docType) => {
+                                                        setDocViewerState({
+                                                            isOpen: true,
+                                                            documentUrl: url,
+                                                            title,
+                                                            documentType: docType,
+                                                        });
+                                                    }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Carousel Pagination and Arrow Controls */}
+                                    <div className="flex items-center justify-between pt-3 px-1 border-t border-slate-100 mt-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            Showing visit <strong>{carouselIndex + 1}</strong> of <strong>{filteredVisits.length}</strong>
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                type="button"
+                                                className="h-7 w-7 rounded-full"
+                                                disabled={carouselIndex <= 0}
+                                                onClick={() => {
+                                                    if (carouselRef.current) {
+                                                        carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+                                                    }
+                                                }}
+                                            >
+                                                <ChevronLeft className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                type="button"
+                                                className="h-7 w-7 rounded-full"
+                                                disabled={carouselIndex >= filteredVisits.length - 1}
+                                                onClick={() => {
+                                                    if (carouselRef.current) {
+                                                        carouselRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+                                                    }
+                                                }}
+                                            >
+                                                <ChevronRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* Traditional Cards Grid View with Mobile Limiter */
+                                <div>
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        {(showAllVisits ? filteredVisits : filteredVisits.slice(0, 3)).map((visit) => (
+                                            <VisitRequestCard
+                                                key={visit.id}
+                                                visit={visit}
+                                                studentProfile={studentProfiles[visit.studentId || '']}
+                                                onUpdateStatus={handleUpdateVisitStatus}
+                                                isUpdating={updatingVisitId === visit.id}
+                                                onOpenDocument={(url, title, docType) => {
+                                                    setDocViewerState({
+                                                        isOpen: true,
+                                                        documentUrl: url,
+                                                        title,
+                                                        documentType: docType,
+                                                    });
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    {filteredVisits.length > 3 && (
+                                        <div className="pt-3">
+                                            {!showAllVisits ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setShowAllVisits(true)}
+                                                    className="w-full text-xs h-9 rounded-xl border-dashed border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50 text-emerald-800 gap-1.5"
+                                                >
+                                                    <ChevronDown className="w-4 h-4" />
+                                                    Show All {filteredVisits.length} Visit Cards ({filteredVisits.length - 3} more)
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    onClick={() => setShowAllVisits(false)}
+                                                    className="w-full text-xs h-8 rounded-xl text-slate-500 hover:text-slate-700 gap-1.5"
+                                                >
+                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                    Show Fewer Cards
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </CardContent>
