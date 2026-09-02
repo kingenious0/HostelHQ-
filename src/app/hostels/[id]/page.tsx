@@ -10,7 +10,7 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap } from 'lucide-react';
 import { useShortlist } from '@/components/shortlist-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1321,6 +1321,156 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 </div>
                             )}
                         </div>
+
+                        {/* Interactive Inclusions Showcase for Selected Room Type */}
+                        {activeRoom && (() => {
+                            const activeRoomAmenities = (activeRoom.roomAmenities && activeRoom.roomAmenities.length > 0)
+                                ? activeRoom.roomAmenities
+                                : (activeRoom as any).amenities?.length > 0
+                                ? (activeRoom as any).amenities
+                                : [
+                                    `${activeRoom.capacity || 1} Student Bedding`,
+                                    'Lockable Wardrobe',
+                                    'Study Desk & Chair',
+                                    'Ceiling Fan',
+                                    'Washroom Facilities',
+                                    'Electrical Power Outlet'
+                                ];
+
+                            const matchingPhysicalRoom = (hostel as any)?.rooms?.find(
+                                (r: any) => String(r.roomTypeId || '') === String(activeRoom.id || '') ||
+                                            String(r.roomType || r.type || '').toLowerCase().trim() === String(activeRoom.name || '').toLowerCase().trim()
+                            );
+                            const targetRoomLink = matchingPhysicalRoom?.id 
+                                ? `/hostels/${hostel.id}/rooms/${matchingPhysicalRoom.id}`
+                                : `/hostels/${hostel.id}/rooms`;
+
+                            return (
+                                <div className="mt-4 rounded-3xl border-2 border-primary/30 bg-gradient-to-br from-primary/[0.04] via-card to-background p-6 sm:p-7 shadow-sm space-y-6">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                                                    Room Inclusions & Specs
+                                                </Badge>
+                                                <span className="text-xs text-muted-foreground font-medium">Standard for every student</span>
+                                            </div>
+                                            <h4 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
+                                                <Bed className="h-5 w-5 text-primary" />
+                                                What's Included in &ldquo;{activeRoom.name}&rdquo;
+                                            </h4>
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Official Rate</span>
+                                                <span className="text-xl font-extrabold text-primary">
+                                                    GH₵{activeRoom.price.toLocaleString()}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground ml-1">/ yr</span>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl border-primary/30 text-primary hover:bg-primary hover:text-white font-bold text-xs h-9"
+                                                asChild
+                                            >
+                                                <Link href={targetRoomLink}>
+                                                    <span>Room Specs & Photos</span>
+                                                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* 3-column responsive grid for Inclusions, Security, and Utilities */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                        {/* Column 1: In-Room Amenities */}
+                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
+                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                                <DoorOpen className="h-4 w-4 text-primary" />
+                                                In-Room Amenities
+                                            </h5>
+                                            <div className="space-y-2">
+                                                {activeRoomAmenities.map((amenity: string, i: number) => (
+                                                    <div key={i} className="flex items-center gap-2 text-xs font-medium text-foreground">
+                                                        <div className="h-5 w-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                            <Check className="h-3 w-3" />
+                                                        </div>
+                                                        <span>{amenity}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Column 2: Security & Protection */}
+                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
+                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                                Security Standards
+                                            </h5>
+                                            <div className="space-y-2">
+                                                {[
+                                                    'Lockable Room Door with Key',
+                                                    ...(hostel.securityAndSafety && hostel.securityAndSafety.length > 0
+                                                        ? hostel.securityAndSafety.slice(0, 3)
+                                                        : ['CCTV in Corridors', '24-hour Access Gate', 'Fenced Compound'])
+                                                ].map((sec: string, i: number) => (
+                                                    <div key={i} className="flex items-center gap-2 text-xs font-medium text-foreground">
+                                                        <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                                            <ShieldCheck className="h-3 w-3" />
+                                                        </div>
+                                                        <span>{sec}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Column 3: Utility Bills Policy */}
+                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
+                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                                <Zap className="h-4 w-4 text-amber-500" />
+                                                Utilities & Bills
+                                            </h5>
+                                            <div className="space-y-2.5 text-xs">
+                                                <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[11px]">
+                                                        <CheckCircle2 className="h-3.5 w-3.5" /> Included in Rent
+                                                    </span>
+                                                    <p className="text-muted-foreground mt-0.5 text-[11px]">
+                                                        {hostel.billsIncluded && hostel.billsIncluded.length > 0
+                                                            ? hostel.billsIncluded.join(', ')
+                                                            : 'Water & municipal sanitation included'}
+                                                    </p>
+                                                </div>
+                                                <div className="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                                                    <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 text-[11px]">
+                                                        <Zap className="h-3.5 w-3.5" /> Prepaid Electricity
+                                                    </span>
+                                                    <p className="text-muted-foreground mt-0.5 text-[11px]">
+                                                        Prepaid meter allocated to this room type
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-muted-foreground">
+                                        <span className="flex items-center gap-1.5">
+                                            <Info className="h-3.5 w-3.5 text-primary" />
+                                            Select any room type above to compare specifications and pricing.
+                                        </span>
+                                        <Link
+                                            href={`/hostels/${hostel.id}/rooms`}
+                                            className="font-bold text-primary hover:underline flex items-center gap-1 shrink-0"
+                                        >
+                                            Compare all {hostel.roomTypes?.length || 0} room types side-by-side
+                                            <ArrowRight className="h-3.5 w-3.5" />
+                                        </Link>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     <Separator />

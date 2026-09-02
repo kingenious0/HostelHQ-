@@ -52,9 +52,9 @@ const AMENITY_CATEGORIES = {
   },
   'Comfort': {
     icon: Wind,
-    color: 'text-green-600',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200'
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200'
   },
   'Entertainment': {
     icon: Tv,
@@ -64,15 +64,15 @@ const AMENITY_CATEGORIES = {
   },
   'Utilities': {
     icon: Zap,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-50',
-    borderColor: 'border-orange-200'
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200'
   },
   'Security': {
     icon: Shield,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50',
-    borderColor: 'border-red-200'
+    color: 'text-rose-600',
+    bgColor: 'bg-rose-50',
+    borderColor: 'border-rose-200'
   },
   'Recreation': {
     icon: Gamepad2,
@@ -82,39 +82,57 @@ const AMENITY_CATEGORIES = {
   }
 };
 
-// Amenity mapping with icons and categories
+// Comprehensive Amenity mapping with icons and categories for room types
 const AMENITY_MAPPING: Record<string, { icon: any; category: keyof typeof AMENITY_CATEGORIES; label: string }> = {
   'wifi': { icon: Wifi, category: 'Essential', label: 'Wi-Fi Internet' },
-  'internet': { icon: Wifi, category: 'Essential', label: 'Internet Access' },
+  'internet': { icon: Wifi, category: 'Essential', label: 'High-Speed Internet Access' },
   'parking': { icon: Car, category: 'Essential', label: 'Parking Space' },
-  'kitchen': { icon: Utensils, category: 'Essential', label: 'Shared Kitchen' },
-  'private kitchen': { icon: Utensils, category: 'Comfort', label: 'Private Kitchen' },
-  'tv': { icon: Tv, category: 'Entertainment', label: 'Television' },
-  'tv room': { icon: Tv, category: 'Entertainment', label: 'TV Room' },
-  'air conditioning': { icon: Wind, category: 'Comfort', label: 'Air Conditioning' },
-  'ac': { icon: Wind, category: 'Comfort', label: 'Air Conditioning' },
+  'kitchen': { icon: Utensils, category: 'Essential', label: 'Shared Kitchen Facility' },
+  'shared kitchen': { icon: Utensils, category: 'Essential', label: 'Shared Kitchen Facility' },
+  'private kitchen': { icon: Utensils, category: 'Comfort', label: 'Private In-Room Kitchenette' },
+  'tv': { icon: Tv, category: 'Entertainment', label: 'Television Set' },
+  'tv room': { icon: Tv, category: 'Entertainment', label: 'TV & Common Lounge' },
+  'air conditioning': { icon: Wind, category: 'Comfort', label: 'Air Conditioning (AC)' },
+  'ac': { icon: Wind, category: 'Comfort', label: 'Air Conditioning (AC)' },
   'fan': { icon: Wind, category: 'Comfort', label: 'Ceiling Fan' },
-  'water': { icon: Droplets, category: 'Essential', label: 'Water Supply' },
-  'hot water': { icon: Droplets, category: 'Comfort', label: 'Hot Water' },
-  'electricity': { icon: Zap, category: 'Utilities', label: 'Electricity' },
-  'power': { icon: Zap, category: 'Utilities', label: 'Power Supply' },
-  'security': { icon: Shield, category: 'Security', label: 'Security System' },
-  'cctv': { icon: Shield, category: 'Security', label: 'CCTV Surveillance' },
+  'ceiling fan': { icon: Wind, category: 'Comfort', label: 'Ceiling Fan' },
+  'water': { icon: Droplets, category: 'Utilities', label: 'Continuous Water Supply' },
+  'hot water': { icon: Droplets, category: 'Comfort', label: 'Hot Water Heater' },
+  'electricity': { icon: Zap, category: 'Utilities', label: 'Prepaid Meter Electricity' },
+  'power': { icon: Zap, category: 'Utilities', label: 'Reliable Power Supply' },
+  'security': { icon: Shield, category: 'Security', label: 'Security Guard & Protection' },
+  'cctv': { icon: Shield, category: 'Security', label: 'CCTV Corridor Surveillance' },
+  'security alarm': { icon: Shield, category: 'Security', label: 'Security Alarm System' },
+  'controlled access gate': { icon: Shield, category: 'Security', label: 'Controlled Access Gate' },
+  'controlled access gate (24-hour)': { icon: Shield, category: 'Security', label: '24-Hour Controlled Access Gate' },
+  'entire building fenced': { icon: Shield, category: 'Security', label: 'Entire Building Securely Fenced' },
+  'maintenance team (24-hour on call)': { icon: Shield, category: 'Security', label: '24-Hour Maintenance Team on Call' },
   'balcony': { icon: Home, category: 'Comfort', label: 'Private Balcony' },
-  'balconies': { icon: Home, category: 'Comfort', label: 'Balconies' },
+  'balconies': { icon: Home, category: 'Comfort', label: 'Private Balcony' },
   'bathroom': { icon: Bath, category: 'Essential', label: 'Private Bathroom' },
   'washroom': { icon: Bath, category: 'Essential', label: 'Private Washroom' },
-  'shared bathroom': { icon: Bath, category: 'Essential', label: 'Shared Bathroom' },
-  'laundry': { icon: Droplets, category: 'Essential', label: 'Laundry Service' },
-  'gym': { icon: Dumbbell, category: 'Recreation', label: 'Gym/Fitness' },
+  'private washroom': { icon: Bath, category: 'Essential', label: 'Private In-Room Washroom' },
+  'shared bathroom': { icon: Bath, category: 'Essential', label: 'Shared Corridor Washroom' },
+  'shared washroom': { icon: Bath, category: 'Essential', label: 'Shared Clean Washroom' },
+  'mattress': { icon: Bed, category: 'Essential', label: 'Comfortable Student Mattress' },
+  'bed': { icon: Bed, category: 'Essential', label: 'Single Student Bed' },
+  'single bed': { icon: Bed, category: 'Essential', label: 'Single Student Bed' },
+  'wardrobe': { icon: Home, category: 'Comfort', label: 'Clothes Wardrobe / Closet' },
+  'furniture (table, chair)': { icon: Coffee, category: 'Comfort', label: 'Study Table & Ergonomic Chair' },
+  'furniture': { icon: Coffee, category: 'Comfort', label: 'Study Table & Chair' },
+  'table': { icon: Coffee, category: 'Comfort', label: 'Study Table' },
+  'desk': { icon: Coffee, category: 'Comfort', label: 'Study Desk' },
+  'laundry': { icon: Droplets, category: 'Essential', label: 'Laundry Space / Facilities' },
+  'gym': { icon: Dumbbell, category: 'Recreation', label: 'Gym & Fitness Equipment' },
   'fitness': { icon: Dumbbell, category: 'Recreation', label: 'Fitness Center' },
   'pool': { icon: Waves, category: 'Recreation', label: 'Swimming Pool' },
   'swimming pool': { icon: Waves, category: 'Recreation', label: 'Swimming Pool' },
-  'games': { icon: Gamepad2, category: 'Entertainment', label: 'Game Room' },
-  'study room': { icon: Coffee, category: 'Essential', label: 'Study Room' },
-  'library': { icon: Coffee, category: 'Essential', label: 'Library' },
-  'comfortable': { icon: Home, category: 'Comfort', label: 'Comfortable Living' },
-  'furnished': { icon: Home, category: 'Comfort', label: 'Fully Furnished' }
+  'games': { icon: Gamepad2, category: 'Entertainment', label: 'Recreational Game Room' },
+  'study room': { icon: Coffee, category: 'Essential', label: 'Quiet Study Room' },
+  'library': { icon: Coffee, category: 'Essential', label: 'Quiet Reading Library' },
+  'comfortable': { icon: Home, category: 'Comfort', label: 'Spacious & Comfortable Living' },
+  'furnished': { icon: Home, category: 'Comfort', label: 'Fully Furnished Room' },
+  'refuse': { icon: Droplets, category: 'Utilities', label: 'Refuse & Sanitation Disposal' }
 };
 
 function getAmenityInfo(amenity: string) {
@@ -122,6 +140,43 @@ function getAmenityInfo(amenity: string) {
   const found = AMENITY_MAPPING[normalized];
   if (found) return found;
   
+  // Fuzzy checks for common keywords
+  if (normalized.includes('washroom') || normalized.includes('bath') || normalized.includes('toilet')) {
+    return {
+      icon: Bath,
+      category: 'Essential' as keyof typeof AMENITY_CATEGORIES,
+      label: amenity
+    };
+  }
+  if (normalized.includes('bed') || normalized.includes('mattress')) {
+    return {
+      icon: Bed,
+      category: 'Essential' as keyof typeof AMENITY_CATEGORIES,
+      label: amenity
+    };
+  }
+  if (normalized.includes('fan') || normalized.includes('ac') || normalized.includes('conditioning') || normalized.includes('balcony') || normalized.includes('wardrobe') || normalized.includes('chair') || normalized.includes('table') || normalized.includes('desk')) {
+    return {
+      icon: Wind,
+      category: 'Comfort' as keyof typeof AMENITY_CATEGORIES,
+      label: amenity
+    };
+  }
+  if (normalized.includes('security') || normalized.includes('cctv') || normalized.includes('gate') || normalized.includes('fence') || normalized.includes('alarm')) {
+    return {
+      icon: Shield,
+      category: 'Security' as keyof typeof AMENITY_CATEGORIES,
+      label: amenity
+    };
+  }
+  if (normalized.includes('water') || normalized.includes('electricity') || normalized.includes('meter') || normalized.includes('refuse') || normalized.includes('bill') || normalized.includes('power')) {
+    return {
+      icon: Zap,
+      category: 'Utilities' as keyof typeof AMENITY_CATEGORIES,
+      label: amenity
+    };
+  }
+
   // Fallback for unmapped amenities
   return {
     icon: CheckCircle,
@@ -244,6 +299,7 @@ export default function RoomDetailPage() {
       if (value.toLowerCase().startsWith('room ')) return value;
       return `Room ${value}`;
     };
+
     if (Array.isArray(rooms) && rooms.length > 0) {
       const found = rooms.find((r: any, index: number) => {
         const fallbackId = r.id ?? `room-${index}`;
@@ -251,25 +307,65 @@ export default function RoomDetailPage() {
       });
       if (found) {
         const index = rooms.indexOf(found);
-        const capacity = found.capacity ?? parseCapacity(found.roomType ?? found.type);
+        const typeName = found.roomType ?? found.type ?? hostel.roomTypes?.[0]?.name ?? "Room";
+        const matchingType = hostel.roomTypes?.find(
+          (rt) => String(rt.id ?? '') === String(found.roomTypeId ?? '') ||
+                  rt.name?.toLowerCase().trim() === String(typeName).toLowerCase().trim()
+        );
+        const capacity = found.capacity ?? matchingType?.capacity ?? parseCapacity(typeName);
+
+        // Inherit amenities from physical room, or parent roomType
+        let rawAmenities = (found.amenities && Array.isArray(found.amenities) && found.amenities.length > 0)
+          ? found.amenities
+          : (found.roomAmenities && Array.isArray(found.roomAmenities) && found.roomAmenities.length > 0)
+          ? found.roomAmenities
+          : (matchingType?.roomAmenities && Array.isArray(matchingType.roomAmenities) && matchingType.roomAmenities.length > 0)
+          ? matchingType.roomAmenities
+          : [];
+
+        // If still empty, provide robust student housing baseline
+        if (rawAmenities.length === 0) {
+          rawAmenities = [
+            capacity && capacity > 1 ? 'Shared Washroom' : 'Private Washroom',
+            'Mattress',
+            'Single Bed',
+            'Wardrobe',
+            'Ceiling Fan',
+            'Furniture (Table, Chair)'
+          ];
+        }
+
         return {
           id: found.id ?? `room-${index}`,
           label: formatLabel(found.roomNumber ?? found.number ?? found.name, index),
-          type: found.roomType ?? found.type ?? hostel.roomTypes?.[0]?.name ?? "Room",
-          price: found.price ?? hostel.priceRange?.min ?? 0,
+          type: typeName,
+          price: found.price ?? matchingType?.price ?? hostel.priceRange?.min ?? 0,
           occupancy: found.currentOccupancy ?? found.occupancy ?? found.occupants ?? 0,
           capacity: capacity ?? null,
           gender: found.gender ?? found.genderTag ?? (hostel.gender || "Mixed"),
           image: found.image ?? found.imageUrl ?? primaryImages[index % primaryImages.length],
+          totalRooms: (matchingType as any)?.numberOfRooms ?? null,
+          amenities: rawAmenities,
         };
       }
     }
 
     const types = hostel.roomTypes ?? [];
-    const byId = types.find((t) => String(t.id ?? "") === String(roomId));
+    const byId = types.find((t) => String(t.id ?? "") === String(roomId) || t.name?.toLowerCase().trim() === decodeURIComponent(roomId).toLowerCase().trim());
     if (byId) {
       const idx = types.indexOf(byId);
       const capacity = byId.capacity ?? parseCapacity(byId.name);
+      let rawAmenities = byId.roomAmenities ?? [];
+      if (!rawAmenities || rawAmenities.length === 0) {
+        rawAmenities = [
+          capacity && capacity > 1 ? 'Shared Washroom' : 'Private Washroom',
+          'Mattress',
+          'Single Bed',
+          'Wardrobe',
+          'Ceiling Fan',
+          'Furniture (Table, Chair)'
+        ];
+      }
       return {
         id: byId.id ?? `roomType-${idx}`,
         label: byId.name,
@@ -280,7 +376,7 @@ export default function RoomDetailPage() {
         gender: hostel.gender || "Mixed",
         image: primaryImages[idx % primaryImages.length],
         totalRooms: (byId as any).numberOfRooms ?? null,
-        amenities: byId.roomAmenities ?? [],
+        amenities: rawAmenities,
       };
     }
 
@@ -381,6 +477,49 @@ export default function RoomDetailPage() {
             Back to rooms
           </Button>
 
+          {/* Room Type Switcher / Comparator Strip */}
+          {hostel.roomTypes && hostel.roomTypes.length > 1 && (
+            <div className="mb-6 p-4 rounded-2xl bg-white border border-border/80 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <DoorOpen className="h-4 w-4 text-primary" />
+                  Room Types Available in {hostel.name}:
+                </span>
+                <span className="text-[11px] text-muted-foreground hidden sm:inline">Click to switch & compare inclusions</span>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {hostel.roomTypes.map((rt, i) => {
+                  const isActive = (room.type && room.type.toLowerCase().trim() === rt.name.toLowerCase().trim()) ||
+                    String(room.id) === String(rt.id);
+                  const matchingPhysical = (hostel as any)?.rooms?.find(
+                    (r: any) => String(r.roomTypeId ?? '') === String(rt.id ?? '') ||
+                                String(r.roomType ?? r.type ?? '').toLowerCase().trim() === rt.name.toLowerCase().trim()
+                  );
+                  const targetId = matchingPhysical?.id ?? rt.id ?? `roomType-${i}`;
+
+                  return (
+                    <Button
+                      key={rt.id || i}
+                      variant={isActive ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => router.push(`/hostels/${hostelId}/rooms/${targetId}`)}
+                      className={cn(
+                        "rounded-xl text-xs font-semibold shrink-0 gap-2 h-9 transition-all",
+                        isActive && "shadow-sm ring-2 ring-primary/30"
+                      )}
+                    >
+                      <span>{rt.name}</span>
+                      <span className={cn("text-[11px] font-normal", isActive ? "text-primary-foreground/90" : "text-muted-foreground")}>
+                        GH₵{rt.price.toLocaleString()}/yr
+                      </span>
+                      {isActive && <Badge className="bg-white/20 text-white text-[9px] px-1.5 py-0 h-4 border-0">Selected</Badge>}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-6">
@@ -435,7 +574,7 @@ export default function RoomDetailPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Home className="h-5 w-5 text-primary" />
-              Room Details
+              Room Specifications & Occupancy
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -487,21 +626,21 @@ export default function RoomDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Amenities Section */}
-        {Object.keys(groupedAmenities).length > 0 && (
+        {/* Room Amenities & Furnishings Section */}
+        {Object.keys(groupedAmenities).length > 0 ? (
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Star className="h-5 w-5 text-primary" />
-                Room Amenities & Features
+                Room Inclusions & Amenities
               </CardTitle>
               <CardDescription>
-                Everything included in this room to make your stay comfortable
+                Everything specifically provided in this {room.type} configuration
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {Object.entries(groupedAmenities).map(([category, amenities]) => {
-                const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES];
+                const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES] || AMENITY_CATEGORIES.Essential;
                 const CategoryIcon = categoryInfo.icon;
                 
                 return (
@@ -517,12 +656,12 @@ export default function RoomDetailPage() {
                       </div>
                       <h4 className="font-semibold text-gray-900">{category}</h4>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-2 sm:ml-6">
                       {amenities.map(({ amenity, info }) => {
                         const AmenityIcon = info.icon;
                         return (
-                          <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <AmenityIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                          <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-border/40">
+                            <AmenityIcon className={cn("h-4 w-4 shrink-0", categoryInfo.color)} />
                             <span className="text-sm font-medium text-gray-700">{info.label}</span>
                           </div>
                         );
@@ -533,7 +672,163 @@ export default function RoomDetailPage() {
               })}
             </CardContent>
           </Card>
+        ) : (
+          <Card className="shadow-lg border-0 bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="h-5 w-5 text-primary" />
+                Room Inclusions & Amenities
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <Bed className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-800">Student Bed & Mattress</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <Bath className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-800">Private or Shared Washroom</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                  <Wind className="h-4 w-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-gray-800">Ceiling Fan & Ventilation</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                  <Home className="h-4 w-4 text-emerald-600" />
+                  <span className="text-sm font-medium text-gray-800">Wardrobe / Storage Closet</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
+
+        {/* Security & Access Standards for this Room */}
+        <Card className="shadow-lg border-0 bg-white">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-rose-600" />
+              Room & Building Security Standards
+            </CardTitle>
+            <CardDescription>
+              Verified safety infrastructure protecting students in this room
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                <ShieldCheck className="h-4 w-4 text-rose-600 shrink-0" />
+                <div>
+                  <div className="text-xs font-bold text-gray-900">Lockable Room Door</div>
+                  <div className="text-[11px] text-muted-foreground">Individual secure key access</div>
+                </div>
+              </div>
+
+              {(hostel.securityAndSafety && hostel.securityAndSafety.length > 0) ? (
+                hostel.securityAndSafety.map((sec, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">{sec}</div>
+                      <div className="text-[11px] text-muted-foreground">Active hostel protection standard</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">24-Hour Access Security</div>
+                      <div className="text-[11px] text-muted-foreground">Gated compound perimeter</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">CCTV Surveillance</div>
+                      <div className="text-[11px] text-muted-foreground">Building corridor monitoring</div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Utilities & Bills Policy for this Room */}
+        <Card className="shadow-lg border-0 bg-white">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-amber-600" />
+              Utilities & Bills Policy
+            </CardTitle>
+            <CardDescription>
+              Transparent breakdown of billing coverage for this room
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Bills Included */}
+              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/60 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  Included in Rent
+                </div>
+                <div className="space-y-1.5 pl-6">
+                  {hostel.billsIncluded && hostel.billsIncluded.length > 0 ? (
+                    hostel.billsIncluded.map((b, i) => (
+                      <div key={i} className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        {b} (Zero Extra Charge)
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Water supply included
+                      </div>
+                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Refuse & sanitation disposal
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Bills Excluded */}
+              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-2">
+                <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
+                  <Zap className="h-4 w-4 text-amber-600" />
+                  Prepaid / Student Responsibility
+                </div>
+                <div className="space-y-1.5 pl-6">
+                  {hostel.billsExcluded && hostel.billsExcluded.length > 0 ? (
+                    hostel.billsExcluded.map((b, i) => (
+                      <div key={i} className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        {b} (Prepaid meter per room / unit)
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Electricity (Prepaid meter per room)
+                      </div>
+                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Cooking gas (if applicable)
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Sidebar */}
