@@ -249,7 +249,7 @@ export default function RoomsPage() {
           occupancy: occupancyFromBookings,
           capacity: capacity ?? null,
           gender: room.gender ?? room.genderTag ?? (hostel.gender || 'Mixed'),
-          image: roomPhotos[0] || room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length],
+          image: roomPhotos[0] || (room.image ?? room.imageUrl ?? primaryImages[index % primaryImages.length]),
           images: roomPhotos,
           videos: roomVideos,
           roomNumber: roomNumber,

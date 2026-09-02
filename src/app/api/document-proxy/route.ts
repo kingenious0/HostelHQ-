@@ -26,12 +26,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const upstreamRes = await fetch(targetUrl, {
+    let fetchUrl = targetUrl;
+    let upstreamRes = await fetch(fetchUrl, {
       headers: {
         "User-Agent": "HostelHQ-Document-Viewer/1.0",
         Accept: "*/*",
       },
     });
+
+    // If Cloudinary denies raw PDF delivery (401/403 ACL failure), fallback to converted JPG raster
+    if (!upstreamRes.ok && (upstreamRes.status === 401 || upstreamRes.status === 403) && targetUrl.includes("cloudinary.com")) {
+      const jpgUrl = targetUrl
+        .replace(/\.pdf(\?.*)?$/i, ".jpg$1")
+        .replace("/image/upload/", "/image/upload/f_auto,q_auto,pg_1/");
+      upstreamRes = await fetch(jpgUrl, {
+        headers: {
+          "User-Agent": "HostelHQ-Document-Viewer/1.0",
+          Accept: "*/*",
+        },
+      });
+    }
 
     if (!upstreamRes.ok) {
       return new NextResponse(`Upstream document returned HTTP ${upstreamRes.status}`, {

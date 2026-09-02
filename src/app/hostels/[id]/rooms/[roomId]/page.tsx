@@ -364,7 +364,7 @@ export default function RoomDetailPage() {
           occupancy: found.currentOccupancy ?? found.occupancy ?? found.occupants ?? 0,
           capacity: capacity ?? null,
           gender: found.gender ?? found.genderTag ?? (hostel.gender || "Mixed"),
-          image: roomPhotos[0] || found.image ?? found.imageUrl ?? primaryImages[index % primaryImages.length],
+          image: roomPhotos[0] || (found.image ?? found.imageUrl ?? primaryImages[index % primaryImages.length]),
           images: roomPhotos,
           videos: roomVideos,
           totalRooms: (matchingType as any)?.numberOfRooms ?? null,
