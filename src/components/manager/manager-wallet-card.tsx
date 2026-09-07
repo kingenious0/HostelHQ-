@@ -2,10 +2,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { WithdrawalModal } from "./withdrawal-modal";
-import { Wallet, ArrowUpRight, CreditCard } from "lucide-react";
+import { Wallet, ArrowUpRight, CreditCard, Banknote } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -95,12 +96,20 @@ export function ManagerWalletCard({ userId }: ManagerWalletCardProps) {
                         <div className="h-9 w-full rounded bg-muted animate-pulse"></div>
                     ) : (
                         <>
-                            <Button className="w-full gap-2" variant="default" onClick={() => setWithdrawOpen(true)}>
-                                <ArrowUpRight className="h-4 w-4" /> Withdraw Funds
-                            </Button>
+                            <div className="flex flex-col gap-2 w-full">
+                                <Button className="w-full gap-2" variant="default" onClick={() => setWithdrawOpen(true)}>
+                                    <ArrowUpRight className="h-4 w-4" /> Withdraw Funds
+                                </Button>
+                                <Button asChild variant="outline" size="sm" className="w-full text-xs rounded-xl gap-1.5 h-8">
+                                    <Link href="/manager/bank-accounts">
+                                        <Banknote className="h-3.5 w-3.5 text-primary" />
+                                        <span>Payout & Bank Accounts</span>
+                                    </Link>
+                                </Button>
+                            </div>
 
                             {/* Real-time indicator (optional) */}
-                            <div className="flex justify-center mt-2">
+                            <div className="flex justify-center mt-1">
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                     <span className="relative flex h-2 w-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
