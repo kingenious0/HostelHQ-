@@ -233,16 +233,45 @@ export default function InvoicePage() {
         }
     };
 
-    // Format current date and time for invoice generation
+    // Format date and time for invoice generation permanently locked to immutable booking date
     const formatInvoiceGenerationTime = () => {
-        return new Date().toLocaleDateString('en-GH', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const dateField = booking.bookingDate || (booking as any).createdAt;
+        if (!dateField) return 'N/A';
+        try {
+            let date: Date;
+            if (dateField instanceof Timestamp) {
+                date = dateField.toDate();
+            } else if (dateField.seconds) {
+                date = new Date(dateField.seconds * 1000);
+            } else {
+                date = new Date(dateField);
+            }
+            return date.toLocaleDateString('en-GH', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch {
+            return 'N/A';
+        }
     };
+
+    // Extract immutable booking year for academic year display
+    const getBookingYear = () => {
+        const dateField = booking.bookingDate || (booking as any).createdAt;
+        if (!dateField) return new Date().getFullYear();
+        try {
+            if (dateField instanceof Timestamp) return dateField.toDate().getFullYear();
+            if (dateField.seconds) return new Date(dateField.seconds * 1000).getFullYear();
+            const parsed = new Date(dateField).getFullYear();
+            return isNaN(parsed) ? new Date().getFullYear() : parsed;
+        } catch {
+            return new Date().getFullYear();
+        }
+    };
+    const academicYearStart = getBookingYear();
 
     // Generate professional invoice ID: INV-{first 3 letters capitalized}{last 3 digits}
     const generateInvoiceId = () => {
@@ -459,7 +488,7 @@ export default function InvoicePage() {
                                                             <td className="py-4 px-6">
                                                                 <div>
                                                                     <p className="font-semibold text-sm sm:text-base">Room Rent - {bookedRoom?.name || 'Standard Room'}</p>
-                                                                    <p className="text-xs text-gray-500 mt-1">Academic Year {new Date().getFullYear()}/{new Date().getFullYear() + 1}</p>
+                                                                    <p className="text-xs text-gray-500 mt-1">Academic Year {academicYearStart}/{academicYearStart + 1}</p>
                                                                 </div>
                                                             </td>
                                                             <td className="py-4 px-6 text-right">

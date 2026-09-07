@@ -11,6 +11,7 @@ const FOOTER_HIDDEN_PATHS = [
   "/payments",
   "/my-roommates",
   "/bank-accounts",
+  "/bank/accounts",
   "/settings",
   "/profile",
   "/signup",
