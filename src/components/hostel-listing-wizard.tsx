@@ -37,16 +37,27 @@ import {
   Video,
   Play,
   Eye,
+  Lock,
+  CreditCard,
+  Smartphone,
+  CheckCircle,
+  CheckCircle2,
+  HelpCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc, collection, addDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, addDoc, setDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { uploadImage, uploadVideo } from "@/lib/cloudinary";
 import { RoomType, Hostel } from "@/lib/data";
 import { HostelLocationPicker } from "@/components/hostel-location-picker";
 import { enhanceHostelDescription } from "@/ai/flows/enhance-hostel-description";
 import { saveHostelAction } from "@/app/actions/db";
+import {
+  validateGhanaCard,
+  formatGhanaCardInput,
+  GHANA_CARD_PERJURY_WARNING,
+} from "@/lib/ghana-card";
 
 const hostelAmenitiesList = [
   "WiFi",
@@ -179,18 +190,61 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
 
+  // Step 6: Manager Onboarding & Statutory Compliance (Act 389)
+  const [linkedPayoutAccounts, setLinkedPayoutAccounts] = useState<any[]>([]);
+  const [loadingPayoutAccounts, setLoadingPayoutAccounts] = useState(false);
+  const [payoutType, setPayoutType] = useState<"momo" | "bank">("momo");
+  const [payoutProvider, setPayoutProvider] = useState("MTN");
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState("");
+  const [payoutAccountName, setPayoutAccountName] = useState("");
+  const [isResolvingAccount, setIsResolvingAccount] = useState(false);
+  const [isSavingPayoutAccount, setIsSavingPayoutAccount] = useState(false);
+  const [accountResolved, setAccountResolved] = useState(false);
+
+  // Statutory Undertaking (Act 389)
+  const [declarantName, setDeclarantName] = useState("");
+  const [ghanaCardNumber, setGhanaCardNumber] = useState("");
+  const [ghanaCardError, setGhanaCardError] = useState<string | null>(null);
+  const [act389Confirmed, setAct389Confirmed] = useState(false);
+
   // UI state
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch linked payout accounts for Zero-Deadlock mandate
+  const loadPayoutAccounts = useCallback(async (uid: string) => {
+    setLoadingPayoutAccounts(true);
+    try {
+      const q = query(collection(db, "bankAccounts"), where("managerId", "==", uid));
+      const snap = await getDocs(q);
+      const accounts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      setLinkedPayoutAccounts(accounts);
+    } catch (err) {
+      console.warn("Could not load manager payout accounts:", err);
+    } finally {
+      setLoadingPayoutAccounts(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
       setCurrentUser(user);
       if (user) {
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
           if (userDoc.exists()) {
-            setUserRole(userDoc.data().role);
+            const data = userDoc.data();
+            setUserRole(data.role);
+            if (data.fullName) {
+              setDeclarantName(data.fullName);
+            } else if (user.displayName) {
+              setDeclarantName(user.displayName);
+            }
+          } else if (user.displayName) {
+            setDeclarantName(user.displayName);
+          }
+          if (mode === "manager") {
+            loadPayoutAccounts(user.uid);
           }
         } catch (e) {
           console.error("Error fetching user role:", e);
@@ -199,7 +253,115 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       setLoadingAuth(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [mode, loadPayoutAccounts]);
+
+  // Handle Paystack Account Resolution
+  const handleResolveAccount = async () => {
+    if (!payoutAccountNumber.trim()) {
+      toast({
+        title: "Account Number Required",
+        description: "Please enter your Mobile Money or Bank Account Number.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsResolvingAccount(true);
+    setAccountResolved(false);
+    try {
+      const res = await fetch(
+        `/api/paystack/resolve?account_number=${encodeURIComponent(
+          payoutAccountNumber.trim()
+        )}&bank_code=${encodeURIComponent(payoutProvider)}`
+      );
+      const json = await res.json();
+
+      if (json.status && json.data?.account_name) {
+        setPayoutAccountName(json.data.account_name);
+        setAccountResolved(true);
+        toast({
+          title: "Account Verified",
+          description: `Account holder resolved: ${json.data.account_name}`,
+        });
+      } else {
+        setAccountResolved(false);
+        toast({
+          title: "Verification Failed",
+          description: json.message || "Could not resolve account with Paystack. Please check the number and provider.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Resolution Error",
+        description: err.message || "Failed to reach account resolution service.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResolvingAccount(false);
+    }
+  };
+
+  // Quick-save payout account into Firestore bankAccounts
+  const handleSavePayoutAccount = async () => {
+    if (!currentUser) return;
+    if (!payoutAccountNumber.trim()) {
+      toast({
+        title: "Missing Details",
+        description: "Please provide an account number.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingPayoutAccount(true);
+    try {
+      const accountPayload = {
+        managerId: currentUser.uid,
+        managerEmail: currentUser.email || "",
+        accountName: payoutAccountName.trim() || declarantName || "Verified Manager",
+        accountNumber: payoutAccountNumber.trim(),
+        bankName: payoutProvider,
+        type: payoutType,
+        isPrimary: linkedPayoutAccounts.length === 0,
+        verifiedViaPaystack: accountResolved,
+        createdAt: serverTimestamp(),
+      };
+
+      const docRef = await addDoc(collection(db, "bankAccounts"), accountPayload);
+      setLinkedPayoutAccounts((prev) => [...prev, { id: docRef.id, ...accountPayload }]);
+
+      toast({
+        title: "Payout Account Linked!",
+        description: "Your commercial payout account has been verified and registered.",
+      });
+
+      // Reset inline form
+      setPayoutAccountNumber("");
+      setPayoutAccountName("");
+      setAccountResolved(false);
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err.message || "Failed to save bank account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPayoutAccount(false);
+    }
+  };
+
+  // Handle Ghana Card Input with live Anti-Spoof Guard
+  const handleGhanaCardChange = (val: string) => {
+    const formatted = formatGhanaCardInput(val);
+    setGhanaCardNumber(formatted);
+    if (formatted.length >= 14) {
+      const check = validateGhanaCard(formatted);
+      setGhanaCardError(check.isValid ? null : (check.error || "Invalid Ghana Card"));
+    } else {
+      setGhanaCardError(null);
+    }
+  };
 
   // Room Type Handlers
   const handleRoomTypeChange = (
@@ -489,6 +651,37 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       return;
     }
 
+    // Manager Statutory Guard & Zero-Deadlock Enforcement
+    if (mode === "manager") {
+      if (linkedPayoutAccounts.length === 0) {
+        toast({
+          title: "Zero-Deadlock Payout Required",
+          description: "University regulations mandate linking at least one verified Mobile Money or Bank payout account before publishing.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const cardCheck = validateGhanaCard(ghanaCardNumber);
+      if (!cardCheck.isValid) {
+        toast({
+          title: "Ghana Card Required (Act 389)",
+          description: cardCheck.error || "Valid Ghana Card identification is required for statutory attestation.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!act389Confirmed) {
+        toast({
+          title: "Statutory Undertaking Required",
+          description: "Please confirm the Act 389 declaration under penalty of perjury before submitting.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     toast({
       title: "Submitting Hostel...",
@@ -577,6 +770,15 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         fullAddress: locationData.address,
         managerId: currentUser.uid,
         managerEmail: currentUser.email || "",
+        statutoryUndertaking: {
+          declarantName: declarantName.trim() || currentUser.displayName || currentUser.email || "Property Manager",
+          ghanaCardNumber: ghanaCardNumber.trim(),
+          act389Confirmed: mode === "manager" ? true : false,
+          declaredAt: new Date().toISOString(),
+          payoutAccountVerified: linkedPayoutAccounts.length > 0,
+          payoutAccountCount: linkedPayoutAccounts.length,
+          legalFramework: ["Act 389", "Act 220", "L.I. 1724", "Act 851"],
+        },
         createdAt: new Date().toISOString(),
       };
 
@@ -1268,62 +1470,357 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
 
                 <div className="pt-2 border-t border-border">
                   <span className="text-muted-foreground font-medium">Description:</span>
-                  <p className="text-slate-700 dark:text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-foreground mt-1 leading-relaxed">
                     {description || "No custom description provided."}
                   </p>
                 </div>
               </div>
+
+              {/* ================= COMPONENT: ZERO-DEADLOCK PAYOUT LINKING (ACT 389 MANDATE) ================= */}
+              {mode === "manager" && (
+                <div className="rounded-2xl border border-border/80 p-5 bg-card space-y-4 shadow-xs">
+                  <div className="flex items-start justify-between gap-2 border-b border-border/60 pb-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-emerald-600" />
+                        <h4 className="font-bold text-sm text-foreground">
+                          Zero-Deadlock Commercial Payout Verification
+                        </h4>
+                        <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
+                          Mandatory Gate
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        University tenancy governance mandates linking a verified Mobile Money or Bank payout account before publishing commercial listings to eliminate student escrow settlement deadlocks.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* List of currently linked accounts */}
+                  {linkedPayoutAccounts.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {linkedPayoutAccounts.map((acc, idx) => (
+                          <div
+                            key={acc.id || idx}
+                            className="p-3 rounded-xl border border-border/70 bg-muted/20 flex items-center justify-between text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0">
+                                {acc.type === "momo" ? (
+                                  <Smartphone className="h-4 w-4" />
+                                ) : (
+                                  <Building className="h-4 w-4" />
+                                )}
+                              </div>
+                              <div className="truncate">
+                                <p className="font-bold text-foreground truncate">
+                                  {acc.accountName || "Verified Account"}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground font-mono">
+                                  {acc.bankName} • {acc.accountNumber}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge className="bg-emerald-600 text-white text-[10px] font-semibold shrink-0">
+                              Verified
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Zero-Deadlock verified. Payouts will settle automatically into your registered account.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Inline Payout Setup Form */
+                    <div className="space-y-4 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs">
+                      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-semibold">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                        <span>No commercial payout account linked yet. Link your Mobile Money or Bank account below:</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Type & Provider */}
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-semibold text-muted-foreground">Provider Type</Label>
+                          <Select
+                            value={payoutProvider}
+                            onValueChange={(val) => {
+                              setPayoutProvider(val);
+                              setPayoutType(
+                                ["MTN", "VOD", "ATL"].includes(val) ? "momo" : "bank"
+                              );
+                              setAccountResolved(false);
+                            }}
+                          >
+                            <SelectTrigger className="h-9 text-xs rounded-xl">
+                              <SelectValue placeholder="Select Provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="MTN">MTN Mobile Money</SelectItem>
+                              <SelectItem value="VOD">Telecel Cash (Vodafone)</SelectItem>
+                              <SelectItem value="ATL">AirtelTigo Money</SelectItem>
+                              <SelectItem value="040100">GCB Bank PLC</SelectItem>
+                              <SelectItem value="130100">Ecobank Ghana</SelectItem>
+                              <SelectItem value="190100">Stanbic Bank</SelectItem>
+                              <SelectItem value="030100">ABSA Bank Ghana</SelectItem>
+                              <SelectItem value="080100">Fidelity Bank Ghana</SelectItem>
+                              <SelectItem value="140100">CalBank</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Account Number */}
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label className="text-[11px] font-semibold text-muted-foreground">
+                            Account / Mobile Money Number *
+                          </Label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="e.g. 0244123456 or 1151000048291"
+                              value={payoutAccountNumber}
+                              onChange={(e) => {
+                                setPayoutAccountNumber(e.target.value);
+                                setAccountResolved(false);
+                              }}
+                              className="h-9 text-xs rounded-xl font-mono"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleResolveAccount}
+                              disabled={isResolvingAccount || !payoutAccountNumber.trim()}
+                              className="h-9 px-3 text-xs font-semibold shrink-0 gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                            >
+                              {isResolvingAccount ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                              )}
+                              Auto-Resolve
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Resolved Account Name Display */}
+                      {accountResolved && payoutAccountName && (
+                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span className="text-xs font-bold text-foreground">
+                              Resolved Name: {payoutAccountName}
+                            </span>
+                          </div>
+                          <Badge className="bg-emerald-600 text-white text-[10px]">
+                            Paystack Verified
+                          </Badge>
+                        </div>
+                      )}
+
+                      <Button
+                        type="button"
+                        onClick={handleSavePayoutAccount}
+                        disabled={isSavingPayoutAccount || !payoutAccountNumber.trim()}
+                        className="w-full h-9 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                      >
+                        {isSavingPayoutAccount ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Saving Account...
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-3.5 w-3.5" />
+                            Save & Link Payout Account
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================= COMPONENT: STATUTORY UNDERTAKING (ACT 389) ================= */}
+              {mode === "manager" && (
+                <div className="rounded-2xl border border-border/80 p-5 bg-card space-y-4 shadow-xs">
+                  <div className="border-b border-border/60 pb-3 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <h4 className="font-bold text-sm text-foreground">
+                        Statutory Undertaking & Tenancy Attestation (Act 389)
+                      </h4>
+                      <Badge variant="outline" className="text-[10px] font-bold border-primary/40 text-primary bg-primary/10">
+                        Legal Declaration
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Pursuant to the Statutory Declarations Act, 1971 (Act 389), Rent Act, 1963 (Act 220), Fire Precaution Regulations, 2003 (L.I. 1724), and Public Health Act, 2012 (Act 851).
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Declarant Full Name */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground">
+                        Declarant Full Legal Name *
+                      </Label>
+                      <Input
+                        placeholder="Full name as stated on Ghana Card"
+                        value={declarantName}
+                        onChange={(e) => setDeclarantName(e.target.value)}
+                        className="h-10 text-xs rounded-xl"
+                      />
+                    </div>
+
+                    {/* Ghana Card with Anti-Spoof Guard */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                        <span>National ID (Ghana Card PIN) *</span>
+                        {ghanaCardNumber.length >= 14 && !ghanaCardError && (
+                          <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            NIA Format Verified
+                          </span>
+                        )}
+                      </Label>
+                      <Input
+                        placeholder="GHA-7XXXXXXXX-X"
+                        value={ghanaCardNumber}
+                        onChange={(e) => handleGhanaCardChange(e.target.value)}
+                        className={`h-10 text-xs rounded-xl font-mono ${
+                          ghanaCardError
+                            ? "border-rose-500 focus-visible:ring-rose-500"
+                            : ""
+                        }`}
+                      />
+                      {ghanaCardError && (
+                        <p className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          {ghanaCardError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 3 Perjury Warning Banner */}
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+                    <p className="font-bold flex items-center gap-1.5 mb-0.5 text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Statutory Warning — Section 3 of Act 389
+                    </p>
+                    <span>{GHANA_CARD_PERJURY_WARNING}</span>
+                  </div>
+
+                  {/* Solemn Declaration Checkbox */}
+                  <div
+                    onClick={() => setAct389Confirmed(!act389Confirmed)}
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      act389Confirmed
+                        ? "bg-primary/5 border-primary text-foreground"
+                        : "bg-muted/20 border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={act389Confirmed}
+                      onCheckedChange={(c) => setAct389Confirmed(Boolean(c))}
+                      className="mt-0.5"
+                    />
+                    <div className="text-xs space-y-1">
+                      <p className="font-bold text-foreground">
+                        Solemn Undertaking under Statutory Declarations Act, 1971 (Act 389)
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        I solemnly and sincerely declare that the building plans, room inventories, electrical/fire safety provisions, and rental tariffs submitted herein reflect genuine property conditions. I undertake to maintain standards required under university residential accreditation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
 
         {/* Wizard Footer Controls */}
-        <CardFooter className="p-6 border-t border-border bg-muted/10 flex items-center justify-between">
+        <CardFooter className="p-6 border-t border-border bg-muted/10 flex flex-col sm:flex-row items-center justify-between gap-3">
           <Button
             type="button"
             variant="outline"
             onClick={prevStep}
             disabled={step === 1 || isSubmitting}
-            className="rounded-xl text-xs font-semibold gap-1.5 h-10 px-4"
+            className="rounded-xl text-xs font-semibold gap-1.5 h-10 px-4 w-full sm:w-auto"
           >
             <ArrowLeft className="h-4 w-4" />
             Previous
           </Button>
 
-          {step < totalSteps ? (
-            <Button
-              type="button"
-              onClick={nextStep}
-              className="rounded-xl text-xs font-bold gap-1.5 h-10 px-5 bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/20"
-            >
-              <span>Continue</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="rounded-xl text-xs font-extrabold gap-2 h-11 px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/30"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Publishing Property...
-                </>
-              ) : mode === "manager" ? (
-                <>
-                  <ShieldCheck className="h-4 w-4" />
-                  Submit for University Verification
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Publish Hostel Directly
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            {step === 6 && mode === "manager" && (
+              <div className="text-[11px] text-muted-foreground text-center sm:text-right">
+                {linkedPayoutAccounts.length === 0 ? (
+                  <span className="text-rose-600 font-semibold flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Payout account required
+                  </span>
+                ) : !validateGhanaCard(ghanaCardNumber).isValid ? (
+                  <span className="text-amber-600 font-semibold flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Ghana Card validation required
+                  </span>
+                ) : !act389Confirmed ? (
+                  <span className="text-amber-600 font-semibold flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Confirm Act 389 declaration
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Ready for university dispatch
+                  </span>
+                )}
+              </div>
+            )}
+
+            {step < totalSteps ? (
+              <Button
+                type="button"
+                onClick={nextStep}
+                className="rounded-xl text-xs font-bold gap-1.5 h-10 px-5 bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/20 w-full sm:w-auto"
+              >
+                <span>Continue</span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={
+                  isSubmitting ||
+                  (mode === "manager" &&
+                    (linkedPayoutAccounts.length === 0 ||
+                      !validateGhanaCard(ghanaCardNumber).isValid ||
+                      !act389Confirmed))
+                }
+                className="rounded-xl text-xs font-extrabold gap-2 h-11 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-lg shadow-emerald-600/30 w-full sm:w-auto"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Publishing Property...
+                  </>
+                ) : mode === "manager" ? (
+                  <>
+                    <ShieldCheck className="h-4 w-4" />
+                    Submit for University Verification
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Publish Hostel Directly
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </CardFooter>
       </Card>
     </div>

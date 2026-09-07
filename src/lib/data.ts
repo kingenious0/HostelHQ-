@@ -125,6 +125,20 @@ export type Complaint = {
   updatedAt?: string;
   resolvedAt?: string;
   resolvedBy?: string;
+  welfareFreeze?: boolean;
+  welfareFreezeReason?: string | null;
+  welfareFrozenAt?: string | null;
+  welfareFrozenBy?: string | null;
+  arbitrationHearing?: {
+    date: string;
+    time: string;
+    venue: string;
+    officers: string;
+    summonsNote: string;
+    scheduledBy: string;
+    scheduledAt: string;
+    smsDispatched: boolean;
+  } | null;
 };
 
 export type StudentVerification = {

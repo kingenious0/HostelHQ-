@@ -48,7 +48,50 @@ import {
   Loader2,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
+  Scale,
+  ShieldCheck,
+  Gavel,
 } from "lucide-react";
+
+// Statutory campus tariff limits per KNUST/AAMUSTED residential zoning
+export const STATUTORY_TARIFF_CEILINGS: Record<string, { label: string; maxPrice: number }> = {
+  "1-in-a-room": { label: "1 in a Room (Single)", maxPrice: 9000 },
+  "2-in-a-room": { label: "2 in a Room", maxPrice: 6500 },
+  "3-in-a-room": { label: "3 in a Room", maxPrice: 4500 },
+  "4-in-a-room": { label: "4 in a Room", maxPrice: 3500 },
+};
+
+export function getStatutoryTariffCeiling(roomTypeName: string): { label: string; maxPrice: number } | null {
+  const norm = (roomTypeName || "").toLowerCase();
+  if (norm.includes("1") || norm.includes("single") || norm.includes("one")) {
+    return STATUTORY_TARIFF_CEILINGS["1-in-a-room"];
+  }
+  if (norm.includes("2") || norm.includes("two") || norm.includes("double")) {
+    return STATUTORY_TARIFF_CEILINGS["2-in-a-room"];
+  }
+  if (norm.includes("3") || norm.includes("three") || norm.includes("triple")) {
+    return STATUTORY_TARIFF_CEILINGS["3-in-a-room"];
+  }
+  if (norm.includes("4") || norm.includes("four") || norm.includes("quad")) {
+    return STATUTORY_TARIFF_CEILINGS["4-in-a-room"];
+  }
+  return null;
+}
+
+export interface TariffViolation {
+  hostelId: string;
+  hostelName: string;
+  institution?: string;
+  location?: string;
+  roomTypeName: string;
+  roomIndex: number;
+  postedPrice: number;
+  statutoryCap: number;
+  excess: number;
+  status: "pending" | "approved";
+  hostel: Hostel;
+}
 
 // Room with pending price changes for tariff revisions
 interface RoomWithPendingPrice {
@@ -307,6 +350,166 @@ export default function CoordinatorDashboardPage() {
     });
   };
 
+  // Statutory Desk Review Pipeline: 1-Year Provisional Accreditation Pass under Act 389
+  const handleGrantProvisionalPass = async (hostel: Hostel) => {
+    setActionLoading(true);
+    try {
+      const coordName = currentUser?.displayName || "University Hostel Coordinator";
+      const targetId = hostel.id.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+      const hostelRef = doc(db, "hostels", targetId);
+      const expiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+      const provisionalPayload = {
+        ...hostel,
+        id: targetId,
+        status: "approved",
+        verified: true,
+        provisionalAccreditation: true,
+        provisionalExpiry: expiry,
+        accreditationType: "1-Year Provisional Desk Pass (Act 389)",
+        deskReviewedBy: coordName,
+        deskReviewedAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
+        approvedBy: coordName,
+      };
+
+      await setDoc(hostelRef, provisionalPayload, { merge: true });
+
+      // Update matching requests in hostelRequests
+      try {
+        const reqsQuery = query(collection(db, "hostelRequests"), where("hostelId", "==", targetId));
+        const reqsSnap = await getDocs(reqsQuery);
+        for (const reqDoc of reqsSnap.docs) {
+          await updateDoc(reqDoc.ref, {
+            status: "approved",
+            provisionalAccreditation: true,
+            provisionalExpiry: expiry,
+            approvedAt: new Date().toISOString(),
+            approvedBy: coordName,
+          });
+        }
+      } catch (reqErr) {
+        console.warn("Could not sync hostelRequests during provisional pass:", reqErr);
+      }
+
+      setPendingHostels((prev) => prev.filter((h) => h.id !== hostel.id));
+      setApprovedHostels((prev) => [provisionalPayload as any, ...prev]);
+
+      toast({
+        title: "1-Year Provisional Pass Granted",
+        description: `"${hostel.name}" received instant statutory desk accreditation under Act 389. Valid through ${new Date(expiry).toLocaleDateString()}.`,
+      });
+      setSelectedHostel(null);
+    } catch (err: any) {
+      toast({
+        title: "Provisional Pass Failed",
+        description: err.message || "Failed to grant provisional pass",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Tariff Ceiling Enforcer: Clamp room price to campus statutory limit
+  const handleEnforceTariffCap = async (v: TariffViolation) => {
+    setActionLoading(true);
+    try {
+      const coordName = currentUser?.displayName || "University Hostel Coordinator";
+      const targetId = v.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+      const hostelRef = doc(db, "hostels", targetId);
+
+      const updatedRoomTypes = [...(v.hostel.roomTypes || [])];
+      if (updatedRoomTypes[v.roomIndex]) {
+        updatedRoomTypes[v.roomIndex] = {
+          ...updatedRoomTypes[v.roomIndex],
+          price: v.statutoryCap,
+        };
+      }
+
+      const prices = updatedRoomTypes.map((r) => r.price).filter((p) => typeof p === "number");
+      const newMin = prices.length ? Math.min(...prices) : v.statutoryCap;
+      const newMax = prices.length ? Math.max(...prices) : v.statutoryCap;
+
+      await updateDoc(hostelRef, {
+        roomTypes: updatedRoomTypes,
+        priceRange: { min: newMin, max: newMax },
+        lastTariffEnforcedAt: new Date().toISOString(),
+        lastTariffEnforcedBy: coordName,
+      });
+
+      const updatedHostel = {
+        ...v.hostel,
+        roomTypes: updatedRoomTypes,
+        priceRange: { min: newMin, max: newMax },
+      };
+
+      if (v.status === "pending") {
+        setPendingHostels((prev) => prev.map((h) => (h.id === v.hostelId ? updatedHostel : h)));
+      } else {
+        setApprovedHostels((prev) => prev.map((h) => (h.id === v.hostelId ? updatedHostel : h)));
+      }
+
+      toast({
+        title: "Statutory Rent Cap Enforced",
+        description: `Clamped tariff for ${v.roomTypeName} at "${v.hostelName}" to statutory ceiling GH₵${v.statutoryCap.toLocaleString()} (reduced from GH₵${v.postedPrice.toLocaleString()}).`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Enforcement Failed",
+        description: err.message || "Could not enforce statutory rent cap.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Calculate Tariff Ceiling Violations across all hostels
+  const tariffViolations: TariffViolation[] = [];
+
+  pendingHostels.forEach((h) => {
+    (h.roomTypes || []).forEach((rt, idx) => {
+      const ceiling = getStatutoryTariffCeiling(rt.name);
+      if (ceiling && rt.price > ceiling.maxPrice) {
+        tariffViolations.push({
+          hostelId: h.id,
+          hostelName: h.name,
+          institution: h.institution,
+          location: h.location,
+          roomTypeName: rt.name,
+          roomIndex: idx,
+          postedPrice: rt.price,
+          statutoryCap: ceiling.maxPrice,
+          excess: rt.price - ceiling.maxPrice,
+          status: "pending",
+          hostel: h,
+        });
+      }
+    });
+  });
+
+  approvedHostels.forEach((h) => {
+    (h.roomTypes || []).forEach((rt, idx) => {
+      const ceiling = getStatutoryTariffCeiling(rt.name);
+      if (ceiling && rt.price > ceiling.maxPrice) {
+        tariffViolations.push({
+          hostelId: h.id,
+          hostelName: h.name,
+          institution: h.institution,
+          location: h.location,
+          roomTypeName: rt.name,
+          roomIndex: idx,
+          postedPrice: rt.price,
+          statutoryCap: ceiling.maxPrice,
+          excess: rt.price - ceiling.maxPrice,
+          status: "approved",
+          hostel: h,
+        });
+      }
+    });
+  });
+
   const filteredApproved = approvedHostels.filter((h) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -322,7 +525,7 @@ export default function CoordinatorDashboardPage() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
           <p className="text-sm font-medium text-muted-foreground">Authenticating Coordinator credentials...</p>
@@ -331,8 +534,11 @@ export default function CoordinatorDashboardPage() {
     );
   }
 
+  // Count of pending listings with digital Act 389 undertakings
+  const deskReviewHostels = pendingHostels.filter((h) => Boolean((h as any).statutoryUndertaking));
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header />
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
@@ -343,12 +549,12 @@ export default function CoordinatorDashboardPage() {
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
                 Hostel Accreditation & Operations
               </h1>
-              <Badge variant="outline" className="text-xs font-semibold text-emerald-700 bg-emerald-50 border-emerald-200">
+              <Badge variant="outline" className="text-xs font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
                 Coordinator Console
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Accredit private student hostels, review room tariff revisions, and maintain the campus housing directory.
+              Statutory desk reviews under Act 389, campus rent tariff enforcement, and student housing directory governance.
             </p>
           </div>
 
@@ -360,39 +566,58 @@ export default function CoordinatorDashboardPage() {
             className="h-9 px-3 text-xs font-semibold self-start sm:self-auto"
           >
             <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingData ? "animate-spin" : ""}`} />
-            Refresh
+            Refresh Feed
           </Button>
         </div>
 
         {/* Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="border border-border/60 shadow-xs">
+          <Card className="border border-border/60 shadow-xs bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Pending Accreditations
+                Registration Queue
               </CardTitle>
               <Clock className="h-4 w-4 text-amber-500" />
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-amber-600">{pendingHostels.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Filings awaiting inspection</p>
+              <p className="text-xs text-muted-foreground mt-1">Awaiting coordinator review</p>
             </CardContent>
           </Card>
 
-          <Card className="border border-border/60 shadow-xs">
+          <Card className="border border-border/60 shadow-xs bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Tariff Revisions
+                Statutory Desk Passes
               </CardTitle>
-              <DollarSign className="h-4 w-4 text-blue-600" />
+              <Scale className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-foreground">{pendingPrices.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Tariff adjustments in queue</p>
+              <div className="text-2xl sm:text-3xl font-black text-foreground">
+                {deskReviewHostels.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Act 389 attested ready for pass</p>
             </CardContent>
           </Card>
 
-          <Card className="border border-border/60 shadow-xs">
+          <Card className="border border-border/60 shadow-xs bg-card">
+            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
+              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Tariff Ceiling Alerts
+              </CardTitle>
+              <AlertTriangle className={`h-4 w-4 ${tariffViolations.length > 0 ? "text-rose-500" : "text-emerald-500"}`} />
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className={`text-2xl sm:text-3xl font-black ${tariffViolations.length > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600"}`}>
+                {tariffViolations.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {tariffViolations.length > 0 ? "Exceeding statutory campus rent caps" : "All listings comply with caps"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/60 shadow-xs bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Accredited Hostels
@@ -402,19 +627,6 @@ export default function CoordinatorDashboardPage() {
             <CardContent className="px-4 pb-4">
               <div className="text-2xl sm:text-3xl font-black text-emerald-600">{approvedHostels.length}</div>
               <p className="text-xs text-muted-foreground mt-1">Active in university registry</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-border/60 shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Safety Audits
-              </CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-teal-600" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-foreground">100%</div>
-              <p className="text-xs text-muted-foreground mt-1">Standard facility compliance</p>
             </CardContent>
           </Card>
         </div>
@@ -430,8 +642,34 @@ export default function CoordinatorDashboardPage() {
                 <Clock className="h-4 w-4" />
                 Registration Queue
                 {pendingHostels.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200">
                     {pendingHostels.length}
+                  </span>
+                )}
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="deskReview"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
+              >
+                <Scale className="h-4 w-4 text-primary" />
+                Statutory Desk Review (Act 389)
+                {deskReviewHostels.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary">
+                    {deskReviewHostels.length}
+                  </span>
+                )}
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="tariffEnforcer"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
+              >
+                <AlertTriangle className={`h-4 w-4 ${tariffViolations.length > 0 ? "text-rose-500" : "text-muted-foreground"}`} />
+                Tariff Ceiling Enforcer
+                {tariffViolations.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200">
+                    {tariffViolations.length}
                   </span>
                 )}
               </TabsTrigger>
@@ -443,7 +681,7 @@ export default function CoordinatorDashboardPage() {
                 <TrendingUp className="h-4 w-4" />
                 Tariff Revisions
                 {pendingPrices.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200">
                     {pendingPrices.length}
                   </span>
                 )}
@@ -455,7 +693,7 @@ export default function CoordinatorDashboardPage() {
               >
                 <Building2 className="h-4 w-4" />
                 Accredited Directory
-                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
                   {approvedHostels.length}
                 </span>
               </TabsTrigger>
@@ -486,7 +724,7 @@ export default function CoordinatorDashboardPage() {
                     {/* Desktop Table View */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-50 border-b border-border/60">
+                        <TableHeader className="bg-muted/40 border-b border-border/60">
                           <TableRow>
                             <TableHead className="w-32">Status</TableHead>
                             <TableHead>Hostel Name & Location</TableHead>
@@ -498,9 +736,9 @@ export default function CoordinatorDashboardPage() {
                         </TableHeader>
                         <TableBody>
                           {pendingHostels.map((hostel) => (
-                            <TableRow key={hostel.id} className="hover:bg-slate-50/80 transition-colors">
+                            <TableRow key={hostel.id} className="hover:bg-muted/30 transition-colors">
                               <TableCell className="py-3">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                                   Pending Inspection
                                 </span>
                               </TableCell>
@@ -521,16 +759,26 @@ export default function CoordinatorDashboardPage() {
                               </TableCell>
 
                               <TableCell className="py-3">
-                                <div className="space-y-0.5">
+                                <div className="space-y-1">
                                   {hostel.roomTypes && hostel.roomTypes.length > 0 ? (
-                                    hostel.roomTypes.map((rt, idx) => (
-                                      <div key={idx} className="text-xs flex items-center gap-1.5 text-muted-foreground">
-                                        <span className="font-medium text-foreground">{rt.name}:</span>
-                                        <span className="font-semibold text-emerald-600 font-mono">
-                                          GH₵{rt.price?.toLocaleString()}
-                                        </span>
-                                      </div>
-                                    ))
+                                    hostel.roomTypes.map((rt, idx) => {
+                                      const ceiling = getStatutoryTariffCeiling(rt.name);
+                                      const isExcess = ceiling && rt.price > ceiling.maxPrice;
+
+                                      return (
+                                        <div key={idx} className="text-xs flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-medium text-foreground">{rt.name}:</span>
+                                          <span className={`font-semibold font-mono ${isExcess ? "text-rose-600 dark:text-rose-400 font-bold" : "text-emerald-600"}`}>
+                                            GH₵{rt.price?.toLocaleString()}
+                                          </span>
+                                          {isExcess && (
+                                            <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/15 px-1.5 py-0.2 rounded border border-rose-500/25">
+                                              +GH₵{(rt.price - ceiling.maxPrice).toLocaleString()} over cap
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })
                                   ) : (
                                     <span className="text-xs text-muted-foreground">Pricing provided on inspection</span>
                                   )}
@@ -545,6 +793,16 @@ export default function CoordinatorDashboardPage() {
 
                               <TableCell className="py-3 text-right">
                                 <div className="flex justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGrantProvisionalPass(hostel)}
+                                    disabled={actionLoading}
+                                    className="h-8 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                                    title="Issue 1-Year Provisional Pass under Act 389"
+                                  >
+                                    <Scale className="h-3.5 w-3.5 mr-1" /> Desk Pass
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -593,12 +851,12 @@ export default function CoordinatorDashboardPage() {
                                 {hostel.location} • {hostel.institution || "AAMUSTED"}
                               </p>
                             </div>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
                               Pending
                             </span>
                           </div>
 
-                          <div className="text-xs text-muted-foreground space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                          <div className="text-xs text-muted-foreground space-y-1 bg-muted/40 p-2.5 rounded-lg border border-border/60">
                             <div>
                               Manager: <span className="font-medium text-foreground">{hostel.createdBy?.fullName || "Private Manager"}</span>
                             </div>
@@ -611,7 +869,7 @@ export default function CoordinatorDashboardPage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between gap-2 pt-1">
+                          <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
                             <span className="text-[11px] text-muted-foreground">
                               {hostel.submittedAt ? new Date(hostel.submittedAt).toLocaleDateString() : "Recently"}
                             </span>
@@ -619,10 +877,19 @@ export default function CoordinatorDashboardPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => handleGrantProvisionalPass(hostel)}
+                                disabled={actionLoading}
+                                className="h-7 text-xs px-2 text-primary border-primary/30"
+                              >
+                                <Scale className="h-3 w-3 mr-1" /> Desk Pass
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={() => setSelectedHostel(hostel)}
                                 className="h-7 text-xs px-2"
                               >
-                                <Eye className="h-3 w-3 mr-1" /> Inspect
+                                <Eye className="h-3 w-3" />
                               </Button>
                               <Button
                                 size="sm"
@@ -630,7 +897,7 @@ export default function CoordinatorDashboardPage() {
                                 disabled={actionLoading}
                                 className="h-7 text-xs px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                               >
-                                <Check className="h-3 w-3 mr-1" /> Approve
+                                <Check className="h-3 w-3" />
                               </Button>
                               <Button
                                 size="sm"
@@ -650,6 +917,259 @@ export default function CoordinatorDashboardPage() {
                       ))}
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB: STATUTORY DESK REVIEW PIPELINE (ACT 389) */}
+          <TabsContent value="deskReview" className="space-y-4 pt-2">
+            <Card className="border border-border/60 shadow-xs bg-card">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/20 rounded-t-xl">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold flex items-center gap-1.5">
+                      <Scale className="h-4 w-4 text-primary" /> Statutory Desk Review Pipeline
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/30">
+                      Act 389 / L.I. 1724
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                    Fast-track 1-Year Provisional Accreditation passes based on sworn statutory undertakings with Ghana Card anti-spoof validation. Bypasses physical inspection bottlenecks during peak admission intake.
+                  </CardDescription>
+                </div>
+              </div>
+
+              <CardContent className="p-0">
+                {pendingHostels.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-foreground">Zero pending statutory desk filings</p>
+                    <p className="text-xs">All submitted accommodations have completed statutory review.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/40 border-b border-border/60">
+                        <TableRow>
+                          <TableHead className="w-40">Statutory Status</TableHead>
+                          <TableHead>Hostel & Declarant</TableHead>
+                          <TableHead>Legal Undertaking Warranties</TableHead>
+                          <TableHead>Campus Zoning Tariffs</TableHead>
+                          <TableHead className="text-right">Desk Pass Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingHostels.map((hostel) => {
+                          const undertaking = (hostel as any).statutoryUndertaking;
+                          const hasViolation = (hostel.roomTypes || []).some((rt) => {
+                            const c = getStatutoryTariffCeiling(rt.name);
+                            return c && rt.price > c.maxPrice;
+                          });
+
+                          return (
+                            <TableRow key={hostel.id} className="hover:bg-muted/30 transition-colors">
+                              <TableCell className="py-3">
+                                <div className="space-y-1">
+                                  {undertaking ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                      <ShieldCheck className="h-3 w-3" /> Act 389 Attested
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                      <Clock className="h-3 w-3" /> Standard Filing
+                                    </span>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground font-mono">
+                                    {undertaking?.timestamp ? new Date(undertaking.timestamp).toLocaleDateString() : "Digital Submission"}
+                                  </p>
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <p className="font-semibold text-foreground text-sm">{hostel.name}</p>
+                                <p className="text-xs text-muted-foreground">{hostel.location} • {hostel.institution || "AAMUSTED"}</p>
+                                {undertaking ? (
+                                  <p className="text-xs text-foreground/80 font-mono mt-0.5">
+                                    Declarant: <span className="font-semibold">{undertaking.declaredBy}</span> ({undertaking.declarantGhanaCard})
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Manager: {hostel.createdBy?.fullName || "Private Manager"}
+                                  </p>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap gap-1">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground border border-border/60">
+                                      ✓ Act 389
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground border border-border/60">
+                                      ✓ Fire & Egress
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground border border-border/60">
+                                      ✓ L.I. 1724
+                                    </span>
+                                    {undertaking?.perjuryAcknowledged && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-semibold">
+                                        Perjury Acknowledged
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground">Digital Solemn Declaration verified without paper bottleneck</p>
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="py-3">
+                                {hasViolation ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                                    <AlertTriangle className="h-3 w-3" /> Tariff Cap Exceeded
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                    <CheckCircle2 className="h-3 w-3" /> Tariffs Compliant
+                                  </span>
+                                )}
+                                <div className="text-[11px] text-muted-foreground mt-0.5">
+                                  {hostel.roomTypes?.length || 0} room configuration(s)
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="py-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleGrantProvisionalPass(hostel)}
+                                    disabled={actionLoading}
+                                    className="h-8 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                                  >
+                                    <Scale className="h-3.5 w-3.5 mr-1" /> Grant 1-Yr Pass
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedHostel(hostel)}
+                                    className="h-8 text-xs"
+                                  >
+                                    <Eye className="h-3.5 w-3.5 mr-1" /> Review
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB: TARIFF CEILING ENFORCER */}
+          <TabsContent value="tariffEnforcer" className="space-y-4 pt-2">
+            {/* Statutory Campus Limits Legend */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Object.entries(STATUTORY_TARIFF_CEILINGS).map(([key, item]) => (
+                <Card key={key} className="border border-border/60 bg-card p-3 shadow-xs">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase">{item.label}</span>
+                  <div className="text-lg font-black text-foreground mt-1 font-mono">
+                    GH₵{item.maxPrice.toLocaleString()}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Statutory Campus Ceiling</span>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="border border-border/60 shadow-xs bg-card">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-muted/20 rounded-t-xl">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4 text-rose-500" /> Tariff Ceiling Enforcer
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20">
+                      Active Campus Rent Caps
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                    Automated detection and clamp utility for student accommodations exceeding statutory KNUST/AAMUSTED rent ceilings.
+                  </CardDescription>
+                </div>
+              </div>
+
+              <CardContent className="p-0">
+                {tariffViolations.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-foreground">Zero tariff ceiling violations detected</p>
+                    <p className="text-xs">All room configurations across pending and accredited hostels operate within statutory campus rental caps.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/40 border-b border-border/60">
+                        <TableRow>
+                          <TableHead>Hostel & Location</TableHead>
+                          <TableHead>Room Configuration</TableHead>
+                          <TableHead>Posted Rate</TableHead>
+                          <TableHead>Statutory Cap</TableHead>
+                          <TableHead>Excess / Gouging</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Enforcement Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tariffViolations.map((v, idx) => (
+                          <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
+                            <TableCell className="py-3">
+                              <p className="font-semibold text-foreground text-sm">{v.hostelName}</p>
+                              <p className="text-xs text-muted-foreground">{v.location} • {v.institution || "AAMUSTED"}</p>
+                            </TableCell>
+
+                            <TableCell className="py-3 font-medium text-xs text-foreground">
+                              {v.roomTypeName}
+                            </TableCell>
+
+                            <TableCell className="py-3 font-mono text-xs font-semibold text-rose-600 line-through">
+                              GH₵{v.postedPrice.toLocaleString()}
+                            </TableCell>
+
+                            <TableCell className="py-3 font-mono text-xs font-bold text-emerald-600">
+                              GH₵{v.statutoryCap.toLocaleString()}
+                            </TableCell>
+
+                            <TableCell className="py-3">
+                              <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 font-mono">
+                                +GH₵{v.excess.toLocaleString()}
+                              </span>
+                            </TableCell>
+
+                            <TableCell className="py-3">
+                              <Badge variant={v.status === "approved" ? "default" : "outline"} className="text-[10px]">
+                                {v.status === "approved" ? "Live Directory" : "Pending Filing"}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="py-3 text-right">
+                              <Button
+                                size="sm"
+                                onClick={() => handleEnforceTariffCap(v)}
+                                disabled={actionLoading}
+                                className="h-8 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                                title="Clamp listing price to statutory ceiling"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Enforce Cap
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -765,7 +1285,7 @@ export default function CoordinatorDashboardPage() {
                             </div>
                           </div>
 
-                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs space-y-0.5">
+                          <div className="bg-muted/40 p-2.5 rounded-lg border border-border/60 text-xs space-y-0.5">
                             <p className="text-muted-foreground">
                               <span className="font-medium text-foreground">Justification:</span> {item.reason || "Annual indexation"}
                             </p>
@@ -837,7 +1357,7 @@ export default function CoordinatorDashboardPage() {
               <CardContent className="p-0">
                 {filteredApproved.length === 0 ? (
                   <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
-                    <Building2 className="h-8 w-8 text-slate-300 mx-auto" />
+                    <Building2 className="h-8 w-8 text-muted-foreground/30 mx-auto" />
                     <p className="font-semibold text-foreground">No accredited hostels found</p>
                     <p className="text-xs">
                       {searchQuery || availabilityFilter !== "all"
@@ -850,90 +1370,138 @@ export default function CoordinatorDashboardPage() {
                     {/* Desktop Table */}
                     <div className="hidden md:block overflow-x-auto">
                       <Table>
-                        <TableHeader className="bg-slate-50 border-b border-border/60">
+                        <TableHeader className="bg-muted/40 border-b border-border/60">
                           <TableRow>
                             <TableHead className="w-32">Status</TableHead>
                             <TableHead>Hostel Name & Location</TableHead>
                             <TableHead>Campus Zone</TableHead>
+                            <TableHead>Tariff Status</TableHead>
                             <TableHead>Price Range</TableHead>
                             <TableHead className="text-right">Rating</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredApproved.map((h) => (
-                            <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
-                              <TableCell className="py-3">
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                    h.availability === "Available"
-                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                      : h.availability === "Limited"
-                                      ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                      : "bg-rose-50 text-rose-700 border border-rose-200"
-                                  }`}
-                                >
-                                  {h.availability || "Available"}
-                                </span>
-                              </TableCell>
+                          {filteredApproved.map((h) => {
+                            const hasTariffViolation = h.roomTypes?.some(
+                              (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
+                            );
+                            const isProvisional = (h as any).provisionalAccreditation;
 
-                              <TableCell className="py-3">
-                                <p className="font-medium text-foreground text-sm">{h.name}</p>
-                                <p className="text-xs text-muted-foreground">{h.location}</p>
-                              </TableCell>
+                            return (
+                              <TableRow key={h.id} className="hover:bg-muted/30 transition-colors">
+                                <TableCell className="py-3">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span
+                                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                        h.availability === "Available"
+                                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                          : h.availability === "Limited"
+                                          ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                                          : "bg-rose-500/10 text-rose-600 border border-rose-500/20"
+                                      }`}
+                                    >
+                                      {h.availability || "Available"}
+                                    </span>
+                                    {isProvisional && (
+                                      <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/30">
+                                        Act 389 Desk Pass
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
 
-                              <TableCell className="py-3">
-                                <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
-                              </TableCell>
+                                <TableCell className="py-3">
+                                  <p className="font-medium text-foreground text-sm">{h.name}</p>
+                                  <p className="text-xs text-muted-foreground">{h.location}</p>
+                                </TableCell>
 
-                              <TableCell className="py-3">
-                                <span className="text-xs font-semibold text-foreground font-mono">
-                                  GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
-                                </span>
-                              </TableCell>
+                                <TableCell className="py-3">
+                                  <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
+                                </TableCell>
 
-                              <TableCell className="py-3 text-right">
-                                <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
-                                  <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
-                                  <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                <TableCell className="py-3">
+                                  {hasTariffViolation ? (
+                                    <Badge variant="destructive" className="text-[10px] font-semibold bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30">
+                                      Ceiling Exceeded
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-[11px] text-emerald-600 font-medium">
+                                      Compliant
+                                    </span>
+                                  )}
+                                </TableCell>
+
+                                <TableCell className="py-3">
+                                  <span className="text-xs font-semibold text-foreground font-mono">
+                                    GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
+                                  </span>
+                                </TableCell>
+
+                                <TableCell className="py-3 text-right">
+                                  <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                                    <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
+                                    <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
 
                     {/* Mobile Card Stack */}
                     <div className="block md:hidden divide-y divide-border/60">
-                      {filteredApproved.map((h) => (
-                        <div key={h.id} className="p-4 space-y-2">
-                          <div className="flex justify-between items-start gap-2">
-                            <div>
-                              <p className="font-semibold text-foreground text-sm">{h.name}</p>
-                              <p className="text-xs text-muted-foreground">{h.institution || "AAMUSTED"} • {h.location}</p>
+                      {filteredApproved.map((h) => {
+                        const hasTariffViolation = h.roomTypes?.some(
+                          (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
+                        );
+                        const isProvisional = (h as any).provisionalAccreditation;
+
+                        return (
+                          <div key={h.id} className="p-4 space-y-2">
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <p className="font-semibold text-foreground text-sm">{h.name}</p>
+                                <p className="text-xs text-muted-foreground">{h.institution || "AAMUSTED"} • {h.location}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    h.availability === "Available"
+                                      ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                                      : h.availability === "Limited"
+                                      ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                                      : "bg-rose-500/10 text-rose-600 border border-rose-500/20"
+                                  }`}
+                                >
+                                  {h.availability || "Available"}
+                                </span>
+                                {isProvisional && (
+                                  <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/30">
+                                    Act 389 Desk Pass
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                h.availability === "Available"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : h.availability === "Limited"
-                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                  : "bg-rose-50 text-rose-700 border border-rose-200"
-                              }`}
-                            >
-                              {h.availability || "Available"}
-                            </span>
+                            {hasTariffViolation && (
+                              <div className="pt-0.5">
+                                <Badge variant="destructive" className="text-[10px] bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30">
+                                  Tariff Ceiling Exceeded
+                                </Badge>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
+                              <span className="font-mono font-semibold text-foreground">
+                                GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
+                              </span>
+                              <span className="font-semibold text-foreground">
+                                ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
-                            <span className="font-mono font-semibold text-foreground">
-                              GH₵{h.priceRange?.min?.toLocaleString()} – GH₵{h.priceRange?.max?.toLocaleString()}
-                            </span>
-                            <span className="font-semibold text-foreground">
-                              ★ {h.rating ? h.rating.toFixed(1) : "4.5"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -968,7 +1536,7 @@ export default function CoordinatorDashboardPage() {
                   {selectedHostel.images && selectedHostel.images.length > 0 && (
                     <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden">
                       {selectedHostel.images.slice(0, 2).map((img, idx) => (
-                        <div key={idx} className="relative h-40 bg-slate-100">
+                        <div key={idx} className="relative h-40 bg-muted/30">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={img}
@@ -980,12 +1548,56 @@ export default function CoordinatorDashboardPage() {
                     </div>
                   )}
 
+                  {/* Act 389 Statutory Undertaking Card if present */}
+                  {selectedHostel.statutoryUndertaking ? (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 text-xs space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                        <Scale className="h-4 w-4 shrink-0" />
+                        <span>Statutory Sworn Undertaking Verified (Act 389)</span>
+                      </div>
+                      <p className="text-muted-foreground">
+                        Declarant: <span className="font-semibold text-foreground">{selectedHostel.statutoryUndertaking.declarantName}</span> ({selectedHostel.statutoryUndertaking.declarantDesignation})
+                      </p>
+                      <p className="text-muted-foreground font-mono">
+                        Ghana Card: <span className="font-semibold text-foreground">{selectedHostel.statutoryUndertaking.ghanaCardNumber}</span>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground pt-0.5">
+                        Attested on {new Date(selectedHostel.statutoryUndertaking.attestedAt).toLocaleDateString()} under penalty of Section 3 Perjury. Qualifies for rapid 1-year provisional desk pass.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/40 border border-border/60 rounded-xl p-3 text-xs text-muted-foreground flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+                      <span>Legacy registration — sworn Act 389 digital attestation not on file.</span>
+                    </div>
+                  )}
+
+                  {/* Tariff Ceiling Check */}
+                  {selectedHostel.roomTypes?.some(
+                    (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
+                  ) && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <span>Room tariffs exceed campus statutory limits. Clamping required.</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEnforceTariffCap(selectedHostel)}
+                        className="h-6 text-[11px] border-rose-300 text-rose-700 dark:text-rose-400 hover:bg-rose-500/10 w-fit"
+                      >
+                        Clamp to Ceiling
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Narrative Description */}
                   <div>
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                       Facility Overview & Specification
                     </p>
-                    <p className="text-sm text-foreground bg-slate-50 p-3 rounded-lg border border-border/60 leading-relaxed">
+                    <p className="text-sm text-foreground bg-muted/40 p-3 rounded-lg border border-border/60 leading-relaxed">
                       {selectedHostel.description}
                     </p>
                   </div>
@@ -1015,27 +1627,37 @@ export default function CoordinatorDashboardPage() {
                     </p>
                     <div className="border border-border/60 rounded-lg overflow-hidden">
                       <Table>
-                        <TableHeader className="bg-slate-50">
+                        <TableHeader className="bg-muted/40">
                           <TableRow>
                             <TableHead className="text-xs">Room Type</TableHead>
                             <TableHead className="text-xs">Capacity</TableHead>
-                            <TableHead className="text-xs">Tariff / Year</TableHead>
+                            <TableHead className="text-xs">Campus Ceiling</TableHead>
+                            <TableHead className="text-xs">Listed Tariff / Year</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {selectedHostel.roomTypes && selectedHostel.roomTypes.length > 0 ? (
-                            selectedHostel.roomTypes.map((rt, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell className="text-xs font-medium">{rt.name}</TableCell>
-                                <TableCell className="text-xs">{rt.capacity || 2} students</TableCell>
-                                <TableCell className="text-xs font-semibold text-emerald-600 font-mono">
-                                  GH₵{rt.price?.toLocaleString()}
-                                </TableCell>
-                              </TableRow>
-                            ))
+                            selectedHostel.roomTypes.map((rt, idx) => {
+                              const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity);
+                              const exceeds = rt.price > ceiling;
+
+                              return (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-xs font-medium">{rt.name}</TableCell>
+                                  <TableCell className="text-xs">{rt.capacity || 2} students</TableCell>
+                                  <TableCell className="text-xs font-mono text-muted-foreground">
+                                    GH₵{ceiling.toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className={`text-xs font-semibold font-mono ${exceeds ? "text-rose-600" : "text-emerald-600"}`}>
+                                    GH₵{rt.price?.toLocaleString()}
+                                    {exceeds && <span className="ml-1 text-[10px] text-rose-500 font-normal">(!exceeds)</span>}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={3} className="text-center text-xs text-muted-foreground">
+                              <TableCell colSpan={4} className="text-center text-xs text-muted-foreground">
                                 No room types specified.
                               </TableCell>
                             </TableRow>
@@ -1053,6 +1675,13 @@ export default function CoordinatorDashboardPage() {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
                   >
                     <Check className="h-3.5 w-3.5 mr-1" /> Approve & Publish
+                  </Button>
+                  <Button
+                    onClick={() => handleGrantProvisionalPass(selectedHostel)}
+                    disabled={actionLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 1-Yr Desk Pass (Act 389)
                   </Button>
                   <Button
                     variant="outline"

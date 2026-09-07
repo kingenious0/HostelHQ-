@@ -62,7 +62,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   const shortlisted = isShortlisted(cleanId || hostel.id);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
       setCurrentUser(user);
     });
     return () => unsubscribe();

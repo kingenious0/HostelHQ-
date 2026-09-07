@@ -239,9 +239,9 @@ export default function SettingsPage() {
                 <section>
                   <div className="flex items-center gap-3 mb-4">
                     <User className="h-5 w-5 text-primary" />
-                    <h2 className="text-xl font-bold font-headline">Identity</h2>
+                    <h2 className="text-xl font-bold font-headline">Identity & Credentials</h2>
                   </div>
-                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                  <Card className="rounded-2xl border border-border/60 shadow-xs bg-card">
                     <CardContent className="p-6">
                       <div className="space-y-4">
                         <div className="space-y-2">
@@ -250,18 +250,25 @@ export default function SettingsPage() {
                             <Input
                               value={fullName}
                               onChange={e => setFullName(e.target.value)}
-                              className="rounded-xl h-12 bg-muted/20 border-border/40"
+                              className="rounded-xl h-11 bg-background border-border/60"
                               placeholder="Electronic Student Name"
                             />
                             <Button
                               disabled={!fullName.trim() || fullName === initialName || saving}
                               onClick={handleSave}
-                              className="rounded-xl px-8 h-12 font-bold"
+                              className="rounded-xl px-8 h-11 font-bold"
                             >
                               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
                             </Button>
                           </div>
                         </div>
+
+                        {appUser && (
+                          <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>Account Tier: <span className="font-semibold text-foreground capitalize">{appUser.role}</span></span>
+                            <span>Verified ID: <span className="font-mono text-foreground">{appUser.email}</span></span>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -270,20 +277,20 @@ export default function SettingsPage() {
                 {/* Privacy Section */}
                 <section>
                   <div className="flex items-center gap-3 mb-4">
-                    <Shield className="h-5 w-5 text-green-600" />
-                    <h2 className="text-xl font-bold font-headline">Privacy & Safety</h2>
+                    <Shield className="h-5 w-5 text-emerald-600" />
+                    <h2 className="text-xl font-bold font-headline">Privacy & Safety (Act 843)</h2>
                   </div>
-                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
-                    <CardContent className="p-6 divide-y divide-border/40">
+                  <Card className="rounded-2xl border border-border/60 shadow-xs bg-card">
+                    <CardContent className="p-6 divide-y divide-border/50">
                       {[
-                        { id: 'showProfile', label: 'Public Profile Visibility', desc: 'Allows roommates to see your profile.' },
-                        { id: 'showPicture', label: 'Show Profile Photo', desc: 'Display your picture to other students.' },
-                        { id: 'showProgrammeOfStudy', label: 'Show Programme', desc: 'Share your academic details.' },
-                        { id: 'showPhoneNumber', label: 'Share Phone Number', desc: 'Necessary for easy connection.' },
+                        { id: 'showProfile', label: 'Public Profile Visibility', desc: 'Allows roommates and hall coordinators to view your profile.' },
+                        { id: 'showPicture', label: 'Show Profile Photo', desc: 'Display your verified photo to other accredited residents.' },
+                        { id: 'showProgrammeOfStudy', label: 'Show Programme of Study', desc: 'Share your academic programme with prospective roommates.' },
+                        { id: 'showPhoneNumber', label: 'Share Mobile Number', desc: 'Permit direct call routing for roommate matching.' },
                       ].map((item) => (
                         <div key={item.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
                           <div>
-                            <p className="font-bold text-sm">{item.label}</p>
+                            <p className="font-semibold text-sm text-foreground">{item.label}</p>
                             <p className="text-xs text-muted-foreground">{item.desc}</p>
                           </div>
                           <Switch
@@ -300,14 +307,14 @@ export default function SettingsPage() {
                 <section>
                   <div className="flex items-center gap-3 mb-4">
                     <Palette className="h-5 w-5 text-primary" />
-                    <h2 className="text-xl font-bold font-headline">Appearance</h2>
+                    <h2 className="text-xl font-bold font-headline">Appearance & Ergonomics</h2>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Card className="rounded-3xl border-transparent premium-shadow bg-white/80 backdrop-blur-md">
+                    <Card className="rounded-2xl border border-border/60 shadow-xs bg-card">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-sm">Dark Mode</p>
-                          <p className="text-[10px] text-muted-foreground">High contrast theme</p>
+                          <p className="font-semibold text-sm text-foreground">Dark Theme</p>
+                          <p className="text-xs text-muted-foreground">Crisp high-contrast enterprise palette</p>
                         </div>
                         <Switch
                           checked={settings?.profile.theme === 'dark'}
@@ -315,11 +322,11 @@ export default function SettingsPage() {
                         />
                       </CardContent>
                     </Card>
-                    <Card className="rounded-3xl border-transparent premium-shadow bg-white/80 backdrop-blur-md">
+                    <Card className="rounded-2xl border border-border/60 shadow-xs bg-card">
                       <CardContent className="p-5 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-sm">Reduced Motion</p>
-                          <p className="text-[10px] text-muted-foreground">Minimize animations</p>
+                          <p className="font-semibold text-sm text-foreground">Reduced Motion</p>
+                          <p className="text-xs text-muted-foreground">Minimize transitions and micro-animations</p>
                         </div>
                         <Switch
                           checked={!!settings?.profile.reducedMotion}
@@ -334,25 +341,25 @@ export default function SettingsPage() {
                 <section>
                   <div className="flex items-center gap-3 mb-4">
                     <Database className="h-5 w-5 text-blue-600" />
-                    <h2 className="text-xl font-bold font-headline">Data & Cache</h2>
+                    <h2 className="text-xl font-bold font-headline">Data & Cache Maintenance</h2>
                   </div>
-                  <Card className="rounded-[2rem] border-transparent premium-shadow overflow-hidden bg-card/80 backdrop-blur-md">
+                  <Card className="rounded-2xl border border-border/60 shadow-xs bg-card">
                     <CardContent className="p-6">
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                          <p className="font-bold text-sm">Cache Management</p>
-                          <p className="text-xs text-muted-foreground">Free up space by clearing local hostel data.</p>
+                          <p className="font-semibold text-sm text-foreground">Cache & Offline Storage</p>
+                          <p className="text-xs text-muted-foreground">Clear cached hostel geometries, offline maps, and temporary reservation drafts.</p>
                         </div>
                         <Button
                           variant="destructive"
                           size="sm"
-                          className="rounded-xl px-6 font-bold"
+                          className="rounded-xl px-6 font-semibold shrink-0 text-xs h-9"
                           onClick={() => {
                             clearLocalData();
-                            toast({ title: 'Cache Purged', description: 'Local storage has been cleared.' });
+                            toast({ title: 'Cache Purged', description: 'Local storage and session artifacts cleared.' });
                           }}
                         >
-                          Clear Local Data
+                          Purge Local Storage
                         </Button>
                       </div>
                     </CardContent>
@@ -360,7 +367,7 @@ export default function SettingsPage() {
                 </section>
 
                 <div className="pt-8 text-center">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.3em]">HostelHQ v2.4.0 • AAMUSTED Edition</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.3em]">HostelHQ Enterprise • Statutory Architecture Act 389 Compliant</p>
                 </div>
               </div>
             </div>
