@@ -13,7 +13,7 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap, Camera, Film, Video } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap, Camera, Film, Video, ExternalLink } from 'lucide-react';
 import { useShortlist } from '@/components/shortlist-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getGoogleMapsNavigationUrl } from '@/lib/utils';
 import { collection, query, where, getDocs, limit, doc, getDoc, orderBy } from 'firebase/firestore';
 import { completeVisitByStudentAction } from '@/app/actions/db';
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@/components/ui/table';
@@ -1633,13 +1633,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                 <MapPin className="h-6 w-6 text-primary" />
                                 Location & Campus Proximity
                             </h3>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                {hostel.location} {hostel.distanceToUniversity ? `• ${hostel.distanceToUniversity} from campus` : ''}
-                            </p>
+                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 mt-1">
+                                <p className="text-sm text-muted-foreground">
+                                    {hostel.location} {hostel.distanceToUniversity ? `• ${hostel.distanceToUniversity} from campus` : ''}
+                                </p>
+                                <a
+                                    href={getGoogleMapsNavigationUrl(hostel)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline transition-colors w-fit"
+                                >
+                                    <span>Directions in Google Maps</span>
+                                    <ExternalLink className="h-3 w-3" />
+                                </a>
+                            </div>
                         </div>
 
                         <div className="h-[360px] sm:h-[420px] rounded-3xl overflow-hidden border border-border/70 shadow-sm relative">
                             <MapboxMap hostelLocation={hostel} />
+                            <a
+                                href={getGoogleMapsNavigationUrl(hostel)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="absolute bottom-4 right-4 z-10 flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-background/95 backdrop-blur-md border border-border/80 text-xs font-bold text-foreground shadow-lg hover:bg-background hover:border-primary/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                <Compass className="h-4 w-4 text-primary" />
+                                <span>Open in Google Maps</span>
+                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                            </a>
                         </div>
 
                         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">

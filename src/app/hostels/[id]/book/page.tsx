@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, getGoogleMapsNavigationUrl } from '@/lib/utils';
 import { format } from 'date-fns';
 import { 
   Calendar as CalendarIcon, 
@@ -34,7 +34,10 @@ import {
   Bed, 
   Sparkles,
   Building,
-  ArrowRight
+  ArrowRight,
+  Compass,
+  ExternalLink,
+  MessageCircle
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -323,20 +326,32 @@ export default function BookingVisitPage() {
                   <p className="text-xs text-blue-700 mt-1">
                     The hostel management has been alerted. You can also directly contact them if you are arriving early:
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="bg-white" asChild>
-                      <a href={`tel:${(hostel as any).managerPhone || '+233597626090'}`}>
-                        <Phone className="h-3.5 w-3.5 mr-1.5" />
-                        Call Manager
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
+                    <Button asChild className="h-11 sm:h-10 w-full bg-primary text-primary-foreground font-semibold text-xs gap-1.5 shadow-sm" size="sm" variant="default">
+                      <a
+                        href={getGoogleMapsNavigationUrl(hostel)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Compass className="h-3.5 w-3.5"/>
+                        <span>Directions in Maps</span>
+                        <ExternalLink className="h-3 w-3 opacity-70"/>
                       </a>
                     </Button>
-                    <Button variant="outline" size="sm" className="bg-white" asChild>
-                      <a 
-                        href={`https://wa.me/${((hostel as any).managerPhone || '233597626090').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I scheduled a free visit to ${hostel.name} on HostelHQ for ${visitDate ? format(visitDate, 'MMM d') : ''}.`)}`} 
-                        target="_blank" 
-                        rel="noreferrer"
+                    <Button asChild className="h-11 sm:h-10 w-full bg-white text-xs font-medium border border-border/80 gap-1.5" size="sm" variant="outline">
+                      <a href={`tel:${(hostel as any).managerPhone || '+233597626090'}`}>
+                        <Phone className="h-3.5 w-3.5 text-emerald-600"/>
+                        <span>Call Manager</span>
+                      </a>
+                    </Button>
+                    <Button asChild className="h-11 sm:h-10 w-full bg-white text-xs font-medium border border-border/80 gap-1.5" size="sm" variant="outline">
+                      <a
+                        href={`https://wa.me/${((hostel as any).managerPhone || '233597626090').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I have scheduled a free visit to ${hostel.name} on HostelHQ for ${visitDate ? format(visitDate, 'EEE, MMM d') : ''}.`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                       >
-                        WhatsApp Manager
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600"/>
+                        <span>WhatsApp Manager</span>
                       </a>
                     </Button>
                   </div>

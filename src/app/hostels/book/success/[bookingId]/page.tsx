@@ -5,11 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Download, FileText, CheckCircle2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Download, FileText, CheckCircle2, Compass, Phone, MessageCircle, ExternalLink, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Hostel, RoomType } from '@/lib/data';
+import { getGoogleMapsNavigationUrl } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -37,7 +39,7 @@ export default function PaymentSuccessPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const { bookingId } = params;
+    const bookingId = (params?.bookingId as string) || '';
 
     const [booking, setBooking] = useState<Booking | null>(null);
     const [hostel, setHostel] = useState<Hostel | null>(null);
@@ -189,6 +191,73 @@ export default function PaymentSuccessPage() {
                                 </div>
                             </div>
                         </CardContent>
+                    </Card>
+
+                    {/* Arrival & Move-In Navigation Card (Pattern: Image 6) */}
+                    <Card className="border border-border/80 shadow-md bg-white rounded-3xl overflow-hidden">
+                      <CardContent className="p-5 sm:p-7 space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/50 pb-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-bold">
+                                Move-In Ready
+                              </Badge>
+                              <span className="text-xs text-muted-foreground font-medium">Official Student Check-In</span>
+                            </div>
+                            <h3 className="text-xl font-bold font-headline text-foreground mt-1">
+                              Directions to {hostel.name}
+                            </h3>
+                            <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-1">
+                              <MapPin className="h-3.5 w-3.5 text-primary shrink-0"/>
+                              <span>{hostel.location}</span>
+                              {(hostel as any).gpsName && (
+                                <span className="font-mono font-bold text-foreground bg-muted px-1.5 py-0.5 rounded text-[11px]">
+                                  {(hostel as any).gpsName}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-left sm:text-right text-xs text-muted-foreground shrink-0">
+                            <span className="font-semibold text-foreground">Next Step:</span> Contact management to announce arrival
+                          </div>
+                        </div>
+
+                        {/* 3-Button Action Trio Grid (Mobile Responsive Stack: 1 col on mobile, 3 cols on desktop) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* 1. Google Maps Navigation (Primary) */}
+                          <Button asChild className="h-11 sm:h-12 w-full rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs gap-2 shadow-sm">
+                            <a
+                              href={getGoogleMapsNavigationUrl(hostel)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Compass className="h-4 w-4"/>
+                              <span>Navigate in Google Maps</span>
+                              <ExternalLink className="h-3 w-3 opacity-70"/>
+                            </a>
+                          </Button>
+
+                          {/* 2. Call Manager */}
+                          <Button asChild className="h-11 sm:h-12 w-full rounded-xl border-border/80 hover:bg-muted text-xs font-semibold gap-2" variant="outline">
+                            <a href={`tel:${(hostel as any).managerPhone || (hostel as any).contactPhone || '+233597626090'}`}>
+                              <Phone className="h-4 w-4 text-emerald-600"/>
+                              <span>Call Manager</span>
+                            </a>
+                          </Button>
+
+                          {/* 3. WhatsApp Manager */}
+                          <Button asChild className="h-11 sm:h-12 w-full rounded-xl border-border/80 hover:bg-muted text-xs font-semibold gap-2" variant="outline">
+                            <a
+                              href={`https://wa.me/${((hostel as any).managerPhone || (hostel as any).contactPhone || '233597626090').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello, I have successfully secured my room at ${hostel.name} via HostelHQ (Booking Ref: #${(booking.id || '').slice(-6).toUpperCase()}). I would like to coordinate arrival and key collection.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <MessageCircle className="h-4 w-4 text-emerald-600"/>
+                              <span>WhatsApp Manager</span>
+                            </a>
+                          </Button>
+                        </div>
+                      </CardContent>
                     </Card>
 
                     {/* Invoice Card */}
