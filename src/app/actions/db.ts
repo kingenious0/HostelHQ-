@@ -67,7 +67,8 @@ export async function saveHostelAction(hostelData: Omit<Hostel, "reviews"> & { i
 export async function updateHostelAction(hostelId: string, updates: Partial<Hostel>, isPending: boolean = false) {
   try {
     const caller = await requireAuth();
-    if (caller.role !== "admin") {
+    const isExecutiveOrAdmin = ["admin", "executive", "pro_vc", "vc", "dean", "coordinator"].includes(caller.role);
+    if (!isExecutiveOrAdmin) {
       const existing = await dynamoService.getHostelById(hostelId);
       if (!existing || existing.managerId !== caller.uid) {
         throw new Error("Unauthorized: You do not have permission to update this hostel.");
@@ -418,7 +419,7 @@ export async function updateReviewStatusAction(reviewId: string, status: "approv
 
 export async function fetchPendingHostelsAction() {
   try {
-    await requireRole(["admin", "dean", "coordinator", "executive"]);
+    await requireRole(["admin", "dean", "coordinator", "executive", "pro_vc", "vc"]);
     const data = await dynamoService.listPendingHostels();
     return { success: true, data };
   } catch (error: any) {
@@ -751,33 +752,154 @@ export async function updateRoomPendingPriceAction(
 
 export async function fetchExecutiveMetricsAction() {
   try {
-    await requireRole(["admin", "executive", "dean", "coordinator"]);
-    // Strictly aggregate metrics only — NO individual records returned
-    const [hostels, bookings, complaints, verifications] = await Promise.all([
-      dynamoService.listHostels(),
-      dynamoCore.scanEntities<any>({ entityType: "BOOKING" }),
-      dynamoService.listComplaints(),
-      dynamoService.listStudentVerifications(),
-    ]);
+    await requireRole(["admin", "executive", "pro_vc", "vc", "dean", "coordinator"]);
+    
+    // 1. Fetch Hostels (DynamoDB with Firestore fallback)
+    let hostels: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        hostels = await dynamoService.listHostels();
+      } catch (err) {
+        console.warn("dynamoService.listHostels note in exec metrics:", err);
+      }
+    }
+    if (!hostels || hostels.length === 0) {
+      try {
+        const snap = await getDocs(collection(db, "hostels"));
+        hostels = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn("Firestore hostels fallback in exec metrics:", fsErr);
+      }
+    }
+
+    // 2. Fetch Pending Hostels
+    let pendingHostels: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        pendingHostels = await dynamoService.listPendingHostels();
+      } catch (err) {
+        console.warn("dynamoService.listPendingHostels note in exec metrics:", err);
+      }
+    }
+    const pendingReviews = (pendingHostels?.length || 0) + hostels.filter((h: any) => h.status === "pending" || h.accreditationStatus === "pending").length;
+
+    // 3. Fetch Bookings
+    let bookings: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        bookings = await dynamoCore.scanEntities<any>({ entityType: "BOOKING" });
+      } catch (err) {
+        console.warn("dynamo bookings scan note in exec metrics:", err);
+      }
+    }
+    if (!bookings || bookings.length === 0) {
+      try {
+        const snap = await getDocs(collection(db, "bookings"));
+        bookings = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn("Firestore bookings fallback in exec metrics:", fsErr);
+      }
+    }
+
+    // 4. Fetch Complaints
+    let complaints: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        complaints = await dynamoService.listComplaints();
+      } catch (err) {
+        console.warn("dynamoService.listComplaints note in exec metrics:", err);
+      }
+    }
+    if (!complaints || complaints.length === 0) {
+      try {
+        const snap = await getDocs(collection(db, "complaints"));
+        complaints = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn("Firestore complaints fallback in exec metrics:", fsErr);
+      }
+    }
+
+    // 5. Fetch Student Verifications
+    let verifications: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        verifications = await dynamoService.listStudentVerifications();
+      } catch (err) {
+        console.warn("dynamo verifications note in exec metrics:", err);
+      }
+    }
+    if (!verifications || verifications.length === 0) {
+      try {
+        const snap = await getDocs(query(collection(db, "users"), where("verificationStatus", "in", ["verified", "pending"])));
+        verifications = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      } catch (fsErr) {
+        console.warn("Firestore users verifications fallback in exec metrics:", fsErr);
+      }
+    }
 
     const totalHostels = hostels.length;
-    const verifiedHostels = hostels.filter((h) => h.status === "approved" || !h.status).length;
-    
-    // Count confirmed / completed bookings as students accommodated
-    const accommodatedStudents = bookings.filter((b) => 
+    const verifiedHostels = hostels.filter((h: any) => (h.status === "approved" || h.verified) && h.status !== "revoked").length;
+    const activeSanctions = hostels.filter((h: any) => 
+      h.sanctionStatus === "sanctioned" || 
+      h.accreditationStatus === "Executive Sanction" || 
+      h.accreditationStatus === "sanctioned" || 
+      h.status === "revoked" ||
+      h.sanctionStatus === "revoked"
+    ).length;
+
+    // Sum off-campus beds strictly from roomTypes
+    const totalOffCampusBeds = hostels.filter((h: any) => h.verified && h.status !== "revoked").reduce((acc: number, h: any) => {
+      const roomCapacity = (h.roomTypes || []).reduce((rAcc: number, rt: any) => {
+        return rAcc + (rt.numberOfRooms || 1) * (rt.capacity || 1);
+      }, 0);
+      return acc + roomCapacity;
+    }, 0);
+
+    const accommodatedStudents = bookings.filter((b: any) => 
       b.status === "confirmed" || b.status === "completed" || b.status === "paid" || b.status === "active"
     ).length;
 
     const totalComplaints = complaints.length;
-    const resolvedComplaints = complaints.filter((c) => c.status === "Resolved").length;
-    const underReviewComplaints = complaints.filter((c) => c.status === "Under Review").length;
-    const submittedComplaints = complaints.filter((c) => c.status === "Submitted").length;
+    const resolvedComplaints = complaints.filter((c: any) => c.status === "Resolved" || c.status === "closed").length;
+    const underReviewComplaints = complaints.filter((c: any) => c.status === "Under Review" || c.status === "arbitration").length;
+    const submittedComplaints = complaints.filter((c: any) => c.status === "Submitted" || c.status === "pending").length;
 
-    // Complaint categories aggregation
+    // Complaint categories aggregation with standard category normalization
     const categoryCounts: Record<string, number> = {};
-    complaints.forEach((c) => {
-      const cat = c.category || "General";
+    const zoneCounts: Record<string, number> = {
+      "Ayeduase": 0,
+      "Kotei": 0,
+      "Amassoma": 0,
+      "Campus Environs": 0,
+    };
+
+    const hostelLocationMap: Record<string, string> = {};
+    hostels.forEach((h: any) => {
+      if (h.id && h.location) {
+        hostelLocationMap[h.id] = h.location;
+        const cleanId = String(h.id).replace(/^HOSTEL#/i, "").trim();
+        hostelLocationMap[cleanId] = h.location;
+      }
+    });
+
+    complaints.forEach((c: any) => {
+      let cat = c.category || "General Inquiries";
+      if (/maintenance|repair|water|sanitation|facility|utility/i.test(cat)) {
+        cat = "Facilities & Utilities";
+      } else if (/price|tariff|overcharg|fee|rent/i.test(cat)) {
+        cat = "Rent & Tariff Overpricing";
+      } else if (/security|safety|theft|break/i.test(cat)) {
+        cat = "Security & Access";
+      } else if (/noise|disturbance|conduct|policy|quiet/i.test(cat)) {
+        cat = "Conduct & Quiet Hours";
+      }
       categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+
+      const loc = (c.hostelId ? hostelLocationMap[c.hostelId] : "") || c.hostelName || c.location || "";
+      if (/ayeduase/i.test(loc)) zoneCounts["Ayeduase"] = (zoneCounts["Ayeduase"] || 0) + 1;
+      else if (/kotei/i.test(loc)) zoneCounts["Kotei"] = (zoneCounts["Kotei"] || 0) + 1;
+      else if (/amassoma/i.test(loc)) zoneCounts["Amassoma"] = (zoneCounts["Amassoma"] || 0) + 1;
+      else zoneCounts["Campus Environs"] = (zoneCounts["Campus Environs"] || 0) + 1;
     });
 
     const categoryBreakdown = Object.entries(categoryCounts).map(([category, count]) => ({
@@ -786,14 +908,20 @@ export async function fetchExecutiveMetricsAction() {
       percentage: totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0,
     })).sort((a, b) => b.count - a.count);
 
+    const zoneBreakdown = Object.entries(zoneCounts).map(([zone, count]) => ({
+      zone,
+      count,
+      percentage: totalComplaints > 0 ? Math.round((count / totalComplaints) * 100) : 0,
+    })).sort((a, b) => b.count - a.count);
+
     // Complaint directions
-    const studentToHostelCount = complaints.filter((c) => c.direction === "student_to_hostel").length;
-    const managerToStudentCount = complaints.filter((c) => c.direction === "manager_to_student").length;
+    const studentToHostelCount = complaints.filter((c: any) => c.direction === "student_to_hostel" || (!c.direction && c.studentId)).length;
+    const managerToStudentCount = complaints.filter((c: any) => c.direction === "manager_to_student" || (!c.direction && !c.studentId && c.managerId)).length;
 
     // Verification rate
     const totalVerifications = verifications.length;
-    const approvedVerifications = verifications.filter((v) => v.status === "verified").length;
-    const pendingVerifications = verifications.filter((v) => v.status === "pending").length;
+    const approvedVerifications = verifications.filter((v: any) => v.status === "verified" || v.verificationStatus === "verified").length;
+    const pendingVerifications = verifications.filter((v: any) => v.status === "pending" || v.verificationStatus === "pending").length;
 
     return {
       success: true,
@@ -801,18 +929,22 @@ export async function fetchExecutiveMetricsAction() {
         summary: {
           totalHostels,
           verifiedHostels,
+          pendingReviews,
+          activeSanctions,
+          totalOffCampusBeds,
           accommodatedStudents,
           totalComplaints,
           resolvedComplaints,
           underReviewComplaints,
           submittedComplaints,
-          resolutionRate: totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0,
+          resolutionRate: totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 100,
           totalVerifications,
           approvedVerifications,
           pendingVerifications,
           verificationRate: totalVerifications > 0 ? Math.round((approvedVerifications / totalVerifications) * 100) : 0,
         },
         categoryBreakdown,
+        zoneBreakdown,
         directionBreakdown: {
           studentToHostel: studentToHostelCount,
           managerToStudent: managerToStudentCount,
