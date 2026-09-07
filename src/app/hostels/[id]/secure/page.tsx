@@ -36,6 +36,8 @@ import { auth, db } from '@/lib/firebase'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import type { User as FirebaseUser } from 'firebase/auth'
+import { calculateRoomTypeInventory } from '@/lib/room-capacity'
+import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack'
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -49,6 +51,7 @@ const formSchema = z.object({
   guardianRelationship: z.string().min(3, { message: "Relationship is required." }),
   guardianPhoneNumber: z.string().regex(/^\+?[0-9]{10,13}$/, { message: "Invalid guardian phone number." }),
   guardianEmail: z.string().email({ message: "Invalid guardian email address." }),
+  roomNumber: z.string().optional(),
 })
 
 
@@ -65,6 +68,8 @@ export default function SecureHostelPage() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [hostel, setHostel] = React.useState<Hostel | null>(null);
     const [selectedRoom, setSelectedRoom] = React.useState<RoomType | null>(null);
+    const [selectedRoomNumber, setSelectedRoomNumber] = React.useState<string>(roomNumber || '');
+    const [confirmedBookings, setConfirmedBookings] = React.useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
     const [loading, setLoading] = React.useState(true);
     const [existingBooking, setExistingBooking] = React.useState<{ id: string } | null | undefined>(null);
     const [verificationStatus, setVerificationStatus] = React.useState<string | null>(null);
@@ -86,8 +91,42 @@ export default function SecureHostelPage() {
             guardianName: "",
             guardianRelationship: "",
             guardianPhoneNumber: "",
+            guardianEmail: "",
+            roomNumber: roomNumber || "",
         },
     });
+
+    React.useEffect(() => {
+        const fetchBookings = async () => {
+            if (!hostelId) return;
+            try {
+                const bookingsQuery = query(
+                    collection(db, 'bookings'),
+                    where('hostelId', '==', hostelId),
+                    where('status', '==', 'confirmed')
+                );
+                const snapshot = await getDocs(bookingsQuery);
+                const bookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = [];
+                snapshot.forEach((d) => {
+                    const data = d.data() as any;
+                    bookings.push({
+                        roomId: data.roomId,
+                        roomNumber: data.roomNumber,
+                        roomTypeId: data.roomTypeId,
+                    });
+                });
+                setConfirmedBookings(bookings);
+            } catch (e) {
+                console.error('Error fetching confirmed bookings for secure page:', e);
+            }
+        };
+        fetchBookings();
+    }, [hostelId]);
+
+    const inventorySummary = React.useMemo(() => {
+        if (!selectedRoom) return null;
+        return calculateRoomTypeInventory(selectedRoom, confirmedBookings);
+    }, [selectedRoom, confirmedBookings]);
 
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
@@ -106,6 +145,7 @@ export default function SecureHostelPage() {
                     guardianRelationship: "",
                     guardianPhoneNumber: "",
                     guardianEmail: "",
+                    roomNumber: selectedRoomNumber || roomNumber || "",
                 });
                 return;
             }
@@ -128,6 +168,7 @@ export default function SecureHostelPage() {
                     guardianRelationship: "",
                     guardianPhoneNumber: "",
                     guardianEmail: "",
+                    roomNumber: selectedRoomNumber || roomNumber || "",
                 });
             } catch {
                 // ignore profile load errors
@@ -135,7 +176,7 @@ export default function SecureHostelPage() {
         });
 
         return () => unsubscribe();
-    }, [hostelId]);
+    }, [hostelId, selectedRoomNumber, roomNumber]);
 
     async function handleAskAi(question: string) {
         const trimmed = question.trim();
@@ -262,7 +303,7 @@ export default function SecureHostelPage() {
                 roomTypeName: selectedRoom.name,
                 roomPrice: selectedRoom.price,
                 roomId,
-                roomNumber,
+                roomNumber: values.roomNumber || selectedRoomNumber || roomNumber || null,
             }));
 
             const result = await initializeHostelPayment({
@@ -394,6 +435,37 @@ export default function SecureHostelPage() {
                     <CardContent>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                                {inventorySummary && (
+                                    <div className="space-y-2.5 pb-2">
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel className="text-sm font-bold text-foreground">
+                                                Select Your Specific Room &amp; Bed
+                                            </FormLabel>
+                                            {selectedRoomNumber && (
+                                                <span className="text-xs font-semibold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full">
+                                                    Selected: {selectedRoomNumber}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <RoomCapacityRack
+                                            summary={inventorySummary}
+                                            interactive={true}
+                                            selectedRoomNumber={selectedRoomNumber}
+                                            onSelectRoom={(room) => {
+                                                if (room.status !== 'full') {
+                                                    setSelectedRoomNumber(room.roomNumber);
+                                                    form.setValue('roomNumber', room.roomNumber, { shouldValidate: true });
+                                                }
+                                            }}
+                                        />
+                                        {selectedRoomNumber && (
+                                            <p className="text-xs text-muted-foreground">
+                                                ✓ Locking in bed allocation for <strong className="text-foreground">{selectedRoomNumber}</strong> upon payment confirmation.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="grid gap-6 md:grid-cols-2">
                                     <FormField
                                         control={form.control}
@@ -610,7 +682,12 @@ export default function SecureHostelPage() {
                         <div className="rounded-xl border border-muted bg-muted/30 p-4">
                             <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Selected Room</p>
                             <p className="mt-2 text-lg font-semibold text-foreground">{selectedRoom?.name}</p>
-                            <p className="text-muted-foreground">
+                            {selectedRoomNumber && (
+                                <p className="text-xs font-bold text-primary mt-1 flex items-center gap-1">
+                                    <BedDouble className="h-3.5 w-3.5" /> Allocated Unit: {selectedRoomNumber}
+                                </p>
+                            )}
+                            <p className="text-muted-foreground text-xs mt-1">
                                 Annual rent: GH₵{selectedRoom?.price?.toLocaleString()} · Availability: {selectedRoom?.availability}
                             </p>
                         </div>

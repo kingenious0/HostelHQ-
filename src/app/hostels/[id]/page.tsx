@@ -37,6 +37,8 @@ import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapboxMap } from '@/components/map';
+import { calculateRoomTypeInventory } from '@/lib/room-capacity';
+import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -105,6 +107,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const { isShortlisted, toggleShortlist } = useShortlist();
     const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
+    const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
 
     const activeRoom = useMemo<RoomType | null>(() => {
         if (hostel.roomTypes && hostel.roomTypes.length > 0) {
@@ -213,8 +216,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 );
                 const snapshot = await getDocs(bookingsQuery);
                 const counts: Record<string, number> = {};
+                const bookingsList: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = [];
                 snapshot.forEach((docSnap) => {
                     const data = docSnap.data() as any;
+                    bookingsList.push({
+                        roomId: data.roomId,
+                        roomNumber: data.roomNumber,
+                        roomTypeId: data.roomTypeId,
+                    });
                     const roomTypeId = data.roomTypeId || null;
                     const roomTypeName = data.roomTypeName || data.roomType || null;
                     if (roomTypeId) {
@@ -225,6 +234,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     }
                 });
                 setRoomOccupancy(counts);
+                setConfirmedBookings(bookingsList);
             } catch (error) {
                 console.error('Error loading room occupancy for hostel detail page:', error);
             }
@@ -1225,113 +1235,117 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     const capacityNum = Number(room.capacity) || 0;
                                     const hasRoomVideos = Boolean(room.videos && room.videos.length > 0);
 
+                                    const inventorySummary = calculateRoomTypeInventory(room, confirmedBookings);
+
                                     return (
-                                        <div
-                                            key={room.id || idx}
-                                            onClick={() => setSelectedRoomIndex(idx)}
-                                            className={cn(
-                                                "rounded-3xl border p-5 sm:p-6 transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between cursor-pointer",
-                                                isSelected
-                                                    ? "border-primary bg-primary/[0.04] shadow-md ring-2 ring-primary/40"
-                                                    : "border-border/70 bg-card/60 backdrop-blur-sm shadow-sm hover:border-primary/40 hover:shadow-md"
-                                            )}
-                                        >
-                                            <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center w-full md:w-auto">
-                                                <div
-                                                    className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted cursor-pointer group"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const slidesToOpen = roomPhotos.length > 0
-                                                            ? [...roomPhotos, ...primaryImages.filter((img) => !roomPhotos.includes(img))]
-                                                            : [roomImg, ...primaryImages.filter((img) => img !== roomImg)];
-                                                        openLightbox(0, slidesToOpen);
-                                                    }}
-                                                    title="Click to view room photos"
-                                                >
-                                                    <Image
-                                                        src={roomImg}
-                                                        alt={room.name}
-                                                        fill
-                                                        className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                                    />
-                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
-                                                        <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
-                                                            <Eye className="w-3 h-3" /> View {roomPhotos.length > 1 ? `(${roomPhotos.length})` : ''}
-                                                        </span>
+                                        <div key={room.id || idx} className="space-y-3">
+                                            <div
+                                                onClick={() => setSelectedRoomIndex(idx)}
+                                                className={cn(
+                                                    "rounded-3xl border p-5 sm:p-6 transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between cursor-pointer",
+                                                    isSelected
+                                                        ? "border-primary bg-primary/[0.04] shadow-md ring-2 ring-primary/40"
+                                                        : "border-border/70 bg-card/60 backdrop-blur-sm shadow-sm hover:border-primary/40 hover:shadow-md"
+                                                )}
+                                            >
+                                                <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center w-full md:w-auto">
+                                                    <div
+                                                        className="relative h-28 w-full sm:w-36 rounded-2xl overflow-hidden shrink-0 bg-muted cursor-pointer group"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const slidesToOpen = roomPhotos.length > 0
+                                                                ? [...roomPhotos, ...primaryImages.filter((img) => !roomPhotos.includes(img))]
+                                                                : [roomImg, ...primaryImages.filter((img) => img !== roomImg)];
+                                                            openLightbox(0, slidesToOpen);
+                                                        }}
+                                                        title="Click to view room photos"
+                                                    >
+                                                        <Image
+                                                            src={roomImg}
+                                                            alt={room.name}
+                                                            fill
+                                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                                                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
+                                                                <Eye className="w-3 h-3" /> View {roomPhotos.length > 1 ? `(${roomPhotos.length})` : ''}
+                                                            </span>
+                                                        </div>
+
+                                                        {roomPhotos.length > 1 && (
+                                                            <div className="absolute bottom-1.5 left-1.5 z-10 bg-black/75 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                                                                <Camera className="w-2.5 h-2.5 text-primary" /> {roomPhotos.length}
+                                                            </div>
+                                                        )}
+
+                                                        {hasRoomVideos && (
+                                                            <div className="absolute top-1.5 left-1.5 z-10 bg-indigo-600/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                                                                <Film className="w-2.5 h-2.5" /> Video
+                                                            </div>
+                                                        )}
                                                     </div>
-
-                                                    {roomPhotos.length > 1 && (
-                                                        <div className="absolute bottom-1.5 left-1.5 z-10 bg-black/75 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
-                                                            <Camera className="w-2.5 h-2.5 text-primary" /> {roomPhotos.length}
-                                                        </div>
-                                                    )}
-
-                                                    {hasRoomVideos && (
-                                                        <div className="absolute top-1.5 left-1.5 z-10 bg-indigo-600/90 backdrop-blur-sm text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
-                                                            <Film className="w-2.5 h-2.5" /> Video
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center gap-2.5 flex-wrap">
-                                                        <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
-                                                        <Badge
-                                                            variant={getRoomAvailabilityVariant(room.availability)}
-                                                            className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
-                                                        >
-                                                            {room.availability}
-                                                        </Badge>
-                                                        {isSelected && (
-                                                            <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                                                                Selected Room
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center gap-2.5 flex-wrap">
+                                                            <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
+                                                            <Badge
+                                                                variant={getRoomAvailabilityVariant(room.availability)}
+                                                                className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
+                                                            >
+                                                                {room.availability}
                                                             </Badge>
-                                                        )}
-                                                    </div>
+                                                            {isSelected && (
+                                                                <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                                                                    Selected Room
+                                                                </Badge>
+                                                            )}
+                                                        </div>
 
-                                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-medium">
-                                                        {room.capacity && (
-                                                            <span className="flex items-center gap-1">
-                                                                <UsersIcon className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{capacityNum > 1 ? 's' : ''}
-                                                            </span>
-                                                        )}
-                                                        {room.beds && (
-                                                            <span className="flex items-center gap-1">
-                                                                <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Bed{bedsNum > 1 ? 's' : ''}
-                                                            </span>
-                                                        )}
-                                                        {room.bathrooms && (
-                                                            <span className="flex items-center gap-1">
-                                                                <Bath className="h-3.5 w-3.5 text-primary" /> {room.bathrooms} Bath
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {roomAmenities.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1.5 pt-1">
-                                                            {roomAmenities.slice(0, 3).map((am, i) => (
-                                                                <span key={i} className="text-[10px] bg-muted px-2 py-0.5 rounded-md text-muted-foreground font-medium">
-                                                                    {am}
+                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground font-medium">
+                                                            {room.capacity && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <UsersIcon className="h-3.5 w-3.5 text-primary" /> {room.capacity} Student{capacityNum > 1 ? 's' : ''}
                                                                 </span>
-                                                            ))}
-                                                            {roomAmenities.length > 3 && (
-                                                                <span className="text-[10px] text-muted-foreground font-medium self-center">
-                                                                    +{roomAmenities.length - 3} more
+                                                            )}
+                                                            {room.beds && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Bed className="h-3.5 w-3.5 text-primary" /> {room.beds} Bed{bedsNum > 1 ? 's' : ''}
+                                                                </span>
+                                                            )}
+                                                            {room.bathrooms && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Bath className="h-3.5 w-3.5 text-primary" /> {room.bathrooms} Bath
                                                                 </span>
                                                             )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            </div>
 
-                                            <div className="flex sm:flex-col items-center sm:items-end justify-between w-full md:w-auto gap-3 pt-4 sm:pt-0 border-t sm:border-t-0 border-border/50">
-                                                <div className="text-left sm:text-right">
-                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Annual Rate</p>
-                                                    <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
+                                                        {roomAmenities.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1.5 pt-1">
+                                                                {roomAmenities.slice(0, 3).map((am, i) => (
+                                                                    <span key={i} className="text-[10px] bg-muted px-2 py-0.5 rounded-md text-muted-foreground font-medium">
+                                                                        {am}
+                                                                    </span>
+                                                                ))}
+                                                                {roomAmenities.length > 3 && (
+                                                                    <span className="text-[10px] text-muted-foreground font-medium self-center">
+                                                                        +{roomAmenities.length - 3} more
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div onClick={(e) => e.stopPropagation()}>
-                                                    {getVisitButton(room)}
+
+                                                <div className="flex sm:flex-col items-center sm:items-end justify-between w-full md:w-auto gap-3 pt-4 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                                                    <div className="text-left sm:text-right">
+                                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Annual Rate</p>
+                                                        <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
+                                                    </div>
+                                                    <div onClick={(e) => e.stopPropagation()}>
+                                                        {getVisitButton(room)}
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <RoomCapacityRack summary={inventorySummary} />
                                         </div>
                                     );
                                 })

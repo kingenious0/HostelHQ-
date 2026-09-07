@@ -24,6 +24,8 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
+import { calculateRoomTypeInventory } from '@/lib/room-capacity';
+import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
 
 interface AppUser {
   uid: string;
@@ -58,6 +60,8 @@ export default function RoomsPage() {
   const [hasCompletedVisit, setHasCompletedVisit] = useState<boolean>(false);
   const [hasSecuredHostel, setHasSecuredHostel] = useState<boolean>(false);
   const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
+  const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
+  const [selectedRoomsByType, setSelectedRoomsByType] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'oldest'>('price-low');
   const [roomTypeFilter, setRoomTypeFilter] = useState<string>('');
@@ -313,9 +317,15 @@ export default function RoomsPage() {
         );
         const snapshot = await getDocs(bookingsQuery);
         const counts: Record<string, number> = {};
+        const bookingsList: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = [];
         
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as any;
+          bookingsList.push({
+            roomId: data.roomId,
+            roomNumber: data.roomNumber,
+            roomTypeId: data.roomTypeId,
+          });
           
           // Priority: specific roomId > roomNumber > fallback to roomTypeId
           const specificRoomId = data.roomId || null;
@@ -335,6 +345,7 @@ export default function RoomsPage() {
         });
         
         setRoomOccupancy(counts);
+        setConfirmedBookings(bookingsList);
       } catch (error) {
         console.error('Error loading room occupancy for hostel rooms page:', error);
       }
@@ -660,6 +671,36 @@ export default function RoomsPage() {
                         <span>Compare Inclusions & Security</span>
                       </Button>
                     </div>
+
+                    {/* Real-Time Bed & Room Allocation Rack */}
+                    {(() => {
+                      const roomTypeForInventory: RoomType = matchingType || {
+                        id: roomsForType[0]?.roomTypeId || roomsForType[0]?.id || typeName,
+                        name: typeName,
+                        price: roomsForType[0]?.price || 0,
+                        capacity: roomsForType[0]?.capacity || 1,
+                        numberOfRooms: roomsForType.length,
+                        roomNumbers: roomsForType.map(r => r.roomNumber || r.label).filter(Boolean),
+                        roomAmenities: amenitiesList
+                      };
+                      const inventorySummary = calculateRoomTypeInventory(roomTypeForInventory, confirmedBookings);
+
+                      return (
+                        <RoomCapacityRack
+                          summary={inventorySummary}
+                          interactive={true}
+                          selectedRoomNumber={selectedRoomsByType[typeName]}
+                          onSelectRoom={(r) => {
+                            if (r.status !== 'full') {
+                              setSelectedRoomsByType(prev => ({
+                                ...prev,
+                                [typeName]: r.roomNumber
+                              }));
+                            }
+                          }}
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div
@@ -797,7 +838,8 @@ export default function RoomsPage() {
                                 const params = new URLSearchParams();
                                 params.set('roomTypeId', room.id);
                                 if (room.id) params.set('roomId', room.id);
-                                if (room.roomNumber) params.set('roomNumber', room.roomNumber);
+                                const selectedRoomNum = selectedRoomsByType[typeName] || room.roomNumber;
+                                if (selectedRoomNum) params.set('roomNumber', selectedRoomNum);
 
                                 const base = hasCompletedVisit ? 'secure' : 'book';
                                 const target = `/hostels/${id}/${base}?${params.toString()}`;
@@ -820,7 +862,9 @@ export default function RoomsPage() {
                                 : hasSecuredHostel
                                 ? 'Room Secured ✓'
                                 : hasCompletedVisit
-                                ? 'Secure This Room'
+                                ? selectedRoomsByType[typeName]
+                                  ? `Secure ${selectedRoomsByType[typeName]}`
+                                  : 'Secure This Room'
                                 : 'Request Free Visit'}
                             </Button>
 
