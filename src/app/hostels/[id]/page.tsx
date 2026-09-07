@@ -37,7 +37,7 @@ import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapboxMap } from '@/components/map';
-import { calculateRoomTypeInventory } from '@/lib/room-capacity';
+import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
 import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
 
 
@@ -437,12 +437,26 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const getVisitButton = (room: RoomType) => {
+        const roomSoldOut = isRoomTypeSoldOut(room, confirmedBookings) || isHostelSoldOut(hostel);
+
+        if (roomSoldOut) {
+            return (
+                <Button
+                    size="sm"
+                    disabled
+                    className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed text-xs font-bold flex items-center gap-1.5"
+                >
+                    <Lock className="h-3.5 w-3.5" /> Sold Out
+                </Button>
+            );
+        }
+
         if (!currentUser) {
             return (
                 <Button
                     variant="outline"
                     size="sm"
-                    disabled={room.availability === 'Full'}
+                    disabled={room.availability === 'Full' || roomSoldOut}
                     onClick={handleLoginRedirect}
                     className="rounded-xl text-xs font-semibold"
                 >
@@ -493,7 +507,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 return (
                     <Button
                         size="sm"
-                        disabled={room.availability === 'Full'}
+                        disabled={room.availability === 'Full' || roomSoldOut}
                         onClick={() => router.push(`/hostels/${hostel.id}/secure?roomTypeId=${room.id}`)}
                         className="bg-accent hover:bg-accent/90 text-accent-foreground text-xs font-bold"
                     >
@@ -538,7 +552,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             <Button
                 variant="outline"
                 size="sm"
-                disabled={room.availability === 'Full'}
+                disabled={room.availability === 'Full' || roomSoldOut}
                 onClick={() => router.push(`/hostels/${hostel.id}/book?roomTypeId=${room.id}`)}
                 className="rounded-xl text-xs font-semibold hover:bg-primary hover:text-white transition-colors"
             >
@@ -551,6 +565,24 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     const renderPrimaryAction = (size: 'default' | 'lg' = 'default') => {
         const buttonHeight = size === 'lg' ? "h-14" : "h-12";
+        const isHostelLocked = isHostelSoldOut(hostel);
+        const isActiveRoomLocked = activeRoom ? isRoomTypeSoldOut(activeRoom, confirmedBookings) : false;
+        const isSoldOut = isHostelLocked || isActiveRoomLocked || hostel.availability === 'Full' || activeRoomAvailability === 'Full';
+
+        if (isSoldOut) {
+            return (
+                <Button
+                    disabled
+                    className={cn(
+                        "flex-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2",
+                        buttonHeight
+                    )}
+                >
+                    <Lock className="h-4 w-4" />
+                    Sold Out (100% Capacity)
+                </Button>
+            );
+        }
 
         if (!currentUser) {
             return (
@@ -563,18 +595,6 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 >
                     <Ticket className="h-4 w-4" />
                     View Visits
-                </Button>
-            );
-        }
-
-        if (hostel.availability === 'Full' || activeRoomAvailability === 'Full') {
-            return (
-                <Button
-                    disabled
-                    variant="secondary"
-                    className={cn("flex-1 rounded-xl text-xs sm:text-sm font-bold", buttonHeight)}
-                >
-                    Room Full
                 </Button>
             );
         }
@@ -764,6 +784,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const getPrimaryCTA = () => {
+        const isHostelLocked = isHostelSoldOut(hostel);
+
+        if (isHostelLocked || hostel.availability === 'Full') {
+            return (
+                <Button
+                    size="lg"
+                    className="w-full h-14 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed rounded-2xl font-bold flex items-center justify-center gap-2"
+                    disabled
+                    title="This hostel has reached 100% capacity"
+                >
+                    <Lock className="h-5 w-5" />
+                    Sold Out (100% Capacity)
+                </Button>
+            );
+        }
+
         if (!currentUser) {
             return (
                 <Button
@@ -772,21 +808,6 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     onClick={handleLoginRedirect}
                 >
                     Log In to Request Free Visit
-                </Button>
-            );
-        }
-
-        // If the hostel is marked Full by admin, block all CTAs
-        if (hostel.availability === 'Full') {
-            return (
-                <Button
-                    size="lg"
-                    className="w-full h-14 rounded-2xl"
-                    variant="secondary"
-                    disabled
-                    title="This hostel is fully booked"
-                >
-                    Hostel Fully Booked
                 </Button>
             );
         }
@@ -851,6 +872,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             const roomTypes = hostel.roomTypes || [];
 
             if (roomTypes.length === 1 && roomTypes[0]?.id) {
+                const isSingleRoomSoldOut = isRoomTypeSoldOut(roomTypes[0], confirmedBookings);
+                if (isSingleRoomSoldOut) {
+                    return (
+                        <Button
+                            size="lg"
+                            className="w-full h-14 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed rounded-2xl font-bold flex items-center justify-center gap-2"
+                            disabled
+                        >
+                            <Lock className="h-5 w-5" />
+                            Sold Out (100% Capacity)
+                        </Button>
+                    );
+                }
                 return (
                     <Button
                         size="lg"
@@ -864,6 +898,19 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             }
 
             if (roomTypes.length > 1) {
+                const allSoldOut = roomTypes.every(rt => isRoomTypeSoldOut(rt, confirmedBookings));
+                if (allSoldOut) {
+                    return (
+                        <Button
+                            size="lg"
+                            className="w-full h-14 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed rounded-2xl font-bold flex items-center justify-center gap-2"
+                            disabled
+                        >
+                            <Lock className="h-5 w-5" />
+                            Sold Out (100% Capacity)
+                        </Button>
+                    );
+                }
                 return (
                     <Button
                         size="lg"

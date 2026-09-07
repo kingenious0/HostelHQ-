@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck, ArrowLeft } from "lucide-react"
+import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck, ArrowLeft, Lock } from "lucide-react"
 import { getHostel, Hostel, RoomType } from "@/lib/data"
 import { notFound } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
@@ -36,7 +36,7 @@ import { auth, db } from '@/lib/firebase'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import type { User as FirebaseUser } from 'firebase/auth'
-import { calculateRoomTypeInventory } from '@/lib/room-capacity'
+import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity'
 import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack'
 
 const formSchema = z.object({
@@ -127,6 +127,12 @@ export default function SecureHostelPage() {
         if (!selectedRoom) return null;
         return calculateRoomTypeInventory(selectedRoom, confirmedBookings);
     }, [selectedRoom, confirmedBookings]);
+
+    const isSoldOut = React.useMemo(() => {
+        if (hostel && isHostelSoldOut(hostel, confirmedBookings)) return true;
+        if (selectedRoom && isRoomTypeSoldOut(selectedRoom, confirmedBookings)) return true;
+        return inventorySummary?.isSoldOut ?? false;
+    }, [hostel, selectedRoom, confirmedBookings, inventorySummary]);
 
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
@@ -262,6 +268,15 @@ export default function SecureHostelPage() {
     async function onSubmit(values: z.infer<typeof formSchema>) {
         if (!hostel || !selectedRoom || typeof hostelId !== 'string') return;
         
+        if (isSoldOut) {
+            toast({
+                title: "Unit Sold Out",
+                description: "This room type is currently at 100% capacity and cannot accept new bookings.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         if (!auth.currentUser) {
             toast({
                 title: "Login Required",
@@ -424,6 +439,26 @@ export default function SecureHostelPage() {
                     </div>
                 </div>
             </div>
+            {isSoldOut && (
+                <div className="mx-auto max-w-6xl px-4 md:px-6 mb-6">
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50/90 p-5 text-rose-900 shadow-sm flex items-start gap-4">
+                        <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700 shrink-0 mt-0.5">
+                            <Lock className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-sm text-rose-900">Inventory Locked — 100% Capacity Reached</h3>
+                                <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 uppercase tracking-wider">
+                                    Sold Out
+                                </span>
+                            </div>
+                            <p className="text-xs text-rose-700 mt-1 leading-relaxed">
+                                This room type is completely booked and cannot accept new reservations. You can still inspect all pricing, hostel specifications, and tenancy inclusions in read-only mode, but payment processing is disabled.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-[1.1fr_0.9fr] md:px-6">
                 <Card className="shadow-xl border border-border/40">
                     <CardHeader>
@@ -661,11 +696,22 @@ export default function SecureHostelPage() {
                                 </div>
                                 <Button
                                     type="submit"
-                                    className="w-full h-12 text-lg"
-                                    disabled={isSubmitting || !selectedRoom}
+                                    className={`w-full h-12 text-lg ${isSoldOut ? 'bg-slate-200 text-slate-500 hover:bg-slate-200 cursor-not-allowed border border-slate-300 shadow-none' : ''}`}
+                                    disabled={isSubmitting || !selectedRoom || isSoldOut}
                                 >
-                                    {isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                                    {isSubmitting ? 'Processing...' : `Pay GH₵${selectedRoom?.price?.toLocaleString() || 'N/A'} Securely`}
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            Processing...
+                                        </>
+                                    ) : isSoldOut ? (
+                                        <>
+                                            <Lock className="mr-2 h-5 w-5 text-slate-500" />
+                                            Sold Out (100% Capacity — Locked)
+                                        </>
+                                    ) : (
+                                        `Pay GH₵${selectedRoom?.price?.toLocaleString() || 'N/A'} Securely`
+                                    )}
                                 </Button>
                             </form>
                         </Form>
@@ -680,7 +726,14 @@ export default function SecureHostelPage() {
                     </CardHeader>
                     <CardContent className="space-y-6 text-sm">
                         <div className="rounded-xl border border-muted bg-muted/30 p-4">
-                            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Selected Room</p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Selected Room</p>
+                                {isSoldOut && (
+                                    <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                                        <Lock className="h-2.5 w-2.5 mr-1 text-rose-700" /> Sold Out (100%)
+                                    </span>
+                                )}
+                            </div>
                             <p className="mt-2 text-lg font-semibold text-foreground">{selectedRoom?.name}</p>
                             {selectedRoomNumber && (
                                 <p className="text-xs font-bold text-primary mt-1 flex items-center gap-1">

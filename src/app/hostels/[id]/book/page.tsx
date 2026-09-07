@@ -37,13 +37,15 @@ import {
   ArrowRight,
   Compass,
   ExternalLink,
-  MessageCircle
+  MessageCircle,
+  Lock
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { sendVisitBookingSMSAction } from '@/app/actions/sms';
 import { notifyVisitScheduled, notifyManagerVisitRequest } from '@/lib/notification-service-onesignal';
+import { isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
 
 const TIME_SLOTS = [
   { value: "09:00 - 12:00", label: "Morning (9:00 AM – 12:00 PM)" },
@@ -67,6 +69,7 @@ export default function BookingVisitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdVisitId, setCreatedVisitId] = useState<string | null>(null);
+  const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
 
   // Form state
   const [studentName, setStudentName] = useState('');
@@ -125,14 +128,55 @@ export default function BookingVisitPage() {
     fetchHostelData();
   }, [id, selectedRoomId]);
 
+  // Fetch confirmed bookings for capacity check
+  useEffect(() => {
+    const fetchBookings = async () => {
+      if (!id) return;
+      try {
+        const bookingsQuery = query(
+          collection(db, 'bookings'),
+          where('hostelId', '==', id),
+          where('status', '==', 'confirmed')
+        );
+        const snapshot = await getDocs(bookingsQuery);
+        const bookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as any;
+          bookings.push({
+            roomId: data.roomId,
+            roomNumber: data.roomNumber,
+            roomTypeId: data.roomTypeId,
+          });
+        });
+        setConfirmedBookings(bookings);
+      } catch (e) {
+        console.error('Error fetching confirmed bookings for book visit page:', e);
+      }
+    };
+    fetchBookings();
+  }, [id]);
+
   const selectedRoom: RoomType | undefined = hostel?.roomTypes?.find(
     (rt) => rt.id === selectedRoomId
   );
+
+  const isHostelFull = hostel ? isHostelSoldOut(hostel, confirmedBookings) : false;
+  const isSelectedRoomSoldOut = selectedRoom ? isRoomTypeSoldOut(selectedRoom, confirmedBookings) : false;
+  const isSoldOut = isHostelFull || isSelectedRoomSoldOut;
 
   const handleSubmitVisit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!hostel) return;
+
+    if (isSoldOut) {
+      toast({
+        title: "Visits Locked",
+        description: "This room or hostel is currently at 100% capacity and cannot schedule in-person tours.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!studentName.trim() || !phone.trim() || !email.trim() || !visitDate) {
       toast({
@@ -377,7 +421,26 @@ export default function BookingVisitPage() {
             </Card>
           ) : (
             /* Booking Form View */
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+            <div className="space-y-6">
+              {isSoldOut && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/90 p-5 text-rose-900 shadow-sm flex items-start gap-4">
+                  <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700 shrink-0 mt-0.5">
+                    <Lock className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-rose-900">Physical Visits &amp; Bookings Locked</h3>
+                      <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 uppercase tracking-wider">
+                        100% Capacity Full
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-700 mt-1 leading-relaxed">
+                      This unit is currently sold out and cannot accommodate new in-person inspection appointments. You can still inspect all property rules, security amenities, and campus proximity details in read-only mode.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
               {/* Left Column: Booking Form */}
               <Card className="shadow-xl border-0 bg-white">
                 <CardHeader>
@@ -406,11 +469,15 @@ export default function BookingVisitPage() {
                             <SelectValue placeholder="Choose a room type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {hostel.roomTypes.map((rt) => (
-                              <SelectItem key={rt.id} value={rt.id}>
-                                {rt.name} — GH₵{rt.price.toLocaleString()} / year ({rt.capacity} in room)
-                              </SelectItem>
-                            ))}
+                            {hostel.roomTypes.map((rt) => {
+                              const isRtSoldOut = isRoomTypeSoldOut(rt, confirmedBookings);
+                              return (
+                                <SelectItem key={rt.id} value={rt.id}>
+                                  {rt.name} — GH₵{rt.price.toLocaleString()} / year ({rt.capacity} in room)
+                                  {isRtSoldOut ? ' [SOLD OUT]' : ''}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
@@ -544,13 +611,23 @@ export default function BookingVisitPage() {
 
                     <Button
                       type="submit"
-                      disabled={submitting}
-                      className="w-full h-12 text-base font-semibold shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
+                      disabled={submitting || isSoldOut}
+                      className={cn(
+                        "w-full h-12 text-base font-semibold shadow-md",
+                        isSoldOut
+                          ? "bg-slate-200 text-slate-500 hover:bg-slate-200 cursor-not-allowed border border-slate-300 shadow-none"
+                          : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                      )}
                     >
                       {submitting ? (
                         <>
                           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                           Scheduling Free Visit...
+                        </>
+                      ) : isSoldOut ? (
+                        <>
+                          <Lock className="mr-2 h-5 w-5 text-slate-500" />
+                          Visits Locked (100% Capacity Full)
                         </>
                       ) : (
                         <>
@@ -587,7 +664,14 @@ export default function BookingVisitPage() {
                   <CardContent className="p-4 space-y-4 text-sm">
                     {selectedRoom && (
                       <div className="p-3 bg-muted/40 rounded-lg space-y-1">
-                        <div className="text-xs text-muted-foreground font-medium">Selected Room Type</div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+                          <span>Selected Room Type</span>
+                          {isSoldOut && (
+                            <Badge variant="destructive" className="text-[10px] h-5 bg-rose-100 text-rose-800 border-rose-200 font-bold">
+                              <Lock className="h-2.5 w-2.5 mr-1 text-rose-700" /> Sold Out
+                            </Badge>
+                          )}
+                        </div>
                         <div className="font-semibold text-foreground flex justify-between items-center">
                           <span>{selectedRoom.name}</span>
                           <span className="text-primary font-bold">
@@ -651,14 +735,26 @@ export default function BookingVisitPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full text-xs font-semibold border-primary/40 text-primary hover:bg-primary/10"
+                    disabled={isSoldOut}
+                    className={cn(
+                      "w-full text-xs font-semibold border-primary/40 text-primary hover:bg-primary/10",
+                      isSoldOut && "opacity-60 cursor-not-allowed border-slate-300 text-slate-500 hover:bg-transparent"
+                    )}
                     onClick={() => router.push(`/hostels/${id}/secure?roomTypeId=${selectedRoomId}`)}
                   >
-                    Skip Visit & Secure Room Now
+                    {isSoldOut ? (
+                      <>
+                        <Lock className="h-3.5 w-3.5 mr-1 text-slate-500 inline" />
+                        Sold Out (Booking Locked)
+                      </>
+                    ) : (
+                      "Skip Visit & Secure Room Now"
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
+          </div>
           )}
         </div>
       </main>

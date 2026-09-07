@@ -13,7 +13,7 @@ import {
   Wifi, Car, Utensils, Tv, Wind, Droplets, Zap, Shield,
   Home, Bath, Coffee, Gamepad2, Dumbbell, Waves,
   CheckCircle, Star, Phone, Mail, Clock, Calendar, Eye,
-  Camera, Film, Video, Play, DoorOpen
+  Camera, Film, Video, Play, DoorOpen, Lock
 } from "lucide-react";
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -21,6 +21,7 @@ import Counter from 'yet-another-react-lightbox/plugins/counter';
 import 'yet-another-react-lightbox/styles.css';
 import 'yet-another-react-lightbox/plugins/counter.css';
 import { getHostel, Hostel, RoomType } from "@/lib/data";
+import { isHostelSoldOut, isRoomTypeSoldOut } from "@/lib/room-capacity";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
@@ -444,8 +445,27 @@ export default function RoomDetailPage() {
     );
   }
 
+  const isSoldOut = useMemo(() => {
+    if (!hostel || !room) return false;
+    if (isHostelSoldOut(hostel)) return true;
+    if (hostel.availability === 'Full') return true;
+
+    // Check matching room type
+    const types = hostel.roomTypes ?? [];
+    const matchingType = types.find(
+      (t) => String(t.id ?? "") === String(room.id) ||
+             t.name?.toLowerCase().trim() === (room.type || "").toLowerCase().trim()
+    );
+    if (matchingType && isRoomTypeSoldOut(matchingType)) return true;
+
+    // Check physical room occupancy
+    if (room.capacity && room.occupancy >= room.capacity) return true;
+
+    return false;
+  }, [hostel, room]);
+
   const handlePrimaryAction = () => {
-    if (hostel.availability === 'Full' || hasSecuredHostel) {
+    if (isSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
       return;
     }
     const baseTarget = hasCompletedVisit
@@ -478,13 +498,14 @@ export default function RoomDetailPage() {
 
   // Get availability status
   const getAvailabilityStatus = () => {
+    if (isSoldOut) return { status: 'full', color: 'text-rose-600', bgColor: 'bg-rose-50' };
     if (!room.capacity || !room.totalRooms) return null;
     const totalSlots = room.capacity * room.totalRooms;
     const used = Math.max(0, Math.min(totalSlots, room.occupancy));
     const remainingSlots = Math.max(0, totalSlots - used);
     const occupancyRate = (used / totalSlots) * 100;
     
-    if (occupancyRate >= 100) return { status: 'full', color: 'text-red-600', bgColor: 'bg-red-50' };
+    if (occupancyRate >= 100) return { status: 'full', color: 'text-rose-600', bgColor: 'bg-rose-50' };
     if (occupancyRate >= 80) return { status: 'limited', color: 'text-orange-600', bgColor: 'bg-orange-50' };
     return { status: 'available', color: 'text-green-600', bgColor: 'bg-green-50' };
   };
@@ -505,6 +526,23 @@ export default function RoomDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             Back to rooms
           </Button>
+
+          {/* Sold Out Notice Banner */}
+          {isSoldOut && (
+            <div className="mb-6 p-4 rounded-2xl bg-rose-50/80 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 flex items-start gap-3 shadow-xs">
+              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 shrink-0">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+                  Inventory Lock: 100% Capacity Reached (Read-Only Mode)
+                </h4>
+                <p className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
+                  This room has reached maximum occupancy and is currently locked for new booking transactions and in-person visit requests. You can freely explore all room inclusions, virtual walkthrough videos, and building specifications below.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Room Type Switcher / Comparator Strip */}
           {hostel.roomTypes && hostel.roomTypes.length > 1 && (
@@ -601,12 +639,20 @@ export default function RoomDetailPage() {
                 </div>
               </div>
             </div>
-            <Badge 
-              variant="secondary" 
-              className="absolute top-4 right-4 bg-white/90 text-gray-900 shadow-sm"
-            >
-              {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
-            </Badge>
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+              {isSoldOut && (
+                <Badge className="bg-rose-600/95 hover:bg-rose-600 text-white font-black border-0 shadow-md uppercase tracking-wider text-[11px] flex items-center gap-1 px-3 py-1">
+                  <Lock className="h-3.5 w-3.5" />
+                  Sold Out (100% Full)
+                </Badge>
+              )}
+              <Badge 
+                variant="secondary" 
+                className="bg-white/90 text-gray-900 shadow-sm"
+              >
+                {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
+              </Badge>
+            </div>
           </div>
 
           {/* Gallery Thumbnail Row if multiple photos exist */}
@@ -942,11 +988,19 @@ export default function RoomDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Button
-              className="w-full h-12 text-base font-semibold shadow-md"
+              className={cn(
+                "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2",
+                isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10"
+              )}
               onClick={handlePrimaryAction}
-              disabled={hostel.availability === 'Full' || hasSecuredHostel}
+              disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel}
             >
-              {hostel.availability === 'Full' ? (
+              {isSoldOut ? (
+                <>
+                  <Lock className="h-5 w-5 mr-2" />
+                  Sold Out (100% Capacity)
+                </>
+              ) : hostel.availability === 'Full' ? (
                 <>
                   <ShieldCheck className="h-5 w-5 mr-2" />
                   Hostel Fully Booked
@@ -1038,10 +1092,18 @@ export default function RoomDetailPage() {
   </div>
   <Button 
     onClick={handlePrimaryAction}
-    disabled={hostel.availability === 'Full' || hasSecuredHostel}
-    className="h-11 px-5 text-sm font-semibold shadow-md"
+    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel}
+    className={cn(
+      "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5",
+      isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed"
+    )}
   >
-    {hostel.availability === 'Full' 
+    {isSoldOut ? (
+      <>
+        <Lock className="h-4 w-4" />
+        Sold Out
+      </>
+    ) : hostel.availability === 'Full' 
       ? 'Fully Booked' 
       : hasSecuredHostel 
       ? 'Already Secured' 

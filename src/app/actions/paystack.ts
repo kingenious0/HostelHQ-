@@ -4,6 +4,9 @@
 import { PAYSTACK_PUBLIC_KEY } from "@/lib/paystack";
 import { getPaystackKeys } from "@/lib/paystack-utils";
 import { headers } from "next/headers";
+import { adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
+import { requireAuth } from "@/lib/auth-guard";
 
 type MomoPaymentPayload = {
     email: string;
@@ -23,6 +26,8 @@ type HostelPaymentPayload = {
     hostelName: string;
     studentName: string;
     hostelId: string;
+    roomTypeId?: string;
+    roomId?: string;
 }
 
 export async function initializeMomoPayment(payload: MomoPaymentPayload) {
@@ -131,6 +136,34 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
         return { status: false, message: "Payment processor is not configured. Please contact support." };
     }
 
+    // Pre-flight capacity guardrail: Prevent payment initialization for 100% full units
+    if (payload.hostelId) {
+        try {
+            const hostelSnap = await adminDb.collection('hostels').doc(payload.hostelId).get();
+            if (hostelSnap.exists) {
+                const hData = hostelSnap.data();
+                if (hData?.status === 'sold-out' || hData?.availability === 'Full') {
+                    return { status: false, message: "Cannot initialize payment: This hostel has reached 100% capacity and is fully booked." };
+                }
+                if (payload.roomTypeId) {
+                    const rtSnap = await adminDb.collection('hostels').doc(payload.hostelId).collection('roomTypes').doc(payload.roomTypeId).get();
+                    if (rtSnap.exists) {
+                        const rtData = rtSnap.data();
+                        const capacity = Number(rtData?.capacity) || 1;
+                        const numRooms = Number(rtData?.numberOfRooms) || 1;
+                        const totalCap = Number(rtData?.totalCapacity) || (capacity * numRooms);
+                        const occ = Number(rtData?.occupancy) || 0;
+                        if (rtData?.status === 'sold-out' || rtData?.availability === 'Full' || (totalCap > 0 && occ >= totalCap)) {
+                            return { status: false, message: "Cannot initialize payment: This room type has reached 100% capacity and is sold out." };
+                        }
+                    }
+                }
+            }
+        } catch (checkErr) {
+            console.warn("Capacity pre-check warning in initializeHostelPayment:", checkErr);
+        }
+    }
+
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
     const headersList = await headers();
@@ -140,6 +173,8 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
     callback_url.searchParams.set('bookingType', 'secure');
+    if (payload.roomTypeId) callback_url.searchParams.set('roomTypeId', payload.roomTypeId);
+    if (payload.roomId) callback_url.searchParams.set('roomId', payload.roomId);
 
     try {
         const response = await fetch(paystackUrl, {
@@ -158,6 +193,8 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                     booking_type: 'secure',
                     student_id: (payload as any).studentId, // Ensure ID is passed for webhook processing
                     hostel_id: payload.hostelId,
+                    room_type_id: payload.roomTypeId,
+                    room_id: payload.roomId,
                     custom_fields: [
                         {
                             display_name: "Student Name",
@@ -198,14 +235,10 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     }
 }
 
-import { adminDb } from "@/lib/firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
-
-import { requireAuth } from "@/lib/auth-guard";
-
 /**
  * Verify Paystack Transaction and Process Booking (Securely on Server)
  * - Verifies transaction with Paystack
+ * - Enforces capacity guardrails inside Firestore transaction
  * - Creates Booking record
  * - Updates Room Occupancy
  * - Credits Manager Wallet (Earnings Ledger)
@@ -279,25 +312,61 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
             invoiceGenerated: false,
         };
 
-        // 4. Run Transaction (Booking + Occupancy + Wallet)
+        // 4. Run Transaction (Capacity Guardrails + Booking + Occupancy + Wallet)
         await adminDb.runTransaction(async (t) => {
             // Transaction Prerequisite: All Reads MUST happen before any Writes
 
-            // Read: Get Hostel Doc Manager ID (for wallet credit)
+            // Read: Get Hostel Doc Manager ID (for wallet credit) & check hostel-level capacity
             const hostelRef = adminDb.collection('hostels').doc(hostelId);
             const hostelSnap = await t.get(hostelRef);
-            const managerId = hostelSnap.exists ? hostelSnap.data()?.managerId : null;
+            if (!hostelSnap.exists) {
+                throw new Error("Transaction rejected: Hostel record does not exist.");
+            }
+            const hostelData = hostelSnap.data();
+            if (hostelData?.status === 'sold-out' || hostelData?.availability === 'Full') {
+                throw new Error("Transaction rejected: This hostel has reached 100% capacity and is fully booked.");
+            }
+            const managerId = hostelData?.managerId || null;
 
-            // Read: Check RoomType and Room existence
+            // Read: Check RoomType existence & strict capacity limit
             let rtRef, rtSnap, rRef, rSnap;
 
             if (bookingData.roomTypeId) {
                 rtRef = adminDb.collection('hostels').doc(hostelId).collection('roomTypes').doc(bookingData.roomTypeId);
                 rtSnap = await t.get(rtRef);
+                if (rtSnap && rtSnap.exists) {
+                    const rtData = rtSnap.data();
+                    const capacityPerRoom = Number(rtData?.capacity) || 1;
+                    const numRooms = Number(rtData?.numberOfRooms) || 1;
+                    const totalCap = Number(rtData?.totalCapacity) || (capacityPerRoom * numRooms);
+                    const currentOcc = Number(rtData?.occupancy) || 0;
+
+                    if (
+                        rtData?.status === 'sold-out' ||
+                        rtData?.availability === 'Full' ||
+                        (totalCap > 0 && currentOcc >= totalCap)
+                    ) {
+                        throw new Error("Transaction rejected: This room type has reached 100% capacity and is sold out.");
+                    }
+                }
             }
+
+            // Read: Check specific physical Room existence & capacity limit
             if (bookingData.roomId) {
                 rRef = adminDb.collection('hostels').doc(hostelId).collection('rooms').doc(bookingData.roomId);
                 rSnap = await t.get(rRef);
+                if (rSnap && rSnap.exists) {
+                    const rData = rSnap.data();
+                    const roomCap = Number(rData?.capacity) || 1;
+                    const roomOcc = Number(rData?.currentOccupancy) || 0;
+                    if (
+                        rData?.status === 'full' ||
+                        rData?.status === 'sold-out' ||
+                        roomOcc >= roomCap
+                    ) {
+                        throw new Error("Transaction rejected: This specific room unit has reached 100% capacity and is sold out.");
+                    }
+                }
             }
 
             // A. Create Booking (Write)

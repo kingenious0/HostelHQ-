@@ -193,6 +193,32 @@ export async function createBookingAction(bookingData: any) {
       throw new Error("Unauthorized: You can only create bookings for yourself.");
     }
     bookingData.studentId = caller.uid;
+
+    if (bookingData.hostelId) {
+      const hostel = await dynamoService.getHostelById(bookingData.hostelId);
+      if (hostel) {
+        if (hostel.availability === 'Full' || hostel.status === 'sold-out') {
+          throw new Error("Booking rejected: This hostel has reached 100% capacity and is fully booked.");
+        }
+        if (bookingData.roomTypeId && hostel.roomTypes && hostel.roomTypes.length > 0) {
+          const roomType = hostel.roomTypes.find((rt) => String(rt.id) === String(bookingData.roomTypeId));
+          if (roomType) {
+            const capacity = Number(roomType.capacity) || 1;
+            const numRooms = Number(roomType.numberOfRooms) || 1;
+            const totalCap = Number(roomType.totalCapacity) || (capacity * numRooms);
+            const occ = Number(roomType.occupancy) || 0;
+            if (
+              roomType.status === 'sold-out' ||
+              roomType.availability === 'Full' ||
+              (totalCap > 0 && occ >= totalCap)
+            ) {
+              throw new Error("Booking rejected: This room type has reached 100% capacity and is sold out.");
+            }
+          }
+        }
+      }
+    }
+
     const booking = await dynamoService.saveBooking(bookingData);
     return { success: true, data: booking };
   } catch (error: any) {
@@ -286,6 +312,38 @@ export async function createVisitAction(visitData: any) {
   try {
     const caller = await requireAuth();
     visitData.studentId = caller.uid;
+
+    if (visitData.hostelId) {
+      const hostel = await dynamoService.getHostelById(visitData.hostelId);
+      if (hostel) {
+        if (hostel.availability === 'Full' || hostel.status === 'sold-out') {
+          return {
+            success: false,
+            error: "Physical visits are locked: This property has reached 100% capacity and is fully booked."
+          };
+        }
+        if (visitData.roomTypeId && hostel.roomTypes && hostel.roomTypes.length > 0) {
+          const roomType = hostel.roomTypes.find((rt) => String(rt.id) === String(visitData.roomTypeId));
+          if (roomType) {
+            const capacity = Number(roomType.capacity) || 1;
+            const numRooms = Number(roomType.numberOfRooms) || 1;
+            const totalCap = Number(roomType.totalCapacity) || (capacity * numRooms);
+            const occ = Number(roomType.occupancy) || 0;
+            if (
+              roomType.status === 'sold-out' ||
+              roomType.availability === 'Full' ||
+              (totalCap > 0 && occ >= totalCap)
+            ) {
+              return {
+                success: false,
+                error: "Physical visits are locked: The requested room type is at 100% capacity and sold out."
+              };
+            }
+          }
+        }
+      }
+    }
+
     const visit = await dynamoService.saveVisit(visitData);
     return { success: true, data: visit };
   } catch (error: any) {

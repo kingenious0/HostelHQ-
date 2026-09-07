@@ -5,7 +5,7 @@ import { Header } from '@/components/header';
 import { getHostel, Hostel, RoomType } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
-import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter, CheckCircle2, Clock, ShieldCheck, Sparkles, Building, ChevronRight, Check, Shield, Zap, Droplets, Wind, Home, Eye, Info, Camera, Film, Video } from 'lucide-react';
+import { Star, MapPin, Users, Bed, Bath, DoorOpen, ArrowLeft, Grid3x3, List, Search, Filter, CheckCircle2, Clock, ShieldCheck, Sparkles, Building, ChevronRight, Check, Shield, Zap, Droplets, Wind, Home, Eye, Info, Camera, Film, Video, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,7 +24,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
-import { calculateRoomTypeInventory } from '@/lib/room-capacity';
+import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
 import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
 
 interface AppUser {
@@ -607,6 +607,17 @@ export default function RoomsPage() {
                     'Washroom Facilities'
                   ];
 
+              const roomTypeForInventory: RoomType = matchingType || {
+                id: roomsForType[0]?.roomTypeId || roomsForType[0]?.id || typeName,
+                name: typeName,
+                price: roomsForType[0]?.price || 0,
+                capacity: roomsForType[0]?.capacity || 1,
+                numberOfRooms: roomsForType.length,
+                roomNumbers: roomsForType.map(r => r.roomNumber || r.label).filter(Boolean),
+                roomAmenities: amenitiesList
+              };
+              const isTypeSoldOut = (hostel ? isHostelSoldOut(hostel) : false) || isRoomTypeSoldOut(roomTypeForInventory, confirmedBookings);
+
               return (
                 <div key={typeName} className="space-y-5">
                   {/* Room Type Header & Quick Inclusions Banner */}
@@ -673,34 +684,19 @@ export default function RoomsPage() {
                     </div>
 
                     {/* Real-Time Bed & Room Allocation Rack */}
-                    {(() => {
-                      const roomTypeForInventory: RoomType = matchingType || {
-                        id: roomsForType[0]?.roomTypeId || roomsForType[0]?.id || typeName,
-                        name: typeName,
-                        price: roomsForType[0]?.price || 0,
-                        capacity: roomsForType[0]?.capacity || 1,
-                        numberOfRooms: roomsForType.length,
-                        roomNumbers: roomsForType.map(r => r.roomNumber || r.label).filter(Boolean),
-                        roomAmenities: amenitiesList
-                      };
-                      const inventorySummary = calculateRoomTypeInventory(roomTypeForInventory, confirmedBookings);
-
-                      return (
-                        <RoomCapacityRack
-                          summary={inventorySummary}
-                          interactive={true}
-                          selectedRoomNumber={selectedRoomsByType[typeName]}
-                          onSelectRoom={(r) => {
-                            if (r.status !== 'full') {
-                              setSelectedRoomsByType(prev => ({
-                                ...prev,
-                                [typeName]: r.roomNumber
-                              }));
-                            }
-                          }}
-                        />
-                      );
-                    })()}
+                    <RoomCapacityRack
+                      summary={calculateRoomTypeInventory(roomTypeForInventory, confirmedBookings)}
+                      interactive={!isTypeSoldOut}
+                      selectedRoomNumber={selectedRoomsByType[typeName]}
+                      onSelectRoom={(r) => {
+                        if (r.status !== 'full' && !isTypeSoldOut) {
+                          setSelectedRoomsByType(prev => ({
+                            ...prev,
+                            [typeName]: r.roomNumber
+                          }));
+                        }
+                      }}
+                    />
                   </div>
 
                   <div
@@ -711,7 +707,10 @@ export default function RoomsPage() {
                         : "flex flex-col"
                     )}
                   >
-                    {roomsForType.map((room) => (
+                    {roomsForType.map((room) => {
+                      const isRoomSoldOut = isTypeSoldOut || (room.capacity ? room.occupancy >= room.capacity : false);
+
+                      return (
                       <Card
                         key={room.id}
                         className={cn(
@@ -751,6 +750,11 @@ export default function RoomsPage() {
                             <Badge className="bg-background/90 text-foreground backdrop-blur-md border-0 text-[10px] font-bold px-2.5 py-0.5 rounded-full shadow-sm">
                               {room.gender === 'Male' ? '♂ Male' : room.gender === 'Female' ? '♀ Female' : 'Mixed'}
                             </Badge>
+                            {isRoomSoldOut && (
+                              <Badge className="bg-rose-600/95 text-white backdrop-blur-md border-0 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-sm flex items-center gap-1 uppercase tracking-wider">
+                                <Lock className="w-2.5 h-2.5" /> Sold Out
+                              </Badge>
+                            )}
                             {room.images && room.images.length > 1 && (
                               <Badge className="bg-black/75 text-white backdrop-blur-md border-0 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
                                 <Camera className="w-2.5 h-2.5 text-primary" /> {room.images.length}
@@ -827,11 +831,14 @@ export default function RoomsPage() {
                           {/* CTA Buttons */}
                           <div className="space-y-2 pt-2 border-t border-border/50">
                             <Button
-                              className="w-full rounded-xl font-bold text-xs h-11"
-                              disabled={hostel?.availability === 'Full' || hasSecuredHostel}
+                              className={cn(
+                                "w-full rounded-xl font-bold text-xs h-11 flex items-center justify-center gap-1.5",
+                                isRoomSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10"
+                              )}
+                              disabled={isRoomSoldOut || hostel?.availability === 'Full' || hasSecuredHostel}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                if (!hostel || hostel.availability === 'Full' || hasSecuredHostel) {
+                                if (!hostel || isRoomSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
                                   return;
                                 }
 
@@ -857,7 +864,12 @@ export default function RoomsPage() {
                                 }
                               }}
                             >
-                              {hostel?.availability === 'Full'
+                              {isRoomSoldOut ? (
+                                <>
+                                  <Lock className="h-4 w-4" />
+                                  Sold Out (100% Capacity)
+                                </>
+                              ) : hostel?.availability === 'Full'
                                 ? 'Hostel Fully Booked'
                                 : hasSecuredHostel
                                 ? 'Room Secured ✓'
@@ -901,7 +913,8 @@ export default function RoomsPage() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               );

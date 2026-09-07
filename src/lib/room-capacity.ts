@@ -1,4 +1,4 @@
-import type { RoomType } from "@/lib/data";
+import type { RoomType, Hostel } from "@/lib/data";
 
 export interface PhysicalRoomState {
   roomNumber: string;
@@ -23,6 +23,7 @@ export interface RoomTypeInventorySummary {
   partialRoomsCount: number;
   fullRoomsCount: number;
   rooms: PhysicalRoomState[];
+  isSoldOut: boolean;
 }
 
 /**
@@ -31,7 +32,7 @@ export interface RoomTypeInventorySummary {
  */
 export function calculateRoomTypeInventory(
   roomType: RoomType,
-  confirmedBookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>
+  confirmedBookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = []
 ): RoomTypeInventorySummary {
   const capacityPerRoom = Number(roomType.capacity) || 1;
   const configuredRoomNumbers = roomType.roomNumbers && roomType.roomNumbers.length > 0
@@ -78,6 +79,13 @@ export function calculateRoomTypeInventory(
   const partialRoomsCount = rooms.filter((r) => r.status === 'partial').length;
   const fullRoomsCount = rooms.filter((r) => r.status === 'full').length;
 
+  const isExplicitSoldOut =
+    roomType.status === 'sold-out' ||
+    (roomType as any).status === 'full' ||
+    roomType.availability === 'Full';
+
+  const isSoldOut = isExplicitSoldOut || totalAvailableBeds <= 0;
+
   return {
     roomTypeId: roomType.id || '',
     roomTypeName: roomType.name,
@@ -90,5 +98,73 @@ export function calculateRoomTypeInventory(
     partialRoomsCount,
     fullRoomsCount,
     rooms,
+    isSoldOut,
   };
 }
+
+/**
+ * Helper to determine if a room type is 100% capacity / sold-out.
+ */
+export function isRoomTypeSoldOut(
+  roomType?: RoomType | null,
+  confirmedBookings?: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>
+): boolean {
+  if (!roomType) return false;
+
+  // 1. Explicit sold-out status or full availability
+  if (roomType.status === 'sold-out' || (roomType as any).status === 'full') return true;
+  if (roomType.availability === 'Full') return true;
+
+  // 2. Direct capacity vs occupancy check
+  const capacityPerRoom = Number(roomType.capacity) || 1;
+  const numRooms = Number(roomType.numberOfRooms) || (roomType.roomNumbers ? roomType.roomNumbers.length : 1);
+  const totalConfiguredCapacity = capacityPerRoom * numRooms;
+
+  if (roomType.occupancy !== undefined && totalConfiguredCapacity > 0) {
+    if (Number(roomType.occupancy) >= totalConfiguredCapacity) {
+      return true;
+    }
+  }
+
+  // 3. Real-time calculated inventory from confirmed bookings if provided
+  if (confirmedBookings && confirmedBookings.length > 0) {
+    const summary = calculateRoomTypeInventory(roomType, confirmedBookings);
+    if (summary.totalAvailableBeds <= 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Helper to determine if an entire hostel is 100% capacity / sold-out.
+ */
+export function isHostelSoldOut(
+  hostel?: Hostel | null,
+  confirmedBookings?: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>
+): boolean {
+  if (!hostel) return false;
+
+  // 1. Explicit hostel-level sold-out status or full availability
+  if (hostel.status === 'sold-out' || (hostel as any).status === 'full') return true;
+  if (hostel.availability === 'Full') return true;
+
+  // 2. Direct hostel totalCapacity vs occupancy check if defined
+  if (hostel.totalCapacity !== undefined && hostel.totalCapacity > 0 && hostel.occupancy !== undefined) {
+    if (Number(hostel.occupancy) >= Number(hostel.totalCapacity)) {
+      return true;
+    }
+  }
+
+  // 3. If all configured room types are individually sold out, the hostel is sold out
+  if (hostel.roomTypes && hostel.roomTypes.length > 0) {
+    const allRoomsSoldOut = hostel.roomTypes.every((rt) => isRoomTypeSoldOut(rt, confirmedBookings));
+    if (allRoomsSoldOut) {
+      return true;
+    }
+  }
+
+  return false;
+}
+

@@ -23,7 +23,9 @@ import {
   Check,
   ArrowRight,
   Sparkles,
+  Lock,
 } from "lucide-react";
+import { isHostelSoldOut } from "@/lib/room-capacity";
 
 export function HostelCompareDrawer() {
   const { shortlist, removeFromShortlist, clearShortlist } = useShortlist();
@@ -123,11 +125,10 @@ export function HostelCompareDrawer() {
               const cleanId = (hostel.originalId || hostel.id || "")
                 .replace(/^HOSTEL#/i, "")
                 .replace(/^PENDING_HOSTEL#/i, "")
-                .replace(/^HOSTEL#/i, "")
-                .replace(/^PENDING_HOSTEL#/i, "")
                 .trim();
               const minPrice = hostel.priceRange?.min || (hostel.roomTypes?.[0]?.price ?? 0);
               const maxPrice = hostel.priceRange?.max || minPrice;
+              const isSoldOut = isHostelSoldOut(hostel);
 
               return (
                 <div
@@ -168,8 +169,8 @@ export function HostelCompareDrawer() {
                   <h4 className="text-xl font-headline font-extrabold text-foreground mb-1 leading-tight">
                     {hostel.name}
                   </h4>
-                  <div className="flex items-center text-xs text-muted-foreground mb-4 truncate">
-                    <MapPin className="h-3.5 w-3.5 mr-1 text-primary shrink-0" />
+                  <div className="flex items-center gap-1 text-muted-foreground text-xs mb-3">
+                    <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                     <span className="truncate">{hostel.location}</span>
                   </div>
 
@@ -205,18 +206,25 @@ export function HostelCompareDrawer() {
 
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Availability:</span>
-                      <Badge
-                        className={`text-[10px] font-bold rounded-lg ${
-                          hostel.availability === "Available"
-                            ? "bg-emerald-500/15 text-emerald-700 border-emerald-300 dark:text-emerald-400"
-                            : hostel.availability === "Limited"
-                            ? "bg-amber-500/15 text-amber-700 border-amber-300 dark:text-amber-400"
-                            : "bg-rose-500/15 text-rose-700 border-rose-300 dark:text-rose-400"
-                        }`}
-                        variant="outline"
-                      >
-                        {hostel.availability}
-                      </Badge>
+                      {isSoldOut ? (
+                        <Badge className="bg-rose-600 hover:bg-rose-600 text-white border-0 text-[10px] font-black flex items-center gap-1 uppercase tracking-wider">
+                          <Lock className="h-3 w-3" />
+                          Sold Out
+                        </Badge>
+                      ) : (
+                        <Badge
+                          className={`text-[10px] font-bold rounded-lg ${
+                            hostel.availability === "Available"
+                              ? "bg-emerald-500/15 text-emerald-700 border-emerald-300 dark:text-emerald-400"
+                              : hostel.availability === "Limited"
+                              ? "bg-amber-500/15 text-amber-700 border-amber-300 dark:text-amber-400"
+                              : "bg-rose-500/15 text-rose-700 border-rose-300 dark:text-rose-400"
+                          }`}
+                          variant="outline"
+                        >
+                          {hostel.availability}
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
@@ -255,7 +263,7 @@ export function HostelCompareDrawer() {
                   {/* Direct Action Button */}
                   <Button asChild className="w-full mt-auto rounded-2xl h-11 bg-primary text-white font-bold text-xs gap-2">
                     <Link href={`/hostels/${cleanId || hostel.id}`}>
-                      View Details & Request Visit
+                      {isSoldOut ? "View Details (Sold Out)" : "View Details & Request Visit"}
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </Button>

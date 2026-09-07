@@ -3,7 +3,7 @@
 import * as React from "react";
 import { RoomTypeInventorySummary, PhysicalRoomState } from "@/lib/room-capacity";
 import { Badge } from "@/components/ui/badge";
-import { Users, DoorOpen, Bed, UserCheck, AlertCircle } from "lucide-react";
+import { Users, DoorOpen, Bed, UserCheck, AlertCircle, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface RoomCapacityRackProps {
@@ -19,12 +19,20 @@ export function RoomCapacityRack({
   onSelectRoom,
   interactive = false,
 }: RoomCapacityRackProps) {
-  const percentOccupied = summary.totalBeds > 0
+  const isSoldOut = summary.isSoldOut || summary.totalAvailableBeds === 0;
+  const percentOccupied = isSoldOut
+    ? 100
+    : summary.totalBeds > 0
     ? Math.round((summary.totalOccupiedBeds / summary.totalBeds) * 100)
     : 0;
 
   return (
-    <div className="space-y-3.5 bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-2xl border border-border/60">
+    <div className={cn(
+      "space-y-3.5 p-4 rounded-2xl border transition-all",
+      isSoldOut
+        ? "bg-rose-50/40 dark:bg-rose-950/10 border-rose-200/70 dark:border-rose-900/40"
+        : "bg-slate-50/80 dark:bg-slate-900/40 border-border/60"
+    )}>
       {/* Top Headline & Summary Stat */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
         <div>
@@ -33,15 +41,22 @@ export function RoomCapacityRack({
             Live Bed & Room Vacancy
           </span>
           <p className="text-[11px] text-muted-foreground">
-            {summary.totalAvailableBeds} of {summary.totalBeds} total beds open across {summary.totalRooms} rooms
+            {isSoldOut ? (
+              <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                100% capacity reached • 0 of {summary.totalBeds} beds available
+              </span>
+            ) : (
+              `${summary.totalAvailableBeds} of ${summary.totalBeds} total beds open across ${summary.totalRooms} rooms`
+            )}
           </p>
         </div>
 
         {/* Dynamic Status Tag */}
         <div className="flex items-center gap-1.5">
-          {summary.totalAvailableBeds === 0 ? (
-            <Badge className="text-[10px] font-bold uppercase" variant="destructive">
-              Fully Booked
+          {isSoldOut ? (
+            <Badge className="bg-rose-600 hover:bg-rose-600 text-white border-0 text-[10px] font-black flex items-center gap-1 uppercase tracking-wider" variant="destructive">
+              <Lock className="h-3 w-3" />
+              Sold Out (100% Full)
             </Badge>
           ) : summary.partialRoomsCount > 0 ? (
             <Badge className="bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300 text-[10px] font-bold">
@@ -62,20 +77,20 @@ export function RoomCapacityRack({
             style={{ width: `${percentOccupied}%` }}
             className={cn(
               "h-full transition-all duration-500",
-              percentOccupied >= 90 ? "bg-rose-500" : percentOccupied > 50 ? "bg-amber-500" : "bg-primary"
+              isSoldOut || percentOccupied >= 90 ? "bg-rose-500" : percentOccupied > 50 ? "bg-amber-500" : "bg-primary"
             )}
           />
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground font-medium px-0.5">
-          <span>{summary.totalOccupiedBeds} Taken</span>
-          <span>{summary.totalAvailableBeds} Beds Vacant</span>
+          <span>{isSoldOut ? summary.totalBeds : summary.totalOccupiedBeds} Taken</span>
+          <span>{isSoldOut ? "0" : summary.totalAvailableBeds} Beds Vacant</span>
         </div>
       </div>
 
       {/* Individual Room Grid Rack (Linktree Day Pills, Attached Image 4) */}
       <div className="pt-1">
         <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">
-          {interactive ? "Select an available room to secure:" : "Room-by-Room Availability:"}
+          {isSoldOut ? "Room Inventory (Sold Out • Read-Only):" : interactive ? "Select an available room to secure:" : "Room-by-Room Availability:"}
         </span>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">

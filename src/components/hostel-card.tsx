@@ -25,6 +25,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from '@/components/ui/carousel';
 import { Separator } from '@/components/ui/separator';
 import { useShortlist } from '@/components/shortlist-context';
+import { isHostelSoldOut } from '@/lib/room-capacity';
 
 type HostelCardProps = {
   hostel: Hostel;
@@ -60,6 +61,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
     .trim();
   const { isShortlisted, toggleShortlist } = useShortlist();
   const shortlisted = isShortlisted(cleanId || hostel.id);
+  const isSoldOut = isHostelSoldOut(hostel);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: any) => {
@@ -167,18 +169,23 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
 
           {/* Availability Badge (Bottom Left of Image) */}
           <div className="absolute bottom-3 left-3 z-10">
-            <Badge
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border",
-                hostel.availability === 'Available'
-                  ? 'bg-emerald-500/90 text-white border-emerald-400/40'
-                  : hostel.availability === 'Limited'
-                  ? 'bg-amber-500/90 text-white border-amber-400/40'
-                  : 'bg-rose-500/90 text-white border-rose-400/40'
-              )}
-            >
-              {hostel.availability}
-            </Badge>
+            {isSoldOut ? (
+              <Badge className="bg-rose-600/95 hover:bg-rose-600 text-white border-0 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md backdrop-blur-md flex items-center gap-1 uppercase tracking-wider">
+                <Lock className="h-3 w-3" />
+                Sold Out
+              </Badge>
+            ) : (
+              <Badge
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border",
+                  hostel.availability === 'Available'
+                    ? 'bg-emerald-500/90 text-white border-emerald-400/40'
+                    : 'bg-amber-500/90 text-white border-amber-400/40'
+                )}
+              >
+                {hostel.availability}
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -256,10 +263,28 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
               <span className="text-[11px] text-muted-foreground font-normal"> / year</span>
             </div>
 
-            <Button asChild size="sm" className="rounded-xl h-10 px-4 font-bold bg-primary text-white hover:bg-primary/90 text-xs shadow-sm gap-1">
+            <Button
+              asChild
+              size="sm"
+              className={cn(
+                "rounded-xl h-10 px-4 font-bold text-xs shadow-sm gap-1 transition-all",
+                isSoldOut
+                  ? "bg-slate-800 hover:bg-slate-900 text-white border border-slate-700"
+                  : "bg-primary text-white hover:bg-primary/90"
+              )}
+            >
               <Link href={`/hostels/${cleanId}`}>
-                View Details
-                <ArrowRight className="h-3.5 w-3.5" />
+                {isSoldOut ? (
+                  <>
+                    <Lock className="h-3.5 w-3.5 text-rose-400" />
+                    <span>View (Sold Out)</span>
+                  </>
+                ) : (
+                  <>
+                    <span>View Details</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </>
+                )}
               </Link>
             </Button>
           </div>
