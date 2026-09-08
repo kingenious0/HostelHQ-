@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPaystackKeys } from "@/lib/paystack-utils";
+import { getPaystackKeys, generatePaystackVerificationToken } from "@/lib/paystack-utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -57,14 +57,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const resolvedName = data.data.account_name;
+    const resolvedNumber = data.data.account_number || accountNumber;
+    const verificationToken = generatePaystackVerificationToken(
+      resolvedNumber,
+      bankCode,
+      resolvedName,
+      secretKey
+    );
+
     return NextResponse.json({
       status: true,
       message: "Account name resolved successfully.",
       data: {
-        account_number: data.data.account_number,
-        account_name: data.data.account_name,
+        account_number: resolvedNumber,
+        account_name: resolvedName,
         bank_id: data.data.bank_id,
         bank_code: bankCode,
+        verification_token: verificationToken,
+        verification_hash: verificationToken,
       },
     });
   } catch (error: any) {

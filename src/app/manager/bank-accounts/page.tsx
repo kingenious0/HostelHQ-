@@ -98,6 +98,7 @@ export interface BankAccount {
     isPrimary: boolean;
     isVerified?: boolean;
     verifiedViaPaystack?: boolean;
+    verificationToken?: string;
     status?: string;
     createdAt?: any;
     updatedAt?: any;
@@ -150,6 +151,7 @@ export default function ManagerBankAccountsPage() {
     const [isResolving, setIsResolving] = useState(false);
     const [isResolved, setIsResolved] = useState(false);
     const [resolutionError, setResolutionError] = useState<string | null>(null);
+    const [verificationToken, setVerificationToken] = useState<string>('');
 
     // Check user role
     useEffect(() => {
@@ -230,6 +232,7 @@ export default function ManagerBankAccountsPage() {
                     isPrimary: !!data.isPrimary,
                     isVerified: !!(data.isVerified || data.verifiedViaPaystack),
                     verifiedViaPaystack: !!(data.verifiedViaPaystack || data.isVerified),
+                    verificationToken: data.verificationToken,
                     status: data.status || 'active',
                     createdAt: data.createdAt,
                     updatedAt: data.updatedAt,
@@ -249,69 +252,138 @@ export default function ManagerBankAccountsPage() {
         };
     }, [currentUser, isManager]);
 
-    // Live Paystack Account Resolution Check
-    const handleResolveAccount = async () => {
-        const targetNumber = accountType === 'bank' ? accountNumber.trim() : momoNumber.trim();
-        const targetBankCode = accountType === 'bank'
-            ? (selectedBankCode === 'custom' ? '040100' : selectedBankCode)
-            : selectedMomoNetwork;
+    // Automatic Debounced Paystack Resolution Pipeline
+    useEffect(() => {
+        if (!addDialogOpen && !editDialogOpen) return;
 
-        if (!targetNumber) {
-            toast({
-                title: 'Account number required',
-                description: accountType === 'bank'
-                    ? 'Please enter your bank account number to verify with Paystack.'
-                    : 'Please enter your Mobile Money phone number to verify with Paystack.',
-                variant: 'destructive',
-            });
-            return;
-        }
+        if (accountType === 'momo') {
+            const cleanNumber = momoNumber.replace(/\D/g, '');
 
-        setIsResolving(true);
-        setIsResolved(false);
-        setResolutionError(null);
-
-        try {
-            const res = await fetch(
-                `/api/paystack/resolve?account_number=${encodeURIComponent(targetNumber)}&bank_code=${encodeURIComponent(targetBankCode)}`
-            );
-            const json = await res.json();
-
-            if (json.status && json.data?.account_name) {
-                const resolved = json.data.account_name;
-                if (accountType === 'bank') {
-                    setAccountName(resolved);
-                } else {
-                    setMomoName(resolved);
-                }
-                setIsResolved(true);
-                setResolutionError(null);
-                toast({
-                    title: 'Paystack Name Resolved!',
-                    description: `Account holder confirmed: "${resolved}"`,
-                });
-            } else {
-                setIsResolved(false);
-                const errMsg = json.message || 'Paystack could not verify this account. Please verify details or enter name manually.';
-                setResolutionError(errMsg);
-                toast({
-                    title: 'Verification Inconclusive',
-                    description: errMsg,
-                    variant: 'destructive',
-                });
+            // Standard Ghanaian Mobile Money numbers are 10 digits
+            if (cleanNumber.length !== 10) {
+                setIsResolving(false);
+                return;
             }
-        } catch (err: any) {
-            setIsResolved(false);
-            setResolutionError(err.message || 'Unable to connect to Paystack verification API.');
-            toast({
-                title: 'Resolution Service Error',
-                description: 'Failed to contact Paystack. You can still enter your registered account name manually.',
-                variant: 'destructive',
-            });
-        } finally {
-            setIsResolving(false);
+
+            // Skip re-fetching if already verified with token
+            if (isResolved && verificationToken && momoName) {
+                return;
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(async () => {
+                setIsResolving(true);
+                setResolutionError(null);
+
+                try {
+                    const res = await fetch(
+                        `/api/paystack/resolve?account_number=${encodeURIComponent(cleanNumber)}&bank_code=${encodeURIComponent(selectedMomoNetwork)}`,
+                        { signal: controller.signal }
+                    );
+                    const json = await res.json();
+
+                    if (json.status && json.data?.account_name) {
+                        const resolved = json.data.account_name;
+                        setMomoName(resolved);
+                        setIsResolved(true);
+                        setVerificationToken(json.data.verification_token || json.data.verification_hash || '');
+                        setResolutionError(null);
+                        toast({
+                            title: 'Paystack Verified',
+                            description: `Subscriber confirmed: "${resolved}" (${selectedMomoNetwork})`,
+                        });
+                    } else {
+                        setIsResolved(false);
+                        setMomoName('');
+                        setVerificationToken('');
+                        const errMsg = json.message || 'Paystack could not verify this Mobile Money number. Please confirm network and phone number.';
+                        setResolutionError(errMsg);
+                    }
+                } catch (err: any) {
+                    if (err.name === 'AbortError') return;
+                    setIsResolved(false);
+                    setMomoName('');
+                    setVerificationToken('');
+                    setResolutionError(err.message || 'Unable to connect to Paystack verification API.');
+                } finally {
+                    setIsResolving(false);
+                }
+            }, 500);
+
+            return () => {
+                clearTimeout(timeoutId);
+                controller.abort();
+            };
+        } else if (accountType === 'bank' && selectedBankCode !== 'custom') {
+            const cleanNumber = accountNumber.trim();
+
+            if (cleanNumber.length < 9) {
+                setIsResolving(false);
+                return;
+            }
+
+            if (isResolved && verificationToken && accountName) {
+                return;
+            }
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(async () => {
+                setIsResolving(true);
+                setResolutionError(null);
+
+                try {
+                    const res = await fetch(
+                        `/api/paystack/resolve?account_number=${encodeURIComponent(cleanNumber)}&bank_code=${encodeURIComponent(selectedBankCode)}`,
+                        { signal: controller.signal }
+                    );
+                    const json = await res.json();
+
+                    if (json.status && json.data?.account_name) {
+                        const resolved = json.data.account_name;
+                        setAccountName(resolved);
+                        setIsResolved(true);
+                        setVerificationToken(json.data.verification_token || json.data.verification_hash || '');
+                        setResolutionError(null);
+                        toast({
+                            title: 'Paystack Verified',
+                            description: `Account holder confirmed: "${resolved}"`,
+                        });
+                    } else {
+                        setIsResolved(false);
+                        setAccountName('');
+                        setVerificationToken('');
+                        setResolutionError(json.message || 'Could not verify account with bank.');
+                    }
+                } catch (err: any) {
+                    if (err.name === 'AbortError') return;
+                    setIsResolved(false);
+                    setAccountName('');
+                    setVerificationToken('');
+                    setResolutionError(err.message || 'Verification service error.');
+                } finally {
+                    setIsResolving(false);
+                }
+            }, 600);
+
+            return () => {
+                clearTimeout(timeoutId);
+                controller.abort();
+            };
         }
-    };
+    }, [
+        accountType,
+        momoNumber,
+        selectedMomoNetwork,
+        accountNumber,
+        selectedBankCode,
+        addDialogOpen,
+        editDialogOpen,
+        isResolved,
+        verificationToken,
+        momoName,
+        accountName,
+        toast,
+    ]);
 
     // Open Add Dialog
     const openAddDialog = () => {
@@ -330,6 +402,9 @@ export default function ManagerBankAccountsPage() {
         setIsPrimary(account.isPrimary);
         setIsResolved(!!account.isVerified || !!account.verifiedViaPaystack);
         setResolutionError(null);
+
+        const token = account.verificationToken || '';
+        setVerificationToken(token);
 
         if (account.type === 'bank') {
             const matchedBank = GHANA_BANKS.find(b => b.code === account.bankCode || b.name === account.bankName);
@@ -351,6 +426,24 @@ export default function ManagerBankAccountsPage() {
         }
 
         setEditDialogOpen(true);
+
+        // If existing verified account doesn't have a token, prefetch it silently in background
+        if (!token && (account.isVerified || account.verifiedViaPaystack)) {
+            const targetNum = (account.type === 'bank' ? account.accountNumber : (account.momoNumber || account.accountNumber))?.trim();
+            const targetCode = account.type === 'bank'
+                ? (account.bankCode || '040100')
+                : (account.momoNetwork || account.bankCode || 'MTN');
+            if (targetNum && targetCode) {
+                fetch(`/api/paystack/resolve?account_number=${encodeURIComponent(targetNum)}&bank_code=${encodeURIComponent(targetCode)}`)
+                    .then(r => r.json())
+                    .then(j => {
+                        if (j.status && j.data?.verification_token) {
+                            setVerificationToken(j.data.verification_token);
+                        }
+                    })
+                    .catch(() => {});
+            }
+        }
     };
 
     const resetForm = () => {
@@ -367,11 +460,12 @@ export default function ManagerBankAccountsPage() {
         setIsPrimary(false);
         setIsResolving(false);
         setIsResolved(false);
+        setVerificationToken('');
         setResolutionError(null);
         setSelectedAccount(null);
     };
 
-    // Handle Create Account in Firestore
+    // Handle Create Account with Backend Bypass Prevention
     const handleAddAccount = async () => {
         if (!currentUser) return;
 
@@ -383,6 +477,16 @@ export default function ManagerBankAccountsPage() {
             toast({
                 title: 'Required fields missing',
                 description: 'Please provide both the account number and account name.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        // Form Submission Guard (Bypass Prevention)
+        if (!isResolved || !verificationToken) {
+            toast({
+                title: 'Paystack Verification Required',
+                description: 'This account must be verified by Paystack before saving.',
                 variant: 'destructive',
             });
             return;
@@ -416,56 +520,39 @@ export default function ManagerBankAccountsPage() {
         try {
             setSubmitting(true);
 
-            // If primary, demote existing primary accounts for this hostel
-            if (isPrimary) {
-                const siblings = bankAccounts.filter(acc =>
-                    acc.isPrimary &&
-                    (formHostelId === 'all' || acc.hostelId === formHostelId || !acc.hostelId)
-                );
-                for (const sib of siblings) {
-                    await updateDoc(doc(db, 'bankAccounts', sib.id), { isPrimary: false });
-                }
+            // Call secure server route to validate token and update DB
+            const res = await fetch('/api/payouts/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    managerId: currentUser.uid,
+                    managerEmail: currentUser.email || '',
+                    type: accountType,
+                    bankName: bankNameFinal,
+                    bankCode: bankCodeFinal,
+                    accountNumber: num,
+                    accountName: name,
+                    momoNetwork: !isBank ? selectedMomoNetwork : undefined,
+                    momoNumber: !isBank ? num : undefined,
+                    momoName: !isBank ? name : undefined,
+                    branch: isBank ? bankBranch.trim() : undefined,
+                    hostelId: formHostelId,
+                    hostelName: assignedHostelName,
+                    isPrimary,
+                    verificationToken,
+                }),
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.status) {
+                throw new Error(data.error || 'Failed to save verified payment account.');
             }
-
-            const newDoc: any = {
-                managerId: currentUser.uid,
-                managerEmail: currentUser.email || '',
-                type: accountType,
-                bankName: bankNameFinal,
-                bankCode: bankCodeFinal,
-                accountNumber: num,
-                accountName: name,
-                isPrimary,
-                isVerified: isResolved,
-                verifiedViaPaystack: isResolved,
-                status: 'active',
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-            };
-
-            if (isBank) {
-                if (bankBranch.trim()) newDoc.branch = bankBranch.trim();
-            } else {
-                newDoc.momoNetwork = selectedMomoNetwork;
-                newDoc.momoNumber = num;
-                newDoc.momoName = name;
-            }
-
-            if (formHostelId !== 'all') {
-                newDoc.hostelId = formHostelId;
-                newDoc.hostelName = assignedHostelName;
-            } else {
-                newDoc.hostelId = 'all';
-                newDoc.hostelName = 'All Managed Hostels';
-            }
-
-            await addDoc(collection(db, 'bankAccounts'), newDoc);
 
             setAddDialogOpen(false);
             resetForm();
             toast({
                 title: 'Payment Account Linked!',
-                description: `${bankNameFinal} account (${num}) is now active for ${assignedHostelName}.`,
+                description: `${bankNameFinal} account (${num}) is verified and active for ${assignedHostelName}.`,
             });
         } catch (error: any) {
             console.error('Error adding bank account:', error);
@@ -479,9 +566,9 @@ export default function ManagerBankAccountsPage() {
         }
     };
 
-    // Handle Edit Account in Firestore
+    // Handle Edit Account with Backend Bypass Prevention
     const handleEditAccount = async () => {
-        if (!selectedAccount) return;
+        if (!selectedAccount || !currentUser) return;
 
         const isBank = accountType === 'bank';
         const num = isBank ? accountNumber.trim() : momoNumber.trim();
@@ -491,6 +578,16 @@ export default function ManagerBankAccountsPage() {
             toast({
                 title: 'Required fields missing',
                 description: 'Please provide both the account number and account name.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        // Form Submission Guard (Bypass Prevention)
+        if (!isResolved || !verificationToken) {
+            toast({
+                title: 'Paystack Verification Required',
+                description: 'This account must be verified by Paystack before updating.',
                 variant: 'destructive',
             });
             return;
@@ -522,51 +619,34 @@ export default function ManagerBankAccountsPage() {
         try {
             setSubmitting(true);
 
-            // If setting as primary, demote existing primary siblings
-            if (isPrimary && !selectedAccount.isPrimary) {
-                const siblings = bankAccounts.filter(acc =>
-                    acc.id !== selectedAccount.id &&
-                    acc.isPrimary &&
-                    (formHostelId === 'all' || acc.hostelId === formHostelId || !acc.hostelId)
-                );
-                for (const sib of siblings) {
-                    await updateDoc(doc(db, 'bankAccounts', sib.id), { isPrimary: false });
-                }
+            // Call secure server route to validate token and update DB
+            const res = await fetch('/api/payouts/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accountId: selectedAccount.id,
+                    managerId: currentUser.uid,
+                    managerEmail: currentUser.email || '',
+                    type: accountType,
+                    bankName: bankNameFinal,
+                    bankCode: bankCodeFinal,
+                    accountNumber: num,
+                    accountName: name,
+                    momoNetwork: !isBank ? selectedMomoNetwork : undefined,
+                    momoNumber: !isBank ? num : undefined,
+                    momoName: !isBank ? name : undefined,
+                    branch: isBank ? bankBranch.trim() : undefined,
+                    hostelId: formHostelId,
+                    hostelName: assignedHostelName,
+                    isPrimary,
+                    verificationToken,
+                }),
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.status) {
+                throw new Error(data.error || 'Failed to update payment details.');
             }
-
-            const updates: any = {
-                type: accountType,
-                bankName: bankNameFinal,
-                bankCode: bankCodeFinal,
-                accountNumber: num,
-                accountName: name,
-                isPrimary,
-                isVerified: isResolved,
-                verifiedViaPaystack: isResolved,
-                updatedAt: serverTimestamp(),
-            };
-
-            if (isBank) {
-                updates.branch = bankBranch.trim();
-                updates.momoNetwork = null;
-                updates.momoNumber = null;
-                updates.momoName = null;
-            } else {
-                updates.branch = null;
-                updates.momoNetwork = selectedMomoNetwork;
-                updates.momoNumber = num;
-                updates.momoName = name;
-            }
-
-            if (formHostelId !== 'all') {
-                updates.hostelId = formHostelId;
-                updates.hostelName = assignedHostelName;
-            } else {
-                updates.hostelId = 'all';
-                updates.hostelName = 'All Managed Hostels';
-            }
-
-            await updateDoc(doc(db, 'bankAccounts', selectedAccount.id), updates);
 
             setEditDialogOpen(false);
             resetForm();
@@ -1152,32 +1232,20 @@ export default function ManagerBankAccountsPage() {
                                 {/* Account Number with Paystack Resolve */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">Bank Account Number *</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            placeholder="e.g. 1151000048291"
-                                            value={accountNumber}
-                                            onChange={(e) => {
-                                                setAccountNumber(e.target.value);
-                                                setIsResolved(false);
-                                                setResolutionError(null);
-                                            }}
-                                            className="h-10 text-xs rounded-xl font-mono"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={handleResolveAccount}
-                                            disabled={isResolving || !accountNumber.trim()}
-                                            className="h-10 px-3 text-xs font-semibold shrink-0 gap-1.5 rounded-xl border-primary/30 hover:bg-primary/5"
-                                        >
-                                            {isResolving ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                                            )}
-                                            <span>Verify Account</span>
-                                        </Button>
-                                    </div>
+                                    <Input
+                                        placeholder="e.g. 1151000048291"
+                                        value={accountNumber}
+                                        onChange={(e) => {
+                                            setAccountNumber(e.target.value);
+                                            setIsResolved(false);
+                                            if (selectedBankCode !== 'custom') {
+                                                setAccountName('');
+                                                setVerificationToken('');
+                                            }
+                                            setResolutionError(null);
+                                        }}
+                                        className="h-10 text-xs rounded-xl font-mono"
+                                    />
                                 </div>
 
                                 {/* Account Name */}
@@ -1185,18 +1253,41 @@ export default function ManagerBankAccountsPage() {
                                     <div className="flex items-center justify-between">
                                         <Label className="text-xs font-semibold">Account Holder Name *</Label>
                                         {isResolved && (
-                                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/20">
                                                 <CheckCircle2 className="h-3 w-3" />
-                                                Paystack Verified
+                                                ✓ Paystack Verified
                                             </span>
                                         )}
                                     </div>
-                                    <Input
-                                        placeholder="e.g. Kingenious Hostel Ltd or Ayeduase Executive"
-                                        value={accountName}
-                                        onChange={(e) => setAccountName(e.target.value)}
-                                        className="h-10 text-xs rounded-xl font-medium"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            placeholder={
+                                                isResolving
+                                                    ? "Verifying with Bank..."
+                                                    : selectedBankCode === 'custom'
+                                                        ? "e.g. Kingenious Hostel Ltd"
+                                                        : (accountNumber.trim().length >= 9
+                                                            ? "Awaiting bank resolution..."
+                                                            : "Enter account number above")
+                                            }
+                                            value={isResolving ? "Verifying with Bank..." : accountName}
+                                            readOnly={selectedBankCode !== 'custom'}
+                                            onChange={(e) => {
+                                                if (selectedBankCode === 'custom') setAccountName(e.target.value);
+                                            }}
+                                            className={cn(
+                                                "h-10 text-xs rounded-xl font-medium transition-all",
+                                                isResolving && "text-muted-foreground bg-muted/40 italic cursor-wait pr-9",
+                                                isResolved && "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200 font-semibold cursor-not-allowed",
+                                                selectedBankCode !== 'custom' && !isResolved && !isResolving && "bg-muted/20 cursor-not-allowed text-muted-foreground"
+                                            )}
+                                        />
+                                        {isResolving && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </>
                         ) : (
@@ -1209,6 +1300,8 @@ export default function ManagerBankAccountsPage() {
                                         onValueChange={(val) => {
                                             setSelectedMomoNetwork(val);
                                             setIsResolved(false);
+                                            setMomoName('');
+                                            setVerificationToken('');
                                             setResolutionError(null);
                                         }}
                                     >
@@ -1225,54 +1318,65 @@ export default function ManagerBankAccountsPage() {
                                     </Select>
                                 </div>
 
-                                {/* MoMo Phone Number with Resolve */}
+                                {/* MoMo Phone Number with Auto-Verification */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">Mobile Money Phone Number *</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            placeholder="e.g. 0244123456"
-                                            value={momoNumber}
-                                            onChange={(e) => {
-                                                setMomoNumber(e.target.value);
-                                                setIsResolved(false);
-                                                setResolutionError(null);
-                                            }}
-                                            className="h-10 text-xs rounded-xl font-mono"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={handleResolveAccount}
-                                            disabled={isResolving || !momoNumber.trim()}
-                                            className="h-10 px-3 text-xs font-semibold shrink-0 gap-1.5 rounded-xl border-primary/30 hover:bg-primary/5"
-                                        >
-                                            {isResolving ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                                            )}
-                                            <span>Verify MoMo</span>
-                                        </Button>
-                                    </div>
+                                    <Input
+                                        placeholder="e.g. 0244123456"
+                                        value={momoNumber}
+                                        maxLength={10}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setMomoNumber(val);
+                                            setIsResolved(false);
+                                            setMomoName('');
+                                            setVerificationToken('');
+                                            setResolutionError(null);
+                                        }}
+                                        className="h-10 text-xs rounded-xl font-mono"
+                                    />
                                 </div>
 
-                                {/* MoMo Account Name */}
+                                {/* MoMo Registered Subscriber Name */}
                                 <div className="space-y-1.5">
                                     <div className="flex items-center justify-between">
                                         <Label className="text-xs font-semibold">Registered Subscriber Name *</Label>
                                         {isResolved && (
-                                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/20">
                                                 <CheckCircle2 className="h-3 w-3" />
-                                                Paystack Verified
+                                                ✓ Paystack Verified
                                             </span>
                                         )}
                                     </div>
-                                    <Input
-                                        placeholder="e.g. Kwabena Mensah or Kingenious Ltd"
-                                        value={momoName}
-                                        onChange={(e) => setMomoName(e.target.value)}
-                                        className="h-10 text-xs rounded-xl font-medium"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            placeholder={
+                                                isResolving
+                                                    ? "Verifying with Telco..."
+                                                    : (momoNumber.replace(/\D/g, '').length === 10
+                                                        ? "Awaiting Telco verification..."
+                                                        : "Enter 10-digit mobile number above")
+                                            }
+                                            value={isResolving ? "Verifying with Telco..." : momoName}
+                                            readOnly
+                                            className={cn(
+                                                "h-10 text-xs rounded-xl font-medium transition-all",
+                                                isResolving && "text-muted-foreground bg-muted/40 italic cursor-wait pr-9",
+                                                isResolved && "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200 cursor-not-allowed font-semibold",
+                                                !isResolved && !isResolving && "bg-muted/20 cursor-not-allowed text-muted-foreground"
+                                            )}
+                                        />
+                                        {isResolving && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {momoNumber.replace(/\D/g, '').length > 0 && momoNumber.replace(/\D/g, '').length < 10 && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {10 - momoNumber.replace(/\D/g, '').length} more digit{10 - momoNumber.replace(/\D/g, '').length > 1 ? 's' : ''} required for automatic Paystack verification.
+                                        </p>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -1310,7 +1414,11 @@ export default function ManagerBankAccountsPage() {
                         <Button variant="outline" onClick={() => setAddDialogOpen(false)} className="rounded-xl">
                             Cancel
                         </Button>
-                        <Button onClick={handleAddAccount} disabled={submitting} className="rounded-xl font-semibold gap-2">
+                        <Button
+                            onClick={handleAddAccount}
+                            disabled={submitting || isResolving || !isResolved}
+                            className="rounded-xl font-semibold gap-2"
+                        >
                             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                             <span>Save Payment Account</span>
                         </Button>
@@ -1395,33 +1503,23 @@ export default function ManagerBankAccountsPage() {
                                     />
                                 </div>
 
-                                {/* Account Number with Paystack Resolve */}
+                                {/* Account Number */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">Bank Account Number *</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            value={accountNumber}
-                                            onChange={(e) => {
-                                                setAccountNumber(e.target.value);
-                                                setIsResolved(false);
-                                            }}
-                                            className="h-10 text-xs rounded-xl font-mono"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={handleResolveAccount}
-                                            disabled={isResolving || !accountNumber.trim()}
-                                            className="h-10 px-3 text-xs font-semibold shrink-0 gap-1.5 rounded-xl border-primary/30"
-                                        >
-                                            {isResolving ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                                            )}
-                                            <span>Re-verify</span>
-                                        </Button>
-                                    </div>
+                                    <Input
+                                        placeholder="e.g. 1151000048291"
+                                        value={accountNumber}
+                                        onChange={(e) => {
+                                            setAccountNumber(e.target.value);
+                                            setIsResolved(false);
+                                            if (selectedBankCode !== 'custom') {
+                                                setAccountName('');
+                                                setVerificationToken('');
+                                            }
+                                            setResolutionError(null);
+                                        }}
+                                        className="h-10 text-xs rounded-xl font-mono"
+                                    />
                                 </div>
 
                                 {/* Account Name */}
@@ -1429,17 +1527,41 @@ export default function ManagerBankAccountsPage() {
                                     <div className="flex items-center justify-between">
                                         <Label className="text-xs font-semibold">Account Holder Name *</Label>
                                         {isResolved && (
-                                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/20">
                                                 <CheckCircle2 className="h-3 w-3" />
-                                                Paystack Verified
+                                                ✓ Paystack Verified
                                             </span>
                                         )}
                                     </div>
-                                    <Input
-                                        value={accountName}
-                                        onChange={(e) => setAccountName(e.target.value)}
-                                        className="h-10 text-xs rounded-xl font-medium"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            placeholder={
+                                                isResolving
+                                                    ? "Verifying with Bank..."
+                                                    : selectedBankCode === 'custom'
+                                                        ? "e.g. Kingenious Hostel Ltd"
+                                                        : (accountNumber.trim().length >= 9
+                                                            ? "Awaiting bank resolution..."
+                                                            : "Enter account number above")
+                                            }
+                                            value={isResolving ? "Verifying with Bank..." : accountName}
+                                            readOnly={selectedBankCode !== 'custom'}
+                                            onChange={(e) => {
+                                                if (selectedBankCode === 'custom') setAccountName(e.target.value);
+                                            }}
+                                            className={cn(
+                                                "h-10 text-xs rounded-xl font-medium transition-all",
+                                                isResolving && "text-muted-foreground bg-muted/40 italic cursor-wait pr-9",
+                                                isResolved && "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200 font-semibold cursor-not-allowed",
+                                                selectedBankCode !== 'custom' && !isResolved && !isResolving && "bg-muted/20 cursor-not-allowed text-muted-foreground"
+                                            )}
+                                        />
+                                        {isResolving && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </>
                         ) : (
@@ -1452,6 +1574,9 @@ export default function ManagerBankAccountsPage() {
                                         onValueChange={(val) => {
                                             setSelectedMomoNetwork(val);
                                             setIsResolved(false);
+                                            setMomoName('');
+                                            setVerificationToken('');
+                                            setResolutionError(null);
                                         }}
                                     >
                                         <SelectTrigger className="h-10 text-xs rounded-xl">
@@ -1467,33 +1592,23 @@ export default function ManagerBankAccountsPage() {
                                     </Select>
                                 </div>
 
-                                {/* MoMo Phone Number with Resolve */}
+                                {/* MoMo Phone Number with Auto-Verification */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">Mobile Money Phone Number *</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            value={momoNumber}
-                                            onChange={(e) => {
-                                                setMomoNumber(e.target.value);
-                                                setIsResolved(false);
-                                            }}
-                                            className="h-10 text-xs rounded-xl font-mono"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={handleResolveAccount}
-                                            disabled={isResolving || !momoNumber.trim()}
-                                            className="h-10 px-3 text-xs font-semibold shrink-0 gap-1.5 rounded-xl border-primary/30"
-                                        >
-                                            {isResolving ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                                            )}
-                                            <span>Re-verify</span>
-                                        </Button>
-                                    </div>
+                                    <Input
+                                        placeholder="e.g. 0244123456"
+                                        value={momoNumber}
+                                        maxLength={10}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setMomoNumber(val);
+                                            setIsResolved(false);
+                                            setMomoName('');
+                                            setVerificationToken('');
+                                            setResolutionError(null);
+                                        }}
+                                        className="h-10 text-xs rounded-xl font-mono"
+                                    />
                                 </div>
 
                                 {/* MoMo Account Name */}
@@ -1501,17 +1616,41 @@ export default function ManagerBankAccountsPage() {
                                     <div className="flex items-center justify-between">
                                         <Label className="text-xs font-semibold">Subscriber Name *</Label>
                                         {isResolved && (
-                                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                                            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/20">
                                                 <CheckCircle2 className="h-3 w-3" />
                                                 Paystack Verified
                                             </span>
                                         )}
                                     </div>
-                                    <Input
-                                        value={momoName}
-                                        onChange={(e) => setMomoName(e.target.value)}
-                                        className="h-10 text-xs rounded-xl font-medium"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            placeholder={
+                                                isResolving
+                                                    ? "Verifying with Telco..."
+                                                    : (momoNumber.replace(/\D/g, '').length === 10
+                                                        ? "Awaiting Telco verification..."
+                                                        : "Enter 10-digit mobile number above")
+                                            }
+                                            value={isResolving ? "Verifying with Telco..." : momoName}
+                                            readOnly
+                                            className={cn(
+                                                "h-10 text-xs rounded-xl font-medium transition-all",
+                                                isResolving && "text-muted-foreground bg-muted/40 italic cursor-wait pr-9",
+                                                isResolved && "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200 cursor-not-allowed font-semibold",
+                                                !isResolved && !isResolving && "bg-muted/20 cursor-not-allowed text-muted-foreground"
+                                            )}
+                                        />
+                                        {isResolving && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-muted-foreground">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {momoNumber.replace(/\D/g, '').length > 0 && momoNumber.replace(/\D/g, '').length < 10 && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {10 - momoNumber.replace(/\D/g, '').length} more digit{10 - momoNumber.replace(/\D/g, '').length > 1 ? 's' : ''} required for automatic Paystack verification.
+                                        </p>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -1535,7 +1674,11 @@ export default function ManagerBankAccountsPage() {
                         <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="rounded-xl">
                             Cancel
                         </Button>
-                        <Button onClick={handleEditAccount} disabled={submitting} className="rounded-xl font-semibold gap-2">
+                        <Button
+                            onClick={handleEditAccount}
+                            disabled={submitting || isResolving || !isResolved}
+                            className="rounded-xl font-semibold gap-2"
+                        >
                             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                             <span>Update Details</span>
                         </Button>

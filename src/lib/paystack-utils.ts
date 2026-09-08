@@ -34,3 +34,44 @@ export async function getPaystackKeys() {
         mode: 'test' as const // Assume test if not specified
     };
 }
+
+import crypto from "crypto";
+
+/**
+ * Generate a tamper-proof verification hash for a Paystack-resolved account
+ */
+export function generatePaystackVerificationToken(
+    accountNumber: string,
+    bankCode: string,
+    accountName: string,
+    secretKey?: string
+): string {
+    const key = secretKey || process.env.PAYSTACK_SECRET_KEY || "hostelhq-payout-verification-secret";
+    return crypto
+        .createHmac("sha256", key)
+        .update(`${accountNumber.trim()}:${bankCode.trim()}:${accountName.trim().toUpperCase()}`)
+        .digest("hex");
+}
+
+/**
+ * Verify a Paystack verification hash against provided account parameters
+ */
+export function verifyPaystackToken(
+    accountNumber: string,
+    bankCode: string,
+    accountName: string,
+    token: string,
+    secretKey?: string
+): boolean {
+    if (!token || !accountNumber || !bankCode || !accountName) return false;
+    const expected = generatePaystackVerificationToken(accountNumber, bankCode, accountName, secretKey);
+    try {
+        const tokenBuf = Buffer.from(token);
+        const expectedBuf = Buffer.from(expected);
+        if (tokenBuf.length !== expectedBuf.length) return false;
+        return crypto.timingSafeEqual(tokenBuf, expectedBuf);
+    } catch {
+        return false;
+    }
+}
+

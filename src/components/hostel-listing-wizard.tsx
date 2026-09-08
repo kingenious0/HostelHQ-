@@ -200,6 +200,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
   const [isResolvingAccount, setIsResolvingAccount] = useState(false);
   const [isSavingPayoutAccount, setIsSavingPayoutAccount] = useState(false);
   const [accountResolved, setAccountResolved] = useState(false);
+  const [payoutVerificationToken, setPayoutVerificationToken] = useState("");
 
   // Statutory Undertaking (Act 389)
   const [declarantName, setDeclarantName] = useState("");
@@ -255,60 +256,81 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
     return () => unsubscribe();
   }, [mode, loadPayoutAccounts]);
 
-  // Handle Paystack Account Resolution
-  const handleResolveAccount = async () => {
-    if (!payoutAccountNumber.trim()) {
-      toast({
-        title: "Account Number Required",
-        description: "Please enter your Mobile Money or Bank Account Number.",
-        variant: "destructive",
-      });
+  // Automatic Debounced Paystack Resolution for Step 6 Payout Setup
+  useEffect(() => {
+    if (step !== 6 || mode !== "manager") return;
+
+    const isBank = payoutType === "bank";
+    const cleanNumber = isBank
+      ? payoutAccountNumber.trim()
+      : payoutAccountNumber.replace(/\D/g, "");
+
+    // Require 10 digits for MoMo or at least 9 for Bank
+    const isValidLength = isBank ? cleanNumber.length >= 9 : cleanNumber.length === 10;
+    if (!isValidLength) {
+      setIsResolvingAccount(false);
       return;
     }
 
-    setIsResolvingAccount(true);
-    setAccountResolved(false);
-    try {
-      const res = await fetch(
-        `/api/paystack/resolve?account_number=${encodeURIComponent(
-          payoutAccountNumber.trim()
-        )}&bank_code=${encodeURIComponent(payoutProvider)}`
-      );
-      const json = await res.json();
-
-      if (json.status && json.data?.account_name) {
-        setPayoutAccountName(json.data.account_name);
-        setAccountResolved(true);
-        toast({
-          title: "Account Verified",
-          description: `Account holder resolved: ${json.data.account_name}`,
-        });
-      } else {
-        setAccountResolved(false);
-        toast({
-          title: "Verification Failed",
-          description: json.message || "Could not resolve account with Paystack. Please check the number and provider.",
-          variant: "destructive",
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: "Resolution Error",
-        description: err.message || "Failed to reach account resolution service.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsResolvingAccount(false);
+    if (accountResolved && payoutVerificationToken && payoutAccountName) {
+      return;
     }
-  };
 
-  // Quick-save payout account into Firestore bankAccounts
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsResolvingAccount(true);
+      try {
+        const res = await fetch(
+          `/api/paystack/resolve?account_number=${encodeURIComponent(cleanNumber)}&bank_code=${encodeURIComponent(payoutProvider)}`,
+          { signal: controller.signal }
+        );
+        const json = await res.json();
+        if (json.status && json.data?.account_name) {
+          setPayoutAccountName(json.data.account_name);
+          setAccountResolved(true);
+          setPayoutVerificationToken(json.data.verification_token || json.data.verification_hash || "");
+          toast({
+            title: "Account Verified",
+            description: `Account holder resolved: ${json.data.account_name}`,
+          });
+        } else {
+          setAccountResolved(false);
+          setPayoutAccountName("");
+          setPayoutVerificationToken("");
+        }
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        setAccountResolved(false);
+        setPayoutAccountName("");
+        setPayoutVerificationToken("");
+      } finally {
+        setIsResolvingAccount(false);
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    payoutAccountNumber,
+    payoutProvider,
+    payoutType,
+    step,
+    mode,
+    accountResolved,
+    payoutVerificationToken,
+    payoutAccountName,
+    toast,
+  ]);
+
+  // Quick-save payout account into Firestore bankAccounts via /api/payouts/update
   const handleSavePayoutAccount = async () => {
     if (!currentUser) return;
-    if (!payoutAccountNumber.trim()) {
+    if (!accountResolved || !payoutVerificationToken) {
       toast({
-        title: "Missing Details",
-        description: "Please provide an account number.",
+        title: "Verification Required",
+        description: "Please enter a valid account number and allow Paystack to verify before saving.",
         variant: "destructive",
       });
       return;
@@ -316,20 +338,28 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
 
     setIsSavingPayoutAccount(true);
     try {
-      const accountPayload = {
-        managerId: currentUser.uid,
-        managerEmail: currentUser.email || "",
-        accountName: payoutAccountName.trim() || declarantName || "Verified Manager",
-        accountNumber: payoutAccountNumber.trim(),
-        bankName: payoutProvider,
-        type: payoutType,
-        isPrimary: linkedPayoutAccounts.length === 0,
-        verifiedViaPaystack: accountResolved,
-        createdAt: serverTimestamp(),
-      };
+      const res = await fetch("/api/payouts/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          managerId: currentUser.uid,
+          managerEmail: currentUser.email || "",
+          accountName: payoutAccountName.trim(),
+          accountNumber: payoutAccountNumber.trim(),
+          bankName: payoutProvider,
+          bankCode: payoutProvider,
+          type: payoutType,
+          isPrimary: linkedPayoutAccounts.length === 0,
+          verificationToken: payoutVerificationToken,
+        }),
+      });
 
-      const docRef = await addDoc(collection(db, "bankAccounts"), accountPayload);
-      setLinkedPayoutAccounts((prev) => [...prev, { id: docRef.id, ...accountPayload }]);
+      const data = await res.json();
+      if (!res.ok || !data.status) {
+        throw new Error(data.error || "Failed to link verified payout account.");
+      }
+
+      setLinkedPayoutAccounts((prev) => [...prev, data.data]);
 
       toast({
         title: "Payout Account Linked!",
@@ -339,6 +369,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       // Reset inline form
       setPayoutAccountNumber("");
       setPayoutAccountName("");
+      setPayoutVerificationToken("");
       setAccountResolved(false);
     } catch (err: any) {
       toast({
@@ -1542,7 +1573,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
                         <span>No commercial payout account linked yet. Link your Mobile Money or Bank account below:</span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {/* Type & Provider */}
                         <div className="space-y-1.5">
                           <Label className="text-[11px] font-semibold text-muted-foreground">Provider Type</Label>
@@ -1554,6 +1585,8 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
                                 ["MTN", "VOD", "ATL"].includes(val) ? "momo" : "bank"
                               );
                               setAccountResolved(false);
+                              setPayoutAccountName("");
+                              setPayoutVerificationToken("");
                             }}
                           >
                             <SelectTrigger className="h-9 text-xs rounded-xl">
@@ -1574,58 +1607,79 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
                         </div>
 
                         {/* Account Number */}
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label className="text-[11px] font-semibold text-muted-foreground">
-                            Account / Mobile Money Number *
-                          </Label>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="e.g. 0244123456 or 1151000048291"
-                              value={payoutAccountNumber}
-                              onChange={(e) => {
-                                setPayoutAccountNumber(e.target.value);
-                                setAccountResolved(false);
-                              }}
-                              className="h-9 text-xs rounded-xl font-mono"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleResolveAccount}
-                              disabled={isResolvingAccount || !payoutAccountNumber.trim()}
-                              className="h-9 px-3 text-xs font-semibold shrink-0 gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-                            >
-                              {isResolvingAccount ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                              )}
-                              Auto-Resolve
-                            </Button>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] font-semibold text-muted-foreground">
+                              {payoutType === "momo" ? "Mobile Money Number *" : "Bank Account Number *"}
+                            </Label>
+                            {payoutType === "momo" && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {payoutAccountNumber.replace(/\D/g, "").length}/10 digits
+                              </span>
+                            )}
                           </div>
+                          <Input
+                            placeholder={payoutType === "momo" ? "e.g. 0244123456" : "e.g. 1151000048291"}
+                            value={payoutAccountNumber}
+                            maxLength={payoutType === "momo" ? 10 : 20}
+                            onChange={(e) => {
+                              setPayoutAccountNumber(e.target.value);
+                              setAccountResolved(false);
+                              setPayoutAccountName("");
+                              setPayoutVerificationToken("");
+                            }}
+                            className="h-9 text-xs rounded-xl font-mono"
+                          />
                         </div>
                       </div>
 
-                      {/* Resolved Account Name Display */}
-                      {accountResolved && payoutAccountName && (
-                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            <span className="text-xs font-bold text-foreground">
-                              Resolved Name: {payoutAccountName}
+                      {/* Locked Subscriber / Account Name Field */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[11px] font-semibold text-muted-foreground">
+                            {payoutType === "momo" ? "Subscriber Name (from Telco)" : "Account Legal Name"}
+                          </Label>
+                          {accountResolved && payoutAccountName && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Paystack Verified
                             </span>
-                          </div>
-                          <Badge className="bg-emerald-600 text-white text-[10px]">
-                            Paystack Verified
-                          </Badge>
+                          )}
                         </div>
-                      )}
+                        <div className="relative">
+                          <Input
+                            readOnly
+                            value={
+                              isResolvingAccount
+                                ? "Verifying with Telco..."
+                                : payoutAccountName || ""
+                            }
+                            placeholder={
+                              payoutType === "momo"
+                                ? "Auto-populated upon entering 10-digit number"
+                                : "Auto-populated upon entering account number"
+                            }
+                            className={`h-9 text-xs rounded-xl font-medium ${
+                              accountResolved
+                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 font-semibold cursor-not-allowed"
+                                : isResolvingAccount
+                                ? "bg-muted/40 text-muted-foreground animate-pulse cursor-wait"
+                                : "bg-muted/30 text-muted-foreground cursor-not-allowed"
+                            }`}
+                          />
+                          {isResolvingAccount && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
                       <Button
                         type="button"
                         onClick={handleSavePayoutAccount}
-                        disabled={isSavingPayoutAccount || !payoutAccountNumber.trim()}
-                        className="w-full h-9 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                        disabled={isSavingPayoutAccount || !accountResolved || !payoutVerificationToken || isResolvingAccount}
+                        className="w-full h-9 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 transition-all disabled:opacity-50"
                       >
                         {isSavingPayoutAccount ? (
                           <>
