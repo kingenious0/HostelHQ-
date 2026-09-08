@@ -242,7 +242,7 @@ export default function RoomDetailPage() {
 
     fetch();
 
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    const unsub = onAuthStateChanged(auth, async (user: any) => {
       if (user) {
         const userDocRef = doc(db, "users", user.uid);
         const snap = await getDoc(userDocRef);
@@ -265,7 +265,7 @@ export default function RoomDetailPage() {
             );
             const visitsSnapshot = await getDocs(visitsQuery);
             if (!visitsSnapshot.empty) {
-              const hasCompleted = visitsSnapshot.docs.some((docSnap) => {
+              const hasCompleted = visitsSnapshot.docs.some((docSnap: any) => {
                 const data = docSnap.data() as any;
                 return data.status === "completed" && data.studentCompleted === true;
               });
@@ -444,21 +444,7 @@ export default function RoomDetailPage() {
     return groups;
   }, [room?.amenities]);
 
-  if (!hostelId || !roomId) {
-    notFound();
-  }
-
-  if (loading || !hostel || !room) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </main>
-      </div>
-    );
-  }
-
+  // Check if room or hostel is sold out - moved before early returns to fix hooks order
   const isSoldOut = useMemo(() => {
     if (!hostel || !room) return false;
     if (isHostelSoldOut(hostel)) return true;
@@ -477,6 +463,21 @@ export default function RoomDetailPage() {
 
     return false;
   }, [hostel, room]);
+
+  if (!hostelId || !roomId) {
+    notFound();
+  }
+
+  if (loading || !hostel || !room) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </main>
+      </div>
+    );
+  }
 
   const isRestricted = hostel ? isHostelRestricted(hostel) : false;
 
