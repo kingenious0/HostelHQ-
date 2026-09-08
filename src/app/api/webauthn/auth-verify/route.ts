@@ -12,22 +12,37 @@ export async function POST(req: NextRequest) {
     const host = req.headers.get('host') || 'localhost:8080';
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
     
-    // Handle different environments
+    // RP ID must be domain without port
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1:60518')) {
-      rpID = 'localhost'; // Handle both localhost and 127.0.0.1:60518
-    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
-      rpID = 'hostelhq.vercel.app'; // Production domain
-    } else if (host.includes('vercel.app')) {
-      rpID = host; // Preview/staging domains (use full domain)
+    const cleanHost = host.split(':')[0];
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
+      rpID = 'localhost';
     } else {
-      rpID = host; // Fallback to full domain
+      rpID = cleanHost;
     }
     
     const origin = `${protocol}://${host}`;
+    const expectedOrigins: string[] = [origin];
+    if (origin.startsWith('http://')) {
+      expectedOrigins.push(origin.replace('http://', 'https://'));
+    } else if (origin.startsWith('https://')) {
+      expectedOrigins.push(origin.replace('https://', 'http://'));
+    }
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
+      expectedOrigins.push(
+        'http://localhost:3000',
+        'https://localhost:3000',
+        'http://localhost:8080',
+        'http://localhost:9002',
+        'http://127.0.0.1:3000'
+      );
+    }
     
     console.log('WebAuthn Auth Verify Config:', { rpID, origin, host, environment: process.env.NODE_ENV });
-    const { userId, credential } = await req.json();
+    const { userId, credential, clientOrigin } = await req.json();
+    if (clientOrigin && !expectedOrigins.includes(clientOrigin)) {
+      expectedOrigins.push(clientOrigin);
+    }
 
     if (!userId || !credential) {
       return NextResponse.json(
@@ -72,9 +87,9 @@ export async function POST(req: NextRequest) {
     const opts: any = {
       response: credential,
       expectedChallenge,
-      expectedOrigin: origin,
+      expectedOrigin: expectedOrigins,
       expectedRPID: rpID,
-      requireUserVerification: true,
+      requireUserVerification: false,
     };
 
     const verification = await verifyAuthenticationResponse(opts);

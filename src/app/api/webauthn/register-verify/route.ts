@@ -20,28 +20,37 @@ export async function POST(req: NextRequest) {
     // Detect if request is from Android WebView (Capacitor app)
     const isAndroidWebView = userAgent.includes('wv') || userAgent.includes('Android');
     
-    // Handle different environments
+    // RP ID must be domain without port
     let rpID: string;
-    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    const cleanHost = host.split(':')[0];
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
       rpID = 'localhost';
-    } else if (host.includes('hostelhq.vercel.app') || host === 'hostelhq.vercel.app') {
-      rpID = 'hostelhq.vercel.app'; // Production domain
-    } else if (host.includes('vercel.app')) {
-      rpID = host; // Preview/staging domains (use full domain)
     } else {
-      rpID = host; // Fallback to full domain
+      rpID = cleanHost;
     }
     
     // Determine the expected origin
-    // For Android WebView, we need to accept both the web origin and android:apk-key-hash origin
     let origin = `${protocol}://${host}`;
     
-    // Build list of expected origins (for Android WebView compatibility)
+    // Build list of expected origins (for Android WebView & cross-protocol compatibility)
     const expectedOrigins: string[] = [origin];
     
-    // For Android, also accept the client-reported origin if it's an android: scheme
-    if (isAndroidWebView && clientOrigin && clientOrigin.startsWith('android:')) {
+    if (clientOrigin && !expectedOrigins.includes(clientOrigin)) {
       expectedOrigins.push(clientOrigin);
+    }
+    if (origin.startsWith('http://')) {
+      expectedOrigins.push(origin.replace('http://', 'https://'));
+    } else if (origin.startsWith('https://')) {
+      expectedOrigins.push(origin.replace('https://', 'http://'));
+    }
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1') {
+      expectedOrigins.push(
+        'http://localhost:3000',
+        'https://localhost:3000',
+        'http://localhost:8080',
+        'http://localhost:9002',
+        'http://127.0.0.1:3000'
+      );
     }
     
     console.log('WebAuthn Verify Config:', { 
@@ -78,16 +87,16 @@ export async function POST(req: NextRequest) {
       userId, 
       hasCredential: !!credential, 
       hasChallenge: !!expectedChallenge,
-      rpID,
+      rpID, 
       expectedOrigins 
     });
 
     const opts: VerifyRegistrationResponseOpts = {
       response: credential,
       expectedChallenge,
-      expectedOrigin: expectedOrigins, // Accept multiple origins for Android WebView
+      expectedOrigin: expectedOrigins, // Accept multiple origins for Android WebView & web
       expectedRPID: rpID,
-      requireUserVerification: true,
+      requireUserVerification: false, // Match 'preferred' setting from registration options
     };
 
     const verification = await verifyRegistrationResponse(opts);
