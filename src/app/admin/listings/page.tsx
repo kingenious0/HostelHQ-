@@ -11,10 +11,11 @@ import {Badge} from "@/components/ui/badge";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
 import {AlertTriangle, Edit, Loader2, PlusCircle, Repeat, Trash2, Users} from "lucide-react";
 import {db, auth} from "@/lib/firebase";
-import {collection, doc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc} from "firebase/firestore";
+import {collection, doc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where} from "firebase/firestore";
 import {onAuthStateChanged, type User} from "firebase/auth";
 import type {Hostel, RoomType} from "@/lib/data";
 import {useToast} from "@/hooks/use-toast";
+import {fetchHostelOccupanciesAction} from "@/app/actions/db";
 
 type ListingRow = {
   id: string;
@@ -28,6 +29,15 @@ type ListingRow = {
   [key: string]: any;
 };
 
+function deduplicateById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!item?.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 const deriveCapacityFromName = (name?: string | null) => {
   if (!name) return 0;
   const numericMatch = name.match(/\d+/);
@@ -37,18 +47,25 @@ const deriveCapacityFromName = (name?: string | null) => {
   return words[first] ?? 0;
 };
 
-const summarizeRoomTypes = (roomTypes: RoomType[]) => {
-  return roomTypes.reduce(
-    (acc, room) => {
-      const capacity = room.capacity ?? deriveCapacityFromName(room.name);
-      const occupancy = room.occupancy ?? 0;
-      return {
-        totalCapacity: acc.totalCapacity + (capacity || 0),
-        totalOccupancy: acc.totalOccupancy + occupancy,
-      };
-    },
-    {totalCapacity: 0, totalOccupancy: 0}
-  );
+const calculateHostelCapacity = (hostel: any, roomTypes: RoomType[] = []) => {
+  if (typeof hostel.totalCapacity === "number" && hostel.totalCapacity > 0) {
+    return hostel.totalCapacity;
+  }
+  if (typeof hostel.capacity === "number" && hostel.capacity > 0) {
+    return hostel.capacity;
+  }
+  const rTypes = roomTypes.length > 0 ? roomTypes : (Array.isArray(hostel.roomTypes) ? hostel.roomTypes : []);
+  if (rTypes.length > 0) {
+    return rTypes.reduce((sum: number, rt: any) => {
+      const capPerRoom = Number(rt.capacity) || deriveCapacityFromName(rt.name) || 1;
+      const numRooms = Number(rt.numberOfRooms) || (Array.isArray(rt.roomNumbers) ? rt.roomNumbers.length : 1);
+      return sum + (capPerRoom * numRooms);
+    }, 0);
+  }
+  if (Array.isArray(hostel.rooms) && hostel.rooms.length > 0) {
+    return hostel.rooms.reduce((sum: number, r: any) => sum + (Number(r.capacity) || 1), 0);
+  }
+  return 0;
 };
 
 export default function AdminListingsPage() {
@@ -58,12 +75,13 @@ export default function AdminListingsPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [approvedHostels, setApprovedHostels] = useState<ListingRow[]>([]);
   const [pendingHostels, setPendingHostels] = useState<ListingRow[]>([]);
+  const [realtimeOccupancy, setRealtimeOccupancy] = useState<Record<string, number>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const {toast} = useToast();
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
       setCurrentUser(user);
       if (user) {
         const userDoc = await getDoc(doc(db, "users", user.uid));
@@ -85,34 +103,81 @@ export default function AdminListingsPage() {
 
     setLoading(true);
 
+    // Initial occupancy aggregation seed from backend
+    fetchHostelOccupanciesAction().then((res) => {
+      if (res.success && res.occupancies) {
+        setRealtimeOccupancy((prev) => ({ ...prev, ...res.occupancies }));
+      }
+    });
+
+    // Real-time confirmed & active bookings listener
+    const bookingsQuery = query(
+      collection(db, "bookings"),
+      where("status", "in", ["confirmed", "active", "completed"])
+    );
+
+    const unsubBookings = onSnapshot(
+      bookingsQuery,
+      (snapshot: any) => {
+        const counts: Record<string, number> = {};
+        snapshot.docs.forEach((docSnap: any) => {
+          const data = docSnap.data();
+          const hId = data.hostelId;
+          if (hId) {
+            const beds = Number(data.assignedBeds || data.bedsCount || data.bedCount) || 1;
+            counts[hId] = (counts[hId] || 0) + beds;
+          }
+        });
+        setRealtimeOccupancy(counts);
+      },
+      (err: any) => {
+        console.warn("Real-time bookings snapshot note (falling back to server action):", err);
+        fetchHostelOccupanciesAction().then((res) => {
+          if (res.success && res.occupancies) {
+            setRealtimeOccupancy(res.occupancies);
+          }
+        });
+      }
+    );
+
     const hydrateHostels = async (snapshots: ListingRow[], collectionName: "hostels" | "pendingHostels") => {
       return Promise.all(
         snapshots.map(async (hostel) => {
-          const hostelRef = doc(db, collectionName, hostel.id);
-          const roomTypesSnap = await getDocs(collection(hostelRef, "roomTypes"));
-          const roomTypes = roomTypesSnap.docs.map((d) => ({id: d.id, ...d.data()}) as RoomType);
-          const totals = summarizeRoomTypes(roomTypes);
-          return {...hostel, roomTypes, ...totals};
+          let roomTypes: RoomType[] = Array.isArray(hostel.roomTypes) ? hostel.roomTypes : [];
+          try {
+            const hostelRef = doc(db, collectionName, hostel.id);
+            const roomTypesSnap = await getDocs(collection(hostelRef, "roomTypes"));
+            if (!roomTypesSnap.empty) {
+              roomTypes = roomTypesSnap.docs.map((d: any) => ({id: d.id, ...d.data()}) as RoomType);
+            }
+          } catch (err) {
+            console.warn(`Could not fetch roomTypes subcollection for ${hostel.id}:`, err);
+          }
+          const totalCapacity = calculateHostelCapacity(hostel, roomTypes);
+          return {...hostel, roomTypes, totalCapacity};
         })
       );
     };
 
-    const unsubApproved = onSnapshot(collection(db, "hostels"), async (snapshot) => {
-      const hostels = snapshot.docs.map((docSnap) => ({id: docSnap.id, ...docSnap.data()})) as ListingRow[];
-      const hydrated = await hydrateHostels(hostels, "hostels");
-      setApprovedHostels(hydrated);
+    const unsubApproved = onSnapshot(collection(db, "hostels"), async (snapshot: any) => {
+      const hostels = snapshot.docs.map((docSnap: any) => ({id: docSnap.id, ...docSnap.data()})) as ListingRow[];
+      const deduplicated = deduplicateById(hostels);
+      const hydrated = await hydrateHostels(deduplicated, "hostels");
+      setApprovedHostels(deduplicateById(hydrated));
       setLoading(false);
     });
 
-    const unsubPending = onSnapshot(collection(db, "pendingHostels"), async (snapshot) => {
-      const hostels = snapshot.docs.map((docSnap) => ({id: docSnap.id, ...docSnap.data()})) as ListingRow[];
-      const hydrated = await hydrateHostels(hostels, "pendingHostels");
-      setPendingHostels(hydrated);
+    const unsubPending = onSnapshot(collection(db, "pendingHostels"), async (snapshot: any) => {
+      const hostels = snapshot.docs.map((docSnap: any) => ({id: docSnap.id, ...docSnap.data()})) as ListingRow[];
+      const deduplicated = deduplicateById(hostels);
+      const hydrated = await hydrateHostels(deduplicated, "pendingHostels");
+      setPendingHostels(deduplicateById(hydrated));
     });
 
     return () => {
       unsubApproved();
       unsubPending();
+      unsubBookings();
     };
   }, [currentUser, userRole]);
 
@@ -149,7 +214,7 @@ export default function AdminListingsPage() {
     }
   };
 
-  const availabilityBadge = useMemo(
+  const availabilityBadge: Record<string, "default" | "secondary" | "destructive" | "outline"> = useMemo(
     () => ({
       Available: "default",
       Limited: "secondary",
@@ -232,64 +297,118 @@ export default function AdminListingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {approvedHostels.map((hostel) => (
-                      <TableRow key={hostel.id}>
-                        <TableCell>
-                          <div className="font-semibold">{hostel.name}</div>
-                          <p className="text-xs text-muted-foreground">{hostel.location}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={availabilityBadge[hostel.availability || "Full"]}>
-                            {hostel.availability || "Full"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-sm">
-                            <Users className="h-4 w-4 text-primary" />
-                            {hostel.totalCapacity || "N/A"}
-                          </div>
-                        </TableCell>
-                        <TableCell>{hostel.totalOccupancy || 0}</TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.push(`/hostels/${hostel.id}`)}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9"
-                            title="Cycle availability"
-                            onClick={() => handleToggleAvailability(hostel)}
-                            disabled={processingId === hostel.id}
-                          >
-                            {processingId === hostel.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Repeat className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="h-9 w-9"
-                            title="Delete hostel"
-                            onClick={() => handleDelete(hostel.id, "hostels")}
-                            disabled={processingId === hostel.id}
-                          >
-                            {processingId === hostel.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {approvedHostels.map((hostel) => {
+                      const occupancy = realtimeOccupancy[hostel.id] ?? hostel.totalOccupancy ?? 0;
+                      const capacity = hostel.totalCapacity || 0;
+                      const percentage = capacity > 0 ? Math.min(100, Math.round((occupancy / capacity) * 100)) : null;
+                      const isFull = capacity > 0 && occupancy >= capacity;
+
+                      return (
+                        <TableRow key={hostel.id}>
+                          <TableCell>
+                            <div className="font-semibold">{hostel.name}</div>
+                            <p className="text-xs text-muted-foreground">{hostel.location}</p>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={availabilityBadge[hostel.availability || "Full"] || "default"}>
+                              {hostel.availability || "Full"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-sm font-medium">
+                              <Users className="h-4 w-4 text-primary" />
+                              {capacity > 0 ? capacity : "N/A"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1.5 min-w-[130px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm">
+                                  {occupancy}
+                                  {capacity > 0 && (
+                                    <span className="text-muted-foreground font-normal"> / {capacity}</span>
+                                  )}
+                                </span>
+                                {isFull ? (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 font-semibold">
+                                    Full
+                                  </Badge>
+                                ) : percentage !== null ? (
+                                  <Badge
+                                    variant={percentage >= 80 ? "secondary" : "outline"}
+                                    className={`text-[10px] px-1.5 py-0 h-4 font-medium ${
+                                      percentage >= 80 ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200" : ""
+                                    }`}
+                                  >
+                                    {percentage}%
+                                  </Badge>
+                                ) : occupancy > 0 ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                    {occupancy} active
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                                    Vacant
+                                  </Badge>
+                                )}
+                              </div>
+                              {capacity > 0 && (
+                                <div className="w-full max-w-[110px] bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isFull
+                                        ? "bg-red-500"
+                                        : (percentage ?? 0) >= 80
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${Math.min(100, percentage ?? 0)}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/hostels/${hostel.id}`)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9"
+                              title="Cycle availability"
+                              onClick={() => handleToggleAvailability(hostel)}
+                              disabled={processingId === hostel.id}
+                            >
+                              {processingId === hostel.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Repeat className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-9 w-9"
+                              title="Delete hostel"
+                              onClick={() => handleDelete(hostel.id, "hostels")}
+                              disabled={processingId === hostel.id}
+                            >
+                              {processingId === hostel.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -315,42 +434,101 @@ export default function AdminListingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendingHostels.map((hostel) => (
-                      <TableRow key={hostel.id}>
-                        <TableCell>
-                          <div className="font-semibold">{hostel.name}</div>
-                          <p className="text-xs text-muted-foreground">
-                            Submitted {hostel.dateSubmitted || "recently"}
-                          </p>
-                        </TableCell>
-                        <TableCell>{hostel.totalCapacity || "N/A"}</TableCell>
-                        <TableCell>{hostel.totalOccupancy || 0}</TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.push(`/hostels/${hostel.id}`)}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Review
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            className="h-9 w-9"
-                            onClick={() => handleDelete(hostel.id, "pendingHostels")}
-                            disabled={processingId === hostel.id}
-                            title="Delete pending hostel"
-                          >
-                            {processingId === hostel.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {pendingHostels.map((hostel) => {
+                      const occupancy = realtimeOccupancy[hostel.id] ?? hostel.totalOccupancy ?? 0;
+                      const capacity = hostel.totalCapacity || 0;
+                      const percentage = capacity > 0 ? Math.min(100, Math.round((occupancy / capacity) * 100)) : null;
+                      const isFull = capacity > 0 && occupancy >= capacity;
+
+                      return (
+                        <TableRow key={hostel.id}>
+                          <TableCell>
+                            <div className="font-semibold">{hostel.name}</div>
+                            <p className="text-xs text-muted-foreground">
+                              Submitted {hostel.dateSubmitted || "recently"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-sm font-medium">
+                              <Users className="h-4 w-4 text-primary" />
+                              {capacity > 0 ? capacity : "N/A"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1.5 min-w-[130px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm">
+                                  {occupancy}
+                                  {capacity > 0 && (
+                                    <span className="text-muted-foreground font-normal"> / {capacity}</span>
+                                  )}
+                                </span>
+                                {isFull ? (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 font-semibold">
+                                    Full
+                                  </Badge>
+                                ) : percentage !== null ? (
+                                  <Badge
+                                    variant={percentage >= 80 ? "secondary" : "outline"}
+                                    className={`text-[10px] px-1.5 py-0 h-4 font-medium ${
+                                      percentage >= 80 ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200" : ""
+                                    }`}
+                                  >
+                                    {percentage}%
+                                  </Badge>
+                                ) : occupancy > 0 ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                    {occupancy} active
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                                    Vacant
+                                  </Badge>
+                                )}
+                              </div>
+                              {capacity > 0 && (
+                                <div className="w-full max-w-[110px] bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isFull
+                                        ? "bg-red-500"
+                                        : (percentage ?? 0) >= 80
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${Math.min(100, percentage ?? 0)}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/hostels/${hostel.id}`)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Review
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => handleDelete(hostel.id, "pendingHostels")}
+                              disabled={processingId === hostel.id}
+                              title="Delete pending hostel"
+                            >
+                              {processingId === hostel.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

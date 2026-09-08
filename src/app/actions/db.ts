@@ -4,6 +4,7 @@ import * as dynamoService from "@/lib/dynamodb-service";
 import * as dynamoCore from "@/lib/dynamodb";
 import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
 import { db } from "@/lib/firebase";
+import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { requireAuth, requireRole } from "@/lib/auth-guard";
 import {
   collection,
@@ -96,6 +97,176 @@ export async function deleteHostelAction(hostelId: string, isPending: boolean = 
   } catch (error: any) {
     console.error("deleteHostelAction error:", error);
     return { success: false, error: error.message || "Failed to delete hostel" };
+  }
+}
+
+/**
+ * Dynamic Occupancy Aggregation Pipeline
+ * Calculates real-time confirmed/active tenant bookings for a specific hostel ID.
+ */
+export async function fetchHostelOccupancyAction(hostelId: string): Promise<{
+  success: boolean;
+  occupancy: number;
+  error?: string;
+}> {
+  try {
+    if (!hostelId) {
+      return { success: false, error: "Hostel ID is required", occupancy: 0 };
+    }
+
+    let totalOccupancy = 0;
+
+    // 1. Primary Query: Firebase Admin Firestore
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const bookingsSnapshot = await adminDb
+          .collection("bookings")
+          .where("hostelId", "==", hostelId)
+          .where("status", "in", ["confirmed", "active", "completed"])
+          .get();
+
+        totalOccupancy = bookingsSnapshot.size;
+        return { success: true, occupancy: totalOccupancy };
+      } catch (err: any) {
+        console.warn("adminDb IN query failed, trying flexible filter:", err);
+        try {
+          const snapshot = await adminDb
+            .collection("bookings")
+            .where("hostelId", "==", hostelId)
+            .get();
+
+          totalOccupancy = snapshot.docs.filter((docSnap) => {
+            const data = docSnap.data();
+            const status = (data.status || "").toLowerCase();
+            return ["confirmed", "active", "completed"].includes(status) || data.paymentStatus === "successful";
+          }).length;
+
+          return { success: true, occupancy: totalOccupancy };
+        } catch (subErr) {
+          console.warn("adminDb fallback query note:", subErr);
+        }
+      }
+    }
+
+    // 2. Secondary Query: Client SDK Firestore
+    try {
+      const q = query(
+        collection(db, "bookings"),
+        where("hostelId", "==", hostelId),
+        where("status", "in", ["confirmed", "active", "completed"])
+      );
+      const snap = await getDocs(q);
+      totalOccupancy = snap.size;
+      return { success: true, occupancy: totalOccupancy };
+    } catch (fsErr) {
+      console.warn("Firestore client bookings query fallback note:", fsErr);
+    }
+
+    // 3. Tertiary Query: DynamoDB if configured
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        const dBookings = await dynamoService.listBookingsByHostel(hostelId);
+        totalOccupancy = (dBookings || []).filter((b: any) => {
+          const status = (b.status || "").toLowerCase();
+          return ["confirmed", "active", "completed"].includes(status) || b.paymentStatus === "successful";
+        }).length;
+        return { success: true, occupancy: totalOccupancy };
+      } catch (dErr) {
+        console.warn("DynamoDB bookings query note:", dErr);
+      }
+    }
+
+    return { success: true, occupancy: totalOccupancy };
+  } catch (error: any) {
+    console.error("fetchHostelOccupancyAction error:", error);
+    return { success: false, error: error.message || "Failed to calculate occupancy", occupancy: 0 };
+  }
+}
+
+/**
+ * Bulk Occupancy Aggregation Pipeline
+ * Calculates real-time confirmed/active tenant bookings across all hostels.
+ */
+export async function fetchHostelOccupanciesAction(hostelIds?: string[]): Promise<{
+  success: boolean;
+  occupancies: Record<string, number>;
+  error?: string;
+}> {
+  try {
+    const occupancies: Record<string, number> = {};
+    if (hostelIds && hostelIds.length > 0) {
+      hostelIds.forEach((id) => (occupancies[id] = 0));
+    }
+
+    let processed = false;
+
+    // 1. Firebase Admin
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const bookingsSnapshot = await adminDb
+          .collection("bookings")
+          .where("status", "in", ["confirmed", "active", "completed"])
+          .get();
+
+        bookingsSnapshot.docs.forEach((docSnap: any) => {
+          const data = docSnap.data();
+          const hId = data.hostelId;
+          if (hId && (!hostelIds || hostelIds.includes(hId))) {
+            const beds = Number(data.assignedBeds || data.bedsCount || data.bedCount) || 1;
+            occupancies[hId] = (occupancies[hId] || 0) + beds;
+          }
+        });
+        processed = true;
+      } catch (adminErr) {
+        console.warn("adminDb bulk occupancy fetch note:", adminErr);
+      }
+    }
+
+    // 2. Client Firestore
+    if (!processed) {
+      try {
+        const q = query(
+          collection(db, "bookings"),
+          where("status", "in", ["confirmed", "active", "completed"])
+        );
+        const snap = await getDocs(q);
+        snap.docs.forEach((d: any) => {
+          const data = d.data();
+          const hId = data.hostelId;
+          if (hId && (!hostelIds || hostelIds.includes(hId))) {
+            const beds = Number(data.assignedBeds || data.bedsCount || data.bedCount) || 1;
+            occupancies[hId] = (occupancies[hId] || 0) + beds;
+          }
+        });
+        processed = true;
+      } catch (fsErr) {
+        console.warn("Firestore client bulk bookings query note:", fsErr);
+      }
+    }
+
+    // 3. DynamoDB
+    if (!processed && dynamoCore.isDynamoConfigured()) {
+      try {
+        const allBookings = await dynamoCore.scanEntities<any>({ entityType: "BOOKING" });
+        (allBookings || []).forEach((b: any) => {
+          const hId = b.hostelId;
+          const status = (b.status || "").toLowerCase();
+          const isValid = ["confirmed", "active", "completed"].includes(status) || b.paymentStatus === "successful";
+          if (isValid && hId && (!hostelIds || hostelIds.includes(hId))) {
+            const beds = Number(b.assignedBeds || b.bedsCount || b.bedCount) || 1;
+            occupancies[hId] = (occupancies[hId] || 0) + beds;
+          }
+        });
+        processed = true;
+      } catch (dErr) {
+        console.warn("DynamoDB bulk bookings note:", dErr);
+      }
+    }
+
+    return { success: true, occupancies };
+  } catch (error: any) {
+    console.error("fetchHostelOccupanciesAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch occupancies", occupancies: {} };
   }
 }
 
