@@ -539,13 +539,13 @@ export default function RoomDetailPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
       <Header />
-      <main className="flex-1 px-4 py-6 md:py-8">
-        <div className="max-w-4xl mx-auto">
+      <main className="flex-1 px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-28 md:pb-8">
+        <div className="max-w-5xl mx-auto w-full">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.back()}
-            className="mb-6 flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            className="mb-4 sm:mb-6 flex items-center gap-2 text-muted-foreground hover:text-foreground text-xs sm:text-sm"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to rooms
@@ -573,7 +573,7 @@ export default function RoomDetailPage() {
 
           {/* Room Type Switcher / Comparator Strip */}
           {hostel.roomTypes && hostel.roomTypes.length > 1 && (
-            <div className="mb-6 p-4 rounded-2xl bg-white border border-border/80 shadow-sm space-y-2.5">
+            <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-white border border-border/80 shadow-sm space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <DoorOpen className="h-4 w-4 text-primary" />
@@ -614,13 +614,13 @@ export default function RoomDetailPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-6">
               {/* Hero Image & Basic Info */}
-              <Card className="overflow-hidden shadow-lg border-0 bg-white">
+              <Card className="overflow-hidden shadow-lg border-0 bg-white rounded-2xl">
                 <div 
-                  className="relative h-64 md:h-80 w-full cursor-pointer group"
+                  className="relative h-64 sm:h-72 md:h-80 w-full cursor-pointer group"
                   onClick={() => {
                     setActiveImageIndex(0);
                     setLightboxOpen(true);
@@ -634,573 +634,611 @@ export default function RoomDetailPage() {
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                     priority
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
                   <div className="absolute top-4 left-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
                       <Eye className="w-3.5 h-3.5" /> View Photo
                     </span>
                   </div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                    <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30">
-                      {hostel.name}
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30 text-xs font-medium">
+                            {hostel.name}
+                          </Badge>
+                          <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white shadow-sm">
+                            University-Approved ✓
+                          </span>
+                        </div>
+                        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight">
+                          {room.label}
+                        </h1>
+                        <p className="text-white/90 text-xs sm:text-sm font-medium">
+                          {room.type} • {hostel.location}
+                        </p>
+                      </div>
+                      <div className="text-left sm:text-right shrink-0">
+                        <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                          GH₵{room.price.toLocaleString()}
+                        </div>
+                        <div className="text-white/80 text-xs sm:text-sm font-medium">per academic year</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    {isSoldOut && (
+                      <Badge className="bg-rose-600/95 hover:bg-rose-600 text-white font-black border-0 shadow-md uppercase tracking-wider text-[11px] flex items-center gap-1 px-2.5 py-1">
+                        <Lock className="h-3.5 w-3.5" />
+                        Sold Out (100% Full)
+                      </Badge>
+                    )}
+                    <Badge 
+                      variant="secondary" 
+                      className="bg-white/90 text-gray-900 shadow-sm text-xs font-medium"
+                    >
+                      {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
                     </Badge>
-                    <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/90 text-white shadow-sm">
-                      University-Approved ✓
+                  </div>
+                </div>
+
+                {/* Gallery Thumbnail Row if multiple photos exist */}
+                {room.images && room.images.length > 1 && (
+                  <div className="p-3 bg-muted/20 border-t border-border/60 flex items-center gap-2.5 overflow-x-auto scrollbar-none">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1 pl-1">
+                      <Camera className="h-3 w-3 text-primary" /> Photos ({room.images.length}):
                     </span>
-                  </div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-white">
-                    {room.label}
-                  </h1>
-                  <p className="text-white/90 text-sm">
-                    {room.type} • {hostel.location}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-white">
-                    GH₵{room.price.toLocaleString()}
-                  </div>
-                  <div className="text-white/80 text-sm">per year</div>
-                </div>
-              </div>
-            </div>
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-              {isSoldOut && (
-                <Badge className="bg-rose-600/95 hover:bg-rose-600 text-white font-black border-0 shadow-md uppercase tracking-wider text-[11px] flex items-center gap-1 px-3 py-1">
-                  <Lock className="h-3.5 w-3.5" />
-                  Sold Out (100% Full)
-                </Badge>
-              )}
-              <Badge 
-                variant="secondary" 
-                className="bg-white/90 text-gray-900 shadow-sm"
-              >
-                {room.gender === "Male" ? "♂ Male" : room.gender === "Female" ? "♀ Female" : "⚥ Mixed"} room
-              </Badge>
-            </div>
-          </div>
-
-          {/* Gallery Thumbnail Row if multiple photos exist */}
-          {room.images && room.images.length > 1 && (
-            <div className="p-3 bg-muted/20 border-t border-border/60 flex items-center gap-2.5 overflow-x-auto scrollbar-none">
-              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1 pl-1">
-                <Camera className="h-3 w-3 text-primary" /> Photos ({room.images.length}):
-              </span>
-              {room.images.map((imgUrl, pIdx) => (
-                <div
-                  key={pIdx}
-                  onClick={() => {
-                    setActiveImageIndex(pIdx);
-                    setLightboxOpen(true);
-                  }}
-                  className={cn(
-                    "relative h-14 w-20 rounded-lg overflow-hidden shrink-0 border-2 cursor-pointer transition-all",
-                    pIdx === 0 ? "border-primary shadow-xs" : "border-border/70 opacity-80 hover:opacity-100 hover:border-primary/50"
-                  )}
-                >
-                  <Image
-                    src={imgUrl}
-                    alt={`Thumbnail ${pIdx + 1}`}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Virtual Video Walkthrough Section if present */}
-        {room.videos && room.videos.length > 0 && (
-          <Card className="shadow-lg border-0 bg-white overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-                <Film className="h-5 w-5 text-indigo-600" />
-                Virtual Walkthrough Video
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Take a virtual video tour of this {room.type} before scheduling your in-person visit.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {room.videos.map((vidUrl, vIdx) => (
-                <div key={vIdx} className="rounded-2xl overflow-hidden border border-border bg-black aspect-video relative">
-                  <video
-                    src={vidUrl}
-                    controls
-                    preload="metadata"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Room Details */}
-        <Card className="shadow-lg border-0 bg-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Home className="h-5 w-5 text-primary" />
-              Room Specifications & Occupancy
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {room.capacity && (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
-                  <Bed className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <div className="font-semibold text-blue-900">{room.capacity}</div>
-                    <div className="text-xs text-blue-700">Beds per room</div>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
-                <Users className="h-5 w-5 text-green-600" />
-                <div>
-                  <div className="font-semibold text-green-900">{room.occupancy}</div>
-                  <div className="text-xs text-green-700">Current occupants</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
-                <MapPin className="h-5 w-5 text-purple-600" />
-                <div>
-                  <div className="font-semibold text-purple-900 text-xs">{hostel.location.split(',')[0]}</div>
-                  <div className="text-xs text-purple-700">Location</div>
-                </div>
-              </div>
-              {availabilityStatus && (
-                <div className={cn("flex items-center gap-2 p-3 rounded-lg", availabilityStatus.bgColor)}>
-                  <CheckCircle className={cn("h-5 w-5", availabilityStatus.color)} />
-                  <div>
-                    <div className={cn("font-semibold text-xs capitalize", availabilityStatus.color)}>
-                      {availabilityStatus.status}
-                    </div>
-                    <div className={cn("text-xs", availabilityStatus.color)}>Status</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {remainingInfo && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-600" />
-                  <span className="text-sm font-medium text-amber-800">{remainingInfo}</span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Room Amenities & Furnishings Section */}
-        {Object.keys(groupedAmenities).length > 0 ? (
-          <Card className="shadow-lg border-0 bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-primary" />
-                Room Inclusions & Amenities
-              </CardTitle>
-              <CardDescription>
-                Everything specifically provided in this {room.type} configuration
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {Object.entries(groupedAmenities).map(([category, amenities]) => {
-                const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES] || AMENITY_CATEGORIES.Essential;
-                const CategoryIcon = categoryInfo.icon;
-                
-                return (
-                  <div key={category}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className={cn(
-                        "p-2 rounded-lg",
-                        categoryInfo.bgColor,
-                        categoryInfo.borderColor,
-                        "border"
-                      )}>
-                        <CategoryIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                    {room.images.map((imgUrl, pIdx) => (
+                      <div
+                        key={pIdx}
+                        onClick={() => {
+                          setActiveImageIndex(pIdx);
+                          setLightboxOpen(true);
+                        }}
+                        className={cn(
+                          "relative h-14 w-20 rounded-lg overflow-hidden shrink-0 border-2 cursor-pointer transition-all",
+                          pIdx === 0 ? "border-primary shadow-xs" : "border-border/70 opacity-80 hover:opacity-100 hover:border-primary/50"
+                        )}
+                      >
+                        <Image
+                          src={imgUrl}
+                          alt={`Thumbnail ${pIdx + 1}`}
+                          fill
+                          className="object-cover"
+                        />
                       </div>
-                      <h4 className="font-semibold text-gray-900">{category}</h4>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Virtual Video Walkthrough Section if present */}
+              {room.videos && room.videos.length > 0 && (
+                <Card className="shadow-lg border-0 bg-white overflow-hidden rounded-2xl">
+                  <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <Film className="h-5 w-5 text-indigo-600 shrink-0" />
+                      Virtual Walkthrough Video
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Take a virtual video tour of this {room.type} before scheduling your in-person visit.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:p-6 pt-2 space-y-3">
+                    {room.videos.map((vidUrl, vIdx) => (
+                      <div key={vIdx} className="rounded-2xl overflow-hidden border border-border bg-black aspect-video relative">
+                        <video
+                          src={vidUrl}
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Room Details */}
+              <Card className="shadow-lg border-0 bg-white rounded-2xl">
+                <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Home className="h-5 w-5 text-primary shrink-0" />
+                    Room Specifications & Occupancy
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-2 space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    {room.capacity && (
+                      <div className="flex items-center gap-3 p-3 sm:p-3.5 bg-blue-50/80 rounded-xl border border-blue-100/60">
+                        <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                          <Bed className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-blue-950 leading-tight">{room.capacity}</div>
+                          <div className="text-xs text-blue-700 leading-tight">Beds per room</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 p-3 sm:p-3.5 bg-green-50/80 rounded-xl border border-green-100/60">
+                      <div className="h-9 w-9 rounded-lg bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-green-950 leading-tight">{room.occupancy}</div>
+                        <div className="text-xs text-green-700 leading-tight">Current occupants</div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-2 sm:ml-6">
-                      {amenities.map(({ amenity, info }) => {
-                        const AmenityIcon = info.icon;
-                        return (
-                          <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-border/40">
-                            <AmenityIcon className={cn("h-4 w-4 shrink-0", categoryInfo.color)} />
-                            <span className="text-sm font-medium text-gray-700">{info.label}</span>
+                    <div className="flex items-center gap-3 p-3 sm:p-3.5 bg-purple-50/80 rounded-xl border border-purple-100/60">
+                      <div className="h-9 w-9 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                        <MapPin className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-purple-950 leading-tight truncate max-w-[110px] sm:max-w-none">{hostel.location.split(',')[0]}</div>
+                        <div className="text-xs text-purple-700 leading-tight">Location</div>
+                      </div>
+                    </div>
+                    {availabilityStatus && (
+                      <div className={cn("flex items-center gap-3 p-3 sm:p-3.5 rounded-xl border border-border/40", availabilityStatus.bgColor)}>
+                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0 bg-white/60", availabilityStatus.color)}>
+                          <CheckCircle className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className={cn("font-bold text-sm capitalize leading-tight", availabilityStatus.color)}>
+                            {availabilityStatus.status}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="shadow-lg border-0 bg-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-primary" />
-                Room Inclusions & Amenities
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex items-center gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                  <Bed className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-800">Student Bed & Mattress</span>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                  <Bath className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-800">Private or Shared Washroom</span>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                  <Wind className="h-4 w-4 text-emerald-600" />
-                  <span className="text-sm font-medium text-gray-800">Ceiling Fan & Ventilation</span>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                  <Home className="h-4 w-4 text-emerald-600" />
-                  <span className="text-sm font-medium text-gray-800">Wardrobe / Storage Closet</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Security & Access Standards for this Room */}
-        <Card className="shadow-lg border-0 bg-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-rose-600" />
-              Room & Building Security Standards
-            </CardTitle>
-            <CardDescription>
-              Verified safety infrastructure protecting students in this room
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                <ShieldCheck className="h-4 w-4 text-rose-600 shrink-0" />
-                <div>
-                  <div className="text-xs font-bold text-gray-900">Lockable Room Door</div>
-                  <div className="text-[11px] text-muted-foreground">Individual secure key access</div>
-                </div>
-              </div>
-
-              {(hostel.securityAndSafety && hostel.securityAndSafety.length > 0) ? (
-                hostel.securityAndSafety.map((sec, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">{sec}</div>
-                      <div className="text-[11px] text-muted-foreground">Active hostel protection standard</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">24-Hour Access Security</div>
-                      <div className="text-[11px] text-muted-foreground">Gated compound perimeter</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                    <Shield className="h-4 w-4 text-rose-600 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-gray-900">CCTV Surveillance</div>
-                      <div className="text-[11px] text-muted-foreground">Building corridor monitoring</div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Utilities & Bills Policy for this Room */}
-        <Card className="shadow-lg border-0 bg-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-600" />
-              Utilities & Bills Policy
-            </CardTitle>
-            <CardDescription>
-              Transparent breakdown of billing coverage for this room
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Bills Included */}
-              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/60 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  Included in Rent
-                </div>
-                <div className="space-y-1.5 pl-6">
-                  {hostel.billsIncluded && hostel.billsIncluded.length > 0 ? (
-                    hostel.billsIncluded.map((b, i) => (
-                      <div key={i} className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        {b} (Zero Extra Charge)
+                          <div className={cn("text-xs leading-tight opacity-90", availabilityStatus.color)}>Status</div>
+                        </div>
                       </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Water supply included
+                    )}
+                  </div>
+
+                  {remainingInfo && (
+                    <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl">
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                        <span className="text-xs sm:text-sm font-medium text-amber-900">{remainingInfo}</span>
                       </div>
-                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Refuse & sanitation disposal
-                      </div>
-                    </>
+                    </div>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Bills Excluded */}
-              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-2">
-                <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
-                  <Zap className="h-4 w-4 text-amber-600" />
-                  Prepaid / Student Responsibility
-                </div>
-                <div className="space-y-1.5 pl-6">
-                  {hostel.billsExcluded && hostel.billsExcluded.length > 0 ? (
-                    hostel.billsExcluded.map((b, i) => (
-                      <div key={i} className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        {b} (Prepaid meter per room / unit)
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        Electricity (Prepaid meter per room)
-                      </div>
-                      <div className="text-xs text-gray-700 flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        Cooking gas (if applicable)
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Sidebar */}
-      <div className="space-y-6">
-        {/* Booking Card */}
-        <Card className="shadow-lg border-0 bg-white sticky top-24">
-          <CardHeader>
-            <CardTitle className="text-center">
-              <div className="text-3xl font-extrabold text-primary">
-                GH₵{room.price.toLocaleString()}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">per academic year • Direct Booking (Zero Middleman Fee)</div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              className={cn(
-                "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2",
-                isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10",
-                (isHostelRevoked(hostel) || isHostelSanctioned(hostel)) && "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700 shadow-none hover:bg-slate-200"
-              )}
-              onClick={handlePrimaryAction}
-              disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
-            >
-              {isHostelRevoked(hostel) ? (
-                <>
-                  <Ban className="h-5 w-5 mr-2 text-slate-500" />
-                  Bookings Permanently Disabled
-                </>
-              ) : isHostelSanctioned(hostel) ? (
-                <>
-                  <AlertTriangle className="h-5 w-5 mr-2 text-slate-500" />
-                  Bookings Temporarily Paused
-                </>
-              ) : isSoldOut ? (
-                <>
-                  <Lock className="h-5 w-5 mr-2" />
-                  Sold Out (100% Capacity)
-                </>
-              ) : hostel.availability === 'Full' ? (
-                <>
-                  <ShieldCheck className="h-5 w-5 mr-2" />
-                  Hostel Fully Booked
-                </>
-              ) : hasSecuredHostel ? (
-                <>
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  Already Secured
-                </>
-              ) : hasCompletedVisit ? (
-                <>
-                  <ShieldCheck className="h-5 w-5 mr-2" />
-                  Secure This Room
-                </>
+              {/* Room Amenities & Furnishings Section */}
+              {Object.keys(groupedAmenities).length > 0 ? (
+                <Card className="shadow-lg border-0 bg-white rounded-2xl">
+                  <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <Star className="h-5 w-5 text-primary shrink-0" />
+                      Room Inclusions & Amenities
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Everything specifically provided in this {room.type} configuration
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:p-6 pt-2 space-y-6">
+                    {Object.entries(groupedAmenities).map(([category, amenities]) => {
+                      const categoryInfo = AMENITY_CATEGORIES[category as keyof typeof AMENITY_CATEGORIES] || AMENITY_CATEGORIES.Essential;
+                      const CategoryIcon = categoryInfo.icon;
+                      
+                      return (
+                        <div key={category}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className={cn(
+                              "p-1.5 rounded-lg shrink-0",
+                              categoryInfo.bgColor,
+                              categoryInfo.borderColor,
+                              "border"
+                            )}>
+                              <CategoryIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                            </div>
+                            <h4 className="text-sm font-semibold text-foreground">{category}</h4>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 ml-0 sm:ml-4">
+                            {amenities.map(({ amenity, info }) => {
+                              const AmenityIcon = info.icon;
+                              return (
+                                <div key={amenity} className="flex items-center gap-3 p-3 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors border border-border/40">
+                                  <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", categoryInfo.bgColor)}>
+                                    <AmenityIcon className={cn("h-4 w-4", categoryInfo.color)} />
+                                  </div>
+                                  <span className="text-xs sm:text-sm font-medium text-gray-800 leading-tight">{info.label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
               ) : (
-                <>
-                  <Calendar className="h-5 w-5 mr-2" />
-                  Request a Free Visit
-                </>
+                <Card className="shadow-lg border-0 bg-white rounded-2xl">
+                  <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <Star className="h-5 w-5 text-primary shrink-0" />
+                      Room Inclusions & Amenities
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:p-6 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 bg-blue-50/60 rounded-xl border border-blue-100">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                          <Bed className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-800 leading-tight">Student Bed & Mattress</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-blue-50/60 rounded-xl border border-blue-100">
+                        <div className="h-8 w-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                          <Bath className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-800 leading-tight">Private or Shared Washroom</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                          <Wind className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-800 leading-tight">Ceiling Fan & Ventilation</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                          <Home className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-800 leading-tight">Wardrobe / Storage Closet</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-            </Button>
-            
-            <div className="text-center text-xs text-muted-foreground">
-              {isRestricted
-                ? "This property is currently under administrative sanction."
-                : hasCompletedVisit 
-                ? "Complete your room booking with secure university escrow"
-                : "Free inspection • Connect directly with hostel manager"}
-            </div>
-            
-            <Separator />
-            
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Room type:</span>
-                <span className="font-medium">{room.type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gender:</span>
-                <span className="font-medium">{room.gender}</span>
-              </div>
-              {room.capacity && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Capacity:</span>
-                  <span className="font-medium">{room.capacity} students</span>
-                </div>
-              )}
-              <div className="flex justify-between text-xs text-emerald-600 font-medium pt-1">
-                <span>Inspection fee:</span>
-                <span>FREE (Direct Booking)</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Protection Card */}
-        <Card className={cn(
-          "p-4 rounded-xl border",
-          isHostelRevoked(hostel)
-            ? "border-rose-200 bg-rose-50/50"
-            : isHostelSanctioned(hostel)
-            ? "border-amber-200 bg-amber-50/50"
-            : "border-emerald-200 bg-emerald-50/50"
-        )}>
-          <div className="flex items-start gap-3">
-            {isHostelRevoked(hostel) ? (
-              <Ban className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-            ) : isHostelSanctioned(hostel) ? (
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-            ) : (
-              <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-            )}
-            <div className="text-xs space-y-1">
-              <p className={cn(
-                "font-semibold",
+              {/* Security & Access Standards for this Room */}
+              <Card className="shadow-lg border-0 bg-white rounded-2xl">
+                <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Shield className="h-5 w-5 text-rose-600 shrink-0" />
+                    Room & Building Security Standards
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Verified safety infrastructure protecting students in this room
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex items-center gap-3 p-3.5 bg-rose-50/50 rounded-xl border border-rose-100/80">
+                      <div className="h-9 w-9 rounded-lg bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs sm:text-sm font-semibold text-gray-900 leading-snug">Lockable Room Door</div>
+                        <div className="text-xs text-muted-foreground leading-tight">Individual secure key access</div>
+                      </div>
+                    </div>
+
+                    {(hostel.securityAndSafety && hostel.securityAndSafety.length > 0) ? (
+                      hostel.securityAndSafety.map((sec, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3.5 bg-rose-50/50 rounded-xl border border-rose-100/80">
+                          <div className="h-9 w-9 rounded-lg bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0">
+                            <Shield className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 leading-snug">{sec}</div>
+                            <div className="text-xs text-muted-foreground leading-tight">Active hostel protection standard</div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3 p-3.5 bg-rose-50/50 rounded-xl border border-rose-100/80">
+                          <div className="h-9 w-9 rounded-lg bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0">
+                            <Shield className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 leading-snug">24-Hour Access Security</div>
+                            <div className="text-xs text-muted-foreground leading-tight">Gated compound perimeter</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3.5 bg-rose-50/50 rounded-xl border border-rose-100/80">
+                          <div className="h-9 w-9 rounded-lg bg-rose-100/80 text-rose-600 flex items-center justify-center shrink-0">
+                            <Shield className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 leading-snug">CCTV Surveillance</div>
+                            <div className="text-xs text-muted-foreground leading-tight">Building corridor monitoring</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Utilities & Bills Policy for this Room */}
+              <Card className="shadow-lg border-0 bg-white rounded-2xl">
+                <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Zap className="h-5 w-5 text-amber-600 shrink-0" />
+                    Utilities & Bills Policy
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Transparent breakdown of billing coverage for this room
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-2 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Bills Included */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200/60 space-y-3">
+                      <div className="flex items-center gap-2 text-emerald-900 font-semibold text-xs sm:text-sm">
+                        <div className="h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <CheckCircle className="h-3.5 w-3.5" />
+                        </div>
+                        Included in Rent (Zero Surcharge)
+                      </div>
+                      <div className="space-y-2 pl-2 sm:pl-3">
+                        {hostel.billsIncluded && hostel.billsIncluded.length > 0 ? (
+                          hostel.billsIncluded.map((b, i) => (
+                            <div key={i} className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="leading-snug">{b}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <>
+                            <div className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="leading-snug">Water supply included</span>
+                            </div>
+                            <div className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="leading-snug">Refuse & sanitation disposal</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bills Excluded */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/50 border border-amber-200/60 space-y-3">
+                      <div className="flex items-center gap-2 text-amber-900 font-semibold text-xs sm:text-sm">
+                        <div className="h-6 w-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                          <Zap className="h-3.5 w-3.5" />
+                        </div>
+                        Prepaid / Student Responsibility
+                      </div>
+                      <div className="space-y-2 pl-2 sm:pl-3">
+                        {hostel.billsExcluded && hostel.billsExcluded.length > 0 ? (
+                          hostel.billsExcluded.map((b, i) => (
+                            <div key={i} className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="leading-snug">{b} (Per unit meter)</span>
+                            </div>
+                          ))
+                        ) : (
+                          <>
+                            <div className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="leading-snug">Electricity (Prepaid meter per room)</span>
+                            </div>
+                            <div className="text-xs sm:text-sm text-gray-700 flex items-center gap-2.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="leading-snug">Cooking gas (if applicable)</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-6">
+              {/* Booking Card */}
+              <Card className="shadow-lg border-0 bg-white rounded-2xl lg:sticky lg:top-24 overflow-hidden">
+                <CardHeader className="pb-4 pt-6 px-6 text-center border-b border-border/50 bg-muted/10">
+                  <div className="space-y-1.5">
+                    <div className="flex items-baseline justify-center gap-1.5">
+                      <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-primary">
+                        GH₵{room.price.toLocaleString()}
+                      </span>
+                      <span className="text-sm font-semibold text-muted-foreground">/ yr</span>
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">
+                      Academic Year • Direct Booking (Zero Middleman Fee)
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5 sm:p-6 space-y-4">
+                  <Button
+                    className={cn(
+                      "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2 rounded-xl transition-all",
+                      "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
+                      isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10 shadow-none",
+                      (isHostelRevoked(hostel) || isHostelSanctioned(hostel)) && "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700 shadow-none hover:bg-slate-200"
+                    )}
+                    onClick={handlePrimaryAction}
+                    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
+                  >
+                    {isHostelRevoked(hostel) ? (
+                      <>
+                        <Ban className="h-5 w-5 mr-2 text-slate-500" />
+                        Bookings Permanently Disabled
+                      </>
+                    ) : isHostelSanctioned(hostel) ? (
+                      <>
+                        <AlertTriangle className="h-5 w-5 mr-2 text-slate-500" />
+                        Bookings Temporarily Paused
+                      </>
+                    ) : isSoldOut ? (
+                      <>
+                        <Lock className="h-5 w-5 mr-2" />
+                        Sold Out (100% Capacity)
+                      </>
+                    ) : hostel.availability === 'Full' ? (
+                      <>
+                        <ShieldCheck className="h-5 w-5 mr-2" />
+                        Hostel Fully Booked
+                      </>
+                    ) : hasSecuredHostel ? (
+                      <>
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        Already Secured
+                      </>
+                    ) : hasCompletedVisit ? (
+                      <>
+                        <ShieldCheck className="h-5 w-5 mr-2" />
+                        Secure This Room
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-5 w-5 mr-2" />
+                        Request a Free Visit
+                      </>
+                    )}
+                  </Button>
+                  
+                  <div className="text-center text-xs text-muted-foreground leading-relaxed">
+                    {isRestricted
+                      ? "This property is currently under administrative sanction."
+                      : hasCompletedVisit 
+                      ? "Complete your room booking with secure university escrow"
+                      : "Free inspection • Connect directly with hostel manager"}
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2.5 text-xs sm:text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Room type:</span>
+                      <span className="font-semibold text-foreground">{room.type}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Gender:</span>
+                      <span className="font-semibold text-foreground">{room.gender}</span>
+                    </div>
+                    {room.capacity && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Capacity:</span>
+                        <span className="font-semibold text-foreground">{room.capacity} students</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-xs text-emerald-600 font-semibold pt-1">
+                      <span>Inspection fee:</span>
+                      <span>FREE (Direct Booking)</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Protection Card */}
+              <Card className={cn(
+                "p-4 sm:p-5 rounded-2xl border",
                 isHostelRevoked(hostel)
-                  ? "text-rose-950"
+                  ? "border-rose-200 bg-rose-50/50"
                   : isHostelSanctioned(hostel)
-                  ? "text-amber-950"
-                  : "text-emerald-900"
+                  ? "border-amber-200 bg-amber-50/50"
+                  : "border-emerald-200 bg-emerald-50/50"
               )}>
-                {isHostelRevoked(hostel)
-                  ? "Accreditation Revoked"
-                  : isHostelSanctioned(hostel)
-                  ? "Executive Sanction Active"
-                  : "University Protected"}
-              </p>
-              <p className={cn(
-                isHostelRevoked(hostel)
-                  ? "text-rose-700"
-                  : isHostelSanctioned(hostel)
-                  ? "text-amber-700"
-                  : "text-emerald-700"
-              )}>
-                {isHostelRevoked(hostel)
-                  ? "University charter accreditation has been revoked for this property. Student bookings and payment gateways are permanently disabled."
-                  : isHostelSanctioned(hostel)
-                  ? "This property is under formal welfare and regulatory investigation. Room bookings and visit requests are temporarily paused."
-                  : "Verified inventory. No illegal middleman charges. Payment held in university-approved escrow until key handoff."}
-              </p>
+                <div className="flex items-start gap-3">
+                  {isHostelRevoked(hostel) ? (
+                    <Ban className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                  ) : isHostelSanctioned(hostel) ? (
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="text-xs space-y-1">
+                    <p className={cn(
+                      "font-semibold",
+                      isHostelRevoked(hostel)
+                        ? "text-rose-950"
+                        : isHostelSanctioned(hostel)
+                        ? "text-amber-950"
+                        : "text-emerald-900"
+                    )}>
+                      {isHostelRevoked(hostel)
+                        ? "Accreditation Revoked"
+                        : isHostelSanctioned(hostel)
+                        ? "Executive Sanction Active"
+                        : "University Protected"}
+                    </p>
+                    <p className={cn(
+                      "leading-relaxed",
+                      isHostelRevoked(hostel)
+                        ? "text-rose-700"
+                        : isHostelSanctioned(hostel)
+                        ? "text-amber-700"
+                        : "text-emerald-700"
+                    )}>
+                      {isHostelRevoked(hostel)
+                        ? "University charter accreditation has been revoked for this property. Student bookings and payment gateways are permanently disabled."
+                        : isHostelSanctioned(hostel)
+                        ? "This property is under formal welfare and regulatory investigation. Room bookings and visit requests are temporarily paused."
+                        : "Verified inventory. No illegal middleman charges. Payment held in university-approved escrow until key handoff."}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Need Help Card */}
+              <Card className="shadow-sm border border-border/40 bg-white rounded-2xl">
+                <CardHeader className="py-4 px-5">
+                  <CardTitle className="text-sm font-semibold">Need Assistance?</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-5">
+                  <Button variant="outline" className="w-full justify-center gap-2 rounded-xl h-10 text-xs font-semibold" size="sm" asChild>
+                    <a href="tel:+233200000000">
+                      <Phone className="h-4 w-4" />
+                      Call University Housing Support
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           </div>
-        </Card>
+        </div>
+      </main>
 
-        {/* Need Help Card - Message button removed per user directive */}
-        <Card className="shadow-sm border border-border/40 bg-white">
-          <CardHeader className="py-4">
-            <CardTitle className="text-sm font-semibold">Need Assistance?</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 pb-4">
-            <Button variant="outline" className="w-full justify-center gap-2" size="sm" asChild>
-              <a href="tel:+233200000000">
-                <Phone className="h-4 w-4" />
-                Call University Housing Support
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
+      {/* Mobile Sticky Bottom Action Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 sm:px-6 flex items-center justify-between gap-4 md:hidden shadow-lg">
+        <div>
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Academic Year</div>
+          <div className="text-lg sm:text-xl font-extrabold text-primary tracking-tight">GH₵{room.price.toLocaleString()}</div>
+        </div>
+        <Button 
+          onClick={handlePrimaryAction}
+          disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
+          className={cn(
+            "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5 rounded-xl transition-all",
+            "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
+            (isSoldOut || isRestricted) && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed shadow-none",
+            isHostelSanctioned(hostel) && !isHostelRevoked(hostel) && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/50 shadow-none"
+          )}
+        >
+          {isHostelRevoked(hostel) ? (
+            <>
+              <Ban className="h-4 w-4" />
+              Bookings Disabled
+            </>
+          ) : isHostelSanctioned(hostel) ? (
+            <>
+              <AlertTriangle className="h-4 w-4" />
+              Bookings Paused
+            </>
+          ) : isSoldOut ? (
+            <>
+              <Lock className="h-4 w-4" />
+              Sold Out
+            </>
+          ) : hostel.availability === 'Full' 
+            ? 'Fully Booked' 
+            : hasSecuredHostel 
+            ? 'Already Secured' 
+            : hasCompletedVisit 
+            ? 'Secure Room' 
+            : 'Request Free Visit'}
+        </Button>
       </div>
-    </div>
-  </div>
-</main>
-
-{/* Mobile Sticky Bottom Action Bar */}
-<div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 flex items-center justify-between gap-4 md:hidden shadow-lg">
-  <div>
-    <div className="text-xs text-muted-foreground">Rate per year</div>
-    <div className="text-lg font-bold text-foreground">GH₵{room.price.toLocaleString()}</div>
-  </div>
-  <Button 
-    onClick={handlePrimaryAction}
-    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
-    className={cn(
-      "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5",
-      (isSoldOut || isRestricted) && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed",
-      isHostelSanctioned(hostel) && !isHostelRevoked(hostel) && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/50"
-    )}
-  >
-    {isHostelRevoked(hostel) ? (
-      <>
-        <Ban className="h-4 w-4" />
-        Bookings Disabled
-      </>
-    ) : isHostelSanctioned(hostel) ? (
-      <>
-        <AlertTriangle className="h-4 w-4" />
-        Bookings Paused
-      </>
-    ) : isSoldOut ? (
-      <>
-        <Lock className="h-4 w-4" />
-        Sold Out
-      </>
-    ) : hostel.availability === 'Full' 
-      ? 'Fully Booked' 
-      : hasSecuredHostel 
-      ? 'Already Secured' 
-      : hasCompletedVisit 
-      ? 'Secure Room' 
-      : 'Request Free Visit'}
-  </Button>
-</div>
 
 {/* YARL Fullscreen Photo Lightbox for Room Detail */}
 <Lightbox

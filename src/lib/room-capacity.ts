@@ -80,7 +80,7 @@ export function calculateRoomTypeInventory(
   const fullRoomsCount = rooms.filter((r) => r.status === 'full').length;
 
   const isExplicitSoldOut =
-    roomType.status === 'sold-out' ||
+    (roomType as any).status === 'sold-out' ||
     (roomType as any).status === 'full' ||
     roomType.availability === 'Full';
 
@@ -112,7 +112,7 @@ export function isRoomTypeSoldOut(
   if (!roomType) return false;
 
   // 1. Explicit sold-out status or full availability
-  if (roomType.status === 'sold-out' || (roomType as any).status === 'full') return true;
+  if ((roomType as any).status === 'sold-out' || (roomType as any).status === 'full') return true;
   if (roomType.availability === 'Full') return true;
 
   // 2. Direct capacity vs occupancy check
@@ -147,7 +147,7 @@ export function isHostelSoldOut(
   if (!hostel) return false;
 
   // 1. Explicit hostel-level sold-out status or full availability
-  if (hostel.status === 'sold-out' || (hostel as any).status === 'full') return true;
+  if ((hostel.status as any) === 'sold-out' || (hostel as any).status === 'full') return true;
   if (hostel.availability === 'Full') return true;
 
   // 2. Direct hostel totalCapacity vs occupancy check if defined
