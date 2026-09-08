@@ -34,7 +34,7 @@ interface AppUser {
   uid: string;
   email: string;
   fullName: string;
-  role: "student" | "hostel_manager" | "admin";
+  role: string;
   profileImage?: string;
 }
 
@@ -490,6 +490,17 @@ export default function RoomDetailPage() {
       });
       return;
     }
+    if (!appUser || appUser.role !== 'student') {
+      toast({
+        title: "Access Restricted",
+        description: hasCompletedVisit
+          ? "Only students can book hostels."
+          : "Only students can request visits.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (isSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
       return;
     }
@@ -1050,53 +1061,55 @@ export default function RoomDetailPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-5 sm:p-6 space-y-4">
-                  <Button
-                    className={cn(
-                      "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2 rounded-xl transition-all",
-                      "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
-                      isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10 shadow-none",
-                      (isHostelRevoked(hostel) || isHostelSanctioned(hostel)) && "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700 shadow-none hover:bg-slate-200"
-                    )}
-                    onClick={handlePrimaryAction}
-                    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
-                  >
-                    {isHostelRevoked(hostel) ? (
-                      <>
-                        <Ban className="h-5 w-5 mr-2 text-slate-500" />
-                        Bookings Permanently Disabled
-                      </>
-                    ) : isHostelSanctioned(hostel) ? (
-                      <>
-                        <AlertTriangle className="h-5 w-5 mr-2 text-slate-500" />
-                        Bookings Temporarily Paused
-                      </>
-                    ) : isSoldOut ? (
-                      <>
-                        <Lock className="h-5 w-5 mr-2" />
-                        Sold Out (100% Capacity)
-                      </>
-                    ) : hostel.availability === 'Full' ? (
-                      <>
-                        <ShieldCheck className="h-5 w-5 mr-2" />
-                        Hostel Fully Booked
-                      </>
-                    ) : hasSecuredHostel ? (
-                      <>
-                        <CheckCircle className="h-5 w-5 mr-2" />
-                        Already Secured
-                      </>
-                    ) : hasCompletedVisit ? (
-                      <>
-                        <ShieldCheck className="h-5 w-5 mr-2" />
-                        Secure This Room
-                      </>
-                    ) : (
-                      <>
-                        <Calendar className="h-5 w-5 mr-2" />
-                        Request a Free Visit
-                      </>
-                    )}
-                  </Button>
+                  {appUser?.role === 'student' && (
+                    <Button
+                      className={cn(
+                        "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2 rounded-xl transition-all",
+                        "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
+                        isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10 shadow-none",
+                        (isHostelRevoked(hostel) || isHostelSanctioned(hostel)) && "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700 shadow-none hover:bg-slate-200"
+                      )}
+                      onClick={handlePrimaryAction}
+                      disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
+                    >
+                      {isHostelRevoked(hostel) ? (
+                        <>
+                          <Ban className="h-5 w-5 mr-2 text-slate-500" />
+                          Bookings Permanently Disabled
+                        </>
+                      ) : isHostelSanctioned(hostel) ? (
+                        <>
+                          <AlertTriangle className="h-5 w-5 mr-2 text-slate-500" />
+                          Bookings Temporarily Paused
+                        </>
+                      ) : isSoldOut ? (
+                        <>
+                          <Lock className="h-5 w-5 mr-2" />
+                          Sold Out (100% Capacity)
+                        </>
+                      ) : hostel.availability === 'Full' ? (
+                        <>
+                          <ShieldCheck className="h-5 w-5 mr-2" />
+                          Hostel Fully Booked
+                        </>
+                      ) : hasSecuredHostel ? (
+                        <>
+                          <CheckCircle className="h-5 w-5 mr-2" />
+                          Already Secured
+                        </>
+                      ) : hasCompletedVisit ? (
+                        <>
+                          <ShieldCheck className="h-5 w-5 mr-2" />
+                          Secure This Room
+                        </>
+                      ) : (
+                        <>
+                          <Calendar className="h-5 w-5 mr-2" />
+                          Request a Free Visit
+                        </>
+                      )}
+                    </Button>
+                  )}
                   
                   <div className="text-center text-xs text-muted-foreground leading-relaxed">
                     {isRestricted
@@ -1200,46 +1213,48 @@ export default function RoomDetailPage() {
         </div>
       </main>
 
-      {/* Mobile Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 sm:px-6 flex items-center justify-between gap-4 md:hidden shadow-lg">
-        <div>
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Academic Year</div>
-          <div className="text-lg sm:text-xl font-extrabold text-primary tracking-tight">GH₵{room.price.toLocaleString()}</div>
+      {/* Mobile Sticky Bottom Action Bar (Students Only) */}
+      {appUser?.role === 'student' && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 sm:px-6 flex items-center justify-between gap-4 md:hidden shadow-lg">
+          <div>
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Academic Year</div>
+            <div className="text-lg sm:text-xl font-extrabold text-primary tracking-tight">GH₵{room.price.toLocaleString()}</div>
+          </div>
+          <Button 
+            onClick={handlePrimaryAction}
+            disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
+            className={cn(
+              "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5 rounded-xl transition-all",
+              "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
+              (isSoldOut || isRestricted) && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed shadow-none",
+              isHostelSanctioned(hostel) && !isHostelRevoked(hostel) && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/50 shadow-none"
+            )}
+          >
+            {isHostelRevoked(hostel) ? (
+              <>
+                <Ban className="h-4 w-4" />
+                Bookings Disabled
+              </>
+            ) : isHostelSanctioned(hostel) ? (
+              <>
+                <AlertTriangle className="h-4 w-4" />
+                Bookings Paused
+              </>
+            ) : isSoldOut ? (
+              <>
+                <Lock className="h-4 w-4" />
+                Sold Out
+              </>
+            ) : hostel.availability === 'Full' 
+              ? 'Fully Booked' 
+              : hasSecuredHostel 
+              ? 'Already Secured' 
+              : hasCompletedVisit 
+              ? 'Secure Room' 
+              : 'Request Free Visit'}
+          </Button>
         </div>
-        <Button 
-          onClick={handlePrimaryAction}
-          disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
-          className={cn(
-            "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5 rounded-xl transition-all",
-            "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99]",
-            (isSoldOut || isRestricted) && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed shadow-none",
-            isHostelSanctioned(hostel) && !isHostelRevoked(hostel) && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/50 shadow-none"
-          )}
-        >
-          {isHostelRevoked(hostel) ? (
-            <>
-              <Ban className="h-4 w-4" />
-              Bookings Disabled
-            </>
-          ) : isHostelSanctioned(hostel) ? (
-            <>
-              <AlertTriangle className="h-4 w-4" />
-              Bookings Paused
-            </>
-          ) : isSoldOut ? (
-            <>
-              <Lock className="h-4 w-4" />
-              Sold Out
-            </>
-          ) : hostel.availability === 'Full' 
-            ? 'Fully Booked' 
-            : hasSecuredHostel 
-            ? 'Already Secured' 
-            : hasCompletedVisit 
-            ? 'Secure Room' 
-            : 'Request Free Visit'}
-        </Button>
-      </div>
+      )}
 
 {/* YARL Fullscreen Photo Lightbox for Room Detail */}
 <Lightbox

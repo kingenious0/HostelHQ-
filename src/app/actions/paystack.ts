@@ -6,7 +6,7 @@ import { getPaystackKeys } from "@/lib/paystack-utils";
 import { headers } from "next/headers";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth } from "@/lib/auth-guard";
+import { requireAuth, getAuthenticatedUser } from "@/lib/auth-guard";
 import { isHostelRestricted } from "@/lib/sanctions";
 
 type MomoPaymentPayload = {
@@ -38,6 +38,12 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
     if (!secretKey) {
         console.error("Paystack secret key is not configured.");
         return { status: false, message: "Payment processor is not configured. Please contact support." };
+    }
+
+    // RBAC: Enforce student role
+    const caller = await getAuthenticatedUser();
+    if (caller && caller.role !== 'student') {
+        return { status: false, message: "Forbidden: Only students can request visits." };
     }
 
     // Pre-flight sanction guardrail: Reject transactions for sanctioned properties
@@ -148,6 +154,12 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
     if (!secretKey) {
         console.error("Paystack secret key is not configured.");
         return { status: false, message: "Payment processor is not configured. Please contact support." };
+    }
+
+    // RBAC: Enforce student role
+    const caller = await getAuthenticatedUser();
+    if (caller && caller.role !== 'student') {
+        return { status: false, message: "Forbidden: Only students can book hostels." };
     }
 
     // Pre-flight sanction & capacity guardrail: Prevent payment initialization for sanctioned or 100% full units

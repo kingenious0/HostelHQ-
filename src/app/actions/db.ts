@@ -361,6 +361,9 @@ export async function fetchBookingsByHostelAction(hostelId: string) {
 export async function createBookingAction(bookingData: any) {
   try {
     const caller = await requireAuth();
+    if (caller.role !== 'student') {
+      throw new Error("Forbidden: Only students can book hostels.");
+    }
     if (bookingData.studentId && caller.uid !== bookingData.studentId && caller.role !== "admin") {
       throw new Error("Unauthorized: You can only create bookings for yourself.");
     }
@@ -483,6 +486,12 @@ export async function fetchVisitsByHostelAction(hostelId: string) {
 export async function createVisitAction(visitData: any) {
   try {
     const caller = await requireAuth();
+    if (caller.role !== 'student') {
+      return {
+        success: false,
+        error: "Forbidden: Only students can request visits."
+      };
+    }
     visitData.studentId = caller.uid;
 
     if (visitData.hostelId) {
@@ -563,6 +572,12 @@ export async function fetchPendingReviewsAction() {
 export async function createReviewAction(reviewData: any) {
   try {
     const caller = await requireAuth();
+    if (caller.role !== 'student') {
+      return {
+        success: false,
+        error: "Forbidden: Only students can submit reviews."
+      };
+    }
     reviewData.userId = caller.uid;
     reviewData.status = "pending"; // force pending verification
     const review = await dynamoService.saveReview(reviewData);

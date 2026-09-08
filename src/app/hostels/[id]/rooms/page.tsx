@@ -31,7 +31,7 @@ interface AppUser {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'hostel_manager' | 'admin';
+  role: string;
   profileImage?: string;
 }
 
@@ -830,55 +830,58 @@ export default function RoomsPage() {
 
                           {/* CTA Buttons */}
                           <div className="space-y-2 pt-2 border-t border-border/50">
-                            <Button
-                              className={cn(
-                                "w-full rounded-xl font-bold text-xs h-11 flex items-center justify-center gap-1.5",
-                                isRoomSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10"
-                              )}
-                              disabled={isRoomSoldOut || hostel?.availability === 'Full' || hasSecuredHostel}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (!hostel || isRoomSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
-                                  return;
-                                }
+                            {appUser?.role === 'student' && (
+                              <Button
+                                className={cn(
+                                  "w-full rounded-xl font-bold text-xs h-11 flex items-center justify-center gap-1.5",
+                                  isRoomSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10"
+                                )}
+                                disabled={isRoomSoldOut || hostel?.availability === 'Full' || hasSecuredHostel}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (!hostel || isRoomSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
+                                    return;
+                                  }
 
-                                const params = new URLSearchParams();
-                                params.set('roomTypeId', room.id);
-                                if (room.id) params.set('roomId', room.id);
-                                const selectedRoomNum = selectedRoomsByType[typeName] || room.roomNumber;
-                                if (selectedRoomNum) params.set('roomNumber', selectedRoomNum);
+                                  if (!appUser || appUser.role !== 'student') {
+                                    toast({
+                                      title: 'Access Restricted',
+                                      description: hasCompletedVisit
+                                        ? 'Only students can book hostels.'
+                                        : 'Only students can request visits.',
+                                      variant: 'destructive',
+                                    });
+                                    return;
+                                  }
 
-                                const base = hasCompletedVisit ? 'secure' : 'book';
-                                const target = `/hostels/${id}/${base}?${params.toString()}`;
+                                  const params = new URLSearchParams();
+                                  params.set('roomTypeId', room.id);
+                                  if (room.id) params.set('roomId', room.id);
+                                  const selectedRoomNum = selectedRoomsByType[typeName] || room.roomNumber;
+                                  if (selectedRoomNum) params.set('roomNumber', selectedRoomNum);
 
-                                if (appUser) {
+                                  const base = hasCompletedVisit ? 'secure' : 'book';
+                                  const target = `/hostels/${id}/${base}?${params.toString()}`;
+
                                   router.push(target);
-                                } else {
-                                  router.push(`/login?redirect=${encodeURIComponent(target)}`);
-                                  toast({
-                                    title: 'Login Required',
-                                    description: hasCompletedVisit
-                                      ? 'Please log in to secure this room.'
-                                      : 'Please log in to request a visit for this room.',
-                                  });
-                                }
-                              }}
-                            >
-                              {isRoomSoldOut ? (
-                                <>
-                                  <Lock className="h-4 w-4" />
-                                  Sold Out (100% Capacity)
-                                </>
-                              ) : hostel?.availability === 'Full'
-                                ? 'Hostel Fully Booked'
-                                : hasSecuredHostel
-                                ? 'Room Secured ✓'
-                                : hasCompletedVisit
-                                ? selectedRoomsByType[typeName]
-                                  ? `Secure ${selectedRoomsByType[typeName]}`
-                                  : 'Secure This Room'
-                                : 'Request Free Visit'}
-                            </Button>
+                                }}
+                              >
+                                {isRoomSoldOut ? (
+                                  <>
+                                    <Lock className="h-4 w-4" />
+                                    Sold Out (100% Capacity)
+                                  </>
+                                ) : hostel?.availability === 'Full'
+                                  ? 'Hostel Fully Booked'
+                                  : hasSecuredHostel
+                                  ? 'Room Secured ✓'
+                                  : hasCompletedVisit
+                                  ? selectedRoomsByType[typeName]
+                                    ? `Secure ${selectedRoomsByType[typeName]}`
+                                    : 'Secure This Room'
+                                  : 'Request Free Visit'}
+                              </Button>
+                            )}
 
                             <div className="grid grid-cols-2 gap-2">
                               <Button

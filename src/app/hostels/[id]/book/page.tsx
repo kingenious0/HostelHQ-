@@ -69,6 +69,7 @@ export default function BookingVisitPage() {
   const [hostel, setHostel] = useState<Hostel | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -86,7 +87,7 @@ export default function BookingVisitPage() {
   const [visitTimeSlot, setVisitTimeSlot] = useState(TIME_SLOTS[0].value);
   const [notes, setNotes] = useState('');
 
-  // Fetch current user and prefill
+  // Fetch current user and prefill with RBAC page guard
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -95,6 +96,17 @@ export default function BookingVisitPage() {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data() as any;
+            const role = userData.role || 'student';
+            if (role !== 'student') {
+              toast({
+                title: "Access Denied",
+                description: "Only students can request visits",
+                variant: "destructive",
+              });
+              router.replace('/');
+              return;
+            }
+            setUserRole(role);
             if (userData.verificationStatus) setVerificationStatus(userData.verificationStatus);
             if (userData.fullName) setStudentName(userData.fullName);
             if (userData.email || user.email) setEmail(userData.email || user.email || '');
@@ -111,7 +123,7 @@ export default function BookingVisitPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router, toast]);
 
   // Fetch hostel details
   useEffect(() => {
@@ -220,6 +232,16 @@ export default function BookingVisitPage() {
         title: "Login Required",
         description: "Please log in with your student account to schedule your free inspection.",
       });
+      return;
+    }
+
+    if (userRole && userRole !== 'student') {
+      toast({
+        title: "Access Denied",
+        description: "Only students can request visits",
+        variant: "destructive",
+      });
+      router.replace('/');
       return;
     }
 

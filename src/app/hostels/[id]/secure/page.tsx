@@ -79,6 +79,7 @@ export default function SecureHostelPage() {
     const [aiQuestion, setAiQuestion] = React.useState("");
     const [aiAnswer, setAiAnswer] = React.useState<string | null>(null);
     const [aiLoading, setAiLoading] = React.useState(false);
+    const [userRole, setUserRole] = React.useState<string | null>(null);
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -168,6 +169,17 @@ export default function SecureHostelPage() {
             try {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
                 const userData = userDoc.exists() ? userDoc.data() as any : {};
+                const role = userData.role || 'student';
+                if (role !== 'student') {
+                    toast({
+                        title: "Access Denied",
+                        description: "Only students can book hostels",
+                        variant: "destructive",
+                    });
+                    router.replace('/');
+                    return;
+                }
+                setUserRole(role);
                 if (userData.verificationStatus) setVerificationStatus(userData.verificationStatus);
                 form.reset({
                     studentName: userData.fullName || user.displayName || "",
@@ -189,7 +201,7 @@ export default function SecureHostelPage() {
         });
 
         return () => unsubscribe();
-    }, [hostelId, selectedRoomNumber, roomNumber]);
+    }, [hostelId, selectedRoomNumber, roomNumber, router, toast]);
 
     async function handleAskAi(question: string) {
         const trimmed = question.trim();
@@ -316,6 +328,16 @@ export default function SecureHostelPage() {
             });
             const redirectUrl = `/hostels/${hostelId}/secure${roomTypeId ? `?roomTypeId=${roomTypeId}` : ''}`;
             router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+            return;
+        }
+
+        if (userRole && userRole !== 'student') {
+            toast({
+                title: "Access Denied",
+                description: "Only students can book hostels",
+                variant: "destructive",
+            });
+            router.replace('/');
             return;
         }
 

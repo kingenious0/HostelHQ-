@@ -63,7 +63,7 @@ interface AppUser {
     uid: string;
     email: string;
     fullName: string;
-    role: 'student' | 'hostel_manager' | 'admin';
+    role: string;
     profileImage?: string;
 }
 
@@ -388,9 +388,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const handleReviewCTA = () => {
-        if (currentUser) {
+        if (currentUser?.role === 'student') {
             router.push(`/hostels/${hostel.id}/book/rating`);
-        } else {
+        } else if (!currentUser) {
             router.push('/login');
         }
     };
@@ -443,6 +443,11 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const getVisitButton = (room: RoomType) => {
+        // RBAC: Only student role can request visits, secure rooms, or track visits
+        if (!currentUser || currentUser.role !== 'student') {
+            return null;
+        }
+
         const roomSoldOut = isRoomTypeSoldOut(room, confirmedBookings) || isHostelSoldOut(hostel);
 
         // Sanction & Revocation Guardrail: Hard-lock all room-level actions
@@ -597,6 +602,11 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
 
     const renderPrimaryAction = (size: 'default' | 'lg' = 'default') => {
+        // RBAC: Only student role can request visits, secure rooms, or track visits
+        if (!currentUser || currentUser.role !== 'student') {
+            return null;
+        }
+
         const buttonHeight = size === 'lg' ? "h-14" : "h-12";
         const isHostelLocked = isHostelSoldOut(hostel);
         const isActiveRoomLocked = activeRoom ? isRoomTypeSoldOut(activeRoom, confirmedBookings) : false;
@@ -743,6 +753,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const renderShortlistAction = (size: 'default' | 'lg' = 'default') => {
         const shortlisted = isShortlisted(hostel.id);
         const buttonHeight = size === 'lg' ? "h-14" : "h-12";
+        const isStudent = currentUser?.role === 'student';
 
         return (
             <Button
@@ -754,7 +765,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     toggleShortlist(hostel);
                 }}
                 className={cn(
-                    "px-3.5 sm:px-4 rounded-xl border font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0",
+                    "px-3.5 sm:px-4 rounded-xl border font-semibold text-xs transition-all flex items-center justify-center gap-1.5",
+                    isStudent ? "shrink-0" : "w-full flex-1",
                     buttonHeight,
                     shortlisted
                         ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
@@ -771,6 +783,11 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     // Grouped Sticky Room Pricing & CTA Card (Above mobile bottom nav)
     const renderMobileStickyCTA = () => {
+        // RBAC: Only student role should see booking/visit sticky CTA on mobile
+        if (!currentUser || currentUser.role !== 'student') {
+            return null;
+        }
+
         return (
             <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 lg:hidden bg-card/95 backdrop-blur-xl border-t border-border/80 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.5)] p-3.5 sm:px-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
                 <div className="max-w-lg mx-auto flex flex-col gap-2">
@@ -1893,30 +1910,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="grid gap-4 sm:grid-cols-[minmax(0,150px)_1fr]">
-                                        <Select value={selectedRating} onValueChange={setSelectedRating}>
-                                            <SelectTrigger className="bg-background rounded-xl">
-                                                <SelectValue placeholder="Rating" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {[5, 4, 3, 2, 1].map(value => (
-                                                    <SelectItem key={value} value={value.toString()}>
-                                                        {value} Star{value === 1 ? '' : 's'}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Textarea
-                                            value={draftReview}
-                                            onChange={(event) => setDraftReview(event.target.value)}
-                                            placeholder="Share your experience inspecting or staying here..."
-                                            className="min-h-[90px] rounded-xl"
-                                        />
-                                    </div>
-                                    <Button className="w-full justify-between rounded-xl" onClick={handleReviewCTA}>
-                                        {currentUser ? 'Continue to review submission' : 'Login to post review'}
-                                        <ArrowRight className="h-4 w-4" />
-                                    </Button>
+                                    {currentUser?.role === 'student' && (
+                                        <>
+                                            <div className="grid gap-4 sm:grid-cols-[minmax(0,150px)_1fr]">
+                                                <Select value={selectedRating} onValueChange={setSelectedRating}>
+                                                    <SelectTrigger className="bg-background rounded-xl">
+                                                        <SelectValue placeholder="Rating" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {[5, 4, 3, 2, 1].map(value => (
+                                                            <SelectItem key={value} value={value.toString()}>
+                                                                {value} Star{value === 1 ? '' : 's'}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Textarea
+                                                    value={draftReview}
+                                                    onChange={(event) => setDraftReview(event.target.value)}
+                                                    placeholder="Share your experience inspecting or staying here..."
+                                                    className="min-h-[90px] rounded-xl"
+                                                />
+                                            </div>
+                                            <Button className="w-full justify-between rounded-xl" onClick={handleReviewCTA}>
+                                                Continue to review submission
+                                                <ArrowRight className="h-4 w-4" />
+                                            </Button>
+                                        </>
+                                    )}
                                 </CardContent>
                             </Card>
 
