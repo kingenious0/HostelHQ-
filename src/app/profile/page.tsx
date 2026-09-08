@@ -9,16 +9,48 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { toast, useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { uploadImage } from '@/lib/cloudinary';
-import { onAuthStateChanged, User as FirebaseUser, updatePassword } from 'firebase/auth';
+import { onAuthStateChanged, updatePassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useState, useEffect } from 'react';
-import { Loader2, UserCheck, Mail, Phone, MapPin, Save, X, Eye, EyeOff, ShieldCheck, User, Lock, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import {
+  Loader2,
+  UserCheck,
+  Mail,
+  Phone,
+  MapPin,
+  Save,
+  X,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  User,
+  Lock,
+  Sparkles,
+  Camera,
+  Copy,
+  Check,
+  Building2,
+  GraduationCap,
+  CreditCard,
+  ChevronRight,
+  Shield,
+  Smartphone,
+  ExternalLink,
+  HelpCircle,
+  Clock,
+  KeyRound,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 import { BackButton } from '@/components/ui/back-button';
+import { cn } from '@/lib/utils';
 
-interface AppUser {
+export interface AppUser {
   uid: string;
   email: string;
   fullName: string;
@@ -29,6 +61,11 @@ interface AppUser {
   bio?: string;
   nationality?: string;
   gender?: string;
+  department?: string;
+  studentId?: string;
+  emergencyContact?: string;
+  momoNumber?: string;
+  momoNetwork?: string;
 }
 
 export default function ProfilePage() {
@@ -43,50 +80,71 @@ export default function ProfilePage() {
     profileImage: '',
     nationality: '',
     gender: '',
+    department: '',
+    studentId: '',
+    emergencyContact: '',
+    momoNumber: '',
+    momoNetwork: 'MTN',
   });
+  const [activeTab, setActiveTab] = useState<'personal' | 'contact' | 'security'>('personal');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
+
+  // Password state
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const settingsSectionRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
       if (user) {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data() as AppUser;
-          const currentUser: AppUser = {
-            uid: user.uid,
-            email: user.email!,
-            fullName: userData.fullName || user.displayName || '',
-            role: userData.role || 'student',
-            profileImage: userData.profileImage || user.photoURL || '',
-            phone: userData.phone || '',
-            address: userData.address || '',
-            bio: userData.bio || '',
-            nationality: userData.nationality || '',
-            gender: userData.gender || '',
-          };
-          setAppUser(currentUser);
-          setProfileData(currentUser);
-        } else {
-          // If user exists in Auth but not in DB, create a basic profile
-          const newUser: AppUser = {
-            uid: user.uid,
-            email: user.email!,
-            fullName: user.displayName || '',
-            role: 'student', // Default role
-            profileImage: user.photoURL || '',
-          };
-          await updateDoc(userDocRef, newUser, { merge: true });
-          setAppUser(newUser);
-          setProfileData(newUser);
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data() as AppUser;
+            const currentUser: AppUser = {
+              uid: user.uid,
+              email: user.email!,
+              fullName: userData.fullName || user.displayName || '',
+              role: userData.role || 'student',
+              profileImage: userData.profileImage || user.photoURL || '',
+              phone: userData.phone || '',
+              address: userData.address || '',
+              bio: userData.bio || '',
+              nationality: userData.nationality || 'Ghanaian',
+              gender: userData.gender || '',
+              department: userData.department || '',
+              studentId: userData.studentId || '',
+              emergencyContact: userData.emergencyContact || '',
+              momoNumber: userData.momoNumber || userData.phone || '',
+              momoNetwork: userData.momoNetwork || 'MTN',
+            };
+            setAppUser(currentUser);
+            setProfileData(currentUser);
+          } else {
+            const newUser: AppUser = {
+              uid: user.uid,
+              email: user.email!,
+              fullName: user.displayName || '',
+              role: 'student',
+              profileImage: user.photoURL || '',
+              nationality: 'Ghanaian',
+              momoNetwork: 'MTN',
+            };
+            await updateDoc(userDocRef, newUser as any, { merge: true });
+            setAppUser(newUser);
+            setProfileData(newUser);
+          }
+        } catch (error) {
+          console.error("Error fetching user profile:", error);
         }
       } else {
         setAppUser(null);
@@ -100,18 +158,26 @@ export default function ProfilePage() {
   const handleProfileImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      toast({ title: 'Uploading image...', duration: 3000 });
+      setIsUploadingImage(true);
+      toast({ title: 'Uploading profile photo...', description: 'Compressing and syncing with secure cloud storage.' });
       try {
         const imageUrl = await uploadImage(file);
         if (imageUrl) {
           setProfileData(prev => ({ ...prev, profileImage: imageUrl }));
-          toast({ title: 'Image uploaded successfully!' });
+          if (appUser) {
+            const userDocRef = doc(db, "users", appUser.uid);
+            await updateDoc(userDocRef, { profileImage: imageUrl, updatedAt: new Date().toISOString() });
+            setAppUser(prev => prev ? { ...prev, profileImage: imageUrl } : null);
+          }
+          toast({ title: 'Photo updated successfully!' });
         } else {
           toast({ title: 'Image upload failed', variant: 'destructive' });
         }
       } catch (error) {
         console.error("Error uploading image:", error);
         toast({ title: 'Image upload failed', description: (error as Error).message, variant: 'destructive' });
+      } finally {
+        setIsUploadingImage(false);
       }
     }
   };
@@ -126,10 +192,13 @@ export default function ProfilePage() {
         updatedAt: new Date().toISOString()
       });
       setAppUser(prev => prev ? { ...prev, ...profileData } as AppUser : null);
-      toast({ title: 'Profile updated successfully!' });
+      toast({
+        title: 'Profile changes saved!',
+        description: 'Your personal information and preferences have been securely updated.'
+      });
     } catch (error) {
       console.error('Error saving profile:', error);
-      toast({ title: 'Failed to update profile', variant: 'destructive' });
+      toast({ title: 'Failed to update profile', description: 'Please check your connection and try again.', variant: 'destructive' });
     } finally {
       setIsSavingProfile(false);
     }
@@ -137,14 +206,17 @@ export default function ProfilePage() {
 
   const handleChangePassword = async () => {
     if (!auth.currentUser || !newPassword || newPassword !== confirmNewPassword) {
-      toast({ title: 'Error', description: 'Please ensure new passwords match.', variant: 'destructive' });
+      toast({ title: 'Password mismatch', description: 'Please ensure both new password fields match.', variant: 'destructive' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: 'Password too short', description: 'Password must be at least 6 characters long.', variant: 'destructive' });
       return;
     }
     setIsUpdatingPassword(true);
     try {
       await updatePassword(auth.currentUser, newPassword);
-      toast({ title: 'Password updated successfully!' });
-      setCurrentPassword('');
+      toast({ title: 'Password updated successfully!', description: 'Your authentication credentials have been renewed.' });
       setNewPassword('');
       setConfirmNewPassword('');
     } catch (error) {
@@ -155,284 +227,746 @@ export default function ProfilePage() {
     }
   };
 
-  const getRoleBadge = (role?: string) => {
-    switch (role) {
-      case 'executive':
-        return <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30 font-semibold">Executive / Pro-VC</Badge>;
-      case 'dean':
-        return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold">Dean of Students</Badge>;
-      case 'coordinator':
-        return <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 font-semibold">Hostel Coordinator</Badge>;
-      case 'manager':
-        return <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold">Hostel Manager</Badge>;
-      case 'admin':
-        return <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-semibold">System Administrator</Badge>;
-      default:
-        return <Badge variant="outline" className="bg-muted/40 font-semibold">Student Resident</Badge>;
+  const copyUserId = () => {
+    if (!appUser?.uid) return;
+    navigator.clipboard.writeText(appUser.uid);
+    setCopiedUid(true);
+    toast({ title: 'User ID copied to clipboard' });
+    setTimeout(() => setCopiedUid(false), 2000);
+  };
+
+  const scrollToSettingsTab = (tab: 'personal' | 'contact' | 'security') => {
+    setActiveTab(tab);
+    if (settingsSectionRef.current) {
+      settingsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
+  const getRoleBadge = (role?: string) => {
+    switch (role) {
+      case 'executive':
+        return <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30 font-semibold px-2.5 py-0.5 text-xs">Executive / Pro-VC</Badge>;
+      case 'dean':
+        return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold px-2.5 py-0.5 text-xs">Dean of Students</Badge>;
+      case 'coordinator':
+        return <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 font-semibold px-2.5 py-0.5 text-xs">Hostel Coordinator</Badge>;
+      case 'manager':
+        return <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold px-2.5 py-0.5 text-xs">Hostel Manager</Badge>;
+      case 'admin':
+        return <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-semibold px-2.5 py-0.5 text-xs">System Administrator</Badge>;
+      default:
+        return <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-semibold px-2.5 py-0.5 text-xs">Student Resident</Badge>;
+    }
+  };
+
+  // Institutional handle fallback
+  const institutionalHandle = appUser?.email?.includes('@')
+    ? appUser.email
+    : `stu-${(appUser?.uid || 'user').slice(0, 7).toLowerCase()}@hostelhq.com`;
+
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex flex-col min-h-screen bg-gray-50/50 dark:bg-background">
       <Header />
-      <main className="flex-1 p-4 sm:p-8 container mx-auto max-w-6xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3">
-            <BackButton />
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">Account Profile</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground">Manage your identity, institutional credentials, and security settings.</p>
-            </div>
+      
+      <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 pb-32 md:pb-16 max-w-4xl mx-auto w-full space-y-6">
+        {/* Page Top Header */}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">Profile</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              Manage your verified student identity, academic credentials, and security settings
+            </p>
           </div>
-          {appUser && (
-            <div className="flex items-center gap-2">
-              {getRoleBadge(appUser.role)}
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3" /> Active
-              </Badge>
-            </div>
-          )}
+          <BackButton />
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center h-64">
+          <div className="flex flex-col justify-center items-center h-72 space-y-3 bg-white dark:bg-card rounded-3xl border border-border/60 p-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2 text-muted-foreground text-sm">Loading profile...</span>
+            <span className="text-muted-foreground text-sm font-medium">Synchronizing account profile...</span>
           </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-12">
-            {/* Identity Overview Sidebar */}
-            <div className="lg:col-span-4 space-y-6">
-              <Card className="border border-border/60 shadow-xs bg-card">
-                <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
-                  <div className="relative group">
-                    <Avatar className="h-24 w-24 border-2 border-border shadow-xs">
+          <div className="space-y-6">
+            {/* 1. Identity Hero Header Card (Airbnb-Inspired Executive Header) */}
+            <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs overflow-hidden transition-all">
+              <CardContent className="p-5 sm:p-7">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 text-center sm:text-left">
+                  {/* Large Circular Avatar with Camera Upload Badge */}
+                  <div className="relative group shrink-0">
+                    <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-2 border-primary/25 shadow-md ring-4 ring-primary/5">
                       {profileData.profileImage ? (
                         <AvatarImage src={profileData.profileImage} alt="Profile" className="object-cover" />
                       ) : (
-                        <AvatarFallback className="text-xl font-bold bg-muted/60">
+                        <AvatarFallback className="text-2xl sm:text-3xl font-bold bg-primary/10 text-primary">
                           {profileData.fullName?.charAt(0) || appUser?.email?.charAt(0) || 'U'}
                         </AvatarFallback>
                       )}
                     </Avatar>
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground">{profileData.fullName || "Unnamed User"}</h2>
-                    <p className="text-xs text-muted-foreground font-mono">{appUser?.email}</p>
-                  </div>
-                  <div className="w-full pt-2 border-t border-border/60 flex flex-col gap-2 text-left text-xs">
-                    <div className="flex justify-between py-1">
-                      <span className="text-muted-foreground">User ID</span>
-                      <span className="font-mono text-muted-foreground truncate max-w-[150px]">{appUser?.uid}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-muted-foreground">Institutional Role</span>
-                      <span className="font-medium capitalize">{appUser?.role || "Student"}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-muted-foreground">Phone Verified</span>
-                      <span className="font-medium text-emerald-600">{profileData.phone ? "Yes" : "Pending"}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Security Status Card */}
-              <Card className="border border-border/60 shadow-xs bg-card">
-                <CardHeader className="p-5 pb-3">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                    Security & Verification
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 pt-0 text-xs text-muted-foreground space-y-2.5">
-                  <p>
-                    All profile information is synchronized with institutional directory records under Ghana Data Protection Act (Act 843).
-                  </p>
-                  <div className="p-2.5 bg-muted/40 rounded-lg border border-border/50 text-[11px] space-y-1">
-                    <p className="font-semibold text-foreground">Multi-Device Access</p>
-                    <p>Logged in via Firebase secure token authentication.</p>
+                    {/* Quick Camera Action Overlay */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfileImageUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isUploadingImage}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                      title="Upload new profile picture"
+                    >
+                      {isUploadingImage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Main Form Tabs/Sections */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Personal Information Card */}
-              <Card className="border border-border/60 shadow-xs bg-card">
-                <CardHeader className="p-6 border-b border-border/50">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <User className="h-4 w-4 text-primary" />
-                    Personal & Academic Profile
-                  </CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground">
-                    Update your verified identity details and contact preferences.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 space-y-5">
-                  {/* Profile Photo Upload */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-muted/30 rounded-xl border border-border/60">
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-semibold text-foreground">Profile Picture</p>
-                      <p className="text-[11px] text-muted-foreground">Recommended format: Square JPG or PNG, under 2MB.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input id="profilePhoto" type="file" accept="image/*" onChange={handleProfileImageUpload} className="h-8 text-xs w-auto bg-background" />
-                      {profileData.profileImage && (
-                        <Button variant="outline" size="sm" onClick={() => setProfileData(p => ({ ...p, profileImage: '' }))} className="h-8 text-xs">
-                          <X className="h-3 w-3 mr-1" /> Remove
-                        </Button>
+                  {/* Name, Institutional Handle & Verification Badges */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                      {getRoleBadge(appUser?.role)}
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Active Verified
+                      </span>
+                      {profileData.phone && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 hidden sm:inline-flex">
+                          <Smartphone className="h-3 w-3" /> MoMo Linked
+                        </span>
                       )}
                     </div>
+
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight truncate">
+                        {profileData.fullName || "Student Resident"}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-muted-foreground font-mono truncate mt-0.5">
+                        {institutionalHandle}
+                      </p>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground/90 max-w-xl">
+                      {profileData.bio || "Student account authenticated via University Housing Escrow. Direct booking with verified landlords."}
+                    </p>
                   </div>
 
-                  {/* Full Name */}
-                  <div className="grid gap-2">
-                    <Label htmlFor="fullName" className="text-xs font-medium">Full Legal Name</Label>
-                    <div className="relative">
-                      <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input id="fullName" className="pl-9 text-xs bg-background h-9" value={profileData.fullName} onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))} />
-                    </div>
+                  {/* Desktop Quick Edit Trigger */}
+                  <div className="shrink-0 flex sm:flex-col items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => scrollToSettingsTab('personal')}
+                      className="rounded-xl text-xs font-semibold h-9 px-4 gap-1.5 shadow-2xs"
+                    >
+                      <User className="h-3.5 w-3.5" /> Edit Profile
+                    </Button>
+                    {profileData.profileImage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setProfileData(p => ({ ...p, profileImage: '' }))}
+                        className="text-xs text-muted-foreground hover:text-rose-600 h-8 px-2"
+                      >
+                        Remove Photo
+                      </Button>
+                    )}
                   </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                  {/* Email */}
-                  <div className="grid gap-2">
-                    <Label htmlFor="email" className="text-xs font-medium">Email Address (Read-only)</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input id="email" className="pl-9 text-xs bg-muted/40 h-9" value={profileData.email} disabled />
+            {/* 2. Structured Two-Column Metadata Pills Grid Card */}
+            <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs overflow-hidden">
+              <CardHeader className="p-4 sm:p-5 pb-2 border-b border-border/40">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Institutional Identity Credentials
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-5 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  {/* User ID with 1-click copy */}
+                  <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-gray-50/80 dark:bg-muted/30 border border-border/50">
+                    <div className="space-y-0.5 min-w-0 pr-2">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Account ID</p>
+                      <p className="text-xs font-mono text-foreground truncate font-medium">
+                        {appUser?.uid || 'Not available'}
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Phone & Nationality */}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="phone" className="text-xs font-medium">Mobile Contact (MoMo Linked)</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input id="phone" className="pl-9 text-xs bg-background h-9" placeholder="024XXXXXXX" value={profileData.phone} onChange={(e) => setProfileData(p => ({ ...p, phone: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="nationality" className="text-xs font-medium">Nationality</Label>
-                      <Input id="nationality" className="text-xs bg-background h-9" placeholder="Ghanaian" value={profileData.nationality} onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))} />
-                    </div>
-                  </div>
-
-                  {/* Address & Gender */}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="address" className="text-xs font-medium">Campus / Residential Address</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input id="address" className="pl-9 text-xs bg-background h-9" placeholder="Ayeduase / Tanoso" value={profileData.address} onChange={(e) => setProfileData(p => ({ ...p, address: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="gender" className="text-xs font-medium">Gender</Label>
-                      <Select onValueChange={(value) => setProfileData(p => ({ ...p, gender: value }))} value={profileData.gender}>
-                        <SelectTrigger className="w-full text-xs bg-background h-9"><SelectValue placeholder="Select Gender" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Bio */}
-                  <div className="grid gap-2">
-                    <Label htmlFor="bio" className="text-xs font-medium">Bio & Roommate Preferences</Label>
-                    <Textarea id="bio" rows={3} className="text-xs bg-background resize-none" placeholder="Brief note about your daily study routine, hobbies, and roommate expectations..." value={profileData.bio} onChange={(e) => setProfileData(p => ({ ...p, bio: e.target.value }))} />
-                  </div>
-
-                  <div className="flex justify-end pt-2">
-                    <Button onClick={handleSaveProfile} disabled={isSavingProfile} className="text-xs font-semibold">
-                      {isSavingProfile ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                      Save Profile Changes
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyUserId}
+                      className="h-8 w-8 p-0 rounded-lg shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Copy Account ID"
+                    >
+                      {copiedUid ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
 
-              {/* Password & Security Card */}
-              <Card className="border border-border/60 shadow-xs bg-card">
-                <CardHeader className="p-6 border-b border-border/50">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-primary" />
-                    Authentication & Password
-                  </CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground">
-                    Protect your account with a secure passphrase.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                  <p className="text-xs text-muted-foreground">
-                    Connected credential: <span className="font-semibold text-foreground font-mono">{appUser?.email}</span>
+                  {/* Department / Programme */}
+                  <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-gray-50/80 dark:bg-muted/30 border border-border/50">
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Academic Department</p>
+                      <p className="text-xs font-medium text-foreground truncate">
+                        {profileData.department || "Faculty of Science & Computing"}
+                      </p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                  </div>
+
+                  {/* Phone & MoMo Status */}
+                  <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-gray-50/80 dark:bg-muted/30 border border-border/50">
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Phone Verification</p>
+                      <p className="text-xs font-medium text-foreground truncate">
+                        {profileData.phone ? `${profileData.phone} (Verified)` : "No Phone Set"}
+                      </p>
+                    </div>
+                    <span className={cn(
+                      "text-[11px] font-bold px-2 py-0.5 rounded-md",
+                      profileData.phone
+                        ? "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-700 border border-amber-500/20"
+                    )}>
+                      {profileData.phone ? "Verified" : "Pending"}
+                    </span>
+                  </div>
+
+                  {/* Campus Escrow Protection */}
+                  <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-gray-50/80 dark:bg-muted/30 border border-border/50">
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Protection Layer</p>
+                      <p className="text-xs font-medium text-foreground truncate">
+                        Zero Brokerage Escrow (Act 843)
+                      </p>
+                    </div>
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 3. Resident Hub / Resident Pass Card (Airbnb Promo Style Banner) */}
+            <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-primary/10 dark:from-primary/10 dark:via-card dark:to-primary/5 shadow-xs overflow-hidden">
+              <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center sm:text-left">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center justify-center sm:justify-start gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" /> HostelHQ Resident Hub
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-foreground">
+                    Looking for next semester&apos;s verified hostel?
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-md">
+                    Explore university-accredited properties with instant room walkthroughs and zero middleman markup.
                   </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <Button asChild size="sm" className="rounded-xl text-xs font-semibold h-10 px-4 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm gap-1.5">
+                    <Link href="/hostels">
+                      Browse Hostels <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="newPassword" className="text-xs font-medium">New Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="newPassword"
-                          type={showNewPassword ? "text" : "password"}
-                          className="pr-10 text-xs bg-background h-9"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-2.5 py-2 hover:bg-transparent"
-                          onClick={() => setShowNewPassword((prev) => !prev)}
-                        >
-                          {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
+            {/* 4. Airbnb-Style Quick Settings Row Navigator */}
+            <div ref={settingsSectionRef} className="space-y-3">
+              <h3 className="text-lg font-bold text-foreground tracking-tight px-1">
+                Account Settings & Preferences
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('personal')}
+                  className={cn(
+                    "p-4 rounded-2xl border text-left transition-all flex items-center justify-between gap-3 group",
+                    activeTab === 'personal'
+                      ? "bg-white dark:bg-card border-primary ring-2 ring-primary/20 shadow-xs"
+                      : "bg-white/70 dark:bg-card/70 border-border/70 hover:bg-white hover:border-border"
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                      activeTab === 'personal' ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    )}>
+                      <User className="h-5 w-5" />
                     </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="confirmNewPassword" className="text-xs font-medium">Confirm New Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="confirmNewPassword"
-                          type={showConfirmNewPassword ? "text" : "password"}
-                          className="pr-10 text-xs bg-background h-9"
-                          value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-2.5 py-2 hover:bg-transparent"
-                          onClick={() => setShowConfirmNewPassword((prev) => !prev)}
-                        >
-                          {showConfirmNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">Personal & Academic</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Identity & campus details</p>
                     </div>
                   </div>
+                  <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", activeTab === 'personal' && "text-primary translate-x-0.5")} />
+                </button>
 
-                  <div className="flex justify-end pt-2">
-                    <Button onClick={handleChangePassword} disabled={isUpdatingPassword || !newPassword} className="text-xs font-semibold" variant="outline">
-                      {isUpdatingPassword ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                      Update Password
-                    </Button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('contact')}
+                  className={cn(
+                    "p-4 rounded-2xl border text-left transition-all flex items-center justify-between gap-3 group",
+                    activeTab === 'contact'
+                      ? "bg-white dark:bg-card border-primary ring-2 ring-primary/20 shadow-xs"
+                      : "bg-white/70 dark:bg-card/70 border-border/70 hover:bg-white hover:border-border"
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                      activeTab === 'contact' ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    )}>
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">Contact & MoMo</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Wallet & emergency info</p>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", activeTab === 'contact' && "text-primary translate-x-0.5")} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('security')}
+                  className={cn(
+                    "p-4 rounded-2xl border text-left transition-all flex items-center justify-between gap-3 group",
+                    activeTab === 'security'
+                      ? "bg-white dark:bg-card border-primary ring-2 ring-primary/20 shadow-xs"
+                      : "bg-white/70 dark:bg-card/70 border-border/70 hover:bg-white hover:border-border"
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                      activeTab === 'security' ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    )}>
+                      <Shield className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">Login & Security</p>
+                      <p className="text-[11px] text-muted-foreground truncate">Password & credentials</p>
+                    </div>
+                  </div>
+                  <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", activeTab === 'security' && "text-primary translate-x-0.5")} />
+                </button>
+              </div>
             </div>
+
+            {/* 5. Progressive Disclosure Form Stack via Tabs */}
+            <Tabs value={activeTab} onValueChange={(val: string) => setActiveTab(val as any)} className="w-full">
+              {/* Tab 1: Personal & Academic Details */}
+              <TabsContent value="personal" className="mt-0 focus-visible:outline-none">
+                <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs">
+                  <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                      <User className="h-4 w-4 text-primary" />
+                      Personal & Academic Details
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Update your legal identification, academic program, and roommate profile.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5 sm:p-6 space-y-5">
+                    {/* Full Name & Student ID */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">
+                          Full Legal Name
+                        </Label>
+                        <div className="relative">
+                          <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="fullName"
+                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="e.g. Kwame Mensah"
+                            value={profileData.fullName || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="studentId" className="text-xs font-semibold text-foreground">
+                          Student ID / Index Number
+                        </Label>
+                        <div className="relative">
+                          <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="studentId"
+                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="e.g. 20849312"
+                            value={profileData.studentId || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, studentId: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Department & Nationality */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="department" className="text-xs font-semibold text-foreground">
+                          Department / Faculty
+                        </Label>
+                        <Input
+                          id="department"
+                          className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                          placeholder="e.g. Computer Science, KNUST"
+                          value={profileData.department || ''}
+                          onChange={(e) => setProfileData(p => ({ ...p, department: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="nationality" className="text-xs font-semibold text-foreground">
+                          Nationality
+                        </Label>
+                        <Input
+                          id="nationality"
+                          className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                          placeholder="Ghanaian"
+                          value={profileData.nationality || ''}
+                          onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Gender & Campus Address */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="gender" className="text-xs font-semibold text-foreground">
+                          Gender
+                        </Label>
+                        <Select
+                          value={profileData.gender || ''}
+                          onValueChange={(val) => setProfileData(p => ({ ...p, gender: val }))}
+                        >
+                          <SelectTrigger className="w-full h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80">
+                            <SelectValue placeholder="Select Gender" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other / Prefer not to say</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="address" className="text-xs font-semibold text-foreground">
+                          Campus / Residential Address
+                        </Label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="address"
+                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="e.g. Ayeduase Gate, Kumasi"
+                            value={profileData.address || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, address: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bio & Roommate Preferences */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="bio" className="text-xs font-semibold text-foreground">
+                        Bio & Roommate Preferences
+                      </Label>
+                      <Textarea
+                        id="bio"
+                        rows={3}
+                        className="text-sm bg-background resize-none rounded-xl border-border/80"
+                        placeholder="Share your study habits, sleeping schedule, and what you look for in a prospective roommate..."
+                        value={profileData.bio || ''}
+                        onChange={(e) => setProfileData(p => ({ ...p, bio: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* Inline Action Button */}
+                    <div className="flex justify-end pt-2 border-t border-border/40">
+                      <Button
+                        onClick={handleSaveProfile}
+                        disabled={isSavingProfile}
+                        className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                      >
+                        {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save Personal Details
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 2: Contact & MoMo Preferences */}
+              <TabsContent value="contact" className="mt-0 focus-visible:outline-none">
+                <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs">
+                  <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                      Contact & MoMo Preferences
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Manage phone numbers for direct booking verification and university escrow returns.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5 sm:p-6 space-y-5">
+                    {/* Primary Email (Read-Only) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="email" className="text-xs font-semibold text-foreground">
+                          Institutional Email (Authenticated)
+                        </Label>
+                        <span className="text-[11px] text-muted-foreground">Managed via SSO</span>
+                      </div>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="email"
+                          className="pl-10 h-11 sm:h-12 text-sm bg-muted/40 rounded-xl border-border/80 font-mono text-muted-foreground cursor-not-allowed"
+                          value={profileData.email || ''}
+                          disabled
+                        />
+                      </div>
+                    </div>
+
+                    {/* Primary Mobile Number */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="phone" className="text-xs font-semibold text-foreground">
+                          Primary Mobile Number
+                        </Label>
+                        <div className="relative">
+                          <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="phone"
+                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="024XXXXXXX"
+                            value={profileData.phone || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, phone: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Emergency Contact */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="emergencyContact" className="text-xs font-semibold text-foreground">
+                          Emergency Contact (Parent / Guardian)
+                        </Label>
+                        <Input
+                          id="emergencyContact"
+                          className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                          placeholder="e.g. 020XXXXXXX (Father)"
+                          value={profileData.emergencyContact || ''}
+                          onChange={(e) => setProfileData(p => ({ ...p, emergencyContact: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* MoMo Linked Wallet Settings */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/10 border border-amber-200/70 dark:border-amber-900/40 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-bold text-amber-950 dark:text-amber-200 uppercase tracking-wider">
+                          Mobile Money (MoMo) Escrow Wallet
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                        Specify your registered mobile money account. In the event of booking cancellation or overpayment, refunds are routed directly to this wallet.
+                      </p>
+
+                      <div className="grid gap-4 sm:grid-cols-2 pt-1">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="momoNetwork" className="text-xs font-semibold text-foreground">
+                            MoMo Network Provider
+                          </Label>
+                          <Select
+                            value={profileData.momoNetwork || 'MTN'}
+                            onValueChange={(val) => setProfileData(p => ({ ...p, momoNetwork: val }))}
+                          >
+                            <SelectTrigger className="w-full h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80">
+                              <SelectValue placeholder="Network" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                              <SelectItem value="MTN">MTN Mobile Money</SelectItem>
+                              <SelectItem value="Telecel">Telecel Cash (Vodafone)</SelectItem>
+                              <SelectItem value="AT">AT Money (AirtelTigo)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="momoNumber" className="text-xs font-semibold text-foreground">
+                            MoMo Registered Number
+                          </Label>
+                          <Input
+                            id="momoNumber"
+                            className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="024XXXXXXX"
+                            value={profileData.momoNumber || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, momoNumber: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inline Action Button */}
+                    <div className="flex justify-end pt-2 border-t border-border/40">
+                      <Button
+                        onClick={handleSaveProfile}
+                        disabled={isSavingProfile}
+                        className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                      >
+                        {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save Contact & MoMo Details
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 3: Login & Security */}
+              <TabsContent value="security" className="mt-0 focus-visible:outline-none">
+                <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs">
+                  <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                      <Shield className="h-4 w-4 text-primary" />
+                      Login & Security Standards
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Protect your tenancy account and update your login passphrase.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5 sm:p-6 space-y-5">
+                    {/* Active Session Status */}
+                    <div className="p-4 rounded-2xl bg-gray-50 dark:bg-muted/30 border border-border/60 flex items-center justify-between gap-3">
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          Authenticated Session Active
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          Signed in as <span className="font-mono font-medium text-foreground">{appUser?.email}</span>
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-xs shrink-0">
+                        256-bit TLS
+                      </Badge>
+                    </div>
+
+                    {/* Password Update Form */}
+                    <div className="space-y-4 pt-1">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <KeyRound className="h-4 w-4 text-primary" /> Change Passphrase
+                      </h4>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="newPassword" className="text-xs font-semibold text-foreground">
+                            New Passphrase
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="newPassword"
+                              type={showNewPassword ? "text" : "password"}
+                              className="pr-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="At least 6 characters"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowNewPassword((prev) => !prev)}
+                            >
+                              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor="confirmNewPassword" className="text-xs font-semibold text-foreground">
+                            Confirm New Passphrase
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="confirmNewPassword"
+                              type={showConfirmNewPassword ? "text" : "password"}
+                              className="pr-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="Repeat new passphrase"
+                              value={confirmNewPassword}
+                              onChange={(e) => setConfirmNewPassword(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowConfirmNewPassword((prev) => !prev)}
+                            >
+                              {showConfirmNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          onClick={handleChangePassword}
+                          disabled={isUpdatingPassword || !newPassword || !confirmNewPassword}
+                          className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                        >
+                          {isUpdatingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                          Update Passphrase
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Regulatory & Security Compliance Card */}
+                    <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/10 border border-blue-200/60 dark:border-blue-900/40 text-xs text-blue-900 dark:text-blue-300 space-y-1.5">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <ShieldCheck className="h-4 w-4 text-blue-600" />
+                        Ghana Data Protection Act (Act 843) Certified
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-blue-800 dark:text-blue-400">
+                        HostelHQ encrypts all student credentials in transit and at rest. Your phone number and MoMo identifiers are exclusively utilized for university room reservation receipts and escrow verification.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </main>
+
+      {/* 6. Sticky Mobile Save State Bar (Mobile Responsiveness & Touch Optimization) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-t border-border p-3.5 sm:px-6 flex items-center justify-between gap-4 md:hidden shadow-lg">
+        <div className="min-w-0">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Account Profile</div>
+          <div className="text-sm font-bold text-foreground truncate">
+            {profileData.fullName || "Student Resident"}
+          </div>
+        </div>
+        <Button
+          onClick={handleSaveProfile}
+          disabled={isSavingProfile}
+          className="h-11 px-5 text-sm font-semibold shadow-md rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.99] flex items-center gap-2 shrink-0"
+        >
+          {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save Changes
+        </Button>
+      </div>
     </div>
   );
 }
-
-

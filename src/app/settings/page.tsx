@@ -67,7 +67,7 @@ export default function SettingsPage() {
   const [offlineSmsOptIn, setOfflineSmsOptIn] = useState(false);
 
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+    const unsubAuth = onAuthStateChanged(auth, async (u: any) => {
       setUser(u);
       if (!u) {
         setLoading(false);
@@ -161,6 +161,7 @@ export default function SettingsPage() {
   };
 
   const navItems = [
+    { label: 'Profile', href: '/profile', icon: User },
     { label: 'My Bookings', href: '/my-bookings', icon: Calendar },
     { label: 'Payments', href: '/payments', icon: CreditCard },
     { label: 'My Roommates', href: '/my-roommates', icon: Users },
@@ -264,9 +265,13 @@ export default function SettingsPage() {
                         </div>
 
                         {appUser && (
-                          <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="pt-3 border-t border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-muted-foreground">
                             <span>Account Tier: <span className="font-semibold text-foreground capitalize">{appUser.role}</span></span>
-                            <span>Verified ID: <span className="font-mono text-foreground">{appUser.email}</span></span>
+                            <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs text-primary font-semibold">
+                              <Link href="/profile">
+                                Manage Full Profile & MoMo Details →
+                              </Link>
+                            </Button>
                           </div>
                         )}
                       </div>
