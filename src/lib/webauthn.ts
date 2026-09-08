@@ -178,7 +178,12 @@ export async function registerBiometric(
  * @param userId - User's unique ID
  * @returns Object with success status and error message if any
  */
-export async function verifyBiometric(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function verifyBiometric(userId: string): Promise<{
+  success: boolean;
+  customToken?: string | null;
+  user?: any;
+  error?: string;
+}> {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   
   // Check WebAuthn support
@@ -219,7 +224,12 @@ export async function verifyBiometric(userId: string): Promise<{ success: boolea
     }
 
     const result = await verifyResponse.json();
-    return { success: result.verified === true };
+    return {
+      success: result.verified === true,
+      customToken: result.customToken,
+      user: result.user,
+      error: result.error,
+    };
   } catch (error: any) {
     console.error('Biometric verification error:', error);
     

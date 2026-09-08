@@ -419,66 +419,169 @@ function LoginPageInner() {
                 description: 'Touch sensor or use Face ID/Windows Hello...',
             });
 
-            const lastUserId = typeof window !== 'undefined' && window.localStorage?.getItem ? window.localStorage.getItem('lastBiometricUserId') : null;
+            let targetUserId = typeof window !== 'undefined' && window.localStorage?.getItem 
+                ? window.localStorage.getItem('lastBiometricUserId') 
+                : null;
             
-            if (lastUserId) {
-                const result = await verifyBiometric(lastUserId);
-                if (result.success) {
-                    const userDocRef = doc(db, 'users', lastUserId);
-                    const userDocSnap = await getDoc(userDocRef);
-                    
-                    if (userDocSnap.exists()) {
-                        const userData = userDocSnap.data();
-                        const userEmail = userData.authEmail || userData.email;
-                        
-                        if (userEmail && userData.biometricPassword) {
-                            await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
-                            const role = userData.role as string | undefined;
-                            const displayName = userData.fullName || userData.firstName || '';
-                            
-                            if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
-                                try { await signOut(auth); } catch (_) {}
-                                setUnderReviewData({
-                                    fullName: displayName || 'Student',
-                                    studentIndexNumber: userData.studentIndexNumber,
-                                    submittedAt: userData.createdAt,
-                                    rejectionReason: userData.rejectionReason,
-                                    isRejected: userData.verificationStatus === 'rejected',
-                                });
-                                setShowUnderReviewDialog(true);
-                                setBiometricLoading(false);
-                                return;
-                            }
-
-                            toast({ 
-                                title: `Welcome back, ${displayName}!`,
-                                description: 'Biometric verification successful.',
-                            });
-
-                            const destination = safeRedirect && (!role || role === 'student')
-                                ? safeRedirect
-                                : getRouteForRole(role);
-                            router.push(destination);
-                            setBiometricLoading(false);
-                            return;
+            // If device cache is empty, check if user entered their email/phone in identifier field
+            if (!targetUserId && identifier.trim()) {
+                const cleanIdent = identifier.trim().toLowerCase();
+                try {
+                    const usersRef = collection(db, 'users');
+                    const qEmail = query(usersRef, where('email', '==', cleanIdent));
+                    const snapEmail = await getDocs(qEmail);
+                    if (!snapEmail.empty) {
+                        targetUserId = snapEmail.docs[0].id;
+                    } else {
+                        const qAuth = query(usersRef, where('authEmail', '==', cleanIdent));
+                        const snapAuth = await getDocs(qAuth);
+                        if (!snapAuth.empty) {
+                            targetUserId = snapAuth.docs[0].id;
                         }
                     }
+                } catch (lookupErr) {
+                    console.warn('Could not query user for biometric login:', lookupErr);
                 }
             }
 
+            // Graceful guidance if no passkey is registered on this device
+            if (!targetUserId) {
+                toast({
+                    title: 'No Device Passkey Found',
+                    description: 'Sign in with your email or Google first. You can then register this device for instant passkey login in your Profile Settings.',
+                });
+                const identInput = document.getElementById('identifier') as HTMLInputElement | null;
+                identInput?.focus();
+                setBiometricLoading(false);
+                return;
+            }
+
+            const result = await verifyBiometric(targetUserId);
+
+            if (!result.success) {
+                const isCancelled = result.error?.toLowerCase().includes('cancel') || 
+                                    result.error?.includes('NotAllowedError');
+                if (isCancelled) {
+                    toast({
+                        title: 'Biometric Prompt Cancelled',
+                        description: 'You can continue signing in with your password, SMS OTP, or Google.',
+                    });
+                } else {
+                    toast({
+                        title: 'Biometric Sign-In Unavailable',
+                        description: 'Please sign in with your email and password. You can re-enroll this device in Profile Settings.',
+                    });
+                    const passInput = document.getElementById('password') as HTMLInputElement | null;
+                    passInput?.focus();
+                }
+                setBiometricLoading(false);
+                return;
+            }
+
+            // 1. Direct authentication with customToken generated by server
+            if (result.customToken) {
+                await signInWithCustomToken(auth, result.customToken);
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    window.localStorage.setItem('lastBiometricUserId', targetUserId);
+                }
+
+                const role = result.user?.role || 'student';
+                const displayName = result.user?.fullName || 'Resident';
+
+                if (role === 'student' && (result.user?.verificationStatus === 'pending' || result.user?.verificationStatus === 'rejected')) {
+                    try { await signOut(auth); } catch (_) {}
+                    setUnderReviewData({
+                        fullName: displayName || 'Student',
+                        studentIndexNumber: result.user?.studentIndexNumber,
+                        submittedAt: result.user?.createdAt,
+                        rejectionReason: result.user?.rejectionReason,
+                        isRejected: result.user?.verificationStatus === 'rejected',
+                    });
+                    setShowUnderReviewDialog(true);
+                    setBiometricLoading(false);
+                    return;
+                }
+
+                toast({ 
+                    title: `Welcome back, ${displayName}!`,
+                    description: 'Biometric verification successful.',
+                });
+
+                const destination = safeRedirect && (!role || role === 'student')
+                    ? safeRedirect
+                    : getRouteForRole(role);
+                router.push(destination);
+                setBiometricLoading(false);
+                return;
+            }
+
+            // 2. Fallback to Firestore check for legacy credentials or password prompt
+            const userDocRef = doc(db, 'users', targetUserId);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+                const userEmail = userData.authEmail || userData.email;
+                
+                if (userEmail && userData.biometricPassword) {
+                    await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                        window.localStorage.setItem('lastBiometricUserId', targetUserId);
+                    }
+                    const role = userData.role as string | undefined;
+                    const displayName = userData.fullName || userData.firstName || '';
+                    
+                    if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                        try { await signOut(auth); } catch (_) {}
+                        setUnderReviewData({
+                            fullName: displayName || 'Student',
+                            studentIndexNumber: userData.studentIndexNumber,
+                            submittedAt: userData.createdAt,
+                            rejectionReason: userData.rejectionReason,
+                            isRejected: userData.verificationStatus === 'rejected',
+                        });
+                        setShowUnderReviewDialog(true);
+                        setBiometricLoading(false);
+                        return;
+                    }
+
+                    toast({ 
+                        title: `Welcome back, ${displayName}!`,
+                        description: 'Biometric verification successful.',
+                    });
+
+                    const destination = safeRedirect && (!role || role === 'student')
+                        ? safeRedirect
+                        : getRouteForRole(role);
+                    router.push(destination);
+                    setBiometricLoading(false);
+                    return;
+                }
+            }
+
+            // 3. Passkey matched but requires user password to finalize session
             toast({
-                title: 'Passkey Not Enrolled',
-                description: 'Please sign in with your email/password. You can enable passkey in Settings.',
-                variant: 'destructive',
+                title: 'Passkey Verified',
+                description: 'Identity confirmed on this device. Please enter your password to finalize sign-in.',
             });
+            const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+            passwordInput?.focus();
             setBiometricLoading(false);
+
         } catch (error: any) {
             console.error('Biometric login error:', error);
-            toast({
-                title: 'Biometric Login Failed',
-                description: error.message || 'Please sign in with your password.',
-                variant: 'destructive',
-            });
+            const isCancelled = error?.name === 'NotAllowedError' || error?.message?.toLowerCase()?.includes('cancel');
+            if (isCancelled) {
+                toast({
+                    title: 'Biometric Sign-In Cancelled',
+                    description: 'You can continue signing in with your email and password or Google.',
+                });
+            } else {
+                toast({
+                    title: 'Passkey Notice',
+                    description: 'Biometric verification could not be completed on this device. Please sign in with your password.',
+                });
+            }
             setBiometricLoading(false);
         }
     };

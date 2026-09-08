@@ -45,10 +45,15 @@ import {
   Clock,
   KeyRound,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Fingerprint,
+  RefreshCw,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { BackButton } from '@/components/ui/back-button';
 import { cn } from '@/lib/utils';
+import { isBiometricSupported, registerBiometric, getDeviceTypeName } from '@/lib/webauthn';
 
 export interface AppUser {
   uid: string;
@@ -66,6 +71,9 @@ export interface AppUser {
   emergencyContact?: string;
   momoNumber?: string;
   momoNetwork?: string;
+  hasBiometricAuth?: boolean;
+  biometricCredential?: any;
+  passkeyRegisteredAt?: string;
 }
 
 export default function ProfilePage() {
@@ -98,34 +106,59 @@ export default function ProfilePage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
+  // Passkey & Biometric state
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [passkeyEnrolledDate, setPasskeyEnrolledDate] = useState<string | null>(null);
+  const [isEnrollingPasskey, setIsEnrollingPasskey] = useState(false);
+  const [isRemovingPasskey, setIsRemovingPasskey] = useState(false);
+  const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(true);
+  const [deviceLabel, setDeviceLabel] = useState('Face ID / Touch ID / Device Lock');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const settingsSectionRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsWebAuthnSupported(isBiometricSupported());
+      setDeviceLabel(getDeviceTypeName('platform'));
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
       if (user) {
         try {
           const userDocRef = doc(db, "users", user.uid);
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
-            const userData = userDocSnap.data() as AppUser;
+            const rawData = userDocSnap.data() as any;
+            const isEnrolled = !!(rawData.hasBiometricAuth || rawData.biometricCredential || rawData.biometricCredentialId);
+            setHasPasskey(isEnrolled);
+            if (rawData.biometricCredential?.createdAt || rawData.passkeyRegisteredAt) {
+              const d = new Date(rawData.biometricCredential?.createdAt || rawData.passkeyRegisteredAt);
+              if (!isNaN(d.getTime())) {
+                setPasskeyEnrolledDate(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+              }
+            }
+
             const currentUser: AppUser = {
               uid: user.uid,
               email: user.email!,
-              fullName: userData.fullName || user.displayName || '',
-              role: userData.role || 'student',
-              profileImage: userData.profileImage || user.photoURL || '',
-              phone: userData.phone || '',
-              address: userData.address || '',
-              bio: userData.bio || '',
-              nationality: userData.nationality || 'Ghanaian',
-              gender: userData.gender || '',
-              department: userData.department || '',
-              studentId: userData.studentId || '',
-              emergencyContact: userData.emergencyContact || '',
-              momoNumber: userData.momoNumber || userData.phone || '',
-              momoNetwork: userData.momoNetwork || 'MTN',
+              fullName: rawData.fullName || user.displayName || '',
+              role: rawData.role || 'student',
+              profileImage: rawData.profileImage || user.photoURL || '',
+              phone: rawData.phone || '',
+              address: rawData.address || '',
+              bio: rawData.bio || '',
+              nationality: rawData.nationality || 'Ghanaian',
+              gender: rawData.gender || '',
+              department: rawData.department || '',
+              studentId: rawData.studentId || '',
+              emergencyContact: rawData.emergencyContact || '',
+              momoNumber: rawData.momoNumber || rawData.phone || '',
+              momoNetwork: rawData.momoNetwork || 'MTN',
+              hasBiometricAuth: isEnrolled,
+              biometricCredential: rawData.biometricCredential,
+              passkeyRegisteredAt: rawData.passkeyRegisteredAt || rawData.biometricCredential?.createdAt,
             };
             setAppUser(currentUser);
             setProfileData(currentUser);
@@ -224,6 +257,115 @@ export default function ProfilePage() {
       toast({ title: 'Failed to update password', description: (error as Error).message, variant: 'destructive' });
     } finally {
       setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleRegisterPasskey = async () => {
+    if (!appUser?.uid) return;
+    if (!isBiometricSupported()) {
+      toast({
+        title: "Passkey Not Supported",
+        description: "Your current browser or device does not support WebAuthn biometrics.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsEnrollingPasskey(true);
+    try {
+      const userDisplayName = appUser.fullName || appUser.email || 'HostelHQ Resident';
+      const credential = await registerBiometric(appUser.uid, userDisplayName);
+
+      if (credential) {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('lastBiometricUserId', appUser.uid);
+        }
+
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        try {
+          const userDocRef = doc(db, "users", appUser.uid);
+          await updateDoc(userDocRef, {
+            hasBiometricAuth: true,
+            passkeyRegisteredAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+          });
+        } catch (dbErr) {
+          console.warn("Could not record passkey timestamp in firestore:", dbErr);
+        }
+
+        setHasPasskey(true);
+        setPasskeyEnrolledDate(formattedDate);
+        setAppUser(prev => prev ? { ...prev, hasBiometricAuth: true, passkeyRegisteredAt: now.toISOString() } : null);
+
+        toast({
+          title: "Passkey Enrolled",
+          description: "Biometric quick login is now active on this device."
+        });
+      }
+    } catch (error: any) {
+      console.error("Passkey registration failed:", error);
+      if (error?.name === 'NotAllowedError' || error?.message?.includes('cancelled')) {
+        toast({
+          title: "Registration Cancelled",
+          description: "Device biometric prompt was dismissed. You can enroll your passkey anytime."
+        });
+      } else {
+        toast({
+          title: "Passkey Registration Failed",
+          description: error?.message || "Could not register biometric passkey on this device.",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsEnrollingPasskey(false);
+    }
+  };
+
+  const handleRemovePasskey = async () => {
+    if (!appUser?.uid) return;
+    setIsRemovingPasskey(true);
+    try {
+      const userDocRef = doc(db, "users", appUser.uid);
+      await updateDoc(userDocRef, {
+        hasBiometricAuth: false,
+        biometricCredential: null,
+        biometricCredentialId: null,
+        biometricCredentialData: null,
+        passkeyRegisteredAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (typeof window !== 'undefined') {
+        const storedUid = window.localStorage.getItem('lastBiometricUserId');
+        if (storedUid === appUser.uid) {
+          window.localStorage.removeItem('lastBiometricUserId');
+        }
+      }
+
+      setHasPasskey(false);
+      setPasskeyEnrolledDate(null);
+      setAppUser(prev => prev ? {
+        ...prev,
+        hasBiometricAuth: false,
+        biometricCredential: null,
+        passkeyRegisteredAt: null
+      } : null);
+
+      toast({
+        title: "Passkey Removed",
+        description: "Biometric quick login has been disabled for this device."
+      });
+    } catch (error: any) {
+      console.error("Failed to remove passkey:", error);
+      toast({
+        title: "Action Failed",
+        description: "Could not remove passkey. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRemovingPasskey(false);
     }
   };
 
@@ -554,8 +696,15 @@ export default function ProfilePage() {
                       <Shield className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">Login & Security</p>
-                      <p className="text-[11px] text-muted-foreground truncate">Password & credentials</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-foreground truncate">Login & Security</p>
+                        {hasPasskey && (
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {hasPasskey ? "Passkey active • Biometrics" : "Passkey & credentials"}
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", activeTab === 'security' && "text-primary translate-x-0.5")} />
@@ -864,6 +1013,108 @@ export default function ProfilePage() {
                       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-xs shrink-0">
                         256-bit TLS
                       </Badge>
+                    </div>
+
+                    {/* Biometric & Passkey Quick Login Card */}
+                    <div className="p-5 sm:p-6 rounded-2xl border border-border/70 bg-gray-50/60 dark:bg-muted/20 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <Fingerprint className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-sm font-bold text-foreground">
+                                Biometric & Passkey Quick Login
+                              </h4>
+                              {hasPasskey ? (
+                                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[11px] font-semibold">
+                                  Enrolled on this Device
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-muted text-muted-foreground text-[11px]">
+                                  Not Configured
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                              Sign into HostelHQ in seconds using {deviceLabel} without typing your password each time.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {!isWebAuthnSupported ? (
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+                          Biometric passkeys and WebAuthn are not supported or are disabled on this browser/device. Please use a modern browser such as Chrome, Safari, or Edge.
+                        </div>
+                      ) : (
+                        <div className="pt-3 border-t border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            {hasPasskey ? (
+                              <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium">
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                <span>Passkey active • Registered {passkeyEnrolledDate || 'on this device'}</span>
+                              </div>
+                            ) : (
+                              <p>
+                                Hardware-backed cryptographic passkey stored securely on this device (FIDO2 / WebAuthn).
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {hasPasskey ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleRegisterPasskey}
+                                  disabled={isEnrollingPasskey || isRemovingPasskey}
+                                  className="rounded-xl text-xs h-9 font-semibold gap-1.5"
+                                >
+                                  {isEnrollingPasskey ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                  )}
+                                  Re-enroll Device
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleRemovePasskey}
+                                  disabled={isEnrollingPasskey || isRemovingPasskey}
+                                  className="rounded-xl text-xs h-9 font-semibold text-destructive hover:bg-destructive/10 border-destructive/30 gap-1.5"
+                                >
+                                  {isRemovingPasskey ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                  Remove
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                onClick={handleRegisterPasskey}
+                                disabled={isEnrollingPasskey}
+                                className="rounded-xl text-xs h-9 font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm gap-1.5"
+                              >
+                                {isEnrollingPasskey ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Fingerprint className="h-3.5 w-3.5" />
+                                )}
+                                Register This Device Passkey
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Password Update Form */}

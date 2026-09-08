@@ -86,9 +86,30 @@ export async function POST(req: NextRequest) {
         lastBiometricAuth: new Date().toISOString(),
       });
 
+      let customToken: string | null = null;
+      try {
+        const { adminAuth } = await import('@/lib/firebase-admin');
+        if (adminAuth) {
+          customToken = await adminAuth.createCustomToken(userId, {
+            role: userData.role || 'student',
+          });
+        }
+      } catch (tokenErr) {
+        console.warn('Could not generate customToken in auth-verify:', tokenErr);
+      }
+
       const res = NextResponse.json({
         success: true,
         verified: true,
+        customToken,
+        user: {
+          uid: userId,
+          email: userData.authEmail || userData.email,
+          role: userData.role || 'student',
+          fullName: userData.fullName || userData.firstName || '',
+          verificationStatus: userData.verificationStatus,
+          studentIndexNumber: userData.studentIndexNumber,
+        },
       });
       res.cookies.set('webauthn_auth_challenge', '', { maxAge: 0, path: '/' });
       return res;
