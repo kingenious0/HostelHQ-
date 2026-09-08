@@ -38,7 +38,9 @@ import {
   Compass,
   ExternalLink,
   MessageCircle,
-  Lock
+  Lock,
+  AlertTriangle,
+  Ban
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -46,6 +48,8 @@ import { doc, getDoc, collection, addDoc, query, where, getDocs } from 'firebase
 import { sendVisitBookingSMSAction } from '@/app/actions/sms';
 import { notifyVisitScheduled, notifyManagerVisitRequest } from '@/lib/notification-service-onesignal';
 import { isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
+import { SanctionBanner } from '@/components/hostels/SanctionBanner';
+import { isHostelRevoked, isHostelSanctioned, isHostelRestricted, SANCTION_MESSAGES } from '@/lib/sanctions';
 
 const TIME_SLOTS = [
   { value: "09:00 - 12:00", label: "Morning (9:00 AM – 12:00 PM)" },
@@ -118,9 +122,21 @@ export default function BookingVisitPage() {
         notFound();
         return;
       }
+      // Check live Firestore document for immediate sanction status
+      try {
+        const liveDoc = await getDoc(doc(db, 'hostels', id));
+        if (liveDoc.exists()) {
+          const liveData = liveDoc.data();
+          data.accreditationStatus = liveData.accreditationStatus || (data as any).accreditationStatus;
+          (data as any).sanctionStatus = liveData.sanctionStatus || (data as any).sanctionStatus;
+          data.status = liveData.status || data.status;
+        }
+      } catch (err) {
+        console.error('Error fetching live hostel status:', err);
+      }
       setHostel(data);
       if (!selectedRoomId && data.roomTypes?.length) {
-        setSelectedRoomId(data.roomTypes[0].id);
+        setSelectedRoomId(data.roomTypes[0].id || '');
       }
       setLoading(false);
     };
@@ -163,11 +179,21 @@ export default function BookingVisitPage() {
   const isHostelFull = hostel ? isHostelSoldOut(hostel, confirmedBookings) : false;
   const isSelectedRoomSoldOut = selectedRoom ? isRoomTypeSoldOut(selectedRoom, confirmedBookings) : false;
   const isSoldOut = isHostelFull || isSelectedRoomSoldOut;
+  const isRestricted = hostel ? isHostelRestricted(hostel) : false;
 
   const handleSubmitVisit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!hostel) return;
+
+    if (isRestricted) {
+      toast({
+        title: "Action Denied",
+        description: SANCTION_MESSAGES.ACTION_DENIED,
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (isSoldOut) {
       toast({
@@ -306,14 +332,29 @@ export default function BookingVisitPage() {
               Back to hostel
             </Button>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
-                University-Approved ✓
-              </span>
+              {isHostelRevoked(hostel) ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-200 shadow-sm">
+                  <Ban className="h-3 w-3" />
+                  Accreditation Revoked
+                </span>
+              ) : isHostelSanctioned(hostel) ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shadow-sm">
+                  <AlertTriangle className="h-3 w-3" />
+                  Executive Sanction
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
+                  University-Approved ✓
+                </span>
+              )}
               <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                 100% Free Inspection
               </span>
             </div>
           </div>
+
+          {/* Sanction Enforcement Banner */}
+          <SanctionBanner hostel={hostel} className="mb-6" />
 
           {/* Success Screen */}
           {isSuccess ? (
@@ -611,10 +652,10 @@ export default function BookingVisitPage() {
 
                     <Button
                       type="submit"
-                      disabled={submitting || isSoldOut}
+                      disabled={submitting || isSoldOut || isRestricted}
                       className={cn(
                         "w-full h-12 text-base font-semibold shadow-md",
-                        isSoldOut
+                        (isSoldOut || isRestricted)
                           ? "bg-slate-200 text-slate-500 hover:bg-slate-200 cursor-not-allowed border border-slate-300 shadow-none"
                           : "bg-primary hover:bg-primary/90 text-primary-foreground"
                       )}
@@ -623,6 +664,16 @@ export default function BookingVisitPage() {
                         <>
                           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                           Scheduling Free Visit...
+                        </>
+                      ) : isHostelRevoked(hostel) ? (
+                        <>
+                          <Ban className="mr-2 h-5 w-5 text-slate-500" />
+                          Visits Permanently Disabled
+                        </>
+                      ) : isHostelSanctioned(hostel) ? (
+                        <>
+                          <AlertTriangle className="mr-2 h-5 w-5 text-slate-500" />
+                          Visits Temporarily Paused
                         </>
                       ) : isSoldOut ? (
                         <>
@@ -695,7 +746,13 @@ export default function BookingVisitPage() {
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-muted-foreground">Accreditation</span>
-                        <span className="font-semibold text-emerald-600">Verified ✓</span>
+                        {isHostelRevoked(hostel) ? (
+                          <span className="font-semibold text-rose-600">Accreditation Revoked</span>
+                        ) : isHostelSanctioned(hostel) ? (
+                          <span className="font-semibold text-amber-600">Under Executive Sanction</span>
+                        ) : (
+                          <span className="font-semibold text-emerald-600">Verified ✓</span>
+                        )}
                       </div>
                       <div className="flex justify-between text-xs pt-2 border-t border-border">
                         <span className="text-muted-foreground">Inspection Fee</span>
@@ -706,24 +763,83 @@ export default function BookingVisitPage() {
                 </Card>
 
                 {/* University Protection Guarantee */}
-                <Card className="border border-emerald-200 bg-emerald-50/60 p-4 rounded-xl space-y-3">
+                <Card className={cn(
+                  "p-4 rounded-xl space-y-3 border",
+                  isHostelRevoked(hostel)
+                    ? "border-rose-200 bg-rose-50/60"
+                    : isHostelSanctioned(hostel)
+                    ? "border-amber-200 bg-amber-50/60"
+                    : "border-emerald-200 bg-emerald-50/60"
+                )}>
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
-                    <span className="font-bold text-sm text-emerald-950">University Protection</span>
+                    {isHostelRevoked(hostel) ? (
+                      <Ban className="h-5 w-5 text-rose-600 shrink-0" />
+                    ) : isHostelSanctioned(hostel) ? (
+                      <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                    ) : (
+                      <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" />
+                    )}
+                    <span className={cn(
+                      "font-bold text-sm",
+                      isHostelRevoked(hostel)
+                        ? "text-rose-950"
+                        : isHostelSanctioned(hostel)
+                        ? "text-amber-950"
+                        : "text-emerald-950"
+                    )}>
+                      {isHostelRevoked(hostel)
+                        ? "Charter Revoked"
+                        : isHostelSanctioned(hostel)
+                        ? "Regulatory Sanction Active"
+                        : "University Protection"}
+                    </span>
                   </div>
-                  <ul className="space-y-1.5 text-xs text-emerald-800">
-                    <li className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold">•</span>
-                      Accredited by University Housing Board
-                    </li>
-                    <li className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold">•</span>
-                      No brokers, middlemen, or extortionate visit fees
-                    </li>
-                    <li className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 font-bold">•</span>
-                      Direct key handoff guaranteed upon booking
-                    </li>
+                  <ul className={cn(
+                    "space-y-1.5 text-xs",
+                    isHostelRevoked(hostel)
+                      ? "text-rose-800"
+                      : isHostelSanctioned(hostel)
+                      ? "text-amber-800"
+                      : "text-emerald-800"
+                  )}>
+                    {isHostelRevoked(hostel) ? (
+                      <>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-rose-600 font-bold">•</span>
+                          University accreditation revoked by Executive Authority
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-rose-600 font-bold">•</span>
+                          All student booking operations and visit appointments halted
+                        </li>
+                      </>
+                    ) : isHostelSanctioned(hostel) ? (
+                      <>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-amber-600 font-bold">•</span>
+                          Currently under formal inquiry by the Dean of Students
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-amber-600 font-bold">•</span>
+                          New bookings and in-person visits temporarily paused
+                        </li>
+                      </>
+                    ) : (
+                      <>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-600 font-bold">•</span>
+                          Accredited by University Housing Board
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-600 font-bold">•</span>
+                          No brokers, middlemen, or extortionate visit fees
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-600 font-bold">•</span>
+                          Direct key handoff guaranteed upon booking
+                        </li>
+                      </>
+                    )}
                   </ul>
                 </Card>
 
@@ -735,14 +851,24 @@ export default function BookingVisitPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={isSoldOut}
+                    disabled={isSoldOut || isRestricted}
                     className={cn(
                       "w-full text-xs font-semibold border-primary/40 text-primary hover:bg-primary/10",
-                      isSoldOut && "opacity-60 cursor-not-allowed border-slate-300 text-slate-500 hover:bg-transparent"
+                      (isSoldOut || isRestricted) && "opacity-60 cursor-not-allowed border-slate-300 text-slate-500 hover:bg-transparent"
                     )}
                     onClick={() => router.push(`/hostels/${id}/secure?roomTypeId=${selectedRoomId}`)}
                   >
-                    {isSoldOut ? (
+                    {isHostelRevoked(hostel) ? (
+                      <>
+                        <Ban className="h-3.5 w-3.5 mr-1 text-slate-500 inline" />
+                        Accreditation Revoked (Locked)
+                      </>
+                    ) : isHostelSanctioned(hostel) ? (
+                      <>
+                        <AlertTriangle className="h-3.5 w-3.5 mr-1 text-slate-500 inline" />
+                        Executive Sanction (Locked)
+                      </>
+                    ) : isSoldOut ? (
                       <>
                         <Lock className="h-3.5 w-3.5 mr-1 text-slate-500 inline" />
                         Sold Out (Booking Locked)

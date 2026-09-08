@@ -13,7 +13,7 @@ import {
   Wifi, Car, Utensils, Tv, Wind, Droplets, Zap, Shield,
   Home, Bath, Coffee, Gamepad2, Dumbbell, Waves,
   CheckCircle, Star, Phone, Mail, Clock, Calendar, Eye,
-  Camera, Film, Video, Play, DoorOpen, Lock
+  Camera, Film, Video, Play, DoorOpen, Lock, AlertTriangle, Ban
 } from "lucide-react";
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
@@ -27,6 +27,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { SanctionBanner } from "@/components/hostels/SanctionBanner";
+import { isHostelRevoked, isHostelSanctioned, isHostelRestricted, SANCTION_MESSAGES } from "@/lib/sanctions";
 
 interface AppUser {
   uid: string;
@@ -221,6 +223,18 @@ export default function RoomDetailPage() {
       if (!data) {
         notFound();
         return;
+      }
+      // Check live Firestore document for immediate sanction status
+      try {
+        const liveDoc = await getDoc(doc(db, 'hostels', hostelId));
+        if (liveDoc.exists()) {
+          const liveData = liveDoc.data();
+          data.accreditationStatus = liveData.accreditationStatus || (data as any).accreditationStatus;
+          (data as any).sanctionStatus = liveData.sanctionStatus || (data as any).sanctionStatus;
+          data.status = liveData.status || data.status;
+        }
+      } catch (err) {
+        console.error('Error fetching live hostel status in room page:', err);
       }
       setHostel(data);
       setLoading(false);
@@ -464,7 +478,17 @@ export default function RoomDetailPage() {
     return false;
   }, [hostel, room]);
 
+  const isRestricted = hostel ? isHostelRestricted(hostel) : false;
+
   const handlePrimaryAction = () => {
+    if (isRestricted) {
+      toast({
+        title: "Action Denied",
+        description: SANCTION_MESSAGES.ACTION_DENIED,
+        variant: "destructive",
+      });
+      return;
+    }
     if (isSoldOut || hostel.availability === 'Full' || hasSecuredHostel) {
       return;
     }
@@ -526,6 +550,9 @@ export default function RoomDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             Back to rooms
           </Button>
+
+          {/* Sanction Enforcement Banner */}
+          <SanctionBanner hostel={hostel} className="mb-6" />
 
           {/* Sold Out Notice Banner */}
           {isSoldOut && (
@@ -990,12 +1017,23 @@ export default function RoomDetailPage() {
             <Button
               className={cn(
                 "w-full h-12 text-base font-semibold shadow-md flex items-center justify-center gap-2",
-                isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10"
+                isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed hover:bg-rose-500/10",
+                (isHostelRevoked(hostel) || isHostelSanctioned(hostel)) && "bg-slate-200 dark:bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700 shadow-none hover:bg-slate-200"
               )}
               onClick={handlePrimaryAction}
-              disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel}
+              disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
             >
-              {isSoldOut ? (
+              {isHostelRevoked(hostel) ? (
+                <>
+                  <Ban className="h-5 w-5 mr-2 text-slate-500" />
+                  Bookings Permanently Disabled
+                </>
+              ) : isHostelSanctioned(hostel) ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 mr-2 text-slate-500" />
+                  Bookings Temporarily Paused
+                </>
+              ) : isSoldOut ? (
                 <>
                   <Lock className="h-5 w-5 mr-2" />
                   Sold Out (100% Capacity)
@@ -1024,7 +1062,9 @@ export default function RoomDetailPage() {
             </Button>
             
             <div className="text-center text-xs text-muted-foreground">
-              {hasCompletedVisit 
+              {isRestricted
+                ? "This property is currently under administrative sanction."
+                : hasCompletedVisit 
                 ? "Complete your room booking with secure university escrow"
                 : "Free inspection • Connect directly with hostel manager"}
             </div>
@@ -1055,12 +1095,50 @@ export default function RoomDetailPage() {
         </Card>
 
         {/* Protection Card */}
-        <Card className="border border-emerald-200 bg-emerald-50/50 p-4 rounded-xl">
+        <Card className={cn(
+          "p-4 rounded-xl border",
+          isHostelRevoked(hostel)
+            ? "border-rose-200 bg-rose-50/50"
+            : isHostelSanctioned(hostel)
+            ? "border-amber-200 bg-amber-50/50"
+            : "border-emerald-200 bg-emerald-50/50"
+        )}>
           <div className="flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div className="text-xs text-emerald-900 space-y-1">
-              <p className="font-semibold">University Protected</p>
-              <p className="text-emerald-700">Verified inventory. No illegal middleman charges. Payment held in university-approved escrow until key handoff.</p>
+            {isHostelRevoked(hostel) ? (
+              <Ban className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+            ) : isHostelSanctioned(hostel) ? (
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            ) : (
+              <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            )}
+            <div className="text-xs space-y-1">
+              <p className={cn(
+                "font-semibold",
+                isHostelRevoked(hostel)
+                  ? "text-rose-950"
+                  : isHostelSanctioned(hostel)
+                  ? "text-amber-950"
+                  : "text-emerald-900"
+              )}>
+                {isHostelRevoked(hostel)
+                  ? "Accreditation Revoked"
+                  : isHostelSanctioned(hostel)
+                  ? "Executive Sanction Active"
+                  : "University Protected"}
+              </p>
+              <p className={cn(
+                isHostelRevoked(hostel)
+                  ? "text-rose-700"
+                  : isHostelSanctioned(hostel)
+                  ? "text-amber-700"
+                  : "text-emerald-700"
+              )}>
+                {isHostelRevoked(hostel)
+                  ? "University charter accreditation has been revoked for this property. Student bookings and payment gateways are permanently disabled."
+                  : isHostelSanctioned(hostel)
+                  ? "This property is under formal welfare and regulatory investigation. Room bookings and visit requests are temporarily paused."
+                  : "Verified inventory. No illegal middleman charges. Payment held in university-approved escrow until key handoff."}
+              </p>
             </div>
           </div>
         </Card>
@@ -1092,13 +1170,24 @@ export default function RoomDetailPage() {
   </div>
   <Button 
     onClick={handlePrimaryAction}
-    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel}
+    disabled={isSoldOut || hostel.availability === 'Full' || hasSecuredHostel || isRestricted}
     className={cn(
       "h-11 px-5 text-sm font-semibold shadow-md flex items-center gap-1.5",
-      isSoldOut && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed"
+      (isSoldOut || isRestricted) && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 cursor-not-allowed",
+      isHostelSanctioned(hostel) && !isHostelRevoked(hostel) && "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800/50"
     )}
   >
-    {isSoldOut ? (
+    {isHostelRevoked(hostel) ? (
+      <>
+        <Ban className="h-4 w-4" />
+        Bookings Disabled
+      </>
+    ) : isHostelSanctioned(hostel) ? (
+      <>
+        <AlertTriangle className="h-4 w-4" />
+        Bookings Paused
+      </>
+    ) : isSoldOut ? (
       <>
         <Lock className="h-4 w-4" />
         Sold Out

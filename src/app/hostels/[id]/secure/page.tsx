@@ -27,17 +27,20 @@ import {
 import { Input } from "@/components/ui/input"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
-import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck, ArrowLeft, Lock } from "lucide-react"
+import { Loader2, CheckCircle2, FileText, Receipt, BedDouble, ShieldCheck, ArrowLeft, Lock, AlertTriangle, Ban } from "lucide-react"
 import { getHostel, Hostel, RoomType } from "@/lib/data"
 import { notFound } from 'next/navigation';
 import { initializeHostelPayment } from "@/app/actions/paystack"
+import { SanctionBanner } from "@/components/hostels/SanctionBanner"
+import { isHostelRevoked, isHostelSanctioned, isHostelRestricted, SANCTION_MESSAGES } from "@/lib/sanctions"
 import { auth, db } from '@/lib/firebase'
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import type { User as FirebaseUser } from 'firebase/auth'
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity'
 import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack'
+import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 
 const formSchema = z.object({
   studentName: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -133,6 +136,10 @@ export default function SecureHostelPage() {
         if (selectedRoom && isRoomTypeSoldOut(selectedRoom, confirmedBookings)) return true;
         return inventorySummary?.isSoldOut ?? false;
     }, [hostel, selectedRoom, confirmedBookings, inventorySummary]);
+
+    const isRevoked = React.useMemo(() => isHostelRevoked(hostel), [hostel]);
+    const isSanctioned = React.useMemo(() => isHostelSanctioned(hostel), [hostel]);
+    const isRestricted = isRevoked || isSanctioned;
 
     React.useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
@@ -239,6 +246,20 @@ export default function SecureHostelPage() {
                 notFound();
                 return;
             }
+
+            // Sanction Status Check: Ensure fresh accreditationStatus from Firestore
+            try {
+                const liveDocSnap = await getDoc(doc(db, 'hostels', hostelId));
+                if (liveDocSnap.exists()) {
+                    const liveData = liveDocSnap.data();
+                    if (liveData?.accreditationStatus) hostelData.accreditationStatus = liveData.accreditationStatus;
+                    if (liveData?.sanctionStatus) hostelData.sanctionStatus = liveData.sanctionStatus;
+                    if (liveData?.status) hostelData.status = liveData.status;
+                }
+            } catch (snapErr) {
+                console.warn("Realtime sanction check fallback:", snapErr);
+            }
+
             setHostel(hostelData);
             
             const targetRoomId = roomTypeId || hostelData.roomTypes[0]?.id;
@@ -268,6 +289,16 @@ export default function SecureHostelPage() {
     async function onSubmit(values: z.infer<typeof formSchema>) {
         if (!hostel || !selectedRoom || typeof hostelId !== 'string') return;
         
+        // Runtime Sanction Enforcement: Reject submissions for restricted hostels
+        if (isRestricted) {
+            toast({
+                title: "Action Denied",
+                description: SANCTION_MESSAGES.ACTION_DENIED,
+                variant: "destructive",
+            });
+            return;
+        }
+
         if (isSoldOut) {
             toast({
                 title: "Unit Sold Out",
@@ -388,13 +419,28 @@ export default function SecureHostelPage() {
                     Back to room selection
                 </Button>
                 <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        University-Approved ✓
-                    </span>
+                    {isRevoked ? (
+                        <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            Charter Revoked
+                        </span>
+                    ) : isSanctioned ? (
+                        <span className="inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                            Under Sanction
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            University-Approved ✓
+                        </span>
+                    )}
                     <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
                         Escrow Protected
                     </span>
                 </div>
+            </div>
+
+            {/* Non-Dismissible Statutory Sanction Banner */}
+            <div className="mx-auto max-w-6xl px-4 md:px-6 mb-4">
+                <SanctionBanner hostel={hostel} />
             </div>
             <div className="mx-auto max-w-6xl px-4 md:px-6 mb-6 md:mb-8">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6 rounded-2xl bg-gradient-to-r from-primary/5 via-muted/70 to-background px-6 py-6 md:px-10 md:py-8 border border-primary/20 shadow-sm">
@@ -696,13 +742,28 @@ export default function SecureHostelPage() {
                                 </div>
                                 <Button
                                     type="submit"
-                                    className={`w-full h-12 text-lg ${isSoldOut ? 'bg-slate-200 text-slate-500 hover:bg-slate-200 cursor-not-allowed border border-slate-300 shadow-none' : ''}`}
-                                    disabled={isSubmitting || !selectedRoom || isSoldOut}
+                                    className={cn(
+                                        "w-full h-12 text-base font-bold transition-all",
+                                        isRevoked && "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 cursor-not-allowed shadow-none",
+                                        isSanctioned && "bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/30 hover:bg-amber-500/10 cursor-not-allowed shadow-none",
+                                        isSoldOut && !isRestricted && "bg-slate-200 text-slate-500 hover:bg-slate-200 cursor-not-allowed border border-slate-300 shadow-none"
+                                    )}
+                                    disabled={isSubmitting || !selectedRoom || isSoldOut || isRestricted}
                                 >
                                     {isSubmitting ? (
                                         <>
                                             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                                             Processing...
+                                        </>
+                                    ) : isRevoked ? (
+                                        <>
+                                            <Ban className="mr-2 h-5 w-5 text-rose-600" />
+                                            🚫 Payment Gateway Permanently Disabled
+                                        </>
+                                    ) : isSanctioned ? (
+                                        <>
+                                            <AlertTriangle className="mr-2 h-5 w-5 text-amber-600" />
+                                            ⚠️ Bookings Temporarily Paused
                                         </>
                                     ) : isSoldOut ? (
                                         <>

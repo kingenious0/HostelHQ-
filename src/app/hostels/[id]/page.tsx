@@ -13,7 +13,9 @@ import { getHostel, Hostel, RoomType, Review } from '@/lib/data';
 import { notFound, useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap, Camera, Film, Video, ExternalLink } from 'lucide-react';
+import { Wifi, ParkingSquare, Utensils, Droplets, Snowflake, Dumbbell, Star, MapPin, BookOpen, Lock, DoorOpen, Clock, Bed, Bath, User, ShieldCheck, Ticket, FileText, Share2, MessageCircle, Twitter, Facebook, Copy, Check, ArrowRight, Users as UsersIcon, Smartphone, CreditCard, ImagePlus, Receipt, AlertTriangle, ArrowLeft, Grid, CheckCircle2, ChevronRight, ChevronLeft, X, Eye, Sparkles, Building, Info, ShieldAlert, Compass, Heart, Zap, Camera, Film, Video, ExternalLink, Ban } from 'lucide-react';
+import { SanctionBanner } from '@/components/hostels/SanctionBanner';
+import { isHostelRevoked, isHostelSanctioned, isHostelRestricted, SANCTION_MESSAGES } from '@/lib/sanctions';
 import { useShortlist } from '@/components/shortlist-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -108,6 +110,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
     const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
+
+    const isRevoked = useMemo(() => isHostelRevoked(hostel), [hostel]);
+    const isSanctioned = useMemo(() => isHostelSanctioned(hostel), [hostel]);
+    const isRestricted = isRevoked || isSanctioned;
 
     const activeRoom = useMemo<RoomType | null>(() => {
         if (hostel.roomTypes && hostel.roomTypes.length > 0) {
@@ -439,6 +445,33 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const getVisitButton = (room: RoomType) => {
         const roomSoldOut = isRoomTypeSoldOut(room, confirmedBookings) || isHostelSoldOut(hostel);
 
+        // Sanction & Revocation Guardrail: Hard-lock all room-level actions
+        if (isRevoked) {
+            return (
+                <Button
+                    size="sm"
+                    disabled
+                    className="bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 cursor-not-allowed text-xs font-bold flex items-center gap-1.5 shadow-none"
+                    title="University charter accreditation revoked"
+                >
+                    <Ban className="h-3.5 w-3.5" /> Locked
+                </Button>
+            );
+        }
+
+        if (isSanctioned) {
+            return (
+                <Button
+                    size="sm"
+                    disabled
+                    className="bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/30 cursor-not-allowed text-xs font-bold flex items-center gap-1.5 shadow-none"
+                    title="Property under executive sanction"
+                >
+                    <AlertTriangle className="h-3.5 w-3.5" /> Paused
+                </Button>
+            );
+        }
+
         if (roomSoldOut) {
             return (
                 <Button
@@ -568,6 +601,37 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         const isHostelLocked = isHostelSoldOut(hostel);
         const isActiveRoomLocked = activeRoom ? isRoomTypeSoldOut(activeRoom, confirmedBookings) : false;
         const isSoldOut = isHostelLocked || isActiveRoomLocked || hostel.availability === 'Full' || activeRoomAvailability === 'Full';
+
+        // 1. Sanction & Revocation Hard-Lock (Highest Priority)
+        if (isRevoked) {
+            return (
+                <Button
+                    disabled
+                    className={cn(
+                        "flex-1 bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 cursor-not-allowed font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-none",
+                        buttonHeight
+                    )}
+                >
+                    <Ban className="h-4 w-4" />
+                    Bookings Disabled (Charter Revoked)
+                </Button>
+            );
+        }
+
+        if (isSanctioned) {
+            return (
+                <Button
+                    disabled
+                    className={cn(
+                        "flex-1 bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/30 cursor-not-allowed font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-none",
+                        buttonHeight
+                    )}
+                >
+                    <AlertTriangle className="h-4 w-4" />
+                    Bookings Paused (Executive Notice)
+                </Button>
+            );
+        }
 
         if (isSoldOut) {
             return (
@@ -784,6 +848,35 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const getPrimaryCTA = () => {
+        // Sanction & Revocation Hard-Lock
+        if (isRevoked) {
+            return (
+                <Button
+                    size="lg"
+                    className="w-full h-14 bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 cursor-not-allowed rounded-2xl font-bold flex items-center justify-center gap-2 shadow-none"
+                    disabled
+                    title="University charter accreditation revoked"
+                >
+                    <Ban className="h-5 w-5" />
+                    Bookings Disabled (Charter Revoked)
+                </Button>
+            );
+        }
+
+        if (isSanctioned) {
+            return (
+                <Button
+                    size="lg"
+                    className="w-full h-14 bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/30 cursor-not-allowed rounded-2xl font-bold flex items-center justify-center gap-2 shadow-none"
+                    disabled
+                    title="Property under executive sanction"
+                >
+                    <AlertTriangle className="h-5 w-5" />
+                    Bookings Paused (Executive Notice)
+                </Button>
+            );
+        }
+
         const isHostelLocked = isHostelSoldOut(hostel);
 
         if (isHostelLocked || hostel.availability === 'Full') {
@@ -1156,15 +1249,28 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 </div>
             </div>
 
+            {/* Prominent Non-Dismissible Statutory / Executive Sanction Banner */}
+            <SanctionBanner hostel={hostel} className="mb-2" />
+
             {/* Title + Key-Facts Row Directly Beneath Gallery (Full Width) */}
             <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-headline tracking-tight text-foreground">
                         {hostel.name}
                     </h1>
-                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> University-Approved ✓
-                    </Badge>
+                    {isRevoked ? (
+                        <Badge className="bg-rose-600 hover:bg-rose-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
+                            <Ban className="h-3.5 w-3.5" /> Accreditation Revoked
+                        </Badge>
+                    ) : isSanctioned ? (
+                        <Badge className="bg-amber-600 hover:bg-amber-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Under Executive Sanction
+                        </Badge>
+                    ) : (
+                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold border-0 px-3 py-1 text-xs gap-1.5 shadow-sm">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> University-Approved ✓
+                        </Badge>
+                    )}
                     <Badge
                         variant="outline"
                         className={cn("text-xs font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}
@@ -2255,6 +2361,18 @@ export default function HostelDetailPage() {
                     const hostelData = await getHostel(cleanId);
                     if (isMounted) {
                         if (hostelData) {
+                            // Sanction Status Check: Fetch fresh accreditationStatus directly from Firestore
+                            try {
+                                const liveDocSnap = await getDoc(doc(db, 'hostels', cleanId));
+                                if (liveDocSnap.exists()) {
+                                    const liveData = liveDocSnap.data();
+                                    if (liveData?.accreditationStatus) hostelData.accreditationStatus = liveData.accreditationStatus;
+                                    if (liveData?.sanctionStatus) hostelData.sanctionStatus = liveData.sanctionStatus;
+                                    if (liveData?.status) hostelData.status = liveData.status;
+                                }
+                            } catch (snapErr) {
+                                console.warn("Live status check note:", snapErr);
+                            }
                             setHostel(hostelData);
                         } else {
                             notFound();

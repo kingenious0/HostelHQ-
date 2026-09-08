@@ -16,6 +16,8 @@ import {
   Scale,
   Check,
   Users,
+  AlertTriangle,
+  Ban,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,6 +28,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext
 import { Separator } from '@/components/ui/separator';
 import { useShortlist } from '@/components/shortlist-context';
 import { isHostelSoldOut } from '@/lib/room-capacity';
+import { isHostelRevoked, isHostelSanctioned } from '@/lib/sanctions';
 
 type HostelCardProps = {
   hostel: Hostel;
@@ -137,11 +140,23 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
 
           {/* Top Overlays */}
           <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10 pointer-events-none">
-            {/* Uniplaces-Style "University-Approved ✓" Badge */}
-            <Badge className="bg-emerald-600/95 hover:bg-emerald-600 text-white border-0 text-[10.5px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              University-Approved ✓
-            </Badge>
+            {/* Accreditation / Sanction / Approval Badge */}
+            {isHostelRevoked(hostel) ? (
+              <Badge className="bg-rose-600/95 hover:bg-rose-600 text-white border-0 text-[10.5px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md flex items-center gap-1">
+                <Ban className="h-3.5 w-3.5" />
+                Accreditation Revoked
+              </Badge>
+            ) : isHostelSanctioned(hostel) ? (
+              <Badge className="bg-amber-600/95 hover:bg-amber-600 text-white border-0 text-[10.5px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Executive Sanction
+              </Badge>
+            ) : (
+              <Badge className="bg-emerald-600/95 hover:bg-emerald-600 text-white border-0 text-[10.5px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                University-Approved ✓
+              </Badge>
+            )}
 
             {/* Amber Student-Style Shortlist / Compare Toggle */}
             <button

@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth } from "@/lib/auth-guard";
+import { isHostelRestricted } from "@/lib/sanctions";
 
 type MomoPaymentPayload = {
     email: string;
@@ -16,6 +17,7 @@ type MomoPaymentPayload = {
     label?: string;
     hostelId: string;
     visitDate: string;
+    visitTime?: string;
     visitType?: 'in_person' | 'self';
     studentName?: string; // For generating payment reference
 }
@@ -38,6 +40,17 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
         return { status: false, message: "Payment processor is not configured. Please contact support." };
     }
 
+    // Pre-flight sanction guardrail: Reject transactions for sanctioned properties
+    if (payload.hostelId) {
+        const hostelSnap = await adminDb.collection('hostels').doc(payload.hostelId).get();
+        if (hostelSnap.exists) {
+            const hData = hostelSnap.data();
+            if (isHostelRestricted(hData)) {
+                throw new Error("Action Denied: This property is sanctioned and cannot accept student bookings.");
+            }
+        }
+    }
+
     const paystackUrl = 'https://api.paystack.co/transaction/initialize';
 
     const headersList = await headers();
@@ -46,9 +59,10 @@ export async function initializeMomoPayment(payload: MomoPaymentPayload) {
 
     const callback_url = new URL(`${protocol}://${host}/hostels/book/confirmation`);
     callback_url.searchParams.set('hostelId', payload.hostelId);
-    callback_url.searchParams.set('bookingType', 'secure'); callback_url.searchParams.set('visitDate', payload.visitDate);
-    callback_url.searchParams.set('visitTime', payload.visitTime);
-    callback_url.searchParams.set('visitType', payload.visitType);
+    callback_url.searchParams.set('bookingType', 'secure');
+    if (payload.visitDate) callback_url.searchParams.set('visitDate', payload.visitDate);
+    if (payload.visitTime) callback_url.searchParams.set('visitTime', payload.visitTime);
+    if (payload.visitType) callback_url.searchParams.set('visitType', payload.visitType);
 
     // Generate professional payment reference: VISIT-{first3letters}{last3digits}
     const generatePaymentReference = () => {
@@ -136,12 +150,15 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
         return { status: false, message: "Payment processor is not configured. Please contact support." };
     }
 
-    // Pre-flight capacity guardrail: Prevent payment initialization for 100% full units
+    // Pre-flight sanction & capacity guardrail: Prevent payment initialization for sanctioned or 100% full units
     if (payload.hostelId) {
         try {
             const hostelSnap = await adminDb.collection('hostels').doc(payload.hostelId).get();
             if (hostelSnap.exists) {
                 const hData = hostelSnap.data();
+                if (isHostelRestricted(hData)) {
+                    throw new Error("Action Denied: This property is sanctioned and cannot accept student bookings.");
+                }
                 if (hData?.status === 'sold-out' || hData?.availability === 'Full') {
                     return { status: false, message: "Cannot initialize payment: This hostel has reached 100% capacity and is fully booked." };
                 }
@@ -159,7 +176,10 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
                     }
                 }
             }
-        } catch (checkErr) {
+        } catch (checkErr: any) {
+            if (checkErr?.message?.includes("Action Denied")) {
+                throw checkErr;
+            }
             console.warn("Capacity pre-check warning in initializeHostelPayment:", checkErr);
         }
     }
@@ -229,9 +249,9 @@ export async function initializeHostelPayment(payload: HostelPaymentPayload) {
             authorization_url: result.data.authorization_url,
         };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error initializing Paystack transaction:", error);
-        return { status: false, message: "Could not connect to payment service." };
+        return { status: false, message: error?.message || "Could not connect to payment service." };
     }
 }
 
@@ -323,6 +343,9 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
                 throw new Error("Transaction rejected: Hostel record does not exist.");
             }
             const hostelData = hostelSnap.data();
+            if (isHostelRestricted(hostelData)) {
+                throw new Error("Action Denied: This property is sanctioned and cannot accept student bookings.");
+            }
             if (hostelData?.status === 'sold-out' || hostelData?.availability === 'Full') {
                 throw new Error("Transaction rejected: This hostel has reached 100% capacity and is fully booked.");
             }
