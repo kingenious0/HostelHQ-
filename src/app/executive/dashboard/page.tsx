@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -63,6 +64,8 @@ import {
   FileSpreadsheet,
   Check,
   Sparkles,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 
 interface ExecutiveMetricsData {
@@ -144,6 +147,9 @@ export default function ExecutiveDashboardPage() {
   const [activeTab, setActiveTab] = useState<ActiveExecutiveTab>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Switchboard presentation mode (Table vs Cards on small screens)
+  const [switchboardDisplay, setSwitchboardDisplay] = useState<"table" | "cards">("table");
 
   // Grievance category vs zone view switcher
   const [grievanceView, setGrievanceView] = useState<"category" | "zone">("category");
@@ -515,7 +521,7 @@ export default function ExecutiveDashboardPage() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center space-y-3">
           <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto text-primary">
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -539,7 +545,7 @@ export default function ExecutiveDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-zinc-950 text-foreground flex flex-col md:flex-row">
       {/* =========================================================================
-          1. SLEEK COLLAPSIBLE ENTERPRISE SIDEBAR (Cake & Navan inspired)
+          1. SLEEK COLLAPSIBLE ENTERPRISE SIDEBAR (Desktop / Tablet)
           ========================================================================= */}
       <aside
         className={`no-print hidden md:flex flex-col border-r border-border/70 bg-card transition-all duration-300 select-none z-30 ${
@@ -581,7 +587,7 @@ export default function ExecutiveDashboardPage() {
           </Button>
         </div>
 
-        {/* Sidebar Navigation */}
+        {/* Sidebar Navigation Links */}
         <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           <div className="mb-2 px-2">
             {!sidebarCollapsed && (
@@ -746,56 +752,192 @@ export default function ExecutiveDashboardPage() {
       </aside>
 
       {/* =========================================================================
+          MOBILE NAVIGATION SLIDE-OUT DRAWER (Sheet Component)
+          ========================================================================= */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-card border-border">
+          <SheetHeader className="p-4 border-b border-border/60 text-left">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm shrink-0">
+                <Landmark className="h-5 w-5" />
+              </div>
+              <div>
+                <SheetTitle className="font-headline font-black text-sm tracking-tight text-foreground">
+                  HostelHQ Executive
+                </SheetTitle>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Housing Governance
+                </p>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 p-3 space-y-1 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("overview");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "overview" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("compliance");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "compliance" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-4 w-4" />
+                Compliance Audit
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                {accreditationRate}%
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("sanctions");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "sanctions" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Scale className="h-4 w-4" />
+                Sanctions Switchboard
+              </div>
+              {activeSanctionsCount > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                  {activeSanctionsCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("reports");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "reports" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="h-4 w-4" />
+                Executive Reports
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">PDF</span>
+            </button>
+
+            <div className="pt-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setBriefingOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full h-9 text-xs font-bold rounded-xl bg-primary text-primary-foreground gap-1.5 shadow-xs"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Council Briefing
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-3 border-t border-border/60 bg-muted/20">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                {userInitials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">
+                  {currentUser?.displayName || currentUser?.email}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
+              <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+                <ArrowUpRight className="h-3 w-3" />
+                Exit Console
+              </Link>
+              <span className="font-mono text-[9px]">v2.6 Statutory</span>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* =========================================================================
           2. MAIN EXECUTIVE COMMAND CENTER AREA
           ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Executive Header Bar */}
-        <header className="no-print sticky top-0 z-20 h-16 border-b border-border/70 bg-card/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {/* Mobile Sidebar Toggle Button */}
+        <header className="no-print sticky top-0 z-20 h-16 border-b border-border/70 bg-card/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Hamburger Button for Mobile Viewports */}
             <Button
               variant="outline"
               size="icon"
               className="md:hidden h-9 w-9 rounded-xl shrink-0"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => setMobileMenuOpen(true)}
+              title="Open Navigation Menu"
             >
-              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              <Menu className="h-4 w-4" />
             </Button>
 
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <span>Executive Directorate</span>
+            <div className="min-w-0">
+              <div className="hidden xs:flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground truncate">
+                <span>Council</span>
                 <span>/</span>
-                <span className="font-bold text-foreground capitalize">{activeTab}</span>
+                <span className="font-bold text-foreground capitalize truncate">{activeTab}</span>
               </div>
-              <h1 className="text-base sm:text-lg font-black tracking-tight font-headline text-foreground truncate">
-                {activeTab === "overview" && "Executive Housing Overview"}
-                {activeTab === "compliance" && "Portfolio Statutory Compliance Audit"}
-                {activeTab === "sanctions" && "Accreditation Sanction & Revocation Switchboard"}
-                {activeTab === "reports" && "Executive Briefing & Statutory Reports"}
+              <h1 className="text-sm sm:text-base lg:text-lg font-black tracking-tight font-headline text-foreground truncate">
+                {activeTab === "overview" && "Executive Overview"}
+                {activeTab === "compliance" && "Statutory Compliance Audit"}
+                {activeTab === "sanctions" && "Sanctions Switchboard"}
+                {activeTab === "reports" && "Executive Reports"}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Compliance Badge */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Compliance Badge on Desktop */}
             <Badge
               variant="outline"
-              className="hidden lg:flex text-xs font-bold px-3 py-1.5 rounded-xl border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 items-center gap-1.5"
+              className="hidden lg:flex text-xs font-bold px-2.5 py-1 rounded-xl border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 items-center gap-1.5"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {accreditationRate}% Compliance Rate
+              {accreditationRate}% Compliance
             </Badge>
 
-            {/* Council Briefing Generator Modal CTA */}
+            {/* Council Briefing CTA */}
             <Button
               variant="default"
               size="sm"
               onClick={() => setBriefingOpen(true)}
-              className="h-9 px-3.5 text-xs font-bold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 gap-1.5 rounded-xl"
+              className="h-8 sm:h-9 px-2.5 sm:px-3.5 text-[11px] sm:text-xs font-bold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 gap-1.5 rounded-xl"
             >
-              <FileText className="h-4 w-4" />
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Council Briefing</span>
+              <span className="sm:hidden">Briefing</span>
             </Button>
 
             {/* Quick Export CSV */}
@@ -803,7 +945,7 @@ export default function ExecutiveDashboardPage() {
               variant="outline"
               size="sm"
               onClick={handleExportCSV}
-              className="h-9 px-3 text-xs font-semibold rounded-xl border-border/70 hover:bg-muted gap-1.5 hidden sm:flex"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl border-border/70 hover:bg-muted gap-1 hidden sm:flex"
               title="Download Council Briefing CSV"
             >
               <Download className="h-3.5 w-3.5 text-muted-foreground" />
@@ -816,7 +958,7 @@ export default function ExecutiveDashboardPage() {
               size="icon"
               onClick={loadData}
               disabled={loadingMetrics}
-              className="h-9 w-9 rounded-xl border-border/70 hover:bg-muted"
+              className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl border-border/70 hover:bg-muted shrink-0"
               title="Refresh Live Data"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-primary" : "text-muted-foreground"}`} />
@@ -824,95 +966,38 @@ export default function ExecutiveDashboardPage() {
           </div>
         </header>
 
-        {/* Mobile Navigation Drawer */}
-        {mobileMenuOpen && (
-          <div className="no-print md:hidden p-4 border-b border-border bg-card space-y-2">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("overview");
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
-                activeTab === "overview" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Overview
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("compliance");
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
-                activeTab === "compliance" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
-            >
-              <ShieldCheck className="h-4 w-4" />
-              Compliance Audit ({accreditationRate}%)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("sanctions");
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
-                activeTab === "sanctions" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
-            >
-              <Scale className="h-4 w-4" />
-              Sanctions Switchboard ({activeSanctionsCount} Flagged)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("reports");
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
-                activeTab === "reports" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
-            >
-              <FileText className="h-4 w-4" />
-              Executive Reports
-            </button>
-          </div>
-        )}
-
-        {/* Executive Content Surface */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-8">
+        {/* Executive Content Surface with Mobile-Friendly Spacing */}
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
           {/* =========================================================================
-              COMPONENT 2: TOP-LEVEL KPI METRIC CARDS GRID (Cake / Copilot Inspired)
+              COMPONENT 1: RESPONSIVE GRID STACKING FOR KPI CARDS
+              (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 with responsive font scaling)
               ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Card 1: Total Registered Properties */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-5 space-y-3">
+              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Registered Properties
                   </span>
-                  <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <Building2 className="h-4 w-4" />
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
 
-                <div className="flex items-baseline justify-between">
-                  <div className="text-3xl font-black tracking-tight text-foreground font-headline">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-foreground font-headline">
                     {totalRegisteredHostels}
                   </div>
-                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px] font-bold gap-1 px-2 py-0.5">
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px] font-bold gap-1 px-1.5 py-0.5 shrink-0">
                     <TrendingUp className="h-3 w-3" />
                     +4.8% YoY
                   </Badge>
                 </div>
 
-                <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border/50">
+                <div className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border/50 truncate">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <span>
+                  <span className="truncate">
                     <strong className="text-foreground font-semibold">{totalVerifiedHostels}</strong> accredited under charter
                   </span>
                 </div>
@@ -921,26 +1006,26 @@ export default function ExecutiveDashboardPage() {
 
             {/* Card 2: Active Bed Capacity */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-5 space-y-3">
+              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Active Bed Capacity
                   </span>
-                  <div className="h-8 w-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
-                    <Users className="h-4 w-4" />
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
+                    <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
 
-                <div className="flex items-baseline justify-between">
-                  <div className="text-3xl font-black tracking-tight text-sky-600 dark:text-sky-400 font-headline">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-sky-600 dark:text-sky-400 font-headline">
                     {totalOffCampusBeds.toLocaleString()}
                   </div>
-                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20 text-[10px] font-bold px-2 py-0.5">
+                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
                     100% Audited
                   </Badge>
                 </div>
 
-                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
                   Summed room capacity across accredited hostels
                 </div>
               </CardContent>
@@ -948,26 +1033,26 @@ export default function ExecutiveDashboardPage() {
 
             {/* Card 3: Pending Reviews */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-5 space-y-3">
+              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Pending Reviews
                   </span>
-                  <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
-                    <Clock className="h-4 w-4" />
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                    <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
 
-                <div className="flex items-baseline justify-between">
-                  <div className="text-3xl font-black tracking-tight text-amber-600 dark:text-amber-400 font-headline">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-amber-600 dark:text-amber-400 font-headline">
                     {pendingAccreditationReviews}
                   </div>
-                  <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] font-bold px-2 py-0.5">
+                  <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
                     In Pipeline
                   </Badge>
                 </div>
 
-                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
                   Awaiting Coordinator desk verification
                 </div>
               </CardContent>
@@ -975,26 +1060,26 @@ export default function ExecutiveDashboardPage() {
 
             {/* Card 4: Active Sanctions */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-5 space-y-3">
+              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Active Sanctions
                   </span>
-                  <div className="h-8 w-8 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
-                    <AlertTriangle className="h-4 w-4" />
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
+                    <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </div>
                 </div>
 
-                <div className="flex items-baseline justify-between">
-                  <div className="text-3xl font-black tracking-tight text-rose-600 dark:text-rose-400 font-headline">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-rose-600 dark:text-rose-400 font-headline">
                     {activeSanctionsCount}
                   </div>
-                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 text-[10px] font-bold px-2 py-0.5">
+                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
                     Enforcement
                   </Badge>
                 </div>
 
-                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
                   Properties under executive restriction
                 </div>
               </CardContent>
@@ -1005,29 +1090,29 @@ export default function ExecutiveDashboardPage() {
               TAB CONTENT 1: OVERVIEW
               ========================================================================= */}
           {activeTab === "overview" && (
-            <div className="space-y-8">
+            <div className="space-y-6 sm:space-y-8">
               {/* Room Category Inventory Distribution Benchmarks */}
-              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
-                <CardHeader className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
+                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                   <div>
-                    <CardTitle className="text-base font-extrabold font-headline flex items-center gap-2">
+                    <CardTitle className="text-sm sm:text-base font-extrabold font-headline flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-primary" />
                       Live Room Category Inventory &amp; Rental Benchmarks
                     </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
+                    <CardDescription className="text-xs text-muted-foreground mt-0.5">
                       Aggregated off-campus bed supply categorized by room configuration against statutory ceilings.
                     </CardDescription>
                   </div>
-                  <Badge variant="outline" className="text-xs font-bold text-foreground">
-                    Total: {totalOffCampusBeds.toLocaleString()} Bed Spaces
+                  <Badge variant="outline" className="text-xs font-bold text-foreground self-start sm:self-auto">
+                    Total: {totalOffCampusBeds.toLocaleString()} Beds
                   </Badge>
                 </CardHeader>
 
-                <CardContent className="p-5">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                <CardContent className="p-3 sm:p-5">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
+                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
                       <span className="text-muted-foreground font-semibold text-[11px]">1 in a Room (Single)</span>
-                      <p className="text-xl font-extrabold text-foreground mt-1">
+                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
                         {bedsByRoomCategory.oneBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
                       </p>
                       <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
@@ -1040,9 +1125,9 @@ export default function ExecutiveDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
                       <span className="text-muted-foreground font-semibold text-[11px]">2 in a Room (Double)</span>
-                      <p className="text-xl font-extrabold text-foreground mt-1">
+                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
                         {bedsByRoomCategory.twoBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
                       </p>
                       <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
@@ -1055,9 +1140,9 @@ export default function ExecutiveDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
                       <span className="text-muted-foreground font-semibold text-[11px]">3 in a Room (Triple)</span>
-                      <p className="text-xl font-extrabold text-foreground mt-1">
+                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
                         {bedsByRoomCategory.threeBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
                       </p>
                       <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
@@ -1070,9 +1155,9 @@ export default function ExecutiveDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
                       <span className="text-muted-foreground font-semibold text-[11px]">4 in a Room (Quad)</span>
-                      <p className="text-xl font-extrabold text-foreground mt-1">
+                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
                         {bedsByRoomCategory.fourBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
                       </p>
                       <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
@@ -1088,15 +1173,13 @@ export default function ExecutiveDashboardPage() {
                 </CardContent>
               </Card>
 
-              {/* =========================================================================
-                  COMPONENT 3: SPLIT-PANE ANALYTICS SECTION (Cake image_7d38c9.jpg style)
-                  ========================================================================= */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Split-Pane Analytics Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Left Card: Grievance Distribution */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
-                  <div className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
+                  <div className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <CardTitle className="text-base font-extrabold flex items-center gap-2 font-headline">
+                      <CardTitle className="text-sm sm:text-base font-extrabold flex items-center gap-2 font-headline">
                         <BarChart3 className="h-4 w-4 text-primary" />
                         Grievance Distribution
                       </CardTitle>
@@ -1110,7 +1193,7 @@ export default function ExecutiveDashboardPage() {
                         variant={grievanceView === "category" ? "secondary" : "ghost"}
                         size="sm"
                         onClick={() => setGrievanceView("category")}
-                        className="h-7 px-3 text-[11px] font-bold rounded-lg"
+                        className="h-7 px-2.5 sm:px-3 text-[11px] font-bold rounded-lg"
                       >
                         By Category
                       </Button>
@@ -1118,16 +1201,16 @@ export default function ExecutiveDashboardPage() {
                         variant={grievanceView === "zone" ? "secondary" : "ghost"}
                         size="sm"
                         onClick={() => setGrievanceView("zone")}
-                        className="h-7 px-3 text-[11px] font-bold rounded-lg"
+                        className="h-7 px-2.5 sm:px-3 text-[11px] font-bold rounded-lg"
                       >
                         By Zone
                       </Button>
                     </div>
                   </div>
 
-                  <CardContent className="p-5 space-y-4">
+                  <CardContent className="p-4 sm:p-5 space-y-4">
                     {summary.totalComplaints === 0 ? (
-                      <div className="py-12 text-center space-y-2">
+                      <div className="py-10 text-center space-y-2">
                         <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto text-emerald-600">
                           <CheckCircle2 className="h-5 w-5" />
                         </div>
@@ -1141,8 +1224,8 @@ export default function ExecutiveDashboardPage() {
                         categoryBreakdown.map((item, idx) => (
                           <div key={idx} className="space-y-1.5">
                             <div className="flex justify-between text-xs font-medium">
-                              <span className="text-foreground font-semibold">{item.category}</span>
-                              <span className="text-muted-foreground">
+                              <span className="text-foreground font-semibold truncate pr-2">{item.category}</span>
+                              <span className="text-muted-foreground shrink-0">
                                 {item.count} reports ({item.percentage}%)
                               </span>
                             </div>
@@ -1156,11 +1239,11 @@ export default function ExecutiveDashboardPage() {
                       (zoneBreakdown || []).map((item, idx) => (
                         <div key={idx} className="space-y-1.5">
                           <div className="flex justify-between text-xs font-medium">
-                            <span className="text-foreground font-semibold flex items-center gap-1.5">
-                              <MapPin className="h-3 w-3 text-muted-foreground" />
-                              {item.zone}
+                            <span className="text-foreground font-semibold flex items-center gap-1.5 truncate pr-2">
+                              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="truncate">{item.zone}</span>
                             </span>
-                            <span className="text-muted-foreground">
+                            <span className="text-muted-foreground shrink-0">
                               {item.count} reports ({item.percentage}%)
                             </span>
                           </div>
@@ -1172,10 +1255,10 @@ export default function ExecutiveDashboardPage() {
                 </Card>
 
                 {/* Right Card: Dispute Origin & Resolution Status */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
-                  <div className="p-5 border-b border-border/60 bg-muted/10 flex items-center justify-between">
+                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
+                  <div className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-base font-extrabold flex items-center gap-2 font-headline">
+                      <CardTitle className="text-sm sm:text-base font-extrabold flex items-center gap-2 font-headline">
                         <PieChart className="h-4 w-4 text-primary" />
                         Dispute Origin &amp; Resolution Status
                       </CardTitle>
@@ -1185,28 +1268,28 @@ export default function ExecutiveDashboardPage() {
                     </div>
                   </div>
 
-                  <CardContent className="p-5 space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-card border border-border/70 rounded-2xl p-4 text-center">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <CardContent className="p-4 sm:p-5 space-y-5 sm:space-y-6">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                      <div className="bg-card border border-border/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center">
+                        <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           Student → Hostel
                         </p>
-                        <p className="text-2xl font-black text-foreground mt-1 font-headline">
+                        <p className="text-xl sm:text-2xl font-black text-foreground mt-1 font-headline">
                           {directionBreakdown.studentToHostel}
                         </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
                           Facilities &amp; utilities
                         </p>
                       </div>
 
-                      <div className="bg-card border border-border/70 rounded-2xl p-4 text-center">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <div className="bg-card border border-border/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center">
+                        <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           Manager → Student
                         </p>
-                        <p className="text-2xl font-black text-foreground mt-1 font-headline">
+                        <p className="text-xl sm:text-2xl font-black text-foreground mt-1 font-headline">
                           {directionBreakdown.managerToStudent}
                         </p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
                           Conduct &amp; policy notices
                         </p>
                       </div>
@@ -1219,7 +1302,7 @@ export default function ExecutiveDashboardPage() {
                           {summary.resolutionRate}% Concluded
                         </span>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-3 flex overflow-hidden shadow-inner">
+                      <div className="w-full bg-muted rounded-full h-2.5 sm:h-3 flex overflow-hidden shadow-inner">
                         <div
                           style={{ width: `${summary.resolutionRate}%` }}
                           className="bg-emerald-500 h-full transition-all duration-500"
@@ -1231,13 +1314,13 @@ export default function ExecutiveDashboardPage() {
                           title={`Under Review: ${100 - summary.resolutionRate}%`}
                         />
                       </div>
-                      <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
+                      <div className="flex flex-col xs:flex-row justify-between text-[10px] sm:text-[11px] text-muted-foreground gap-1 pt-0.5">
                         <span className="flex items-center gap-1">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block shrink-0" />
                           Resolved ({summary.resolvedComplaints})
                         </span>
                         <span className="flex items-center gap-1">
-                          <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+                          <span className="h-2 w-2 rounded-full bg-amber-400 inline-block shrink-0" />
                           In Arbitration ({summary.underReviewComplaints + summary.submittedComplaints})
                         </span>
                       </div>
@@ -1247,25 +1330,25 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Fast Executive Jump Bar */}
-              <div className="p-5 rounded-3xl bg-card border border-border/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-card border border-border/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                    <Scale className="h-5 w-5" />
+                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <Scale className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-foreground">Accreditation Sanction Control Switchboard</h3>
-                    <p className="text-xs text-muted-foreground">
+                    <h3 className="text-xs sm:text-sm font-bold text-foreground">Accreditation Sanction Control Switchboard</h3>
+                    <p className="text-[11px] text-muted-foreground">
                       Direct executive power to enforce statutory warnings or revoke accreditation under university charter.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setActiveTab("sanctions")}
-                    className="h-9 px-4 text-xs font-bold rounded-xl"
+                    className="flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 text-xs font-bold rounded-xl"
                   >
                     Open Switchboard
                   </Button>
@@ -1273,7 +1356,7 @@ export default function ExecutiveDashboardPage() {
                     variant="default"
                     size="sm"
                     onClick={() => setBriefingOpen(true)}
-                    className="h-9 px-4 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-xs"
+                    className="flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-xs"
                   >
                     Generate Briefing
                   </Button>
@@ -1286,10 +1369,10 @@ export default function ExecutiveDashboardPage() {
               TAB CONTENT 2: COMPLIANCE AUDIT
               ========================================================================= */}
           {activeTab === "compliance" && (
-            <div className="space-y-8">
-              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
-                <CardHeader className="p-5 border-b border-border/60 bg-muted/10">
-                  <CardTitle className="text-base font-extrabold font-headline flex items-center gap-2">
+            <div className="space-y-6 sm:space-y-8">
+              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
+                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10">
+                  <CardTitle className="text-sm sm:text-base font-extrabold font-headline flex items-center gap-2">
                     <ShieldCheck className="h-5 w-5 text-emerald-600" />
                     Statutory Framework &amp; Fire Safety Audits
                   </CardTitle>
@@ -1297,9 +1380,9 @@ export default function ExecutiveDashboardPage() {
                     Oversight of Fire Precaution Regulations (Act 389 and L.I. 1724) and university health standards.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                <CardContent className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-muted-foreground uppercase">Fire Certificates</span>
                         <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 text-[10px]">
@@ -1312,7 +1395,7 @@ export default function ExecutiveDashboardPage() {
                       </p>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-muted-foreground uppercase">Welfare Clearances</span>
                         <Badge className="bg-sky-500/10 text-sky-700 border-sky-500/20 text-[10px]">
@@ -1325,7 +1408,7 @@ export default function ExecutiveDashboardPage() {
                       </p>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-muted-foreground uppercase">Verification Queue</span>
                         <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]">
@@ -1339,7 +1422,7 @@ export default function ExecutiveDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-2xl bg-muted/30 border border-border/60 text-xs space-y-2">
+                  <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-muted/30 border border-border/60 text-xs space-y-2">
                     <h4 className="font-bold text-foreground flex items-center gap-1.5">
                       <Shield className="h-4 w-4 text-primary" />
                       Statutory Enforcement Policy (Pro-VC Directive):
@@ -1355,43 +1438,67 @@ export default function ExecutiveDashboardPage() {
 
           {/* =========================================================================
               TAB CONTENT 3: ACCREDITATION SANCTION & REVOCATION SWITCHBOARD
+              (Mobile Touch-Scrollable Table + Clean Mobile Card View)
               ========================================================================= */}
           {activeTab === "sanctions" && (
-            <div className="space-y-6">
-              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
-                <CardHeader className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-4 sm:space-y-6">
+              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
+                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                   <div>
-                    <CardTitle className="text-base sm:text-lg font-extrabold font-headline flex items-center gap-2">
-                      <Scale className="h-5 w-5 text-rose-600" />
-                      Accreditation Sanction &amp; Revocation Switchboard
+                    <CardTitle className="text-sm sm:text-base lg:text-lg font-extrabold font-headline flex items-center gap-2">
+                      <Scale className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600" />
+                      Accreditation Sanction Switchboard
                     </CardTitle>
                     <CardDescription className="text-xs text-muted-foreground">
-                      Exercise statutory executive oversight over private student accommodation properties.
+                      Executive authority to sanction or revoke university charter accreditation.
                     </CardDescription>
                   </div>
-                  <Badge variant="outline" className="text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/30">
-                    Vice-Chancellor Direct Control
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] sm:text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/30">
+                      VC Direct Control
+                    </Badge>
+                    {/* View Switcher on Mobile/Tablet */}
+                    <div className="flex sm:hidden items-center bg-muted p-0.5 rounded-lg">
+                      <Button
+                        variant={switchboardDisplay === "table" ? "secondary" : "ghost"}
+                        size="icon"
+                        className="h-7 w-7 rounded-md"
+                        onClick={() => setSwitchboardDisplay("table")}
+                        title="Horizontal Table View"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant={switchboardDisplay === "cards" ? "secondary" : "ghost"}
+                        size="icon"
+                        className="h-7 w-7 rounded-md"
+                        onClick={() => setSwitchboardDisplay("cards")}
+                        title="Stacked Card View"
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
 
                 {/* Filter and Search Bar */}
-                <div className="p-4 border-b border-border/60 bg-card flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="p-3 sm:p-4 border-b border-border/60 bg-card flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
                   <div className="relative w-full sm:w-80">
                     <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Search hostels by name or zone..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 h-9 text-xs rounded-xl"
+                      className="pl-9 h-8 sm:h-9 text-xs rounded-xl"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto w-full sm:w-auto">
+                  <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
                     <Button
                       variant={statusFilter === "all" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("all")}
-                      className="h-8 text-xs font-bold rounded-xl"
+                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5"
                     >
                       All ({hostels.length})
                     </Button>
@@ -1399,7 +1506,7 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "approved" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("approved")}
-                      className="h-8 text-xs font-bold rounded-xl"
+                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5"
                     >
                       Good Standing ({totalVerifiedHostels})
                     </Button>
@@ -1407,7 +1514,7 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "sanctioned" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("sanctioned")}
-                      className="h-8 text-xs font-bold rounded-xl text-amber-600"
+                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5 text-amber-600"
                     >
                       Sanctioned
                     </Button>
@@ -1415,17 +1522,159 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "revoked" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("revoked")}
-                      className="h-8 text-xs font-bold rounded-xl text-rose-600"
+                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5 text-rose-600"
                     >
                       Revoked
                     </Button>
                   </div>
                 </div>
 
-                {/* Enterprise Table (Cake image_7d3540.png inspired) */}
+                {/* Content: Mobile Cards View vs Responsive Horizontal Scrollable Table */}
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
+                  {/* MOBILE STACKED CARDS VIEW (Clean, touch-first on small screens) */}
+                  <div className={`${switchboardDisplay === "cards" ? "block" : "block sm:hidden"} divide-y divide-border/60`}>
+                    {filteredHostels.length === 0 ? (
+                      <div className="text-center py-10 text-xs text-muted-foreground px-4">
+                        No properties matched your current filter criteria.
+                      </div>
+                    ) : (
+                      filteredHostels.map((h) => {
+                        const isRevoked = isHostelRevoked(h);
+                        const isSanctioned = isHostelSanctioned(h);
+                        const beds = (h.roomTypes || []).reduce((acc, rt) => acc + ((rt.numberOfRooms || 1) * (rt.capacity || 1)), 0);
+                        const initials = (h.name || "H")
+                          .split(" ")
+                          .map((w) => w[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase();
+
+                        return (
+                          <div key={h.id} className="p-4 space-y-3 bg-card hover:bg-muted/20 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                  {initials}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="font-bold text-xs text-foreground truncate">{h.name}</h4>
+                                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                                    <MapPin className="h-3 w-3 shrink-0" />
+                                    {h.location}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="shrink-0">
+                                {isRevoked ? (
+                                  <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                    <XCircle className="h-3 w-3" />
+                                    Revoked
+                                  </Badge>
+                                ) : isSanctioned ? (
+                                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Sanctioned
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Good Standing
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] bg-muted/30 p-2.5 rounded-xl border border-border/50">
+                              <div>
+                                <span className="text-muted-foreground text-[10px]">Bed Capacity:</span>
+                                <p className="font-bold text-foreground">{beds} Beds</p>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground text-[10px]">Tariff Range:</span>
+                                <p className="font-bold text-foreground truncate">
+                                  GH₵ {h.priceRange?.min?.toLocaleString()} - {h.priceRange?.max?.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            {(h as any).sanctionReason && (
+                              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                                <span className="font-bold">Notice:</span> {(h as any).sanctionReason}
+                              </p>
+                            )}
+
+                            {/* Mobile Action Dropdown Trigger (Full Width) */}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full h-8 text-xs font-bold rounded-xl gap-1.5 border-border/80 hover:bg-muted justify-between"
+                                >
+                                  <span>Manage Status</span>
+                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56 rounded-2xl p-1.5">
+                                <DropdownMenuLabel className="text-[11px] font-bold uppercase text-muted-foreground px-2 py-1">
+                                  Executive Action
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedHostelForSanction(h);
+                                    setNewSanctionStatus("approved");
+                                    setSanctionReason((h as any).sanctionReason || "");
+                                  }}
+                                  className="text-xs font-semibold gap-2 rounded-xl text-emerald-600 cursor-pointer"
+                                >
+                                  <ShieldCheck className="h-4 w-4" />
+                                  Restore Good Standing
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedHostelForSanction(h);
+                                    setNewSanctionStatus("sanctioned");
+                                    setSanctionReason((h as any).sanctionReason || "");
+                                  }}
+                                  className="text-xs font-semibold gap-2 rounded-xl text-amber-600 cursor-pointer"
+                                >
+                                  <AlertTriangle className="h-4 w-4" />
+                                  Apply Executive Sanction
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedHostelForSanction(h);
+                                    setNewSanctionStatus("revoked");
+                                    setSanctionReason((h as any).sanctionReason || "");
+                                  }}
+                                  className="text-xs font-semibold gap-2 rounded-xl text-rose-600 cursor-pointer"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  Revoke Charter Accreditation
+                                </DropdownMenuItem>
+
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild className="text-xs font-semibold gap-2 rounded-xl cursor-pointer">
+                                  <Link href={`/hostels/${h.id}`} target="_blank">
+                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                    View Public Listing
+                                  </Link>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* DESKTOP / TABLET HORIZONTAL SCROLLABLE TABLE (with Pinned Action Column) */}
+                  <div className={`${switchboardDisplay === "table" ? "hidden sm:block" : "hidden"} overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 scrollbar-thin`}>
+                    <Table className="min-w-[700px] w-full">
                       <TableHeader className="bg-muted/40 border-b border-border/60">
                         <TableRow>
                           <TableHead className="w-56 font-bold text-xs">Hostel &amp; Location</TableHead>
@@ -1433,7 +1682,9 @@ export default function ExecutiveDashboardPage() {
                           <TableHead className="font-bold text-xs">Room Inventory &amp; Beds</TableHead>
                           <TableHead className="font-bold text-xs">Tariff Range</TableHead>
                           <TableHead className="font-bold text-xs">Compliance Notes</TableHead>
-                          <TableHead className="text-right font-bold text-xs">Executive Action</TableHead>
+                          <TableHead className="text-right font-bold text-xs sticky right-0 bg-card/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)]">
+                            Executive Action
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1495,7 +1746,7 @@ export default function ExecutiveDashboardPage() {
 
                                 {/* Room Inventory */}
                                 <TableCell className="py-3.5 text-xs">
-                                  <p className="font-bold text-foreground">{beds} Verified Beds</p>
+                                  <p className="font-bold text-foreground">{beds} Beds</p>
                                   <p className="text-[11px] text-muted-foreground">
                                     {h.roomTypes?.length || 1} room categories
                                   </p>
@@ -1520,8 +1771,8 @@ export default function ExecutiveDashboardPage() {
                                   )}
                                 </TableCell>
 
-                                {/* Action Dropdown Menu */}
-                                <TableCell className="py-3.5 text-right">
+                                {/* Pinned Action Dropdown Menu Column */}
+                                <TableCell className="py-3.5 text-right sticky right-0 bg-card/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)]">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
@@ -1602,9 +1853,9 @@ export default function ExecutiveDashboardPage() {
               ========================================================================= */}
           {activeTab === "reports" && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {/* Official Briefing Card */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl p-6 space-y-4">
+                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
                   <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                     <FileText className="h-5 w-5" />
                   </div>
@@ -1614,7 +1865,7 @@ export default function ExecutiveDashboardPage() {
                       Formatted for the University Council, Academic Board, and Directorate of Student Welfare. Includes live statutory rental benchmarks, bed capacity deficits, and sanctions register.
                     </p>
                   </div>
-                  <div className="pt-2 flex items-center gap-2">
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
                     <Button
                       variant="default"
                       size="sm"
@@ -1637,7 +1888,7 @@ export default function ExecutiveDashboardPage() {
                 </Card>
 
                 {/* Audit Trail Card */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl p-6 space-y-4">
+                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
                   <div className="h-10 w-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
                     <FileSpreadsheet className="h-5 w-5" />
                   </div>
@@ -1668,14 +1919,14 @@ export default function ExecutiveDashboardPage() {
             3. MODAL: EXECUTIVE COUNCIL BRIEFING GENERATOR (WITH PRINT ENGINE FIX)
             ========================================================================= */}
         <Dialog open={briefingOpen} onOpenChange={setBriefingOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8 bg-card border-border">
+          <DialogContent className="max-w-4xl max-h-[92vh] w-[95vw] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-8 bg-card border-border">
             <DialogHeader className="border-b border-border pb-4 no-print">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase mb-1">
                     Official Executive Document
                   </Badge>
-                  <DialogTitle className="text-xl sm:text-2xl font-black font-headline text-foreground">
+                  <DialogTitle className="text-lg sm:text-2xl font-black font-headline text-foreground">
                     Executive Council Briefing Report
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-0.5">
@@ -1683,7 +1934,7 @@ export default function ExecutiveDashboardPage() {
                   </DialogDescription>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1709,17 +1960,17 @@ export default function ExecutiveDashboardPage() {
             {/* Printable Briefing Content Container (Unclipped & A4 100% scaled) */}
             <div id="executive-briefing-printable" className="space-y-6 text-xs leading-relaxed text-foreground py-4">
               {/* Institutional Header Letterhead */}
-              <div className="p-5 rounded-2xl bg-muted/40 border border-border/70 flex flex-col sm:flex-row justify-between gap-4 text-xs">
+              <div className="p-4 sm:p-5 rounded-2xl bg-muted/40 border border-border/70 flex flex-col sm:flex-row justify-between gap-3 text-xs">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-white text-xs font-bold">
                       HQ
                     </div>
-                    <span className="font-extrabold text-sm uppercase tracking-wider text-primary">
+                    <span className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-primary">
                       HostelHQ University Housing Directorate
                     </span>
                   </div>
-                  <p className="font-bold text-base text-foreground">
+                  <p className="font-bold text-sm sm:text-base text-foreground">
                     {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate of Student Welfare"}
                   </p>
                   <p className="text-muted-foreground">Accreditation &amp; Private Accommodation Governance Council</p>
@@ -1739,7 +1990,7 @@ export default function ExecutiveDashboardPage() {
                   <Building2 className="h-4 w-4 text-primary" />
                   1. Private Student Housing Portfolio Assessment
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                   <div className="p-3 rounded-xl bg-card border border-border/60">
                     <span className="text-muted-foreground font-medium text-[10px]">Total Hostels</span>
                     <p className="text-lg font-black text-foreground">{totalRegisteredHostels}</p>
@@ -1772,7 +2023,7 @@ export default function ExecutiveDashboardPage() {
                   <DollarSign className="h-4 w-4 text-emerald-600" />
                   2. Campus Rental Price Indices (Statutory Limits vs Market Averages)
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                   <div className="p-3 rounded-xl bg-card border border-border/60">
                     <span className="text-muted-foreground font-medium text-[10px]">1-in-a-Room Avg</span>
                     <p className="text-base font-black text-foreground">GH₵ {rentIndices.oneInRoom.toLocaleString()}</p>
@@ -1903,11 +2154,11 @@ export default function ExecutiveDashboardPage() {
             if (!open) setSelectedHostelForSanction(null);
           }}
         >
-          <DialogContent className="max-w-md rounded-3xl p-6 bg-card border-border">
+          <DialogContent className="max-w-md w-[95vw] rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-lg font-bold font-headline text-foreground flex items-center gap-2">
-                <AlertOctagon className="h-5 w-5 text-rose-600" />
-                Executive Sanction Control
+              <DialogTitle className="text-base sm:text-lg font-bold font-headline text-foreground flex items-center gap-2">
+                <AlertOctagon className="h-5 w-5 text-rose-600 shrink-0" />
+                <span>Executive Sanction Control</span>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 Set statutory standing for {selectedHostelForSanction?.name}.
@@ -1944,7 +2195,7 @@ export default function ExecutiveDashboardPage() {
 
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
                 <p className="font-bold flex items-center gap-1">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                   Statutory Enforcement Effect:
                 </p>
                 <p>
@@ -1957,12 +2208,12 @@ export default function ExecutiveDashboardPage() {
               </div>
             </div>
 
-            <DialogFooter className="gap-2">
+            <DialogFooter className="gap-2 flex-col sm:flex-row">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedHostelForSanction(null)}
-                className="rounded-xl text-xs"
+                className="rounded-xl text-xs w-full sm:w-auto"
               >
                 Cancel
               </Button>
@@ -1971,7 +2222,7 @@ export default function ExecutiveDashboardPage() {
                 size="sm"
                 onClick={handleUpdateSanction}
                 disabled={isUpdatingSanction}
-                className="rounded-xl text-xs font-bold gap-1.5"
+                className="rounded-xl text-xs font-bold gap-1.5 w-full sm:w-auto"
               >
                 {isUpdatingSanction && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Confirm Executive Status
