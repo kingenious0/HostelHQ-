@@ -63,9 +63,11 @@ import {
   Shield,
   FileSpreadsheet,
   Check,
-  Sparkles,
   LayoutGrid,
   List,
+  User as UserIcon,
+  KeyRound,
+  LogOut,
 } from "lucide-react";
 
 interface ExecutiveMetricsData {
@@ -136,6 +138,7 @@ export default function ExecutiveDashboardPage() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userFullName, setUserFullName] = useState<string>("");
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [metrics, setMetrics] = useState<ExecutiveMetricsData>(EMPTY_METRICS_DATA);
@@ -150,6 +153,31 @@ export default function ExecutiveDashboardPage() {
 
   // Switchboard presentation mode (Table vs Cards on small screens)
   const [switchboardDisplay, setSwitchboardDisplay] = useState<"table" | "cards">("table");
+
+  // Automatically default to clean cards on small viewports
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSwitchboardDisplay("cards");
+    }
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut();
+      toast({
+        title: "Signed Out",
+        description: "You have securely signed out of the executive console.",
+      });
+      router.replace("/login");
+    } catch (err) {
+      console.error("Sign out error:", err);
+      toast({
+        title: "Sign Out Failed",
+        description: "Could not sign out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Grievance category vs zone view switcher
   const [grievanceView, setGrievanceView] = useState<"category" | "zone">("category");
@@ -180,8 +208,10 @@ export default function ExecutiveDashboardPage() {
       try {
         const snap = await getDoc(doc(db, "users", user.uid));
         if (snap.exists()) {
-          const role = snap.data().role;
+          const userData = snap.data();
+          const role = userData.role;
           setUserRole(role);
+          setUserFullName(userData.fullName || user.displayName || "");
           if (role !== "pro_vc" && role !== "vc" && role !== "admin" && role !== "executive") {
             toast({
               title: "Access Denied",
@@ -197,9 +227,9 @@ export default function ExecutiveDashboardPage() {
             description: "No authorized profile found. This executive dashboard is restricted.",
             variant: "destructive",
           });
-          router.replace("/");
-          return;
-        }
+            router.replace("/");
+            return;
+          }
       } catch (err) {
         console.error("Executive auth error:", err);
       } finally {
@@ -701,11 +731,11 @@ export default function ExecutiveDashboardPage() {
             {!sidebarCollapsed && (
               <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <Building2 className="h-4 w-4 text-primary" />
                   <span>Council Briefing</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Generate statutory report for the Academic Board &amp; Welfare Directorate.
+                  Generate statutory compliance and capacity reports for the University Council &amp; Welfare Directorate.
                 </p>
                 <Button
                   variant="default"
@@ -723,22 +753,22 @@ export default function ExecutiveDashboardPage() {
 
         {/* Sidebar Footer User Card */}
         <div className="p-3 border-t border-border/60 bg-muted/20">
-          <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? "justify-center" : ""}`}>
-            <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+          <Link href="/settings/profile" className={`flex items-center gap-2.5 ${sidebarCollapsed ? "justify-center" : ""} hover:opacity-80 transition-opacity group`}>
+            <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0 group-hover:border-primary/40">
               {userInitials}
             </div>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">
-                  {currentUser?.displayName || currentUser?.email}
+                <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                  {userFullName || currentUser?.displayName || currentUser?.email}
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1 font-medium">
                   <Landmark className="h-3 w-3 text-amber-600 shrink-0" />
-                  {isVC ? "Vice-Chancellor" : "Executive Directorate"}
+                  {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
                 </p>
               </div>
             )}
-          </div>
+          </Link>
           {!sidebarCollapsed && (
             <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
               <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
@@ -861,19 +891,19 @@ export default function ExecutiveDashboardPage() {
           </div>
 
           <div className="p-3 border-t border-border/60 bg-muted/20">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+            <Link href="/settings/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity group">
+              <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0 group-hover:border-primary/40">
                 {userInitials}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">
-                  {currentUser?.displayName || currentUser?.email}
+                <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                  {userFullName || currentUser?.displayName || currentUser?.email}
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate">
-                  {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"}
+                  {isVC ? "Office of the Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
                 </p>
               </div>
-            </div>
+            </Link>
             <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
               <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
                 <ArrowUpRight className="h-3 w-3" />
@@ -963,6 +993,65 @@ export default function ExecutiveDashboardPage() {
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-primary" : "text-muted-foreground"}`} />
             </Button>
+
+            {/* Interactive User Avatar Dropdown (Touch-First & Accessible) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="relative h-10 w-10 sm:h-9 sm:w-9 min-h-[44px] min-w-[44px] rounded-full p-0 border border-primary/25 hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 transition-all shrink-0 flex items-center justify-center cursor-pointer"
+                  aria-label="Executive profile and account settings"
+                >
+                  <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs sm:text-sm">
+                    {userInitials}
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-xl border-border/80 bg-popover z-50">
+                <DropdownMenuLabel className="font-normal p-2">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-bold text-foreground leading-none truncate">
+                      {userFullName || currentUser?.displayName || (isVC ? "Vice-Chancellor" : "Executive Council")}
+                    </p>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-primary/10 text-primary border-primary/20">
+                        {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono truncate pt-0.5">
+                      {currentUser?.email || "executive@hostelhq.com"}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/settings/profile"
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-muted focus:bg-muted transition-colors w-full"
+                  >
+                    <UserIcon className="h-4 w-4 text-primary" />
+                    <span>Edit Profile &amp; Credentials</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/settings/profile?tab=security"
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-muted focus:bg-muted transition-colors w-full"
+                  >
+                    <KeyRound className="h-4 w-4 text-primary" />
+                    <span>Security &amp; Passkeys</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/10 focus:bg-rose-500/10 transition-colors w-full"
+                >
+                  <LogOut className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
@@ -973,7 +1062,7 @@ export default function ExecutiveDashboardPage() {
               (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 with responsive font scaling)
               ========================================================================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Card 1: Total Registered Properties */}
+            {/* Card 1: Registered Properties */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
               <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
@@ -1004,12 +1093,12 @@ export default function ExecutiveDashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Card 2: Active Bed Capacity */}
+            {/* Card 2: Verified Off-Campus Beds */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
               <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Active Bed Capacity
+                    Verified Off-Campus Beds
                   </span>
                   <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
                     <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1031,12 +1120,12 @@ export default function ExecutiveDashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Card 3: Pending Reviews */}
+            {/* Card 3: Pending Accreditation Audits */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
               <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Pending Reviews
+                    Pending Accreditation Audits
                   </span>
                   <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
                     <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1058,12 +1147,12 @@ export default function ExecutiveDashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Card 4: Active Sanctions */}
+            {/* Card 4: Active Statutory Sanctions */}
             <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
               <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Active Sanctions
+                    Active Statutory Sanctions
                   </span>
                   <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
                     <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1532,7 +1621,7 @@ export default function ExecutiveDashboardPage() {
                 {/* Content: Mobile Cards View vs Responsive Horizontal Scrollable Table */}
                 <CardContent className="p-0">
                   {/* MOBILE STACKED CARDS VIEW (Clean, touch-first on small screens) */}
-                  <div className={`${switchboardDisplay === "cards" ? "block" : "block sm:hidden"} divide-y divide-border/60`}>
+                  <div className={`${switchboardDisplay === "cards" ? "block" : "hidden"} divide-y divide-border/60`}>
                     {filteredHostels.length === 0 ? (
                       <div className="text-center py-10 text-xs text-muted-foreground px-4">
                         No properties matched your current filter criteria.
@@ -1672,12 +1761,12 @@ export default function ExecutiveDashboardPage() {
                     )}
                   </div>
 
-                  {/* DESKTOP / TABLET HORIZONTAL SCROLLABLE TABLE (with Pinned Action Column) */}
-                  <div className={`${switchboardDisplay === "table" ? "hidden sm:block" : "hidden"} overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 scrollbar-thin`}>
+                  {/* DESKTOP / TABLET / MOBILE HORIZONTAL SCROLLABLE TABLE (with Pinned Action & Primary Columns) */}
+                  <div className={`${switchboardDisplay === "table" ? "block" : "hidden"} overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 scrollbar-thin`}>
                     <Table className="min-w-[700px] w-full">
                       <TableHeader className="bg-muted/40 border-b border-border/60">
                         <TableRow>
-                          <TableHead className="w-56 font-bold text-xs">Hostel &amp; Location</TableHead>
+                          <TableHead className="w-56 font-bold text-xs sticky left-0 bg-muted/95 backdrop-blur-xs z-10 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.06)]">Hostel &amp; Location</TableHead>
                           <TableHead className="font-bold text-xs">Accreditation Standing</TableHead>
                           <TableHead className="font-bold text-xs">Room Inventory &amp; Beds</TableHead>
                           <TableHead className="font-bold text-xs">Tariff Range</TableHead>
@@ -1709,7 +1798,7 @@ export default function ExecutiveDashboardPage() {
                             return (
                               <TableRow key={h.id} className="hover:bg-muted/30 transition-colors">
                                 {/* Hostel & Location with Avatar */}
-                                <TableCell className="py-3.5">
+                                <TableCell className="py-3.5 sticky left-0 bg-card/95 backdrop-blur-xs z-10 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.06)]">
                                   <div className="flex items-center gap-3">
                                     <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                                       {initials}

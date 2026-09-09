@@ -463,27 +463,90 @@ export default function ProfilePage() {
     }
   };
 
+export const ROLE_CONFIG: Record<string, { label: string; badgeClass: string; description: string }> = {
+  student: {
+    label: "Student Resident",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
+    description: "Student account authenticated via University Housing Escrow. Direct booking with verified landlords.",
+  },
+  manager: {
+    label: "Hostel Manager",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
+    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
+  },
+  hostel_manager: {
+    label: "Hostel Manager",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
+    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
+  },
+  coordinator: {
+    label: "Housing Coordinator",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
+    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
+  },
+  hostel_coordinator: {
+    label: "Housing Coordinator",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
+    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
+  },
+  dean: {
+    label: "Dean of Students",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
+    description: "Executive student welfare authority governing residential policy, disputes, and hostel accreditation.",
+  },
+  provost: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  pro_vc: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  executive: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  vc: {
+    label: "Vice-Chancellor",
+    badgeClass: "bg-red-50 text-red-800 border-red-300 font-semibold dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/40",
+    description: "Chief executive authority exercising statutory sanction and charter revocation over non-compliant properties.",
+  },
+  registrar: {
+    label: "University Registrar",
+    badgeClass: "bg-slate-50 text-slate-800 border-slate-300 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700",
+    description: "Custodial officer of the statutory university housing charter and council record.",
+  },
+  admin: {
+    label: "System Administrator",
+    badgeClass: "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
+    description: "Administrative console access for platform governance, verification pipelines, and payment processing.",
+  },
+};
+
+export const getRoleConfig = (role?: string) => {
+  if (!role) return ROLE_CONFIG.student;
+  const normalized = role.toLowerCase().trim();
+  return ROLE_CONFIG[normalized] || ROLE_CONFIG.student;
+};
+
   const getRoleBadge = (role?: string) => {
-    switch (role) {
-      case 'executive':
-        return <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30 font-semibold px-2.5 py-0.5 text-xs">Executive / Pro-VC</Badge>;
-      case 'dean':
-        return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold px-2.5 py-0.5 text-xs">Dean of Students</Badge>;
-      case 'coordinator':
-        return <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 font-semibold px-2.5 py-0.5 text-xs">Hostel Coordinator</Badge>;
-      case 'manager':
-        return <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold px-2.5 py-0.5 text-xs">Hostel Manager</Badge>;
-      case 'admin':
-        return <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 font-semibold px-2.5 py-0.5 text-xs">System Administrator</Badge>;
-      default:
-        return <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-semibold px-2.5 py-0.5 text-xs">Student Resident</Badge>;
-    }
+    const config = getRoleConfig(role);
+    return (
+      <Badge variant="outline" className={cn("font-semibold px-2.5 py-0.5 text-xs border", config.badgeClass)}>
+        {config.label}
+      </Badge>
+    );
   };
 
   // Institutional handle fallback
   const institutionalHandle = appUser?.email?.includes('@')
     ? appUser.email
-    : `stu-${(appUser?.uid || 'user').slice(0, 7).toLowerCase()}@hostelhq.com`;
+    : `${(appUser?.role || 'user').slice(0, 3)}-${(appUser?.uid || 'user').slice(0, 7).toLowerCase()}@hostelhq.com`;
+
+  const roleConfig = getRoleConfig(appUser?.role);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50 dark:bg-background">
@@ -495,7 +558,7 @@ export default function ProfilePage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">Profile</h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Manage your verified student identity, academic credentials, and security settings
+              Manage your verified {roleConfig.label.toLowerCase()} credentials, institutional details, and security settings
             </p>
           </div>
           <BackButton />
@@ -563,7 +626,7 @@ export default function ProfilePage() {
 
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight truncate">
-                        {profileData.fullName || "Student Resident"}
+                        {profileData.fullName || roleConfig.label}
                       </h2>
                       <p className="text-xs sm:text-sm text-muted-foreground font-mono truncate mt-0.5">
                         {institutionalHandle}
@@ -571,7 +634,7 @@ export default function ProfilePage() {
                     </div>
 
                     <p className="text-xs text-muted-foreground/90 max-w-xl">
-                      {profileData.bio || "Student account authenticated via University Housing Escrow. Direct booking with verified landlords."}
+                      {profileData.bio || roleConfig.description}
                     </p>
                   </div>
 
@@ -676,24 +739,32 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* 3. Resident Hub / Resident Pass Card (Airbnb Promo Style Banner) */}
+            {/* 3. Role-Aware Portal Banner */}
             <Card className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-white to-primary/10 dark:from-primary/10 dark:via-card dark:to-primary/5 shadow-xs overflow-hidden">
               <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="space-y-1 text-center sm:text-left">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center justify-center sm:justify-start gap-1.5">
-                    <Building2 className="h-3.5 w-3.5" /> HostelHQ Resident Hub
+                    <Building2 className="h-3.5 w-3.5" /> {['executive', 'provost', 'pro_vc', 'vc', 'registrar', 'dean'].includes(appUser?.role?.toLowerCase() || '') ? 'HostelHQ Executive Governance' : appUser?.role === 'manager' || appUser?.role === 'hostel_manager' ? 'HostelHQ Manager Portal' : 'HostelHQ Resident Hub'}
                   </span>
                   <h3 className="text-base sm:text-lg font-bold text-foreground">
-                    Looking for next semester&apos;s verified hostel?
+                    {['executive', 'provost', 'pro_vc', 'vc', 'registrar', 'dean'].includes(appUser?.role?.toLowerCase() || '') 
+                      ? 'Access Executive Housing Council & Sanctions'
+                      : appUser?.role === 'manager' || appUser?.role === 'hostel_manager'
+                      ? 'Manage your properties and room allocations'
+                      : 'Looking for next semester\'s verified hostel?'}
                   </h3>
                   <p className="text-xs text-muted-foreground max-w-md">
-                    Explore university-accredited properties with instant room walkthroughs and zero middleman markup.
+                    {['executive', 'provost', 'pro_vc', 'vc', 'registrar', 'dean'].includes(appUser?.role?.toLowerCase() || '')
+                      ? 'Monitor off-campus accreditation, compliance deficits, and generate statutory council briefings.'
+                      : appUser?.role === 'manager' || appUser?.role === 'hostel_manager'
+                      ? 'Update room tariffs, verify tenant occupancy, and maintain hostel accreditation standards.'
+                      : 'Explore university-accredited properties with instant room walkthroughs and zero middleman markup.'}
                   </p>
                 </div>
                 <div className="shrink-0 flex items-center gap-2">
                   <Button asChild size="sm" className="rounded-xl text-xs font-semibold h-10 px-4 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm gap-1.5">
-                    <Link href="/hostels">
-                      Browse Hostels <ChevronRight className="h-4 w-4" />
+                    <Link href={['executive', 'provost', 'pro_vc', 'vc', 'registrar', 'dean'].includes(appUser?.role?.toLowerCase() || '') ? '/executive/dashboard' : appUser?.role === 'manager' || appUser?.role === 'hostel_manager' ? '/manager/dashboard' : '/hostels'}>
+                      {['executive', 'provost', 'pro_vc', 'vc', 'registrar', 'dean'].includes(appUser?.role?.toLowerCase() || '') ? 'Executive Console' : appUser?.role === 'manager' || appUser?.role === 'hostel_manager' ? 'Manager Dashboard' : 'Browse Hostels'} <ChevronRight className="h-4 w-4" />
                     </Link>
                   </Button>
                 </div>
@@ -1282,7 +1353,7 @@ export default function ProfilePage() {
         <div className="min-w-0">
           <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Account Profile</div>
           <div className="text-sm font-bold text-foreground truncate">
-            {profileData.fullName || "Student Resident"}
+            {profileData.fullName || roleConfig.label}
           </div>
         </div>
         <Button
