@@ -73,8 +73,79 @@ export interface AppUser {
   momoNetwork?: string;
   hasBiometricAuth?: boolean;
   biometricCredential?: any;
-  passkeyRegisteredAt?: string;
+  biometricCredentialId?: any;
+  passkeyRegisteredAt?: string | null;
+  [key: string]: any;
 }
+
+const ROLE_CONFIG: Record<string, { label: string; badgeClass: string; description: string }> = {
+  student: {
+    label: "Student Resident",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
+    description: "Student account authenticated via University Housing Escrow. Direct booking with verified landlords.",
+  },
+  manager: {
+    label: "Hostel Manager",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
+    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
+  },
+  hostel_manager: {
+    label: "Hostel Manager",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
+    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
+  },
+  coordinator: {
+    label: "Housing Coordinator",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
+    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
+  },
+  hostel_coordinator: {
+    label: "Housing Coordinator",
+    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
+    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
+  },
+  dean: {
+    label: "Dean of Students",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
+    description: "Executive student welfare authority governing residential policy, disputes, and hostel accreditation.",
+  },
+  provost: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  pro_vc: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  executive: {
+    label: "Pro-Vice-Chancellor",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
+    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
+  },
+  vc: {
+    label: "Vice-Chancellor",
+    badgeClass: "bg-red-50 text-red-800 border-red-300 font-semibold dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/40",
+    description: "Chief executive authority exercising statutory sanction and charter revocation over non-compliant properties.",
+  },
+  registrar: {
+    label: "University Registrar",
+    badgeClass: "bg-slate-50 text-slate-800 border-slate-300 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700",
+    description: "Custodial officer of the statutory university housing charter and council record.",
+  },
+  admin: {
+    label: "System Administrator",
+    badgeClass: "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
+    description: "Administrative console access for platform governance, verification pipelines, and payment processing.",
+  },
+};
+
+const getRoleConfig = (role?: string) => {
+  if (!role) return ROLE_CONFIG.student;
+  const normalized = role.toLowerCase().trim();
+  return ROLE_CONFIG[normalized] || ROLE_CONFIG.student;
+};
 
 export default function ProfilePage() {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
@@ -462,75 +533,6 @@ export default function ProfilePage() {
       settingsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
-
-export const ROLE_CONFIG: Record<string, { label: string; badgeClass: string; description: string }> = {
-  student: {
-    label: "Student Resident",
-    badgeClass: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
-    description: "Student account authenticated via University Housing Escrow. Direct booking with verified landlords.",
-  },
-  manager: {
-    label: "Hostel Manager",
-    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
-    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
-  },
-  hostel_manager: {
-    label: "Hostel Manager",
-    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40",
-    description: "Verified property manager account for off-campus private hostel administration and room tariffs.",
-  },
-  coordinator: {
-    label: "Housing Coordinator",
-    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
-  },
-  hostel_coordinator: {
-    label: "Housing Coordinator",
-    badgeClass: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-    description: "Institutional officer overseeing off-campus accreditation, compliance inspections, and rent caps.",
-  },
-  dean: {
-    label: "Dean of Students",
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
-    description: "Executive student welfare authority governing residential policy, disputes, and hostel accreditation.",
-  },
-  provost: {
-    label: "Pro-Vice-Chancellor",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
-  },
-  pro_vc: {
-    label: "Pro-Vice-Chancellor",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
-  },
-  executive: {
-    label: "Pro-Vice-Chancellor",
-    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-    description: "University executive leadership monitoring accommodation deficits, compliance, and council briefing reports.",
-  },
-  vc: {
-    label: "Vice-Chancellor",
-    badgeClass: "bg-red-50 text-red-800 border-red-300 font-semibold dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/40",
-    description: "Chief executive authority exercising statutory sanction and charter revocation over non-compliant properties.",
-  },
-  registrar: {
-    label: "University Registrar",
-    badgeClass: "bg-slate-50 text-slate-800 border-slate-300 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700",
-    description: "Custodial officer of the statutory university housing charter and council record.",
-  },
-  admin: {
-    label: "System Administrator",
-    badgeClass: "bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
-    description: "Administrative console access for platform governance, verification pipelines, and payment processing.",
-  },
-};
-
-export const getRoleConfig = (role?: string) => {
-  if (!role) return ROLE_CONFIG.student;
-  const normalized = role.toLowerCase().trim();
-  return ROLE_CONFIG[normalized] || ROLE_CONFIG.student;
-};
 
   const getRoleBadge = (role?: string) => {
     const config = getRoleConfig(role);
