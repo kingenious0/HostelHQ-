@@ -18,8 +18,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithCustomToken, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
-import { isPlatformAuthenticatorAvailable, verifyBiometric } from '@/lib/webauthn';
+import { doc, getDoc, collection, getDocs, query, where, setDoc, limit } from 'firebase/firestore';
+import { isPlatformAuthenticatorAvailable, base64ToArrayBuffer, arrayBufferToBase64 } from '@/lib/webauthn';
 import { cn } from '@/lib/utils';
 import { AppLoader } from '@/components/ui/app-loader';
 
@@ -416,86 +416,141 @@ function LoginPageInner() {
         try {
             toast({
                 title: 'Scan Your Biometric Sensor',
-                description: 'Touch sensor or use Face ID/Windows Hello...',
+                description: 'Touch sensor or use Face ID/Fingerprint...',
             });
 
-            let targetUserId = typeof window !== 'undefined' && window.localStorage?.getItem 
+            // 1. Resolve registered credential IDs if identifier was provided
+            let userCredentialIds: string[] = [];
+            let targetUserId: string | null = typeof window !== 'undefined' && window.localStorage?.getItem 
                 ? window.localStorage.getItem('lastBiometricUserId') 
                 : null;
-            
-            // If device cache is empty, check if user entered their email/phone in identifier field
-            if (!targetUserId && identifier.trim()) {
+
+            if (identifier.trim()) {
                 const cleanIdent = identifier.trim().toLowerCase();
                 try {
                     const usersRef = collection(db, 'users');
-                    const qEmail = query(usersRef, where('email', '==', cleanIdent));
+                    let userDocData: any = null;
+                    let foundUserId: string | null = null;
+
+                    // Query by email
+                    const qEmail = query(usersRef, where('email', '==', cleanIdent), limit(1));
                     const snapEmail = await getDocs(qEmail);
                     if (!snapEmail.empty) {
-                        targetUserId = snapEmail.docs[0].id;
+                        userDocData = snapEmail.docs[0].data();
+                        foundUserId = snapEmail.docs[0].id;
                     } else {
-                        const qAuth = query(usersRef, where('authEmail', '==', cleanIdent));
+                        // Query by authEmail
+                        const qAuth = query(usersRef, where('authEmail', '==', cleanIdent), limit(1));
                         const snapAuth = await getDocs(qAuth);
                         if (!snapAuth.empty) {
-                            targetUserId = snapAuth.docs[0].id;
+                            userDocData = snapAuth.docs[0].data();
+                            foundUserId = snapAuth.docs[0].id;
+                        } else {
+                            // Query by phone
+                            const formatted = formatPhone(identifier.trim());
+                            const qPhone = query(usersRef, where('phoneNumber', '==', formatted), limit(1));
+                            const snapPhone = await getDocs(qPhone);
+                            if (!snapPhone.empty) {
+                                userDocData = snapPhone.docs[0].data();
+                                foundUserId = snapPhone.docs[0].id;
+                            }
                         }
+                    }
+
+                    if (userDocData && foundUserId) {
+                        targetUserId = foundUserId;
+                        if (userDocData.biometricCredentialId) {
+                            userCredentialIds.push(userDocData.biometricCredentialId);
+                        }
+                        // Also inspect users/{uid}/passkeys subcollection
+                        try {
+                            const passkeysSnap = await getDocs(collection(db, 'users', foundUserId, 'passkeys'));
+                            passkeysSnap.forEach((d) => {
+                                const cId = d.data().credentialId || d.id;
+                                if (cId && !userCredentialIds.includes(cId)) {
+                                    userCredentialIds.push(cId);
+                                }
+                            });
+                        } catch (_) {}
                     }
                 } catch (lookupErr) {
                     console.warn('Could not query user for biometric login:', lookupErr);
                 }
             }
 
-            // Graceful guidance if no passkey is registered on this device
-            if (!targetUserId) {
-                toast({
-                    title: 'No Device Passkey Found',
-                    description: 'Sign in with your email or Google first. You can then register this device for instant passkey login in your Profile Settings.',
-                });
-                const identInput = document.getElementById('identifier') as HTMLInputElement | null;
-                identInput?.focus();
-                setBiometricLoading(false);
-                return;
+            // 2. Hardware assertion request options
+            // If user has NOT entered email: empty allowCredentials prompts Android / Google Password Manager
+            // with discoverable resident passkeys for window.location.hostname.
+            // If user HAS entered email: allowCredentials is populated with their registered credentialId(s).
+            const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
+                challenge: crypto.getRandomValues(new Uint8Array(32)),
+                rpId: window.location.hostname,
+                userVerification: "preferred",
+                timeout: 60000,
+                allowCredentials: userCredentialIds.map((id) => ({
+                    id: base64ToArrayBuffer(id),
+                    type: "public-key" as const,
+                })),
+            };
+
+            const assertion = (await navigator.credentials.get({
+                publicKey: publicKeyCredentialRequestOptions,
+            })) as PublicKeyCredential;
+
+            if (!assertion) {
+                throw new Error("Hardware passkey assertion returned empty");
             }
 
-            const result = await verifyBiometric(targetUserId);
-
-            if (!result.success) {
-                const isCancelled = result.error?.toLowerCase().includes('cancel') || 
-                                    result.error?.includes('NotAllowedError');
-                if (isCancelled) {
-                    toast({
-                        title: 'Biometric Prompt Cancelled',
-                        description: 'You can continue signing in with your password, SMS OTP, or Google.',
-                    });
-                } else {
-                    toast({
-                        title: 'Biometric Sign-In Unavailable',
-                        description: 'Please sign in with your email and password. You can re-enroll this device in Profile Settings.',
-                    });
-                    const passInput = document.getElementById('password') as HTMLInputElement | null;
-                    passInput?.focus();
-                }
-                setBiometricLoading(false);
-                return;
+            // Extract userHandle and clientDataJSON from hardware assertion response
+            const assertionResponse = assertion.response as AuthenticatorAssertionResponse;
+            let userHandleStr: string | null = null;
+            if (assertionResponse?.userHandle && assertionResponse.userHandle.byteLength > 0) {
+                try {
+                    userHandleStr = new TextDecoder().decode(assertionResponse.userHandle);
+                } catch (_) {}
             }
 
-            // 1. Direct authentication with customToken generated by server
-            if (result.customToken) {
-                await signInWithCustomToken(auth, result.customToken);
-                if (typeof window !== 'undefined' && window.localStorage) {
-                    window.localStorage.setItem('lastBiometricUserId', targetUserId);
+            const clientDataJSONStr = assertionResponse?.clientDataJSON
+                ? arrayBufferToBase64(assertionResponse.clientDataJSON)
+                : undefined;
+
+            // 3. Verify assertion on backend and obtain customToken
+            const verifyRes = await fetch('/api/webauthn/auth-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: targetUserId || userHandleStr,
+                    userHandle: userHandleStr,
+                    credentialId: assertion.id,
+                    clientDataJSON: clientDataJSONStr,
+                    clientOrigin: window.location.origin,
+                }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) {
+                throw new Error(verifyData.error || 'Failed to verify passkey assertion');
+            }
+
+            // 4. Authenticate session with custom token
+            if (verifyData.customToken) {
+                await signInWithCustomToken(auth, verifyData.customToken);
+                const resolvedUid = verifyData.user?.uid || targetUserId || userHandleStr;
+                if (resolvedUid && typeof window !== 'undefined' && window.localStorage) {
+                    window.localStorage.setItem('lastBiometricUserId', resolvedUid);
                 }
 
-                const role = result.user?.role || 'student';
-                const displayName = result.user?.fullName || 'Resident';
+                const role = verifyData.user?.role || 'student';
+                const displayName = verifyData.user?.fullName || 'Resident';
 
-                if (role === 'student' && (result.user?.verificationStatus === 'pending' || result.user?.verificationStatus === 'rejected')) {
+                if (role === 'student' && (verifyData.user?.verificationStatus === 'pending' || verifyData.user?.verificationStatus === 'rejected')) {
                     try { await signOut(auth); } catch (_) {}
                     setUnderReviewData({
                         fullName: displayName || 'Student',
-                        studentIndexNumber: result.user?.studentIndexNumber,
-                        submittedAt: result.user?.createdAt,
-                        rejectionReason: result.user?.rejectionReason,
-                        isRejected: result.user?.verificationStatus === 'rejected',
+                        studentIndexNumber: verifyData.user?.studentIndexNumber,
+                        submittedAt: verifyData.user?.createdAt,
+                        rejectionReason: verifyData.user?.rejectionReason,
+                        isRejected: verifyData.user?.verificationStatus === 'rejected',
                     });
                     setShowUnderReviewDialog(true);
                     setBiometricLoading(false);
@@ -504,7 +559,7 @@ function LoginPageInner() {
 
                 toast({ 
                     title: `Welcome back, ${displayName}!`,
-                    description: 'Biometric verification successful.',
+                    description: 'Biometric passkey verification successful.',
                 });
 
                 const destination = safeRedirect && (!role || role === 'student')
@@ -515,74 +570,81 @@ function LoginPageInner() {
                 return;
             }
 
-            // 2. Fallback to Firestore check for legacy credentials or password prompt
-            const userDocRef = doc(db, 'users', targetUserId);
-            const userDocSnap = await getDoc(userDocRef);
-            
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                const userEmail = userData.authEmail || userData.email;
+            // Fallback for legacy setups
+            const resolvedUid = verifyData.user?.uid || targetUserId || userHandleStr;
+            if (resolvedUid) {
+                const userDocRef = doc(db, 'users', resolvedUid);
+                const userDocSnap = await getDoc(userDocRef);
                 
-                if (userEmail && userData.biometricPassword) {
-                    await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
-                    if (typeof window !== 'undefined' && window.localStorage) {
-                        window.localStorage.setItem('lastBiometricUserId', targetUserId);
-                    }
-                    const role = userData.role as string | undefined;
-                    const displayName = userData.fullName || userData.firstName || '';
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    const userEmail = userData.authEmail || userData.email;
                     
-                    if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
-                        try { await signOut(auth); } catch (_) {}
-                        setUnderReviewData({
-                            fullName: displayName || 'Student',
-                            studentIndexNumber: userData.studentIndexNumber,
-                            submittedAt: userData.createdAt,
-                            rejectionReason: userData.rejectionReason,
-                            isRejected: userData.verificationStatus === 'rejected',
+                    if (userEmail && userData.biometricPassword) {
+                        await signInWithEmailAndPassword(auth, userEmail, userData.biometricPassword);
+                        if (typeof window !== 'undefined' && window.localStorage) {
+                            window.localStorage.setItem('lastBiometricUserId', resolvedUid);
+                        }
+                        const role = userData.role as string | undefined;
+                        const displayName = userData.fullName || userData.firstName || '';
+                        
+                        if (role === 'student' && (userData.verificationStatus === 'pending' || userData.verificationStatus === 'rejected')) {
+                            try { await signOut(auth); } catch (_) {}
+                            setUnderReviewData({
+                                fullName: displayName || 'Student',
+                                studentIndexNumber: userData.studentIndexNumber,
+                                submittedAt: userData.createdAt,
+                                rejectionReason: userData.rejectionReason,
+                                isRejected: userData.verificationStatus === 'rejected',
+                            });
+                            setShowUnderReviewDialog(true);
+                            setBiometricLoading(false);
+                            return;
+                        }
+
+                        toast({ 
+                            title: `Welcome back, ${displayName}!`,
+                            description: 'Biometric verification successful.',
                         });
-                        setShowUnderReviewDialog(true);
+
+                        const destination = safeRedirect && (!role || role === 'student')
+                            ? safeRedirect
+                            : getRouteForRole(role);
+                        router.push(destination);
                         setBiometricLoading(false);
                         return;
                     }
-
-                    toast({ 
-                        title: `Welcome back, ${displayName}!`,
-                        description: 'Biometric verification successful.',
-                    });
-
-                    const destination = safeRedirect && (!role || role === 'student')
-                        ? safeRedirect
-                        : getRouteForRole(role);
-                    router.push(destination);
-                    setBiometricLoading(false);
-                    return;
                 }
             }
 
-            // 3. Passkey matched but requires user password to finalize session
+            // If no direct token, prompt password to finalize
             toast({
                 title: 'Passkey Verified',
                 description: 'Identity confirmed on this device. Please enter your password to finalize sign-in.',
             });
-            const passwordInput = document.getElementById('password') as HTMLInputElement | null;
-            passwordInput?.focus();
+            setLoginMethod('password');
+            setTimeout(() => {
+                const passwordInput = document.getElementById('password') as HTMLInputElement | null;
+                passwordInput?.focus();
+            }, 100);
             setBiometricLoading(false);
 
         } catch (error: any) {
             console.error('Biometric login error:', error);
-            const isCancelled = error?.name === 'NotAllowedError' || error?.message?.toLowerCase()?.includes('cancel');
-            if (isCancelled) {
-                toast({
-                    title: 'Biometric Sign-In Cancelled',
-                    description: 'You can continue signing in with your email and password or Google.',
-                });
-            } else {
-                toast({
-                    title: 'Passkey Notice',
-                    description: 'Biometric verification could not be completed on this device. Please sign in with your password.',
-                });
-            }
             setBiometricLoading(false);
+
+            // Smoothly collapse back to standard password tab and focus password
+            setLoginMethod('password');
+            setTimeout(() => {
+                const passInput = document.getElementById('password') as HTMLInputElement | null;
+                passInput?.focus();
+            }, 100);
+
+            toast({
+                title: 'Passkey Notice',
+                description: 'Could not find an enrolled passkey on this device. Sign in using your password to re-sync.',
+                variant: 'destructive',
+            });
         }
     };
 
@@ -863,7 +925,7 @@ function LoginPageInner() {
                                     className="w-full h-10 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-medium gap-2"
                                 >
                                     {biometricLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4 text-emerald-400" />}
-                                    Sign in with Passkey / Biometrics
+                                    Scan Your Biometric Sensor / Passkey
                                 </Button>
                             )}
 

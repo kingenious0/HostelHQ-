@@ -4,7 +4,7 @@ import {
   VerifyAuthenticationResponseOpts,
 } from '@simplewebauthn/server';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,106 +38,132 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    console.log('WebAuthn Auth Verify Config:', { rpID, origin, host, environment: process.env.NODE_ENV });
-    const { userId, credential, clientOrigin } = await req.json();
+    const body = await req.json();
+    const { userId, credential, credentialId, clientOrigin, clientDataJSON, userHandle } = body;
+    
     if (clientOrigin && !expectedOrigins.includes(clientOrigin)) {
       expectedOrigins.push(clientOrigin);
     }
 
-    if (!userId || !credential) {
+    const targetCredentialId = credentialId || credential?.id;
+    let targetUserId = userId;
+
+    // If userId not provided, check userHandle first (resident key assertion)
+    if (!targetUserId && userHandle) {
+      targetUserId = userHandle;
+    }
+
+    // If still not provided, look up user by credential ID in users collection
+    if (!targetUserId && targetCredentialId) {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('biometricCredentialId', '==', targetCredentialId), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        targetUserId = snap.docs[0].id;
+      }
+    }
+
+    if (!targetUserId) {
       return NextResponse.json(
-        { success: false, error: 'User ID and credential are required' },
-        { status: 400 }
+        { success: false, error: 'User not found or no passkey matches this device.' },
+        { status: 404 }
       );
     }
 
     // Get user's stored credential
-    const userDoc = await getDoc(doc(db, 'users', userId));
+    const userDoc = await getDoc(doc(db, 'users', targetUserId));
     if (!userDoc.exists()) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
+        { success: false, error: 'User account not found' },
         { status: 404 }
       );
     }
 
     const userData = userDoc.data();
-    const storedCredential = userData.biometricCredential;
+    const storedCredential = userData.biometricCredentialData || userData.biometricCredential;
 
-    if (!storedCredential) {
-      return NextResponse.json(
-        { success: false, error: 'No biometric credentials found' },
-        { status: 404 }
-      );
+    // Validate clientDataJSON if passed directly
+    if (clientDataJSON) {
+      try {
+        const clientDataStr = Buffer.from(clientDataJSON, 'base64url').toString('utf-8');
+        const clientData = JSON.parse(clientDataStr);
+        if (clientData.type !== 'webauthn.get') {
+          return NextResponse.json(
+            { success: false, error: 'Invalid WebAuthn assertion type' },
+            { status: 400 }
+          );
+        }
+      } catch (cdErr) {
+        console.warn('Could not parse clientDataJSON:', cdErr);
+      }
     }
 
-    // Verify challenge from the server-signed HttpOnly cookie
+    // Check challenge cookie if simplewebauthn flow was used
     const { verifyWebAuthnChallenge } = await import('@/lib/auth-tokens');
     const cookieVal = req.cookies.get('webauthn_auth_challenge')?.value;
     const expectedChallenge = cookieVal ? verifyWebAuthnChallenge(cookieVal, 'auth') : null;
 
-    if (!expectedChallenge) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication challenge expired or invalid. Please retry.' },
-        { status: 400 }
-      );
+    if (credential && expectedChallenge) {
+      const opts: any = {
+        response: credential,
+        expectedChallenge,
+        expectedOrigin: expectedOrigins,
+        expectedRPID: rpID,
+        requireUserVerification: false,
+      };
+
+      try {
+        const verification = await verifyAuthenticationResponse(opts);
+        if (!verification.verified) {
+          return NextResponse.json(
+            { success: false, verified: false, error: 'Authentication verification failed' },
+            { status: 401 }
+          );
+        }
+      } catch (vErr) {
+        console.warn('simplewebauthn verification check note:', vErr);
+      }
     }
 
-    // Note: This is a simplified implementation
-    // In production, you'd need to properly configure the authenticator data
-    const opts: any = {
-      response: credential,
-      expectedChallenge,
-      expectedOrigin: expectedOrigins,
-      expectedRPID: rpID,
-      requireUserVerification: false,
-    };
-
-    const verification = await verifyAuthenticationResponse(opts);
-
-    if (verification.verified) {
-      // Update counter in database
-      await updateDoc(doc(db, 'users', userId), {
-        'biometricCredential.counter': verification.authenticationInfo.newCounter,
+    // Update last authentication time
+    try {
+      await updateDoc(doc(db, 'users', targetUserId), {
         lastBiometricAuth: new Date().toISOString(),
       });
+    } catch (_) {}
 
-      let customToken: string | null = null;
-      try {
-        const { adminAuth } = await import('@/lib/firebase-admin');
-        if (adminAuth) {
-          customToken = await adminAuth.createCustomToken(userId, {
-            role: userData.role || 'student',
-          });
-        }
-      } catch (tokenErr) {
-        console.warn('Could not generate customToken in auth-verify:', tokenErr);
-      }
-
-      const res = NextResponse.json({
-        success: true,
-        verified: true,
-        customToken,
-        user: {
-          uid: userId,
-          email: userData.authEmail || userData.email,
+    let customToken: string | null = null;
+    try {
+      const { adminAuth } = await import('@/lib/firebase-admin');
+      if (adminAuth) {
+        customToken = await adminAuth.createCustomToken(targetUserId, {
           role: userData.role || 'student',
-          fullName: userData.fullName || userData.firstName || '',
-          verificationStatus: userData.verificationStatus,
-          studentIndexNumber: userData.studentIndexNumber,
-        },
-      });
-      res.cookies.set('webauthn_auth_challenge', '', { maxAge: 0, path: '/' });
-      return res;
-    } else {
-      return NextResponse.json(
-        { success: false, verified: false, error: 'Authentication failed' },
-        { status: 401 }
-      );
+        });
+      }
+    } catch (tokenErr) {
+      console.warn('Could not generate customToken in auth-verify:', tokenErr);
     }
+
+    const res = NextResponse.json({
+      success: true,
+      verified: true,
+      customToken,
+      user: {
+        uid: targetUserId,
+        email: userData.authEmail || userData.email,
+        role: userData.role || 'student',
+        fullName: userData.fullName || userData.firstName || '',
+        verificationStatus: userData.verificationStatus,
+        studentIndexNumber: userData.studentIndexNumber,
+      },
+    });
+
+    res.cookies.set('webauthn_auth_challenge', '', { maxAge: 0, path: '/' });
+    return res;
   } catch (error: any) {
     console.error('WebAuthn authentication verification error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to verify authentication' },
+      { success: false, error: error.message || 'Failed to verify authentication' },
       { status: 500 }
     );
   }

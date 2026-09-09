@@ -61,9 +61,10 @@ export async function POST(req: NextRequest) {
       attestationType: 'none',
       excludeCredentials: [],
       authenticatorSelection: {
-        residentKey: 'discouraged',
+        authenticatorAttachment: 'platform',
+        residentKey: 'preferred',
+        requireResidentKey: false,
         userVerification: 'preferred',
-        // No authenticatorAttachment restriction - allows any authenticator (Android compatible)
       },
       supportedAlgorithmIDs: [-7, -257], // ES256 and RS256
     };

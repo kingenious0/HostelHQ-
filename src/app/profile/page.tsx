@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { uploadImage } from '@/lib/cloudinary';
 import { onAuthStateChanged, updatePassword } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
@@ -53,7 +53,7 @@ import {
 } from 'lucide-react';
 import { BackButton } from '@/components/ui/back-button';
 import { cn } from '@/lib/utils';
-import { isBiometricSupported, registerBiometric, getDeviceTypeName } from '@/lib/webauthn';
+import { isBiometricSupported, getDeviceTypeName, arrayBufferToBase64 } from '@/lib/webauthn';
 
 export interface AppUser {
   uid: string;
@@ -261,8 +261,16 @@ export default function ProfilePage() {
   };
 
   const handleRegisterPasskey = async () => {
-    if (!appUser?.uid) return;
-    if (!isBiometricSupported()) {
+    if (!appUser?.uid) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to configure hardware biometric login.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials) {
       toast({
         title: "Passkey Not Supported",
         description: "Your current browser or device does not support WebAuthn biometrics.",
@@ -273,37 +281,99 @@ export default function ProfilePage() {
 
     setIsEnrollingPasskey(true);
     try {
-      const userDisplayName = appUser.fullName || appUser.email || 'HostelHQ Resident';
-      const credential = await registerBiometric(appUser.uid, userDisplayName);
+      const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: {
+          name: "HostelHQ",
+          id: window.location.hostname, // Strictly binds to 'hostel-hq.vercel.app'
+        },
+        user: {
+          id: new TextEncoder().encode(appUser.uid),
+          name: appUser.email || "student@hostelhq.com",
+          displayName: appUser.fullName || appUser.email || "Hostel Resident",
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" },  // ES256 (standard Android/iOS biometric)
+          { alg: -257, type: "public-key" }, // RS256 (Windows Hello fallback)
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform", // Enforces local biometrics (fingerprint/Face ID)
+          residentKey: "preferred",            // CRITICAL: Saves discoverable passkey on device
+          requireResidentKey: false,
+          userVerification: "preferred",
+        },
+        timeout: 60000,
+        attestation: "none",
+      };
 
-      if (credential) {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('lastBiometricUserId', appUser.uid);
-        }
+      const credential = (await navigator.credentials.create({
+        publicKey: publicKeyCredentialCreationOptions,
+      })) as PublicKeyCredential;
 
-        const now = new Date();
-        const formattedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      if (!credential) throw new Error("Hardware registration failed");
 
-        try {
-          const userDocRef = doc(db, "users", appUser.uid);
-          await updateDoc(userDocRef, {
-            hasBiometricAuth: true,
-            passkeyRegisteredAt: now.toISOString(),
-            updatedAt: now.toISOString(),
-          });
-        } catch (dbErr) {
-          console.warn("Could not record passkey timestamp in firestore:", dbErr);
-        }
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const rawIdBase64 = arrayBufferToBase64(credential.rawId);
+      const transports = (credential.response as any)?.getTransports?.() || ['internal'];
 
-        setHasPasskey(true);
-        setPasskeyEnrolledDate(formattedDate);
-        setAppUser(prev => prev ? { ...prev, hasBiometricAuth: true, passkeyRegisteredAt: now.toISOString() } : null);
-
-        toast({
-          title: "Passkey Enrolled",
-          description: "Biometric quick login is now active on this device."
+      // Save the credential.id (base64url) and transport info into Firestore under users/{uid}/passkeys
+      try {
+        const passkeyDocRef = doc(db, "users", appUser.uid, "passkeys", credential.id);
+        await setDoc(passkeyDocRef, {
+          credentialId: credential.id,
+          rawId: rawIdBase64,
+          transports,
+          createdAt: now.toISOString(),
         });
+      } catch (subErr) {
+        console.warn("Could not save to users/passkeys subcollection:", subErr);
       }
+
+      // Also persist to users/{uid} root document for instant lookup
+      try {
+        const userDocRef = doc(db, "users", appUser.uid);
+        await updateDoc(userDocRef, {
+          hasBiometricAuth: true,
+          biometricCredentialId: credential.id,
+          biometricCredential: {
+            id: credential.id,
+            rawId: rawIdBase64,
+            deviceType: 'platform',
+            transports,
+            createdAt: now.toISOString(),
+          },
+          biometricCredentialData: {
+            id: credential.id,
+            rawId: rawIdBase64,
+            deviceType: 'platform',
+            transports,
+            createdAt: now.toISOString(),
+          },
+          passkeyRegisteredAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        });
+      } catch (dbErr) {
+        console.warn("Could not record passkey timestamp in firestore:", dbErr);
+      }
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('lastBiometricUserId', appUser.uid);
+      }
+
+      setHasPasskey(true);
+      setPasskeyEnrolledDate(formattedDate);
+      setAppUser(prev => prev ? {
+        ...prev,
+        hasBiometricAuth: true,
+        biometricCredentialId: credential.id,
+        passkeyRegisteredAt: now.toISOString(),
+      } : null);
+
+      toast({
+        title: "Passkey Enrolled",
+        description: "Biometric quick login is now active on this device."
+      });
     } catch (error: any) {
       console.error("Passkey registration failed:", error);
       if (error?.name === 'NotAllowedError' || error?.message?.includes('cancelled')) {
@@ -328,6 +398,14 @@ export default function ProfilePage() {
     setIsRemovingPasskey(true);
     try {
       const userDocRef = doc(db, "users", appUser.uid);
+      const currentCredId = appUser.biometricCredentialId || appUser.biometricCredential?.id;
+      if (currentCredId) {
+        try {
+          const passkeyDocRef = doc(db, "users", appUser.uid, "passkeys", currentCredId);
+          await deleteDoc(passkeyDocRef);
+        } catch (_) {}
+      }
+
       await updateDoc(userDocRef, {
         hasBiometricAuth: false,
         biometricCredential: null,
@@ -350,6 +428,7 @@ export default function ProfilePage() {
         ...prev,
         hasBiometricAuth: false,
         biometricCredential: null,
+        biometricCredentialId: null,
         passkeyRegisteredAt: null
       } : null);
 
@@ -995,7 +1074,7 @@ export default function ProfilePage() {
                       Login & Security Standards
                     </CardTitle>
                     <CardDescription className="text-xs text-muted-foreground">
-                      Protect your tenancy account and update your login passphrase.
+                      Protect your tenancy account and update your login password.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-5 sm:p-6 space-y-5">
@@ -1010,9 +1089,6 @@ export default function ProfilePage() {
                           Signed in as <span className="font-mono font-medium text-foreground">{appUser?.email}</span>
                         </p>
                       </div>
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-xs shrink-0">
-                        256-bit TLS
-                      </Badge>
                     </div>
 
                     {/* Biometric & Passkey Quick Login Card */}
@@ -1120,13 +1196,13 @@ export default function ProfilePage() {
                     {/* Password Update Form */}
                     <div className="space-y-4 pt-1">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <KeyRound className="h-4 w-4 text-primary" /> Change Passphrase
+                        <KeyRound className="h-4 w-4 text-primary" /> Change Password
                       </h4>
 
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="newPassword" className="text-xs font-semibold text-foreground">
-                            New Passphrase
+                            New Password
                           </Label>
                           <div className="relative">
                             <Input
@@ -1149,14 +1225,14 @@ export default function ProfilePage() {
 
                         <div className="space-y-1.5">
                           <Label htmlFor="confirmNewPassword" className="text-xs font-semibold text-foreground">
-                            Confirm New Passphrase
+                            Confirm New Password
                           </Label>
                           <div className="relative">
                             <Input
                               id="confirmNewPassword"
                               type={showConfirmNewPassword ? "text" : "password"}
                               className="pr-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                              placeholder="Repeat new passphrase"
+                              placeholder="Repeat new password"
                               value={confirmNewPassword}
                               onChange={(e) => setConfirmNewPassword(e.target.value)}
                             />
@@ -1178,7 +1254,7 @@ export default function ProfilePage() {
                           className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
                         >
                           {isUpdatingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                          Update Passphrase
+                          Update Password
                         </Button>
                       </div>
                     </div>

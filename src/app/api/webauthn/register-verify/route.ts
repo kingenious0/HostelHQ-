@@ -4,7 +4,7 @@ import {
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 
 const rpName = 'HostelHQ';
 
@@ -132,6 +132,18 @@ export async function POST(req: NextRequest) {
             hasBiometricAuth: true,
             updatedAt: new Date().toISOString(),
           });
+
+          try {
+            const passkeyDocRef = doc(db, 'users', userId, 'passkeys', biometricCredential.id);
+            await setDoc(passkeyDocRef, {
+              credentialId: biometricCredential.id,
+              rawId: biometricCredential.id,
+              transports: biometricCredential.transports || ['internal'],
+              createdAt: biometricCredential.createdAt,
+            });
+          } catch (passkeyErr) {
+            console.warn('Could not save to users/passkeys subcollection:', passkeyErr);
+          }
         }
       } catch (dbError) {
         console.warn('Could not update user document with biometric credential:', dbError);
