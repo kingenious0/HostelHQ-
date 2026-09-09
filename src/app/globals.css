@@ -472,3 +472,92 @@ picture {
   font-weight: 600 !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
 }
+
+/* ==========================================================================
+   Executive Council Briefing Report Print Engine Isolation Styles
+   Resolves mini-window clipping bug and scales to 100% width on standard A4 paper
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm 15mm 15mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force hide all standard application chrome */
+  body > *:not([data-radix-portal]):not(#print-mount-root),
+  header,
+  nav,
+  aside,
+  footer,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  /* Unconstrain Radix portal, modal content and overlays during print */
+  [data-radix-portal],
+  [data-radix-portal] > * {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    inset: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide modal backdrop overlay and dialog chrome buttons */
+  [data-radix-portal] [data-state="open"] > [aria-hidden="true"],
+  [data-radix-portal] button[aria-label="Close"],
+  [data-radix-dialog-overlay] {
+    display: none !important;
+  }
+
+  /* Ensure the printable report is 100% full width and unclipped */
+  #executive-briefing-printable {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  /* Print pagination helpers */
+  .print-break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-page-break-after {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+}

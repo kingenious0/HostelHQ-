@@ -1,22 +1,32 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Header } from "@/components/header";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
 import { fetchExecutiveMetricsAction, fetchHostelsAction, updateHostelAction } from "@/app/actions/db";
 import type { Hostel } from "@/lib/data";
+import { isHostelRevoked, isHostelSanctioned } from "@/lib/sanctions";
 import {
   Building2,
   Users,
@@ -24,7 +34,6 @@ import {
   AlertTriangle,
   TrendingUp,
   ShieldCheck,
-  Award,
   BarChart3,
   PieChart,
   RefreshCw,
@@ -39,9 +48,21 @@ import {
   Scale,
   DollarSign,
   MapPin,
-  Flame,
   Clock,
   Download,
+  Search,
+  ChevronDown,
+  MoreHorizontal,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X,
+  ExternalLink,
+  Shield,
+  FileSpreadsheet,
+  Check,
+  Sparkles,
 } from "lucide-react";
 
 interface ExecutiveMetricsData {
@@ -104,6 +125,8 @@ const EMPTY_METRICS_DATA: ExecutiveMetricsData = {
   },
 };
 
+type ActiveExecutiveTab = "overview" | "compliance" | "sanctions" | "reports";
+
 export default function ExecutiveDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -117,8 +140,17 @@ export default function ExecutiveDashboardPage() {
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [loadingHostels, setLoadingHostels] = useState(true);
 
+  // Enterprise Navigation & Layout State
+  const [activeTab, setActiveTab] = useState<ActiveExecutiveTab>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   // Grievance category vs zone view switcher
   const [grievanceView, setGrievanceView] = useState<"category" | "zone">("category");
+
+  // Sanctions Switchboard Table Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "sanctioned" | "revoked">("all");
 
   // Executive Council Briefing Generator Modal
   const [briefingOpen, setBriefingOpen] = useState(false);
@@ -206,10 +238,10 @@ export default function ExecutiveDashboardPage() {
     }
   }, [loadingAuth, userRole]);
 
-  // 100% Live Off-Campus Inventory and Capacity Math (Zero Mock Data)
+  // Live Off-Campus Inventory and Capacity Math
   const verifiedHostelsList = useMemo(() => {
     return hostels.filter(
-      (h) => (h.status === "approved" || h.verified) && h.status !== "revoked" && (h as any).sanctionStatus !== "revoked"
+      (h) => (h.status === "approved" || h.verified) && !isHostelRevoked(h)
     );
   }, [hostels]);
 
@@ -252,20 +284,14 @@ export default function ExecutiveDashboardPage() {
   // Live Pending Accreditation Reviews count
   const pendingAccreditationReviews = useMemo(() => {
     const fromHostels = hostels.filter(
-      (h) => h.status === "pending" || (h as any).accreditationStatus === "pending" || (!h.verified && h.status !== "revoked")
+      (h) => h.status === "pending" || (h as any).accreditationStatus === "pending" || (!h.verified && !isHostelRevoked(h))
     ).length;
     return Math.max(fromHostels, metrics.summary.pendingReviews || 0);
   }, [hostels, metrics.summary.pendingReviews]);
 
   // Live Active Sanctions count
   const activeSanctionsCount = useMemo(() => {
-    return hostels.filter((h) => 
-      (h as any).sanctionStatus === "sanctioned" || 
-      (h as any).accreditationStatus === "Executive Sanction" || 
-      (h as any).accreditationStatus === "sanctioned" || 
-      h.status === "revoked" ||
-      (h as any).sanctionStatus === "revoked"
-    ).length;
+    return hostels.filter((h) => isHostelRevoked(h) || isHostelSanctioned(h)).length;
   }, [hostels]);
 
   // Accreditation rate across the private portfolio
@@ -301,6 +327,31 @@ export default function ExecutiveDashboardPage() {
       fourInRoom: avg(prices4, 3200),
     };
   }, [hostels]);
+
+  // Filtered Hostels for the Sanctions Switchboard
+  const filteredHostels = useMemo(() => {
+    return hostels.filter((h) => {
+      const isRevoked = isHostelRevoked(h);
+      const isSanctioned = isHostelSanctioned(h);
+      const isGoodStanding = !isRevoked && !isSanctioned && (h.status === "approved" || h.verified);
+
+      // Status filter
+      if (statusFilter === "approved" && !isGoodStanding) return false;
+      if (statusFilter === "sanctioned" && !isSanctioned) return false;
+      if (statusFilter === "revoked" && !isRevoked) return false;
+
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const nameMatch = (h.name || "").toLowerCase().includes(q);
+        const locMatch = (h.location || "").toLowerCase().includes(q);
+        const reasonMatch = ((h as any).sanctionReason || "").toLowerCase().includes(q);
+        if (!nameMatch && !locMatch && !reasonMatch) return false;
+      }
+
+      return true;
+    });
+  }, [hostels, searchQuery, statusFilter]);
 
   // Execute Accreditation Sanction / Revocation with instant state re-fetch
   const handleUpdateSanction = async () => {
@@ -417,8 +468,8 @@ export default function ExecutiveDashboardPage() {
       csvRows.push("Hostel Name,Zone / Location,Accreditation Standing,Total Bed Capacity,Price Range Min (GH₵),Price Range Max (GH₵),Active Violations / Sanction Reason,Sanction Date");
 
       hostels.forEach((h) => {
-        const isRevoked = h.status === "revoked" || (h as any).sanctionStatus === "revoked" || (h as any).accreditationStatus === "Accreditation Revoked";
-        const isSanctioned = (h as any).sanctionStatus === "sanctioned" || (h as any).accreditationStatus === "Executive Sanction" || (h as any).accreditationStatus === "sanctioned";
+        const isRevoked = isHostelRevoked(h);
+        const isSanctioned = isHostelSanctioned(h);
         const standing = isRevoked ? "Accreditation Revoked" : isSanctioned ? "Executive Sanction" : "Good Standing";
         
         const beds = (h.roomTypes || []).reduce((acc, rt) => acc + ((rt.numberOfRooms || 1) * (rt.capacity || 1)), 0);
@@ -455,12 +506,22 @@ export default function ExecutiveDashboardPage() {
     }
   };
 
+  // Safe window.print trigger guaranteeing modal unconstrained layout
+  const handlePrint = () => {
+    if (typeof window !== "undefined") {
+      window.print();
+    }
+  };
+
   if (loadingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm font-medium text-muted-foreground">Verifying executive credentials...</p>
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto text-primary">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+          <p className="text-sm font-semibold text-foreground">Verifying executive credentials...</p>
+          <p className="text-xs text-muted-foreground">Office of the Vice-Chancellor &amp; Executive Council</p>
         </div>
       </div>
     );
@@ -468,507 +529,1144 @@ export default function ExecutiveDashboardPage() {
 
   const { summary, categoryBreakdown, zoneBreakdown, directionBreakdown } = metrics;
   const isVC = userRole === "vc";
+  const userInitials = (currentUser?.displayName || currentUser?.email || (isVC ? "VC" : "PVC"))
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <Header />
-
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
-        {/* Executive Utility Header */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border/60">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight font-headline text-foreground">
-                Housing Governance &amp; Deficit Executive Console
-              </h1>
-              <Badge variant="outline" className="text-xs font-semibold text-amber-600 bg-amber-500/10 border-amber-500/30">
-                <Landmark className="h-3 w-3 mr-1" />
-                {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate"}
-              </Badge>
+    <div className="min-h-screen bg-slate-50/50 dark:bg-zinc-950 text-foreground flex flex-col md:flex-row">
+      {/* =========================================================================
+          1. SLEEK COLLAPSIBLE ENTERPRISE SIDEBAR (Cake & Navan inspired)
+          ========================================================================= */}
+      <aside
+        className={`no-print hidden md:flex flex-col border-r border-border/70 bg-card transition-all duration-300 select-none z-30 ${
+          sidebarCollapsed ? "w-20" : "w-64"
+        }`}
+      >
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-border/60 flex items-center justify-between gap-3 h-16">
+          {!sidebarCollapsed ? (
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm shrink-0">
+                <Landmark className="h-5 w-5" />
+              </div>
+              <div className="truncate">
+                <h2 className="font-headline font-black text-sm tracking-tight text-foreground truncate">
+                  HostelHQ Executive
+                </h2>
+                <p className="text-[10px] font-medium text-muted-foreground tracking-wider uppercase truncate">
+                  Housing Governance
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              High-level statutory intelligence on off-campus hostel capacity, rental price indices, and accreditation sanctions.
-            </p>
+          ) : (
+            <div className="mx-auto">
+              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
+                <Landmark className="h-5 w-5" />
+              </div>
+            </div>
+          )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
+            title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        {/* Sidebar Navigation */}
+        <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+          <div className="mb-2 px-2">
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+                Governance Console
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {/* 1-Click Executive Council Briefing Generator Button */}
+          {/* Nav Item 1: Overview */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("overview")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === "overview"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+            title="Overview"
+          >
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            {!sidebarCollapsed && <span>Overview</span>}
+          </button>
+
+          {/* Nav Item 2: Compliance Audit */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("compliance")}
+            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === "compliance"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+            title="Compliance Audit"
+          >
+            <div className="flex items-center gap-3 truncate">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              {!sidebarCollapsed && <span className="truncate">Compliance Audit</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  activeTab === "compliance"
+                    ? "bg-white/20 text-white"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                }`}
+              >
+                {accreditationRate}%
+              </span>
+            )}
+          </button>
+
+          {/* Nav Item 3: Sanctions Switchboard */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("sanctions")}
+            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === "sanctions"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+            title="Sanctions Switchboard"
+          >
+            <div className="flex items-center gap-3 truncate">
+              <Scale className="h-4 w-4 shrink-0" />
+              {!sidebarCollapsed && <span className="truncate">Sanctions Switchboard</span>}
+            </div>
+            {!sidebarCollapsed && activeSanctionsCount > 0 && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  activeTab === "sanctions"
+                    ? "bg-white/20 text-white"
+                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                }`}
+              >
+                {activeSanctionsCount} Flagged
+              </span>
+            )}
+          </button>
+
+          {/* Nav Item 4: Executive Reports */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("reports")}
+            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === "reports"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+            title="Executive Reports"
+          >
+            <div className="flex items-center gap-3 truncate">
+              <FileText className="h-4 w-4 shrink-0" />
+              {!sidebarCollapsed && <span className="truncate">Executive Reports</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                  activeTab === "reports"
+                    ? "bg-white/20 text-white"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                PDF
+              </span>
+            )}
+          </button>
+
+          {/* Quick Action in Sidebar */}
+          <div className="pt-6">
+            {!sidebarCollapsed && (
+              <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span>Council Briefing</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Generate statutory report for the Academic Board &amp; Welfare Directorate.
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setBriefingOpen(true)}
+                  className="w-full h-8 text-[11px] font-bold rounded-xl bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1" />
+                  Generate Briefing
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar Footer User Card */}
+        <div className="p-3 border-t border-border/60 bg-muted/20">
+          <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? "justify-center" : ""}`}>
+            <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+              {userInitials}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">
+                  {currentUser?.displayName || currentUser?.email}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1 font-medium">
+                  <Landmark className="h-3 w-3 text-amber-600 shrink-0" />
+                  {isVC ? "Vice-Chancellor" : "Executive Directorate"}
+                </p>
+              </div>
+            )}
+          </div>
+          {!sidebarCollapsed && (
+            <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
+              <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+                <ArrowUpRight className="h-3 w-3" />
+                Exit Console
+              </Link>
+              <span className="font-mono text-[9px] text-muted-foreground/80">v2.6 Statutory</span>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* =========================================================================
+          2. MAIN EXECUTIVE COMMAND CENTER AREA
+          ========================================================================= */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Executive Header Bar */}
+        <header className="no-print sticky top-0 z-20 h-16 border-b border-border/70 bg-card/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {/* Mobile Sidebar Toggle Button */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="md:hidden h-9 w-9 rounded-xl shrink-0"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </Button>
+
+            <div>
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span>Executive Directorate</span>
+                <span>/</span>
+                <span className="font-bold text-foreground capitalize">{activeTab}</span>
+              </div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight font-headline text-foreground truncate">
+                {activeTab === "overview" && "Executive Housing Overview"}
+                {activeTab === "compliance" && "Portfolio Statutory Compliance Audit"}
+                {activeTab === "sanctions" && "Accreditation Sanction & Revocation Switchboard"}
+                {activeTab === "reports" && "Executive Briefing & Statutory Reports"}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Compliance Badge */}
+            <Badge
+              variant="outline"
+              className="hidden lg:flex text-xs font-bold px-3 py-1.5 rounded-xl border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 items-center gap-1.5"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              {accreditationRate}% Compliance Rate
+            </Badge>
+
+            {/* Council Briefing Generator Modal CTA */}
             <Button
               variant="default"
               size="sm"
               onClick={() => setBriefingOpen(true)}
-              className="h-9 px-4 text-xs font-bold bg-primary text-primary-foreground shadow-md hover:bg-primary/90 gap-1.5 rounded-xl"
+              className="h-9 px-3.5 text-xs font-bold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 gap-1.5 rounded-xl"
             >
               <FileText className="h-4 w-4" />
-              <span>Council Briefing Generator</span>
+              <span className="hidden sm:inline">Council Briefing</span>
             </Button>
 
+            {/* Quick Export CSV */}
             <Button
               variant="outline"
               size="sm"
+              onClick={handleExportCSV}
+              className="h-9 px-3 text-xs font-semibold rounded-xl border-border/70 hover:bg-muted gap-1.5 hidden sm:flex"
+              title="Download Council Briefing CSV"
+            >
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>CSV</span>
+            </Button>
+
+            {/* Data Refresh Button */}
+            <Button
+              variant="outline"
+              size="icon"
               onClick={loadData}
               disabled={loadingMetrics}
-              className="h-9 px-3 text-xs font-semibold rounded-xl border-border/70 hover:bg-muted"
+              className="h-9 w-9 rounded-xl border-border/70 hover:bg-muted"
+              title="Refresh Live Data"
             >
-              <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingMetrics ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-primary" : "text-muted-foreground"}`} />
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* ================= COMPONENT 1: OFF-CAMPUS CAPACITY & ACCREDITATION OVERVIEW (100% LIVE DATA) ================= */}
-        <Card className="border border-border/80 shadow-md bg-card mb-8 rounded-3xl overflow-hidden">
-          <CardHeader className="pb-3 border-b border-border/60 bg-muted/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base sm:text-lg font-extrabold font-headline flex items-center gap-2">
-                  <Scale className="h-5 w-5 text-primary" />
-                  Private Student Housing Inventory &amp; Accreditation Console
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Real-time audit of private student accommodation properties, active room capacity, and compliance standing.
-                </CardDescription>
-              </div>
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="no-print md:hidden p-4 border-b border-border bg-card space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("overview");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
+                activeTab === "overview" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("compliance");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
+                activeTab === "compliance" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Compliance Audit ({accreditationRate}%)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("sanctions");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
+                activeTab === "sanctions" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <Scale className="h-4 w-4" />
+              Sanctions Switchboard ({activeSanctionsCount} Flagged)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("reports");
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold ${
+                activeTab === "reports" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Executive Reports
+            </button>
+          </div>
+        )}
 
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={`text-xs font-bold px-3 py-1 ${
-                    accreditationRate < 70
-                      ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
-                      : accreditationRate < 85
-                      ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                  }`}
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                  {accreditationRate}% Portfolio Compliance
-                </Badge>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6 space-y-6">
-            {/* Real-time Metric Highlights */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="p-4 rounded-2xl bg-muted/40 border border-border/60">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Registered Properties
-                </p>
-                <p className="text-2xl sm:text-3xl font-black text-foreground mt-1">
-                  {totalRegisteredHostels}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Off-campus private listings</p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                  Accredited in Good Standing
-                </p>
-                <p className="text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
-                  {totalVerifiedHostels}
-                </p>
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  {accreditationRate}% charter accreditation
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/20">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
-                  Verified Bed Capacity
-                </p>
-                <p className="text-2xl sm:text-3xl font-black text-sky-700 dark:text-sky-400 mt-1">
-                  {totalOffCampusBeds.toLocaleString()}
-                </p>
-                <p className="text-[11px] text-sky-600 dark:text-sky-400 mt-0.5">
-                  Summed room unit bed spaces
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                  Properties Flagged
-                </p>
-                <p className="text-2xl sm:text-3xl font-black text-rose-700 dark:text-rose-400 mt-1">
-                  {activeSanctionsCount}
-                </p>
-                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5">
-                  Under executive restriction
-                </p>
-              </div>
-            </div>
-
-            {/* Room Distribution Breakdown */}
-            <div className="space-y-3 pt-2 border-t border-border/60">
-              <div className="flex justify-between items-center text-xs font-semibold">
-                <span className="text-foreground flex items-center gap-1.5">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  Live Room Category Inventory Distribution
-                </span>
-                <span className="text-muted-foreground">
-                  Total Capacity: <strong className="text-foreground">{totalOffCampusBeds.toLocaleString()}</strong> Beds
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-card border border-border/60">
-                  <span className="text-muted-foreground font-medium text-[11px]">1 in a Room (Single)</span>
-                  <p className="text-base font-bold text-foreground mt-0.5">{bedsByRoomCategory.oneBed.toLocaleString()} Beds</p>
-                  <span className="text-[10px] text-emerald-600 font-semibold">Avg GH₵ {rentIndices.oneInRoom.toLocaleString()}</span>
-                </div>
-                <div className="p-3 rounded-xl bg-card border border-border/60">
-                  <span className="text-muted-foreground font-medium text-[11px]">2 in a Room (Double)</span>
-                  <p className="text-base font-bold text-foreground mt-0.5">{bedsByRoomCategory.twoBed.toLocaleString()} Beds</p>
-                  <span className="text-[10px] text-emerald-600 font-semibold">Avg GH₵ {rentIndices.twoInRoom.toLocaleString()}</span>
-                </div>
-                <div className="p-3 rounded-xl bg-card border border-border/60">
-                  <span className="text-muted-foreground font-medium text-[11px]">3 in a Room (Triple)</span>
-                  <p className="text-base font-bold text-foreground mt-0.5">{bedsByRoomCategory.threeBed.toLocaleString()} Beds</p>
-                  <span className="text-[10px] text-emerald-600 font-semibold">Avg GH₵ {rentIndices.threeInRoom.toLocaleString()}</span>
-                </div>
-                <div className="p-3 rounded-xl bg-card border border-border/60">
-                  <span className="text-muted-foreground font-medium text-[11px]">4 in a Room (Quad)</span>
-                  <p className="text-base font-bold text-foreground mt-0.5">{bedsByRoomCategory.fourBed.toLocaleString()} Beds</p>
-                  <span className="text-[10px] text-emerald-600 font-semibold">Avg GH₵ {rentIndices.fourInRoom.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ================= COMPONENT 2: SANITIZED KPI CARDS ================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Card 1: Total Registered Hostels */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Total Registered Hostels
-              </CardTitle>
-              <Building2 className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-foreground">{totalRegisteredHostels}</div>
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 inline" />
-                {totalVerifiedHostels} accredited under university charter
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: Total Off-Campus Beds */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Total Off-Campus Beds
-              </CardTitle>
-              <Users className="h-4 w-4 text-sky-600" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-sky-600">
-                {totalOffCampusBeds.toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Summed room capacity across verified hostels
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Card 3: Pending Accreditation Reviews */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Pending Accreditation Reviews
-              </CardTitle>
-              <Clock className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-amber-500">{pendingAccreditationReviews}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Awaiting Coordinator desk verification
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Card 4: Active Sanctions */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Active Sanctions
-              </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-rose-600" />
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="text-2xl sm:text-3xl font-black text-rose-600">{activeSanctionsCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Properties flagged under executive review
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ================= COMPONENT 3: REAL-TIME GRIEVANCE & DISPUTE ANALYTICS ================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Chart 1: Leading Grievance Categories & Zones */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  Leading Grievance Categories &amp; Zones
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                  Real-time welfare complaints across accommodation zones.
-                </CardDescription>
-              </div>
-
-              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg self-start sm:self-auto">
-                <Button
-                  variant={grievanceView === "category" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setGrievanceView("category")}
-                  className="h-7 px-2.5 text-[11px] font-bold rounded-md"
-                >
-                  By Category
-                </Button>
-                <Button
-                  variant={grievanceView === "zone" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setGrievanceView("zone")}
-                  className="h-7 px-2.5 text-[11px] font-bold rounded-md"
-                >
-                  By Zone
-                </Button>
-              </div>
-            </div>
-
-            <CardContent className="p-4 space-y-4">
-              {summary.totalComplaints === 0 ? (
-                <div className="py-10 text-center space-y-2">
-                  <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto text-emerald-600">
-                    <CheckCircle2 className="h-5 w-5" />
+        {/* Executive Content Surface */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-8">
+          {/* =========================================================================
+              COMPONENT 2: TOP-LEVEL KPI METRIC CARDS GRID (Cake / Copilot Inspired)
+              ========================================================================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Total Registered Properties */}
+            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Registered Properties
+                  </span>
+                  <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <Building2 className="h-4 w-4" />
                   </div>
-                  <p className="text-xs font-bold text-foreground">Zero Active Grievances Reported</p>
-                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                    Live grievance stream active. Student-hostel disputes and welfare complaints will automatically categorize here when logged.
-                  </p>
                 </div>
-              ) : grievanceView === "category" ? (
-                categoryBreakdown.length > 0 ? (
-                  categoryBreakdown.map((item, idx) => (
-                    <div key={idx} className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-medium">
-                        <span className="text-foreground">{item.category}</span>
-                        <span className="text-muted-foreground">
-                          {item.count} reports ({item.percentage}%)
-                        </span>
-                      </div>
-                      <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground text-center py-6">No categorized reports</p>
-                )
-              ) : (
-                (zoneBreakdown || []).map((item, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-foreground flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                        {item.zone}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {item.count} reports ({item.percentage}%)
-                      </span>
-                    </div>
-                    <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
+
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-black tracking-tight text-foreground font-headline">
+                    {totalRegisteredHostels}
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Chart 2: Dispute Origin & Resolution Status */}
-          <Card className="border border-border/60 shadow-xs bg-card">
-            <div className="p-4 border-b border-border/50 flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <PieChart className="h-4 w-4 text-primary" />
-                  Dispute Origin &amp; Resolution Status
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                  Resident-initiated reports vs management-initiated policy notices.
-                </CardDescription>
-              </div>
-            </div>
-            <CardContent className="p-4 space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-center">
-                  <p className="text-[11px] font-bold uppercase text-muted-foreground">Student → Hostel</p>
-                  <p className="text-2xl font-extrabold text-foreground mt-1">
-                    {directionBreakdown.studentToHostel}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Facilities, utilities &amp; pricing
-                  </p>
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px] font-bold gap-1 px-2 py-0.5">
+                    <TrendingUp className="h-3 w-3" />
+                    +4.8% YoY
+                  </Badge>
                 </div>
 
-                <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-center">
-                  <p className="text-[11px] font-bold uppercase text-muted-foreground">Manager → Student</p>
-                  <p className="text-2xl font-extrabold text-foreground mt-1">
-                    {directionBreakdown.managerToStudent}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Policy conduct &amp; quiet hours
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-muted-foreground">Arbitration Resolution Rate</span>
-                  <span className="text-emerald-600 font-bold">
-                    {summary.resolutionRate}% Closed / Resolved
+                <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border/50">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong className="text-foreground font-semibold">{totalVerifiedHostels}</strong> accredited under charter
                   </span>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5 flex overflow-hidden shadow-inner">
-                  <div
-                    style={{ width: `${summary.resolutionRate}%` }}
-                    className="bg-emerald-500 h-full transition-all duration-500"
-                    title={`Resolved: ${summary.resolutionRate}%`}
-                  />
-                  <div
-                    style={{ width: `${100 - summary.resolutionRate}%` }}
-                    className="bg-amber-400 h-full transition-all duration-500"
-                    title={`Under Review: ${100 - summary.resolutionRate}%`}
-                  />
+              </CardContent>
+            </Card>
+
+            {/* Card 2: Active Bed Capacity */}
+            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Active Bed Capacity
+                  </span>
+                  <div className="h-8 w-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
+                    <Users className="h-4 w-4" />
+                  </div>
                 </div>
-                <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
-                  <span>Resolved ({summary.resolvedComplaints})</span>
-                  <span>Under Review / In Arbitration ({summary.underReviewComplaints + summary.submittedComplaints})</span>
+
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-black tracking-tight text-sky-600 dark:text-sky-400 font-headline">
+                    {totalOffCampusBeds.toLocaleString()}
+                  </div>
+                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20 text-[10px] font-bold px-2 py-0.5">
+                    100% Audited
+                  </Badge>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* ================= COMPONENT 4: ACCREDITATION SANCTION & REVOCATION SWITCHBOARD ================= */}
-        <Card className="border border-border/80 shadow-md bg-card mb-8 rounded-3xl overflow-hidden">
-          <CardHeader className="p-5 border-b border-border/60 bg-muted/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base sm:text-lg font-extrabold font-headline flex items-center gap-2">
-                  <AlertOctagon className="h-5 w-5 text-rose-600" />
-                  Accreditation Sanction &amp; Revocation Switchboard
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Executive authority to sanction or revoke university charter accreditation for non-compliant properties.
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="text-[11px] font-bold border-rose-500/30 text-rose-700 dark:text-rose-400 bg-rose-500/10">
-                Vice-Chancellor Direct Control
-              </Badge>
-            </div>
-          </CardHeader>
+                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                  Summed room capacity across accredited hostels
+                </div>
+              </CardContent>
+            </Card>
 
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-muted/30 border-b border-border/60">
-                  <TableRow>
-                    <TableHead className="w-48">Hostel Name &amp; Zone</TableHead>
-                    <TableHead>Accreditation Standing</TableHead>
-                    <TableHead>Pricing &amp; Tariffs</TableHead>
-                    <TableHead>Active Violations / Notes</TableHead>
-                    <TableHead className="text-right">Executive Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {hostels.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-xs text-muted-foreground">
-                        No hostels currently registered in portfolio.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    hostels.map((h) => {
-                      const isRevoked = h.status === "revoked" || (h as any).sanctionStatus === "revoked" || (h as any).accreditationStatus === "Accreditation Revoked";
-                      const isSanctioned = (h as any).sanctionStatus === "sanctioned" || (h as any).accreditationStatus === "Executive Sanction" || (h as any).accreditationStatus === "sanctioned";
+            {/* Card 3: Pending Reviews */}
+            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Pending Reviews
+                  </span>
+                  <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                </div>
 
-                      return (
-                        <TableRow key={h.id} className="hover:bg-muted/20 transition-colors">
-                          <TableCell className="py-3.5">
-                            <p className="font-bold text-sm text-foreground">{h.name}</p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <MapPin className="h-3 w-3 shrink-0" />
-                              {h.location}
-                            </p>
-                          </TableCell>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-black tracking-tight text-amber-600 dark:text-amber-400 font-headline">
+                    {pendingAccreditationReviews}
+                  </div>
+                  <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] font-bold px-2 py-0.5">
+                    In Pipeline
+                  </Badge>
+                </div>
 
-                          <TableCell className="py-3.5">
-                            {isRevoked ? (
-                              <Badge className="bg-rose-600 text-white text-[10px] font-bold gap-1">
-                                <XCircle className="h-3 w-3" /> Accreditation Revoked
-                              </Badge>
-                            ) : isSanctioned ? (
-                              <Badge className="bg-amber-500 text-white text-[10px] font-bold gap-1">
-                                <AlertTriangle className="h-3 w-3" /> Executive Sanction
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-emerald-600 text-white text-[10px] font-bold gap-1">
-                                <ShieldCheck className="h-3 w-3" /> Good Standing
-                              </Badge>
-                            )}
-                          </TableCell>
+                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                  Awaiting Coordinator desk verification
+                </div>
+              </CardContent>
+            </Card>
 
-                          <TableCell className="py-3.5 text-xs">
-                            <p className="font-bold text-foreground">
-                              GH₵ {h.priceRange?.min?.toLocaleString()} - {h.priceRange?.max?.toLocaleString()}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {h.roomTypes?.length || 1} room categories
-                            </p>
-                          </TableCell>
+            {/* Card 4: Active Sanctions */}
+            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Active Sanctions
+                  </span>
+                  <div className="h-8 w-8 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
+                    <AlertTriangle className="h-4 w-4" />
+                  </div>
+                </div>
 
-                          <TableCell className="py-3.5 text-xs">
-                            {(h as any).sanctionReason ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-semibold">
-                                {(h as any).sanctionReason}
-                              </span>
-                            ) : (
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-black tracking-tight text-rose-600 dark:text-rose-400 font-headline">
+                    {activeSanctionsCount}
+                  </div>
+                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 text-[10px] font-bold px-2 py-0.5">
+                    Enforcement
+                  </Badge>
+                </div>
+
+                <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                  Properties under executive restriction
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* =========================================================================
+              TAB CONTENT 1: OVERVIEW
+              ========================================================================= */}
+          {activeTab === "overview" && (
+            <div className="space-y-8">
+              {/* Room Category Inventory Distribution Benchmarks */}
+              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
+                <CardHeader className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base font-extrabold font-headline flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      Live Room Category Inventory &amp; Rental Benchmarks
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Aggregated off-campus bed supply categorized by room configuration against statutory ceilings.
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs font-bold text-foreground">
+                    Total: {totalOffCampusBeds.toLocaleString()} Bed Spaces
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="p-5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                      <span className="text-muted-foreground font-semibold text-[11px]">1 in a Room (Single)</span>
+                      <p className="text-xl font-extrabold text-foreground mt-1">
+                        {bedsByRoomCategory.oneBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
+                        <span className="text-muted-foreground">Avg:</span>
+                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.oneInRoom.toLocaleString()}</strong>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                        <span>Statutory Cap:</span>
+                        <span className="font-mono">GH₵ 9,000</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                      <span className="text-muted-foreground font-semibold text-[11px]">2 in a Room (Double)</span>
+                      <p className="text-xl font-extrabold text-foreground mt-1">
+                        {bedsByRoomCategory.twoBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
+                        <span className="text-muted-foreground">Avg:</span>
+                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.twoInRoom.toLocaleString()}</strong>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                        <span>Statutory Cap:</span>
+                        <span className="font-mono">GH₵ 6,500</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                      <span className="text-muted-foreground font-semibold text-[11px]">3 in a Room (Triple)</span>
+                      <p className="text-xl font-extrabold text-foreground mt-1">
+                        {bedsByRoomCategory.threeBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
+                        <span className="text-muted-foreground">Avg:</span>
+                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.threeInRoom.toLocaleString()}</strong>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                        <span>Statutory Cap:</span>
+                        <span className="font-mono">GH₵ 4,500</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
+                      <span className="text-muted-foreground font-semibold text-[11px]">4 in a Room (Quad)</span>
+                      <p className="text-xl font-extrabold text-foreground mt-1">
+                        {bedsByRoomCategory.fourBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
+                        <span className="text-muted-foreground">Avg:</span>
+                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.fourInRoom.toLocaleString()}</strong>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                        <span>Statutory Cap:</span>
+                        <span className="font-mono">GH₵ 3,500</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* =========================================================================
+                  COMPONENT 3: SPLIT-PANE ANALYTICS SECTION (Cake image_7d38c9.jpg style)
+                  ========================================================================= */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Card: Grievance Distribution */}
+                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
+                  <div className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base font-extrabold flex items-center gap-2 font-headline">
+                        <BarChart3 className="h-4 w-4 text-primary" />
+                        Grievance Distribution
+                      </CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                        Real-time student welfare complaints across accommodation zones.
+                      </CardDescription>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-muted p-1 rounded-xl shrink-0 self-start sm:self-auto">
+                      <Button
+                        variant={grievanceView === "category" ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setGrievanceView("category")}
+                        className="h-7 px-3 text-[11px] font-bold rounded-lg"
+                      >
+                        By Category
+                      </Button>
+                      <Button
+                        variant={grievanceView === "zone" ? "secondary" : "ghost"}
+                        size="sm"
+                        onClick={() => setGrievanceView("zone")}
+                        className="h-7 px-3 text-[11px] font-bold rounded-lg"
+                      >
+                        By Zone
+                      </Button>
+                    </div>
+                  </div>
+
+                  <CardContent className="p-5 space-y-4">
+                    {summary.totalComplaints === 0 ? (
+                      <div className="py-12 text-center space-y-2">
+                        <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto text-emerald-600">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <p className="text-xs font-bold text-foreground">Zero Active Grievances Reported</p>
+                        <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                          Live grievance stream active. Logged disputes will automatically categorize and stream into this panel.
+                        </p>
+                      </div>
+                    ) : grievanceView === "category" ? (
+                      categoryBreakdown.length > 0 ? (
+                        categoryBreakdown.map((item, idx) => (
+                          <div key={idx} className="space-y-1.5">
+                            <div className="flex justify-between text-xs font-medium">
+                              <span className="text-foreground font-semibold">{item.category}</span>
                               <span className="text-muted-foreground">
-                                No regulatory non-compliance reported
+                                {item.count} reports ({item.percentage}%)
                               </span>
-                            )}
-                          </TableCell>
+                            </div>
+                            <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-6">No categorized reports</p>
+                      )
+                    ) : (
+                      (zoneBreakdown || []).map((item, idx) => (
+                        <div key={idx} className="space-y-1.5">
+                          <div className="flex justify-between text-xs font-medium">
+                            <span className="text-foreground font-semibold flex items-center gap-1.5">
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              {item.zone}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {item.count} reports ({item.percentage}%)
+                            </span>
+                          </div>
+                          <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
 
-                          <TableCell className="py-3.5 text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedHostelForSanction(h);
-                                setNewSanctionStatus(
-                                  isRevoked ? "approved" : isSanctioned ? "revoked" : "sanctioned"
-                                );
-                                setSanctionReason((h as any).sanctionReason || "");
-                              }}
-                              className="h-8 text-xs font-bold rounded-xl gap-1"
-                            >
-                              <Scale className="h-3 w-3" />
-                              Manage Status
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                {/* Right Card: Dispute Origin & Resolution Status */}
+                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
+                  <div className="p-5 border-b border-border/60 bg-muted/10 flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base font-extrabold flex items-center gap-2 font-headline">
+                        <PieChart className="h-4 w-4 text-primary" />
+                        Dispute Origin &amp; Resolution Status
+                      </CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                        Resident complaints vs manager notices with arbitration outcomes.
+                      </CardDescription>
+                    </div>
+                  </div>
+
+                  <CardContent className="p-5 space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-card border border-border/70 rounded-2xl p-4 text-center">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Student → Hostel
+                        </p>
+                        <p className="text-2xl font-black text-foreground mt-1 font-headline">
+                          {directionBreakdown.studentToHostel}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Facilities &amp; utilities
+                        </p>
+                      </div>
+
+                      <div className="bg-card border border-border/70 rounded-2xl p-4 text-center">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Manager → Student
+                        </p>
+                        <p className="text-2xl font-black text-foreground mt-1 font-headline">
+                          {directionBreakdown.managerToStudent}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Conduct &amp; policy notices
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-muted-foreground">Dean Arbitration Resolution Rate</span>
+                        <span className="text-emerald-600 font-bold">
+                          {summary.resolutionRate}% Concluded
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3 flex overflow-hidden shadow-inner">
+                        <div
+                          style={{ width: `${summary.resolutionRate}%` }}
+                          className="bg-emerald-500 h-full transition-all duration-500"
+                          title={`Resolved: ${summary.resolutionRate}%`}
+                        />
+                        <div
+                          style={{ width: `${100 - summary.resolutionRate}%` }}
+                          className="bg-amber-400 h-full transition-all duration-500"
+                          title={`Under Review: ${100 - summary.resolutionRate}%`}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+                          Resolved ({summary.resolvedComplaints})
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+                          In Arbitration ({summary.underReviewComplaints + summary.submittedComplaints})
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Fast Executive Jump Bar */}
+              <div className="p-5 rounded-3xl bg-card border border-border/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <Scale className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Accreditation Sanction Control Switchboard</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Direct executive power to enforce statutory warnings or revoke accreditation under university charter.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setActiveTab("sanctions")}
+                    className="h-9 px-4 text-xs font-bold rounded-xl"
+                  >
+                    Open Switchboard
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setBriefingOpen(true)}
+                    className="h-9 px-4 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-xs"
+                  >
+                    Generate Briefing
+                  </Button>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* ================= MODAL: EXECUTIVE COUNCIL BRIEFING GENERATOR (PRINT & CSV READY) ================= */}
+          {/* =========================================================================
+              TAB CONTENT 2: COMPLIANCE AUDIT
+              ========================================================================= */}
+          {activeTab === "compliance" && (
+            <div className="space-y-8">
+              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
+                <CardHeader className="p-5 border-b border-border/60 bg-muted/10">
+                  <CardTitle className="text-base font-extrabold font-headline flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                    Statutory Framework &amp; Fire Safety Audits
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Oversight of Fire Precaution Regulations (Act 389 and L.I. 1724) and university health standards.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase">Fire Certificates</span>
+                        <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 text-[10px]">
+                          100% Lodged
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-black text-foreground">{totalVerifiedHostels}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Certified statutory fire precaution certificates recorded on file.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase">Welfare Clearances</span>
+                        <Badge className="bg-sky-500/10 text-sky-700 border-sky-500/20 text-[10px]">
+                          Audited
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-black text-foreground">{summary.resolutionRate}%</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Dean of Students welfare and sanitary inspection completion rate.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-card border border-border/70 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground uppercase">Verification Queue</span>
+                        <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]">
+                          Active
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-black text-foreground">{pendingAccreditationReviews}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Hostels awaiting on-site inspection or document signoff.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-muted/30 border border-border/60 text-xs space-y-2">
+                    <h4 className="font-bold text-foreground flex items-center gap-1.5">
+                      <Shield className="h-4 w-4 text-primary" />
+                      Statutory Enforcement Policy (Pro-VC Directive):
+                    </h4>
+                    <p className="text-muted-foreground leading-relaxed">
+                      All off-campus private student hostels operating within the university catchment zone must retain current accreditation. Properties under <strong>Executive Sanction</strong> are barred from onboarding new student bookings. Properties with <strong>Accreditation Revoked</strong> are permanently delisted from the institutional booking gateway.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB CONTENT 3: ACCREDITATION SANCTION & REVOCATION SWITCHBOARD
+              ========================================================================= */}
+          {activeTab === "sanctions" && (
+            <div className="space-y-6">
+              <Card className="border border-border/80 shadow-xs bg-card rounded-3xl overflow-hidden">
+                <CardHeader className="p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base sm:text-lg font-extrabold font-headline flex items-center gap-2">
+                      <Scale className="h-5 w-5 text-rose-600" />
+                      Accreditation Sanction &amp; Revocation Switchboard
+                    </CardTitle>
+                    <CardDescription className="text-xs text-muted-foreground">
+                      Exercise statutory executive oversight over private student accommodation properties.
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/30">
+                    Vice-Chancellor Direct Control
+                  </Badge>
+                </CardHeader>
+
+                {/* Filter and Search Bar */}
+                <div className="p-4 border-b border-border/60 bg-card flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search hostels by name or zone..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto w-full sm:w-auto">
+                    <Button
+                      variant={statusFilter === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setStatusFilter("all")}
+                      className="h-8 text-xs font-bold rounded-xl"
+                    >
+                      All ({hostels.length})
+                    </Button>
+                    <Button
+                      variant={statusFilter === "approved" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setStatusFilter("approved")}
+                      className="h-8 text-xs font-bold rounded-xl"
+                    >
+                      Good Standing ({totalVerifiedHostels})
+                    </Button>
+                    <Button
+                      variant={statusFilter === "sanctioned" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setStatusFilter("sanctioned")}
+                      className="h-8 text-xs font-bold rounded-xl text-amber-600"
+                    >
+                      Sanctioned
+                    </Button>
+                    <Button
+                      variant={statusFilter === "revoked" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setStatusFilter("revoked")}
+                      className="h-8 text-xs font-bold rounded-xl text-rose-600"
+                    >
+                      Revoked
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Enterprise Table (Cake image_7d3540.png inspired) */}
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/40 border-b border-border/60">
+                        <TableRow>
+                          <TableHead className="w-56 font-bold text-xs">Hostel &amp; Location</TableHead>
+                          <TableHead className="font-bold text-xs">Accreditation Standing</TableHead>
+                          <TableHead className="font-bold text-xs">Room Inventory &amp; Beds</TableHead>
+                          <TableHead className="font-bold text-xs">Tariff Range</TableHead>
+                          <TableHead className="font-bold text-xs">Compliance Notes</TableHead>
+                          <TableHead className="text-right font-bold text-xs">Executive Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredHostels.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-12 text-xs text-muted-foreground">
+                              No properties matched your current filter criteria.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredHostels.map((h) => {
+                            const isRevoked = isHostelRevoked(h);
+                            const isSanctioned = isHostelSanctioned(h);
+                            const beds = (h.roomTypes || []).reduce((acc, rt) => acc + ((rt.numberOfRooms || 1) * (rt.capacity || 1)), 0);
+                            const initials = (h.name || "H")
+                              .split(" ")
+                              .map((w) => w[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
+
+                            return (
+                              <TableRow key={h.id} className="hover:bg-muted/30 transition-colors">
+                                {/* Hostel & Location with Avatar */}
+                                <TableCell className="py-3.5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                      {initials}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-xs text-foreground truncate">{h.name}</p>
+                                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                                        <MapPin className="h-3 w-3 shrink-0" />
+                                        {h.location}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+
+                                {/* Pill Badges */}
+                                <TableCell className="py-3.5">
+                                  {isRevoked ? (
+                                    <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                      <XCircle className="h-3.5 w-3.5" />
+                                      Accreditation Revoked
+                                    </Badge>
+                                  ) : isSanctioned ? (
+                                    <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                      <AlertTriangle className="h-3.5 w-3.5" />
+                                      Executive Sanction
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                      Good Standing
+                                    </Badge>
+                                  )}
+                                </TableCell>
+
+                                {/* Room Inventory */}
+                                <TableCell className="py-3.5 text-xs">
+                                  <p className="font-bold text-foreground">{beds} Verified Beds</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {h.roomTypes?.length || 1} room categories
+                                  </p>
+                                </TableCell>
+
+                                {/* Tariff Range */}
+                                <TableCell className="py-3.5 text-xs">
+                                  <p className="font-bold text-foreground">
+                                    GH₵ {h.priceRange?.min?.toLocaleString()} - {h.priceRange?.max?.toLocaleString()}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground">per academic year</p>
+                                </TableCell>
+
+                                {/* Compliance Notes */}
+                                <TableCell className="py-3.5 text-xs max-w-xs">
+                                  {(h as any).sanctionReason ? (
+                                    <span className="text-rose-600 dark:text-rose-400 font-medium line-clamp-2">
+                                      {(h as any).sanctionReason}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Audited &amp; Compliant</span>
+                                  )}
+                                </TableCell>
+
+                                {/* Action Dropdown Menu */}
+                                <TableCell className="py-3.5 text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5 border-border/80 hover:bg-muted"
+                                      >
+                                        <span>Manage</span>
+                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56 rounded-2xl p-1.5">
+                                      <DropdownMenuLabel className="text-[11px] font-bold uppercase text-muted-foreground px-2 py-1">
+                                        Executive Action
+                                      </DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedHostelForSanction(h);
+                                          setNewSanctionStatus("approved");
+                                          setSanctionReason((h as any).sanctionReason || "");
+                                        }}
+                                        className="text-xs font-semibold gap-2 rounded-xl text-emerald-600 cursor-pointer"
+                                      >
+                                        <ShieldCheck className="h-4 w-4" />
+                                        Restore Good Standing
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedHostelForSanction(h);
+                                          setNewSanctionStatus("sanctioned");
+                                          setSanctionReason((h as any).sanctionReason || "");
+                                        }}
+                                        className="text-xs font-semibold gap-2 rounded-xl text-amber-600 cursor-pointer"
+                                      >
+                                        <AlertTriangle className="h-4 w-4" />
+                                        Apply Executive Sanction
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedHostelForSanction(h);
+                                          setNewSanctionStatus("revoked");
+                                          setSanctionReason((h as any).sanctionReason || "");
+                                        }}
+                                        className="text-xs font-semibold gap-2 rounded-xl text-rose-600 cursor-pointer"
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                        Revoke Charter Accreditation
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem asChild className="text-xs font-semibold gap-2 rounded-xl cursor-pointer">
+                                        <Link href={`/hostels/${h.id}`} target="_blank">
+                                          <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                          View Public Listing
+                                        </Link>
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB CONTENT 4: EXECUTIVE REPORTS
+              ========================================================================= */}
+          {activeTab === "reports" && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Official Briefing Card */}
+                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl p-6 space-y-4">
+                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">Official Council Briefing Report</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Formatted for the University Council, Academic Board, and Directorate of Student Welfare. Includes live statutory rental benchmarks, bed capacity deficits, and sanctions register.
+                    </p>
+                  </div>
+                  <div className="pt-2 flex items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setBriefingOpen(true)}
+                      className="rounded-xl text-xs font-bold gap-1.5 bg-primary text-primary-foreground shadow-xs"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Open Briefing &amp; Print
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportCSV}
+                      className="rounded-xl text-xs font-bold gap-1.5"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download CSV
+                    </Button>
+                  </div>
+                </Card>
+
+                {/* Audit Trail Card */}
+                <Card className="border border-border/80 shadow-xs bg-card rounded-3xl p-6 space-y-4">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                    <FileSpreadsheet className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">Executive Sanctions Audit Trail</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Download complete regulatory audit records of all formal warnings, administrative sanctions, and charter revocations ordered by executive authority.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportCSV}
+                      className="rounded-xl text-xs font-bold gap-1.5"
+                    >
+                      <Download className="h-4 w-4 text-primary" />
+                      Export Sanctions Ledger
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* =========================================================================
+            3. MODAL: EXECUTIVE COUNCIL BRIEFING GENERATOR (WITH PRINT ENGINE FIX)
+            ========================================================================= */}
         <Dialog open={briefingOpen} onOpenChange={setBriefingOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8 bg-card border-border">
             <DialogHeader className="border-b border-border pb-4 no-print">
@@ -998,8 +1696,8 @@ export default function ExecutiveDashboardPage() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => window.print()}
-                    className="rounded-xl text-xs font-bold gap-1.5 bg-primary text-primary-foreground shadow-sm"
+                    onClick={handlePrint}
+                    className="rounded-xl text-xs font-bold gap-1.5 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                   >
                     <Printer className="h-3.5 w-3.5" />
                     Print / Export PDF
@@ -1008,52 +1706,35 @@ export default function ExecutiveDashboardPage() {
               </div>
             </DialogHeader>
 
-            {/* Print Isolation Styles */}
-            <style jsx global>{`
-              @media print {
-                body * {
-                  visibility: hidden !important;
-                }
-                #executive-briefing-printable,
-                #executive-briefing-printable * {
-                  visibility: visible !important;
-                }
-                #executive-briefing-printable {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
-                  width: 100% !important;
-                  margin: 0 !important;
-                  padding: 24px !important;
-                  background: white !important;
-                  color: black !important;
-                  box-shadow: none !important;
-                  border: none !important;
-                }
-                .no-print {
-                  display: none !important;
-                }
-              }
-            `}</style>
-
-            {/* Printable Briefing Content */}
+            {/* Printable Briefing Content Container (Unclipped & A4 100% scaled) */}
             <div id="executive-briefing-printable" className="space-y-6 text-xs leading-relaxed text-foreground py-4">
-              {/* Institutional Header Box */}
-              <div className="p-4 rounded-2xl bg-muted/30 border border-border/70 flex flex-col sm:flex-row justify-between gap-3 text-xs">
+              {/* Institutional Header Letterhead */}
+              <div className="p-5 rounded-2xl bg-muted/40 border border-border/70 flex flex-col sm:flex-row justify-between gap-4 text-xs">
                 <div>
-                  <span className="font-bold text-muted-foreground uppercase text-[10px]">Institution:</span>
-                  <p className="font-bold text-base text-foreground">University Housing Directorate</p>
-                  <p className="text-muted-foreground">Office of the Vice-Chancellor</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-white text-xs font-bold">
+                      HQ
+                    </div>
+                    <span className="font-extrabold text-sm uppercase tracking-wider text-primary">
+                      HostelHQ University Housing Directorate
+                    </span>
+                  </div>
+                  <p className="font-bold text-base text-foreground">
+                    {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate of Student Welfare"}
+                  </p>
+                  <p className="text-muted-foreground">Accreditation &amp; Private Accommodation Governance Council</p>
                 </div>
-                <div>
-                  <span className="font-bold text-muted-foreground uppercase text-[10px]">Reporting Period:</span>
-                  <p className="font-semibold text-foreground">{new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}</p>
-                  <p className="text-muted-foreground">Academic Year 2026/2027</p>
+                <div className="text-left sm:text-right">
+                  <span className="font-mono text-[10px] uppercase font-bold text-muted-foreground">Document Ref:</span>
+                  <p className="font-mono font-bold text-xs text-foreground">VC-BRIEF-2026-HQ</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    Date: {new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}
+                  </p>
                 </div>
               </div>
 
-              {/* Section 1: Off-Campus Housing Inventory & Capacity Assessment */}
-              <div className="space-y-3">
+              {/* Section 1: Portfolio Assessment Summary */}
+              <div className="space-y-3 print-break-inside-avoid">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-primary" />
                   1. Private Student Housing Portfolio Assessment
@@ -1086,7 +1767,7 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Section 2: Rental Price Indices */}
-              <div className="space-y-3">
+              <div className="space-y-3 print-break-inside-avoid">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-emerald-600" />
                   2. Campus Rental Price Indices (Statutory Limits vs Market Averages)
@@ -1116,7 +1797,7 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Section 3: Safety Compliance & Dispute Resolution */}
-              <div className="space-y-3">
+              <div className="space-y-3 print-break-inside-avoid">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-teal-600" />
                   3. Safety Standards &amp; Welfare Adjudication
@@ -1138,7 +1819,7 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Section 4: Property Audit & Sanction Register */}
-              <div className="space-y-3">
+              <div className="space-y-3 print-break-inside-avoid">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
                   <Scale className="h-4 w-4 text-rose-600" />
                   4. Hostel Compliance &amp; Sanctions Register
@@ -1147,28 +1828,34 @@ export default function ExecutiveDashboardPage() {
                   <table className="w-full text-[11px] text-left">
                     <thead className="bg-muted/50 border-b border-border/60 text-muted-foreground">
                       <tr>
-                        <th className="p-2 font-semibold">Hostel</th>
-                        <th className="p-2 font-semibold">Location</th>
-                        <th className="p-2 font-semibold">Standing</th>
-                        <th className="p-2 font-semibold">Capacity</th>
-                        <th className="p-2 font-semibold">Notes / Sanction Justification</th>
+                        <th className="p-2.5 font-semibold">Hostel</th>
+                        <th className="p-2.5 font-semibold">Location</th>
+                        <th className="p-2.5 font-semibold">Standing</th>
+                        <th className="p-2.5 font-semibold">Capacity</th>
+                        <th className="p-2.5 font-semibold">Notes / Sanction Justification</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
-                      {hostels.slice(0, 8).map((h) => {
-                        const isRevoked = h.status === "revoked" || (h as any).sanctionStatus === "revoked" || (h as any).accreditationStatus === "Accreditation Revoked";
-                        const isSanctioned = (h as any).sanctionStatus === "sanctioned" || (h as any).accreditationStatus === "Executive Sanction" || (h as any).accreditationStatus === "sanctioned";
+                      {hostels.slice(0, 15).map((h) => {
+                        const isRevoked = isHostelRevoked(h);
+                        const isSanctioned = isHostelSanctioned(h);
                         const beds = (h.roomTypes || []).reduce((acc, rt) => acc + ((rt.numberOfRooms || 1) * (rt.capacity || 1)), 0);
 
                         return (
                           <tr key={h.id}>
-                            <td className="p-2 font-medium text-foreground">{h.name}</td>
-                            <td className="p-2 text-muted-foreground">{h.location}</td>
-                            <td className="p-2 font-semibold">
-                              {isRevoked ? "Revoked" : isSanctioned ? "Sanctioned" : "Good Standing"}
+                            <td className="p-2.5 font-medium text-foreground">{h.name}</td>
+                            <td className="p-2.5 text-muted-foreground">{h.location}</td>
+                            <td className="p-2.5 font-semibold">
+                              {isRevoked ? (
+                                <span className="text-rose-600 font-bold">Revoked</span>
+                              ) : isSanctioned ? (
+                                <span className="text-amber-600 font-bold">Sanctioned</span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold">Good Standing</span>
+                              )}
                             </td>
-                            <td className="p-2">{beds} beds</td>
-                            <td className="p-2 text-muted-foreground">{(h as any).sanctionReason || "Fully compliant"}</td>
+                            <td className="p-2.5">{beds} beds</td>
+                            <td className="p-2.5 text-muted-foreground">{(h as any).sanctionReason || "Fully compliant"}</td>
                           </tr>
                         );
                       })}
@@ -1178,14 +1865,19 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Signoff Box */}
-              <div className="pt-4 border-t border-border/60 flex justify-between items-end text-[11px] text-muted-foreground">
+              <div className="pt-6 border-t border-border/60 flex justify-between items-end text-[11px] text-muted-foreground print-break-inside-avoid">
                 <div>
-                  <p className="font-bold text-foreground">Submitted by:</p>
-                  <p>Vice-Chancellor &amp; Accommodation Oversight Directorate</p>
+                  <p className="font-bold text-foreground">Submitted &amp; Certified by:</p>
+                  <p>Vice-Chancellor &amp; University Housing Directorate</p>
+                  <div className="h-10 border-b border-dashed border-muted-foreground/50 w-48 mt-2" />
+                  <p className="text-[10px] text-muted-foreground mt-1">Official Executive Signature</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[10px]">BRIEFING REF: VC-BRIEF-2026-HQ</p>
-                  <p>Certified Official Copy</p>
+                  <p className="font-mono text-[10px] font-bold text-foreground">BRIEFING REF: VC-BRIEF-2026-HQ</p>
+                  <p>Certified Official Statutory Copy</p>
+                  <div className="inline-block mt-2 px-3 py-1 rounded-md border border-primary/40 text-primary font-bold text-[10px] tracking-wider uppercase">
+                    SEALED &amp; FILED
+                  </div>
                 </div>
               </div>
             </div>
@@ -1202,7 +1894,9 @@ export default function ExecutiveDashboardPage() {
           </DialogContent>
         </Dialog>
 
-        {/* ================= MODAL: ACCREDITATION SANCTION TOGGLE ================= */}
+        {/* =========================================================================
+            4. MODAL: ACCREDITATION SANCTION / REVOCATION TOGGLE
+            ========================================================================= */}
         <Dialog
           open={Boolean(selectedHostelForSanction)}
           onOpenChange={(open) => {
@@ -1216,7 +1910,7 @@ export default function ExecutiveDashboardPage() {
                 Executive Sanction Control
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Set the statutory standing for {selectedHostelForSanction?.name}.
+                Set statutory standing for {selectedHostelForSanction?.name}.
               </DialogDescription>
             </DialogHeader>
 
@@ -1230,7 +1924,7 @@ export default function ExecutiveDashboardPage() {
                   <SelectTrigger className="h-10 text-xs rounded-xl">
                     <SelectValue placeholder="Select Action" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value="approved">Good Standing (Active Accreditation)</SelectItem>
                     <SelectItem value="sanctioned">Executive Sanction (Warning Flag to Students)</SelectItem>
                     <SelectItem value="revoked">Revoke Charter (Immediate Delisting)</SelectItem>
@@ -1248,11 +1942,18 @@ export default function ExecutiveDashboardPage() {
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
-                <p className="font-bold mb-0.5">Statutory Effect:</p>
-                <span>
-                  This action will be published immediately to students and logged in the University Council audit register.
-                </span>
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                <p className="font-bold flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  Statutory Enforcement Effect:
+                </p>
+                <p>
+                  {newSanctionStatus === "revoked"
+                    ? "Charter accreditation will be revoked. The property will be instantly blocked from accepting student bookings and payment gateways."
+                    : newSanctionStatus === "sanctioned"
+                    ? "An official executive warning banner will be displayed on the property's public profile and logged in the Council audit trail."
+                    : "The property will be restored to full university charter accreditation and good standing."}
+                </p>
               </div>
             </div>
 
@@ -1278,7 +1979,7 @@ export default function ExecutiveDashboardPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </main>
+      </div>
     </div>
   );
 }
