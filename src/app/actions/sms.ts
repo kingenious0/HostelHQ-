@@ -10,7 +10,7 @@ import { requireAuth, requireRole } from '@/lib/auth-guard';
 export async function sendSMS(phoneNumber: string, message: string) {
     try {
         const caller = await requireAuth();
-        if (caller.role !== 'admin') {
+        if (caller.role !== 'admin' && caller.role !== 'coordinator' && caller.role !== 'dean') {
             const callerPhone = caller.phone ? caller.phone.replace(/[^0-9]/g, '') : '';
             const destPhone = phoneNumber.replace(/[^0-9]/g, '');
             if (callerPhone && !destPhone.endsWith(callerPhone.slice(-9))) {
@@ -44,7 +44,7 @@ export async function notifyAdminsOfNewHostelSubmission(hostelName: string, subm
         const querySnapshot = await getDocs(q);
 
         const phoneNumbers: string[] = [];
-        querySnapshot.forEach((doc) => {
+        querySnapshot.forEach((doc: any) => {
             const userData = doc.data();
             if (userData.phone) {
                 phoneNumbers.push(userData.phone);
@@ -371,3 +371,99 @@ export async function sendRoomSecuredSMSAction(params: {
         return { success: false, error: error.message || 'Failed to send room secured SMS' };
     }
 }
+
+/**
+ * Dispatch SMS alert to property manager when a listing is suspended for exceeding statutory campus rent cap.
+ */
+export async function sendRentCapBreachSMSAction(params: {
+    hostelId: string;
+    hostelName: string;
+    managerPhone?: string;
+    roomTypeName: string;
+    postedRate: number;
+    statutoryCap: number;
+}) {
+    try {
+        const caller = await requireRole(['coordinator', 'dean', 'admin']);
+        const { db } = await import('@/lib/firebase');
+        const { doc, getDoc, collection, addDoc } = await import('firebase/firestore');
+        const { adminDb, isFirebaseAdminConfigured } = await import('@/lib/firebase-admin');
+
+        let managerPhone = params.managerPhone ? params.managerPhone.replace(/[^0-9]/g, '') : '';
+        let managerId = '';
+
+        // 1. Resolve Manager Phone if not directly supplied
+        if (!managerPhone && params.hostelId) {
+            const cleanId = params.hostelId.replace(/^HOSTEL#/i, '').replace(/^PENDING_HOSTEL#/i, '').trim();
+            if (isFirebaseAdminConfigured()) {
+                const hSnap = await adminDb.collection('hostels').doc(cleanId).get();
+                if (hSnap.exists) {
+                    const hData = hSnap.data() || {};
+                    managerPhone = (hData.managerPhone || hData.contactPhone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || '';
+                }
+            } else {
+                const hSnap = await getDoc(doc(db, 'hostels', cleanId));
+                if (hSnap.exists()) {
+                    const hData = hSnap.data() || {};
+                    managerPhone = (hData.managerPhone || hData.contactPhone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || '';
+                }
+            }
+        }
+
+        if (!managerPhone && managerId) {
+            try {
+                const uSnap = await getDoc(doc(db, 'users', managerId));
+                if (uSnap.exists()) {
+                    const uData = uSnap.data() || {};
+                    managerPhone = (uData.phone || uData.phoneNumber || '').replace(/[^0-9]/g, '');
+                }
+            } catch (uErr) {
+                console.warn('[SMS] User phone lookup warning:', uErr);
+            }
+        }
+
+        if (!managerPhone) {
+            console.warn('[SMS] No verified manager phone found for hostel:', params.hostelName);
+            return { success: false, error: 'No manager phone number found for listing' };
+        }
+
+        const message = `HOSTELHQ NOTICE: Your ${params.roomTypeName} rate of GH₵${params.postedRate.toLocaleString()} at "${params.hostelName}" exceeds the statutory campus rent cap of GH₵${params.statutoryCap.toLocaleString()}. Listing suspended from student view. Lower your tariff to restore visibility: https://hostel-hq.vercel.app/manager/dashboard`;
+
+        const smsRes = await wigalSendSMS(managerPhone, message);
+
+        // Log SMS Notification Event
+        try {
+            const logEntry = {
+                type: 'rent_cap_breach',
+                hostelId: params.hostelId,
+                hostelName: params.hostelName,
+                managerPhone,
+                roomTypeName: params.roomTypeName,
+                postedRate: params.postedRate,
+                statutoryCap: params.statutoryCap,
+                result: smsRes,
+                dispatchedBy: caller.fullName || caller.displayName || caller.uid,
+                createdAt: new Date().toISOString(),
+            };
+
+            if (isFirebaseAdminConfigured()) {
+                await adminDb.collection('sms_notifications').add(logEntry);
+            } else {
+                await addDoc(collection(db, 'sms_notifications'), logEntry);
+            }
+        } catch (logErr) {
+            console.warn('[SMS] Could not save rent cap SMS log to Firestore:', logErr);
+        }
+
+        return {
+            success: Boolean(smsRes.success),
+            smsResult: smsRes,
+        };
+    } catch (error: any) {
+        console.error('Error in sendRentCapBreachSMSAction:', error);
+        return { success: false, error: error.message || 'Failed to dispatch rent cap breach SMS' };
+    }
+}
+

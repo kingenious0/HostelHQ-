@@ -59,6 +59,9 @@ import {
   Scale,
 } from "lucide-react";
 
+import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
+import { getStatutoryTariffCeiling } from "@/lib/tariff-limits";
+
 export default function DeanDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -430,6 +433,12 @@ export default function DeanDashboardPage() {
   const pendingVerificationsCount = verifications.filter((v) => v.status === "pending").length;
   const submittedComplaintsCount = complaints.filter((c) => c.status === "Submitted").length;
   const underReviewComplaintsCount = complaints.filter((c) => c.status === "Under Review").length;
+  const rentCapBreachesCount = hostels.filter((h) =>
+    h.roomTypes?.some((r: any) => {
+      const ceiling = getStatutoryTariffCeiling(r.name, r.capacity);
+      return ceiling && typeof r.price === "number" && r.price > ceiling.maxPrice;
+    })
+  ).length;
 
   if (loadingAuth) {
     return (
@@ -558,6 +567,19 @@ export default function DeanDashboardPage() {
                 className="relative py-2 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground transition-all flex items-center gap-2"
               >
                 <span>Placements & Density</span>
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="rentCaps"
+                className="relative py-2 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold text-xs sm:text-sm text-muted-foreground data-[state=active]:text-foreground transition-all flex items-center gap-2"
+              >
+                <Scale className="h-4 w-4" />
+                <span>Rent Cap Compliance</span>
+                {rentCapBreachesCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200">
+                    {rentCapBreachesCount}
+                  </span>
+                )}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1002,6 +1024,16 @@ export default function DeanDashboardPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* TAB 4: RENT CAP COMPLIANCE */}
+          <TabsContent value="rentCaps" className="space-y-4 pt-2">
+            <RentCapComplianceSection
+              hostels={hostels}
+              currentUser={currentUser}
+              userRole={userRole}
+              onHostelUpdated={() => loadDashboardData()}
+            />
           </TabsContent>
         </Tabs>
 

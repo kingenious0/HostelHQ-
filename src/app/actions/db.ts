@@ -69,17 +69,86 @@ export async function updateHostelAction(hostelId: string, updates: Partial<Host
   try {
     const caller = await requireAuth();
     const isExecutiveOrAdmin = ["admin", "executive", "pro_vc", "vc", "dean", "coordinator"].includes(caller.role);
+    const cleanId = hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+    const existing = await dynamoService.getHostelById(cleanId);
+
     if (!isExecutiveOrAdmin) {
-      const existing = await dynamoService.getHostelById(hostelId);
       if (!existing || existing.managerId !== caller.uid) {
         throw new Error("Unauthorized: You do not have permission to update this hostel.");
       }
     }
+
+    // Auto-Restore Check: If hostel is suspended_overpriced and rates are being updated to compliant levels
+    if (existing && (existing.status === "suspended_overpriced" || (updates as any).status === "suspended_overpriced")) {
+      const { fetchTariffLimits, getStatutoryTariffCeiling } = await import("@/lib/tariff-limits");
+      const limits = await fetchTariffLimits();
+      const candidateRooms = updates.roomTypes || existing.roomTypes || [];
+
+      if (candidateRooms.length > 0) {
+        const hasOverpricedRoom = candidateRooms.some((rt: any) => {
+          const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity, limits);
+          return typeof rt.price === "number" && rt.price > ceiling.maxPrice;
+        });
+
+        // If no rooms exceed approved caps, automatically restore visibility to live directory
+        if (!hasOverpricedRoom) {
+          updates.status = "approved";
+          updates.isPublished = true;
+          (updates as any).suspensionReason = null;
+        }
+      }
+    }
+
     const updated = await dynamoService.updateHostel(hostelId, updates, isPending);
+
+    // Sync updates to Firestore
+    try {
+      const fsUpdates: any = { ...updates };
+      delete fsUpdates.id;
+      delete fsUpdates.originalId;
+      await updateDoc(doc(db, "hostels", cleanId), fsUpdates);
+    } catch (fsErr) {
+      console.warn("Firestore sync in updateHostelAction warning:", fsErr);
+    }
+
     return { success: true, data: updated };
   } catch (error: any) {
     console.error("updateHostelAction error:", error);
     return { success: false, error: error.message || "Failed to update hostel" };
+  }
+}
+
+export async function getTariffLimitsAction() {
+  try {
+    const { fetchTariffLimits } = await import("@/lib/tariff-limits");
+    const data = await fetchTariffLimits();
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("getTariffLimitsAction error:", error);
+    return { success: false, error: error.message || "Failed to fetch tariff limits" };
+  }
+}
+
+export async function saveTariffLimitsAction(limits: any) {
+  try {
+    const caller = await requireRole(["coordinator", "dean", "admin"]);
+    const { DEFAULT_TARIFF_LIMITS } = await import("@/lib/tariff-limits");
+    const updatedBy = caller.fullName || caller.displayName || caller.uid;
+
+    const payload = {
+      oneInRoom: Number(limits.oneInRoom) || DEFAULT_TARIFF_LIMITS.oneInRoom,
+      twoInRoom: Number(limits.twoInRoom) || DEFAULT_TARIFF_LIMITS.twoInRoom,
+      threeInRoom: Number(limits.threeInRoom) || DEFAULT_TARIFF_LIMITS.threeInRoom,
+      fourInRoom: Number(limits.fourInRoom) || DEFAULT_TARIFF_LIMITS.fourInRoom,
+      updatedAt: new Date().toISOString(),
+      updatedBy,
+    };
+
+    await setDoc(doc(db, "settings", "tariff_limits"), payload, { merge: true });
+    return { success: true, data: payload };
+  } catch (error: any) {
+    console.error("saveTariffLimitsAction error:", error);
+    return { success: false, error: error.message || "Failed to save tariff limits" };
   }
 }
 
@@ -364,7 +433,7 @@ export async function createBookingAction(bookingData: any) {
     if (caller.role !== 'student') {
       throw new Error("Forbidden: Only students can book hostels.");
     }
-    if (bookingData.studentId && caller.uid !== bookingData.studentId && caller.role !== "admin") {
+    if (bookingData.studentId && caller.uid !== bookingData.studentId && (caller.role as string) !== "admin") {
       throw new Error("Unauthorized: You can only create bookings for yourself.");
     }
     bookingData.studentId = caller.uid;

@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   fetchPendingHostelsAction,
@@ -28,6 +28,7 @@ import {
   rejectPendingHostelAction,
   fetchHostelsAction,
   updateRoomPendingPriceAction,
+  updateHostelAction,
 } from "@/app/actions/db";
 import type { Hostel, RoomType } from "@/lib/data";
 import {
@@ -54,32 +55,15 @@ import {
   Gavel,
 } from "lucide-react";
 
-// Statutory campus tariff limits per KNUST/AAMUSTED residential zoning
-export const STATUTORY_TARIFF_CEILINGS: Record<string, { label: string; maxPrice: number }> = {
-  "1-in-a-room": { label: "1 in a Room (Single)", maxPrice: 9000 },
-  "2-in-a-room": { label: "2 in a Room", maxPrice: 6500 },
-  "3-in-a-room": { label: "3 in a Room", maxPrice: 4500 },
-  "4-in-a-room": { label: "4 in a Room", maxPrice: 3500 },
-};
+import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
+import {
+  STATUTORY_TARIFF_CEILINGS,
+  getStatutoryTariffCeiling,
+  TariffLimits,
+  DEFAULT_TARIFF_LIMITS,
+} from "@/lib/tariff-limits";
 
-export function getStatutoryTariffCeiling(roomTypeName: string): { label: string; maxPrice: number } | null {
-  const norm = (roomTypeName || "").toLowerCase();
-  if (norm.includes("1") || norm.includes("single") || norm.includes("one")) {
-    return STATUTORY_TARIFF_CEILINGS["1-in-a-room"];
-  }
-  if (norm.includes("2") || norm.includes("two") || norm.includes("double")) {
-    return STATUTORY_TARIFF_CEILINGS["2-in-a-room"];
-  }
-  if (norm.includes("3") || norm.includes("three") || norm.includes("triple")) {
-    return STATUTORY_TARIFF_CEILINGS["3-in-a-room"];
-  }
-  if (norm.includes("4") || norm.includes("four") || norm.includes("quad")) {
-    return STATUTORY_TARIFF_CEILINGS["4-in-a-room"];
-  }
-  return null;
-}
-
-export interface TariffViolation {
+interface TariffViolation {
   hostelId: string;
   hostelName: string;
   institution?: string;
@@ -411,37 +395,68 @@ export default function CoordinatorDashboardPage() {
     }
   };
 
-  // Tariff Ceiling Enforcer: Clamp room price to campus statutory limit
-  const handleEnforceTariffCap = async (v: TariffViolation) => {
+  // Rent Cap Compliance: Suspend listing exceeding statutory campus rent cap
+  const handleSuspendListing = async (v: TariffViolation) => {
     setActionLoading(true);
     try {
       const coordName = currentUser?.displayName || "University Hostel Coordinator";
       const targetId = v.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
       const hostelRef = doc(db, "hostels", targetId);
+      const suspensionReason = `Room tariff (GH₵${v.postedPrice.toLocaleString()}) exceeds approved cap (GH₵${v.statutoryCap.toLocaleString()})`;
 
-      const updatedRoomTypes = [...(v.hostel.roomTypes || [])];
-      if (updatedRoomTypes[v.roomIndex]) {
-        updatedRoomTypes[v.roomIndex] = {
-          ...updatedRoomTypes[v.roomIndex],
-          price: v.statutoryCap,
-        };
+      // 1. Delist Room/Hostel in Firestore
+      await updateDoc(hostelRef, {
+        status: "suspended_overpriced",
+        isPublished: false,
+        suspensionReason,
+        suspendedAt: new Date().toISOString(),
+        suspendedBy: coordName,
+      });
+
+      // 2. Delist in DynamoDB
+      await updateHostelAction(targetId, {
+        status: "suspended_overpriced" as any,
+        isPublished: false,
+        suspensionReason,
+      });
+
+      // 3. In-App Manager Notification into notifications
+      const managerRecipientId = v.hostel.managerId || v.hostel.contactPhone || "";
+      if (managerRecipientId) {
+        try {
+          await addDoc(collection(db, "notifications"), {
+            recipientId: managerRecipientId,
+            title: "Listing Suspended: Rent Cap Exceeded",
+            message: `Your ${v.roomTypeName} rate of GH₵${v.postedPrice.toLocaleString()} at "${v.hostelName}" exceeds the campus ceiling of GH₵${v.statutoryCap.toLocaleString()}. Your listing is currently hidden from students. Lower your tariff to restore visibility.`,
+            type: "rent_cap_breach",
+            createdAt: new Date().toISOString(),
+            read: false,
+          });
+        } catch (notifErr) {
+          console.warn("In-app notification write warning:", notifErr);
+        }
       }
 
-      const prices = updatedRoomTypes.map((r) => r.price).filter((p) => typeof p === "number");
-      const newMin = prices.length ? Math.min(...prices) : v.statutoryCap;
-      const newMax = prices.length ? Math.max(...prices) : v.statutoryCap;
-
-      await updateDoc(hostelRef, {
-        roomTypes: updatedRoomTypes,
-        priceRange: { min: newMin, max: newMax },
-        lastTariffEnforcedAt: new Date().toISOString(),
-        lastTariffEnforcedBy: coordName,
-      });
+      // 4. SMS Dispatch Trigger
+      try {
+        const { sendRentCapBreachSMSAction } = await import("@/app/actions/sms");
+        await sendRentCapBreachSMSAction({
+          hostelId: targetId,
+          hostelName: v.hostelName,
+          managerPhone: v.hostel.managerPhone || v.hostel.contactPhone,
+          roomTypeName: v.roomTypeName,
+          postedRate: v.postedPrice,
+          statutoryCap: v.statutoryCap,
+        });
+      } catch (smsErr) {
+        console.warn("SMS breach alert warning:", smsErr);
+      }
 
       const updatedHostel = {
         ...v.hostel,
-        roomTypes: updatedRoomTypes,
-        priceRange: { min: newMin, max: newMax },
+        status: "suspended_overpriced" as any,
+        isPublished: false,
+        suspensionReason,
       };
 
       if (v.status === "pending") {
@@ -451,13 +466,13 @@ export default function CoordinatorDashboardPage() {
       }
 
       toast({
-        title: "Statutory Rent Cap Enforced",
-        description: `Clamped tariff for ${v.roomTypeName} at "${v.hostelName}" to statutory ceiling GH₵${v.statutoryCap.toLocaleString()} (reduced from GH₵${v.postedPrice.toLocaleString()}).`,
+        title: "Listing Suspended: Rent Cap Exceeded",
+        description: `"${v.hostelName}" delisted from student search. In-app and SMS notice dispatched to manager.`,
       });
     } catch (err: any) {
       toast({
-        title: "Enforcement Failed",
-        description: err.message || "Could not enforce statutory rent cap.",
+        title: "Suspension Failed",
+        description: err.message || "Could not suspend property listing.",
         variant: "destructive",
       });
     } finally {
@@ -465,13 +480,13 @@ export default function CoordinatorDashboardPage() {
     }
   };
 
-  // Calculate Tariff Ceiling Violations across all hostels
+  // Calculate Rent Cap Breaches across all hostels
   const tariffViolations: TariffViolation[] = [];
 
-  pendingHostels.forEach((h) => {
+  [...pendingHostels, ...approvedHostels].forEach((h) => {
     (h.roomTypes || []).forEach((rt, idx) => {
-      const ceiling = getStatutoryTariffCeiling(rt.name);
-      if (ceiling && rt.price > ceiling.maxPrice) {
+      const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity);
+      if (ceiling && typeof rt.price === "number" && rt.price > ceiling.maxPrice) {
         tariffViolations.push({
           hostelId: h.id,
           hostelName: h.name,
@@ -482,28 +497,7 @@ export default function CoordinatorDashboardPage() {
           postedPrice: rt.price,
           statutoryCap: ceiling.maxPrice,
           excess: rt.price - ceiling.maxPrice,
-          status: "pending",
-          hostel: h,
-        });
-      }
-    });
-  });
-
-  approvedHostels.forEach((h) => {
-    (h.roomTypes || []).forEach((rt, idx) => {
-      const ceiling = getStatutoryTariffCeiling(rt.name);
-      if (ceiling && rt.price > ceiling.maxPrice) {
-        tariffViolations.push({
-          hostelId: h.id,
-          hostelName: h.name,
-          institution: h.institution,
-          location: h.location,
-          roomTypeName: rt.name,
-          roomIndex: idx,
-          postedPrice: rt.price,
-          statutoryCap: ceiling.maxPrice,
-          excess: rt.price - ceiling.maxPrice,
-          status: "approved",
+          status: h.status === "approved" ? "approved" : "pending",
           hostel: h,
         });
       }
@@ -603,7 +597,7 @@ export default function CoordinatorDashboardPage() {
           <Card className="border border-border/60 shadow-xs bg-card">
             <CardHeader className="flex flex-row items-center justify-between pb-1.5 pt-4 px-4">
               <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Tariff Ceiling Alerts
+                Rent Cap Compliance
               </CardTitle>
               <AlertTriangle className={`h-4 w-4 ${tariffViolations.length > 0 ? "text-rose-500" : "text-emerald-500"}`} />
             </CardHeader>
@@ -666,7 +660,7 @@ export default function CoordinatorDashboardPage() {
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 py-3 text-xs font-semibold text-muted-foreground data-[state=active]:text-foreground flex items-center gap-2"
               >
                 <AlertTriangle className={`h-4 w-4 ${tariffViolations.length > 0 ? "text-rose-500" : "text-muted-foreground"}`} />
-                Tariff Ceiling Enforcer
+                Rent Cap Compliance
                 {tariffViolations.length > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-200">
                     {tariffViolations.length}
@@ -762,8 +756,8 @@ export default function CoordinatorDashboardPage() {
                                 <div className="space-y-1">
                                   {hostel.roomTypes && hostel.roomTypes.length > 0 ? (
                                     hostel.roomTypes.map((rt, idx) => {
-                                      const ceiling = getStatutoryTariffCeiling(rt.name);
-                                      const isExcess = ceiling && rt.price > ceiling.maxPrice;
+                                      const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity);
+                                      const isExcess = ceiling && typeof rt.price === "number" && rt.price > ceiling.maxPrice;
 
                                       return (
                                         <div key={idx} className="text-xs flex items-center gap-1.5 flex-wrap">
@@ -1069,110 +1063,14 @@ export default function CoordinatorDashboardPage() {
             </Card>
           </TabsContent>
 
-          {/* TAB: TARIFF CEILING ENFORCER */}
+          {/* TAB: RENT CAP COMPLIANCE */}
           <TabsContent value="tariffEnforcer" className="space-y-4 pt-2">
-            {/* Statutory Campus Limits Legend */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Object.entries(STATUTORY_TARIFF_CEILINGS).map(([key, item]) => (
-                <Card key={key} className="border border-border/60 bg-card p-3 shadow-xs">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase">{item.label}</span>
-                  <div className="text-lg font-black text-foreground mt-1 font-mono">
-                    GH₵{item.maxPrice.toLocaleString()}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">Statutory Campus Ceiling</span>
-                </Card>
-              ))}
-            </div>
-
-            <Card className="border border-border/60 shadow-xs bg-card">
-              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-muted/20 rounded-t-xl">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base font-bold flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4 text-rose-500" /> Tariff Ceiling Enforcer
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20">
-                      Active Campus Rent Caps
-                    </Badge>
-                  </div>
-                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                    Automated detection and clamp utility for student accommodations exceeding statutory KNUST/AAMUSTED rent ceilings.
-                  </CardDescription>
-                </div>
-              </div>
-
-              <CardContent className="p-0">
-                {tariffViolations.length === 0 ? (
-                  <div className="text-center py-16 text-muted-foreground text-sm space-y-2">
-                    <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
-                    <p className="font-semibold text-foreground">Zero tariff ceiling violations detected</p>
-                    <p className="text-xs">All room configurations across pending and accredited hostels operate within statutory campus rental caps.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/40 border-b border-border/60">
-                        <TableRow>
-                          <TableHead>Hostel & Location</TableHead>
-                          <TableHead>Room Configuration</TableHead>
-                          <TableHead>Posted Rate</TableHead>
-                          <TableHead>Statutory Cap</TableHead>
-                          <TableHead>Excess / Gouging</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Enforcement Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tariffViolations.map((v, idx) => (
-                          <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
-                            <TableCell className="py-3">
-                              <p className="font-semibold text-foreground text-sm">{v.hostelName}</p>
-                              <p className="text-xs text-muted-foreground">{v.location} • {v.institution || "AAMUSTED"}</p>
-                            </TableCell>
-
-                            <TableCell className="py-3 font-medium text-xs text-foreground">
-                              {v.roomTypeName}
-                            </TableCell>
-
-                            <TableCell className="py-3 font-mono text-xs font-semibold text-rose-600 line-through">
-                              GH₵{v.postedPrice.toLocaleString()}
-                            </TableCell>
-
-                            <TableCell className="py-3 font-mono text-xs font-bold text-emerald-600">
-                              GH₵{v.statutoryCap.toLocaleString()}
-                            </TableCell>
-
-                            <TableCell className="py-3">
-                              <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 font-mono">
-                                +GH₵{v.excess.toLocaleString()}
-                              </span>
-                            </TableCell>
-
-                            <TableCell className="py-3">
-                              <Badge variant={v.status === "approved" ? "default" : "outline"} className="text-[10px]">
-                                {v.status === "approved" ? "Live Directory" : "Pending Filing"}
-                              </Badge>
-                            </TableCell>
-
-                            <TableCell className="py-3 text-right">
-                              <Button
-                                size="sm"
-                                onClick={() => handleEnforceTariffCap(v)}
-                                disabled={actionLoading}
-                                className="h-8 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
-                                title="Clamp listing price to statutory ceiling"
-                              >
-                                <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Enforce Cap
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <RentCapComplianceSection
+              hostels={[...pendingHostels, ...approvedHostels]}
+              currentUser={currentUser}
+              userRole={userRole}
+              onHostelUpdated={() => loadData()}
+            />
           </TabsContent>
 
           {/* TAB 2: TARIFF REVISION REQUESTS */}
@@ -1382,9 +1280,10 @@ export default function CoordinatorDashboardPage() {
                         </TableHeader>
                         <TableBody>
                           {filteredApproved.map((h) => {
-                            const hasTariffViolation = h.roomTypes?.some(
-                              (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
-                            );
+                            const hasTariffViolation = h.roomTypes?.some((r) => {
+                              const ceiling = getStatutoryTariffCeiling(r.name, r.capacity);
+                              return ceiling && typeof r.price === "number" && r.price > ceiling.maxPrice;
+                            });
                             const isProvisional = (h as any).provisionalAccreditation;
 
                             return (
@@ -1453,9 +1352,10 @@ export default function CoordinatorDashboardPage() {
                     {/* Mobile Card Stack */}
                     <div className="block md:hidden divide-y divide-border/60">
                       {filteredApproved.map((h) => {
-                        const hasTariffViolation = h.roomTypes?.some(
-                          (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
-                        );
+                        const hasTariffViolation = h.roomTypes?.some((r) => {
+                          const ceiling = getStatutoryTariffCeiling(r.name, r.capacity);
+                          return ceiling && typeof r.price === "number" && r.price > ceiling.maxPrice;
+                        });
                         const isProvisional = (h as any).provisionalAccreditation;
 
                         return (
@@ -1573,22 +1473,18 @@ export default function CoordinatorDashboardPage() {
                   )}
 
                   {/* Tariff Ceiling Check */}
-                  {selectedHostel.roomTypes?.some(
-                    (r) => r.price > getStatutoryTariffCeiling(r.name, r.capacity)
-                  ) && (
+                  {selectedHostel.roomTypes?.some((r) => {
+                    const ceiling = getStatutoryTariffCeiling(r.name, r.capacity);
+                    return ceiling && typeof r.price === "number" && r.price > ceiling.maxPrice;
+                  }) && (
                     <div className="bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 font-medium">
-                        <AlertTriangle className="h-4 w-4 shrink-0" />
-                        <span>Room tariffs exceed campus statutory limits. Clamping required.</span>
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                        <span>Room tariffs exceed campus statutory limits. Suspension flow applies.</span>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEnforceTariffCap(selectedHostel)}
-                        className="h-6 text-[11px] border-rose-300 text-rose-700 dark:text-rose-400 hover:bg-rose-500/10 w-fit"
-                      >
-                        Clamp to Ceiling
-                      </Button>
+                      <Badge variant="outline" className="border-rose-600 text-rose-700 bg-rose-50 dark:bg-rose-950/40 text-[11px] font-semibold">
+                        Rent Cap Breach
+                      </Badge>
                     </div>
                   )}
 
@@ -1639,14 +1535,14 @@ export default function CoordinatorDashboardPage() {
                           {selectedHostel.roomTypes && selectedHostel.roomTypes.length > 0 ? (
                             selectedHostel.roomTypes.map((rt, idx) => {
                               const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity);
-                              const exceeds = rt.price > ceiling;
+                              const exceeds = ceiling ? rt.price > ceiling.maxPrice : false;
 
                               return (
                                 <TableRow key={idx}>
                                   <TableCell className="text-xs font-medium">{rt.name}</TableCell>
                                   <TableCell className="text-xs">{rt.capacity || 2} students</TableCell>
                                   <TableCell className="text-xs font-mono text-muted-foreground">
-                                    GH₵{ceiling.toLocaleString()}
+                                    {ceiling ? `GH₵${ceiling.maxPrice.toLocaleString()}` : "—"}
                                   </TableCell>
                                   <TableCell className={`text-xs font-semibold font-mono ${exceeds ? "text-rose-600" : "text-emerald-600"}`}>
                                     GH₵{rt.price?.toLocaleString()}

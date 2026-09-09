@@ -17,6 +17,8 @@ export type RoomType = {
   roomNumbers?: string[]; // explicit physical room numbers for this type (optional)
   images?: string[]; // Specific photos for this room type
   videos?: string[]; // Walkthrough videos for this room type
+  totalCapacity?: number;
+  status?: string;
 };
 
 // A physical numbered room inside a hostel. Stored under hostels/{hostelId}/rooms/{roomId}.
@@ -73,7 +75,9 @@ export type Hostel = {
     role: 'manager' | 'admin' | 'hostel_coordinator';
     createdAt: string;
   };
-  status?: 'pending' | 'approved' | 'rejected' | 'live';
+  status?: 'pending' | 'approved' | 'rejected' | 'live' | 'suspended_overpriced' | 'suspended' | 'sold-out';
+  isPublished?: boolean;
+  suspensionReason?: string | null;
   submittedAt?: string;
   approvedAt?: string;
   approvedBy?: string;
@@ -297,6 +301,15 @@ const normalizeText = (value?: string) => (value ?? '').toString().trim().toLowe
 const normalizeRoomTypeTag = (value?: string) => (value ?? '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 
 const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
+  // Delist suspended or unpublished listings from student directory
+  if (
+    hostel.status === "suspended_overpriced" ||
+    hostel.status === "suspended" ||
+    hostel.isPublished === false
+  ) {
+    return false;
+  }
+
   const normalizedInstitution = normalizeText(options.institution);
   const normalizedGender = (options.gender ?? '').toString().trim().toLowerCase();
   const normalizedRoomType = normalizeRoomTypeTag(options.roomType);

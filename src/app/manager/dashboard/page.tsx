@@ -30,10 +30,16 @@ import Image from 'next/image';
 import { ManagerWalletCard } from '@/components/manager/manager-wallet-card';
 import { VisitRequestCard, VisitRequestRow, type StudentProfileContext } from '@/components/dashboard/VisitRequestCard';
 import { DocumentViewerModal } from '@/components/ui/DocumentViewerModal';
-import { declineVisitRequestAction } from '@/app/actions/db';
+import { declineVisitRequestAction, updateHostelAction } from '@/app/actions/db';
+import {
+    getStatutoryTariffCeiling,
+    DEFAULT_TARIFF_LIMITS,
+    type TariffLimits,
+} from '@/lib/tariff-limits';
 
-type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability'> & {
-    roomTypes: Pick<RoomType, 'id' | 'name' | 'price'>[];
+type ManagerHostel = Pick<Hostel, 'id' | 'name' | 'availability' | 'status' | 'isPublished' | 'suspensionReason'> & {
+    roomTypes: (Pick<RoomType, 'id' | 'name' | 'price'> & { capacity?: number })[];
+    [key: string]: any;
 };
 
 type Visit = {
@@ -180,6 +186,114 @@ export default function ManagerDashboard() {
     const [reportSubject, setReportSubject] = useState('');
     const [reportDescription, setReportDescription] = useState('');
     const [reportSubmitting, setReportSubmitting] = useState(false);
+
+    // Rent Cap Adjustment & Auto-Restore State
+    const [adjustRatesOpen, setAdjustRatesOpen] = useState(false);
+    const [adjustRatesHostel, setAdjustRatesHostel] = useState<ManagerHostel | null>(null);
+    const [editedRoomTypes, setEditedRoomTypes] = useState<Array<{ id?: string; name: string; price: number; capacity?: number }>>([]);
+    const [savingRates, setSavingRates] = useState(false);
+    const [tariffLimits, setTariffLimits] = useState<TariffLimits>(DEFAULT_TARIFF_LIMITS);
+
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, "settings", "tariff_limits"), (snapshot: any) => {
+            if (snapshot.exists()) {
+                setTariffLimits({
+                    ...DEFAULT_TARIFF_LIMITS,
+                    ...(snapshot.data() as TariffLimits),
+                });
+            }
+        });
+        return () => unsub();
+    }, []);
+
+    const openAdjustRatesDialog = (hostel: ManagerHostel) => {
+        setAdjustRatesHostel(hostel);
+        const initialRooms = (hostel.roomTypes || []).map((rt) => ({
+            id: rt.id,
+            name: rt.name,
+            price: rt.price || 0,
+            capacity: (rt as any).capacity || 1,
+        }));
+        setEditedRoomTypes(initialRooms);
+        setAdjustRatesOpen(true);
+    };
+
+    const handleSaveAdjustedRates = async () => {
+        if (!adjustRatesHostel) return;
+        setSavingRates(true);
+        try {
+            const targetId = adjustRatesHostel.id.replace(/^HOSTEL#/i, "").trim();
+            const hostelRef = doc(db, "hostels", targetId);
+
+            const prices = editedRoomTypes.map((r) => r.price).filter((p) => typeof p === "number" && !isNaN(p));
+            const newMin = prices.length ? Math.min(...prices) : 0;
+            const newMax = prices.length ? Math.max(...prices) : 0;
+
+            const allCompliant = editedRoomTypes.every((rt) => {
+                const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity, tariffLimits);
+                return !ceiling || (typeof rt.price === "number" && rt.price <= ceiling.maxPrice);
+            });
+
+            const wasSuspended = adjustRatesHostel.status === "suspended_overpriced";
+            const willAutoRestore = wasSuspended && allCompliant;
+
+            const updatePayload: any = {
+                roomTypes: editedRoomTypes,
+                priceRange: { min: newMin, max: newMax },
+                updatedAt: new Date().toISOString(),
+            };
+
+            if (willAutoRestore) {
+                updatePayload.status = "approved";
+                updatePayload.isPublished = true;
+                updatePayload.suspensionReason = null;
+                updatePayload.restoredAt = new Date().toISOString();
+            }
+
+            // 1. Update Firestore doc
+            await updateDoc(hostelRef, updatePayload);
+
+            // 2. Sync to DynamoDB via server action
+            await updateHostelAction(targetId, updatePayload);
+
+            // 3. Update local state
+            setHostels((prev) =>
+                prev.map((h) =>
+                    h.id === adjustRatesHostel.id
+                        ? {
+                              ...h,
+                              ...updatePayload,
+                              roomTypes: editedRoomTypes,
+                          }
+                        : h
+                )
+            );
+
+            if (willAutoRestore) {
+                toast({
+                    title: "Tariffs Compliant — Listing Restored!",
+                    description: `All room rates for "${adjustRatesHostel.name}" are now within campus ceilings. Your property has been automatically reactivated and published to students.`,
+                });
+            } else {
+                toast({
+                    title: "Room Rates Updated",
+                    description: `Updated tariffs saved successfully for "${adjustRatesHostel.name}".`,
+                });
+            }
+
+            setAdjustRatesOpen(false);
+            setAdjustRatesHostel(null);
+        } catch (err: any) {
+            console.error("Error updating room rates:", err);
+            toast({
+                title: "Update Failed",
+                description: err.message || "Could not save adjusted room rates.",
+                variant: "destructive",
+            });
+        } finally {
+            setSavingRates(false);
+        }
+    };
 
     const loadComplaints = async (hostelIdsList?: string[]) => {
         if (!currentUser) return;
@@ -1954,93 +2068,131 @@ export default function ManagerDashboard() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="max-h-[350px] overflow-y-auto">
+                            <CardContent className="max-h-[380px] overflow-y-auto">
                                 {loadingData ? (
                                     <div className="flex items-center justify-center p-8">
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                                     </div>
                                 ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Hostel Name</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead className="text-right">Bookings</TableHead>
-                                                <TableHead className="text-right">Secured</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {hostels.length > 0 ? hostels.map(hostel => {
-                                                const stats = hostelStats[hostel.id] || { bookings: 0, secured: 0 };
-                                                const handleDetach = async () => {
-                                                    if (!confirm(`Remove ${hostel.name} from your managed hostels? This will not delete the hostel, only detach it from your account.`)) {
-                                                        return;
-                                                    }
-                                                    try {
-                                                        const ref = doc(db, 'hostels', hostel.id);
-                                                        await updateDoc(ref, { managerId: null });
-                                                        toast({
-                                                            title: 'Hostel detached',
-                                                            description: `${hostel.name} has been removed from your managed hostels.`,
-                                                        });
-                                                    } catch (error) {
-                                                        console.error('Error detaching hostel from manager:', error);
-                                                        toast({
-                                                            title: 'Could not detach hostel',
-                                                            description: 'Please try again or contact support if the problem continues.',
-                                                            variant: 'destructive',
-                                                        });
-                                                    }
-                                                };
+                                    <>
+                                        {hostels.some(h => h.status === 'suspended_overpriced') && (
+                                            <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-700/60 flex items-start gap-2.5">
+                                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                                <div className="text-xs space-y-0.5">
+                                                    <p className="font-semibold text-amber-900 dark:text-amber-200">
+                                                        Listing Suspended: Approved Rent Cap Exceeded
+                                                    </p>
+                                                    <p className="text-amber-800 dark:text-amber-300 text-[11px]">
+                                                        One or more of your properties is delisted from student search due to room prices above university limits. Click &ldquo;Fix Rent Cap&rdquo; to lower tariffs and automatically restore the listing.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Hostel Name</TableHead>
+                                                    <TableHead>Status</TableHead>
+                                                    <TableHead className="text-right">Bookings</TableHead>
+                                                    <TableHead className="text-right">Secured</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {hostels.length > 0 ? hostels.map(hostel => {
+                                                    const stats = hostelStats[hostel.id] || { bookings: 0, secured: 0 };
+                                                    const isSuspendedOverpriced = hostel.status === 'suspended_overpriced';
+                                                    const handleDetach = async () => {
+                                                        if (!confirm(`Remove ${hostel.name} from your managed hostels? This will not delete the hostel, only detach it from your account.`)) {
+                                                            return;
+                                                        }
+                                                        try {
+                                                            const ref = doc(db, 'hostels', hostel.id);
+                                                            await updateDoc(ref, { managerId: null });
+                                                            toast({
+                                                                title: 'Hostel detached',
+                                                                description: `${hostel.name} has been removed from your managed hostels.`,
+                                                            });
+                                                        } catch (error) {
+                                                            console.error('Error detaching hostel from manager:', error);
+                                                            toast({
+                                                                title: 'Could not detach hostel',
+                                                                description: 'Please try again or contact support if the problem continues.',
+                                                                variant: 'destructive',
+                                                            });
+                                                        }
+                                                    };
 
-                                                return (
-                                                    <TableRow key={hostel.id}>
-                                                        <TableCell className="font-medium">{hostel.name}</TableCell>
-                                                        <TableCell>
-                                                            <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
-                                                                {hostel.availability || 'N/A'}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right text-sm text-muted-foreground">
-                                                            {stats.bookings}
-                                                        </TableCell>
-                                                        <TableCell className="text-right text-sm font-medium">
-                                                            {stats.secured}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <div className="flex justify-end gap-2">
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="xs"
-                                                                    className="text-[11px]"
-                                                                    onClick={() => openRoomsDialogForHostel(hostel.id)}
-                                                                >
-                                                                    Manage Rooms
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="xs"
-                                                                    className="text-[11px]"
-                                                                    onClick={handleDetach}
-                                                                >
-                                                                    Remove
-                                                                </Button>
-                                                            </div>
+                                                    return (
+                                                        <TableRow key={hostel.id}>
+                                                            <TableCell className="font-medium">
+                                                                <div>{hostel.name}</div>
+                                                                {isSuspendedOverpriced && hostel.suspensionReason && (
+                                                                    <div className="text-[11px] text-amber-600 dark:text-amber-400 font-normal line-clamp-1">
+                                                                        {hostel.suspensionReason}
+                                                                    </div>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {isSuspendedOverpriced ? (
+                                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700">
+                                                                        Suspended (Overpriced)
+                                                                    </span>
+                                                                ) : (
+                                                                    <Badge variant={availabilityVariant[hostel.availability || 'Full']}>
+                                                                        {hostel.availability || 'N/A'}
+                                                                    </Badge>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right text-sm text-muted-foreground">
+                                                                {stats.bookings}
+                                                            </TableCell>
+                                                            <TableCell className="text-right text-sm font-medium">
+                                                                {stats.secured}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex justify-end gap-1.5 flex-wrap">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className={`text-[11px] h-7 px-2.5 ${isSuspendedOverpriced ? 'border-amber-500 text-amber-800 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-200 font-bold' : ''}`}
+                                                                        onClick={() => openAdjustRatesDialog(hostel)}
+                                                                    >
+                                                                        {isSuspendedOverpriced ? 'Fix Rent Cap' : 'Rates'}
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="text-[11px] h-7 px-2.5"
+                                                                        onClick={() => openRoomsDialogForHostel(hostel.id)}
+                                                                    >
+                                                                        Manage Rooms
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="text-[11px] h-7 px-2.5"
+                                                                        onClick={handleDetach}
+                                                                    >
+                                                                        Remove
+                                                                    </Button>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                }) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="h-24 text-center">
+                                                            You are not managing any hostels yet.
                                                         </TableCell>
                                                     </TableRow>
-                                                );
-                                            }) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="h-24 text-center">
-                                                        You are not managing any hostels yet.
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>
@@ -3084,6 +3236,156 @@ export default function ManagerDashboard() {
                                 className="rounded-xl"
                             >
                                 Close
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Adjust Rates & Rent Cap Auto-Restore Dialog */}
+                <Dialog open={adjustRatesOpen} onOpenChange={setAdjustRatesOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Scale className="h-5 w-5 text-primary" />
+                                Adjust Room Tariffs — {adjustRatesHostel?.name}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Set room rates compliant with official university rent ceilings. 
+                                Pricing at or below approved statutory caps automatically restores and re-publishes suspended listings.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {adjustRatesHostel?.status === 'suspended_overpriced' && (
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                                <div className="font-semibold flex items-center gap-1.5">
+                                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                    <span>Listing Currently Suspended for Rent Cap Violation</span>
+                                </div>
+                                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                    {adjustRatesHostel.suspensionReason || "This property is delisted from student view because one or more room rates exceed approved campus limits. Adjust the prices below to or under statutory limits to reactivate."}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="space-y-4 py-2">
+                            <div className="border rounded-xl overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/40">
+                                            <TableHead className="text-xs">Room Type</TableHead>
+                                            <TableHead className="text-xs text-right">Approved Cap</TableHead>
+                                            <TableHead className="text-xs text-right w-[180px]">New Tariff (GHS)</TableHead>
+                                            <TableHead className="text-xs text-right">Status</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {editedRoomTypes.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-6 text-xs text-muted-foreground">
+                                                    No room types found for this hostel.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            editedRoomTypes.map((rt, idx) => {
+                                                const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity, tariffLimits);
+                                                const currentPrice = Number(rt.price) || 0;
+                                                const isBreach = ceiling ? currentPrice > ceiling.maxPrice : false;
+                                                const excess = ceiling && isBreach ? currentPrice - ceiling.maxPrice : 0;
+
+                                                return (
+                                                    <TableRow key={rt.id || idx}>
+                                                        <TableCell>
+                                                            <div className="text-xs font-medium">{rt.name}</div>
+                                                            {ceiling && (
+                                                                <div className="text-[10px] text-muted-foreground">
+                                                                    {ceiling.label}
+                                                                </div>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold">
+                                                            {ceiling ? (
+                                                                <span>GHS {ceiling.maxPrice.toLocaleString()}</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground font-normal">No cap</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <span className="text-xs text-muted-foreground">GHS</span>
+                                                                <Input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={isNaN(rt.price) ? '' : rt.price}
+                                                                    onChange={(e) => {
+                                                                        const val = parseFloat(e.target.value);
+                                                                        setEditedRoomTypes(prev =>
+                                                                            prev.map((item, i) =>
+                                                                                i === idx ? { ...item, price: isNaN(val) ? 0 : val } : item
+                                                                            )
+                                                                        );
+                                                                    }}
+                                                                    className={`w-28 text-right h-8 text-xs font-medium ${isBreach ? 'border-rose-500 focus-visible:ring-rose-500 bg-rose-50/50 dark:bg-rose-950/20' : 'border-emerald-500 focus-visible:ring-emerald-500'}`}
+                                                                />
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {isBreach ? (
+                                                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 whitespace-nowrap bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300">
+                                                                    +GHS {excess.toLocaleString()} excess
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50">
+                                                                    Compliant
+                                                                </Badge>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {editedRoomTypes.some(rt => {
+                                const c = getStatutoryTariffCeiling(rt.name, rt.capacity, tariffLimits);
+                                return c ? (Number(rt.price) || 0) > c.maxPrice : false;
+                            }) ? (
+                                <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                                    ⚠️ Some room prices still exceed campus limits. Lower them to restore your listing.
+                                </p>
+                            ) : (
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                    <CheckCircle className="h-3.5 w-3.5" />
+                                    All room tariffs comply with approved university rent ceilings.
+                                </p>
+                            )}
+                        </div>
+
+                        <DialogFooter className="pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setAdjustRatesOpen(false)}
+                                disabled={savingRates}
+                                className="rounded-xl"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleSaveAdjustedRates}
+                                disabled={savingRates || editedRoomTypes.length === 0}
+                                className="rounded-xl bg-primary text-white font-medium"
+                            >
+                                {savingRates ? (
+                                    <>
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    'Save & Update Rates'
+                                )}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
