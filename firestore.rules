@@ -13,12 +13,20 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin'] ||
+         request.auth.token.role in ['admin', 'superadmin']);
+    }
+
+    function isCoordinator() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin', 'hostel_coordinator', 'coordinator', 'dean'] ||
+         request.auth.token.role in ['admin', 'superadmin', 'hostel_coordinator', 'coordinator', 'dean']);
     }
 
     function isManager() {
       return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager';
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'hostel_manager'] ||
+         request.auth.token.role in ['manager', 'hostel_manager']);
     }
 
     function isStudent() {
@@ -37,18 +45,18 @@ service cloud.firestore {
     match /hostels/{hostelId} {
       allow read: if true; // Publicly viewable
       allow create: if isManager() || isAdmin();
-      allow update, delete: if isAdmin() || (isManager() && resource.data.managerId == request.auth.uid);
+      allow update, delete: if isAdmin() || isCoordinator() || (isManager() && resource.data.managerId == request.auth.uid);
       
       // Rooms subcollection
       match /rooms/{roomId} {
         allow read: if true;
-        allow write: if isAdmin() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
+        allow write: if isAdmin() || isCoordinator() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
       }
       
       // RoomTypes subcollection
       match /roomTypes/{typeId} {
         allow read: if true;
-        allow write: if isAdmin() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
+        allow write: if isAdmin() || isCoordinator() || (isManager() && get(/databases/$(database)/documents/hostels/$(hostelId)).data.managerId == request.auth.uid);
       }
       
        // Reviews subcollection

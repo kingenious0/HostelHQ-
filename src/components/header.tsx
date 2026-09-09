@@ -74,7 +74,7 @@ type AppUser = {
   uid: string;
   email: string;
   fullName: string;
-  role: 'student' | 'admin' | 'hostel_manager' | 'manager' | 'dean' | 'hostel_coordinator' | 'pro_vc' | 'vc';
+  role: 'student' | 'admin' | 'superadmin' | 'hostel_manager' | 'manager' | 'dean' | 'hostel_coordinator' | 'coordinator' | 'pro_vc' | 'vc';
   profileImage?: string;
   phone?: string;
   phoneNumber?: string;
@@ -777,11 +777,11 @@ export function Header() {
   };
 
   // Role helpers
-  const isAdmin = appUser?.role === 'admin';
+  const isAdmin = appUser?.role === 'admin' || appUser?.role === 'superadmin';
   const isStudent = appUser?.role === 'student';
   const isManager = appUser?.role === 'hostel_manager' || appUser?.role === 'manager';
   const isDean = appUser?.role === 'dean';
-  const isCoordinator = appUser?.role === 'hostel_coordinator';
+  const isCoordinator = appUser?.role === 'hostel_coordinator' || appUser?.role === 'coordinator';
   const isExecutive = appUser?.role === 'pro_vc' || appUser?.role === 'vc';
   const isPending = appUser?.verificationStatus === 'pending';
 
@@ -891,7 +891,7 @@ export function Header() {
                         <p className="text-[11px] text-muted-foreground truncate">{appUser.email}</p>
                         <div className="mt-1">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary capitalize">
-                            {appUser.role === 'hostel_manager' || appUser.role === 'manager' ? 'Hostel Manager' : appUser.role === 'dean' ? 'Dean of Students' : appUser.role === 'hostel_coordinator' ? 'Hostel Coordinator' : appUser.role === 'pro_vc' ? 'Pro-VC' : appUser.role === 'vc' ? 'Vice-Chancellor' : appUser.role === 'admin' ? 'Admin' : 'Student'}
+                            {appUser.role === 'hostel_manager' || appUser.role === 'manager' ? 'Hostel Manager' : appUser.role === 'dean' ? 'Dean of Students' : appUser.role === 'hostel_coordinator' || appUser.role === 'coordinator' ? 'Hostel Coordinator' : appUser.role === 'pro_vc' ? 'Pro-VC' : appUser.role === 'vc' ? 'Vice-Chancellor' : appUser.role === 'admin' || appUser.role === 'superadmin' ? 'Admin' : 'Student'}
                           </span>
                         </div>
                       </div>

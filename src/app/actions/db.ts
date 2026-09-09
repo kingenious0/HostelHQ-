@@ -5,7 +5,7 @@ import * as dynamoCore from "@/lib/dynamodb";
 import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
 import { db } from "@/lib/firebase";
 import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
-import { requireAuth, requireRole } from "@/lib/auth-guard";
+import { requireAuth, requireRole, ACCREDITATION_AUTHORIZED_ROLES } from "@/lib/auth-guard";
 import {
   collection,
   doc,
@@ -695,7 +695,7 @@ export async function approveHostelAccreditationAction(params: {
   reviewerName?: string;
 }) {
   try {
-    const caller = await requireRole(["admin", "dean", "coordinator"]);
+    const caller = await requireRole(ACCREDITATION_AUTHORIZED_ROLES);
     const reviewerUid = params.reviewerId || caller.uid;
     const reviewerName = params.reviewerName || caller.displayName || caller.email || "Institutional Reviewer";
     const cleanId = params.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
@@ -815,7 +815,7 @@ export async function rejectHostelAccreditationAction(params: {
   reviewerName?: string;
 }) {
   try {
-    const caller = await requireRole(["admin", "dean", "coordinator"]);
+    const caller = await requireRole(ACCREDITATION_AUTHORIZED_ROLES);
     const reviewerUid = params.reviewerId || caller.uid;
     const reviewerName = params.reviewerName || caller.displayName || caller.email || "Institutional Reviewer";
     const cleanId = params.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();

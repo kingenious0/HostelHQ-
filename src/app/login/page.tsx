@@ -83,9 +83,9 @@ function LoginPageInner() {
 
     const getRouteForRole = (role?: string) => {
         if (role === 'hostel_manager' || role === 'manager') return '/manager/dashboard';
-        if (role === 'admin') return '/admin/dashboard';
+        if (role === 'admin' || role === 'superadmin') return '/admin/dashboard';
         if (role === 'dean') return '/dean/dashboard';
-        if (role === 'hostel_coordinator') return '/coordinator/dashboard';
+        if (role === 'hostel_coordinator' || role === 'coordinator') return '/coordinator/dashboard';
         if (role === 'pro_vc' || role === 'vc') return '/executive/dashboard';
         return '/my-bookings';
     };

@@ -153,6 +153,40 @@ export async function getAuthenticatedUser(req?: Request): Promise<Authenticated
 }
 
 /**
+ * Authorized roles permitted to perform institutional accreditation reviews,
+ * provisional passes, approvals, and rejections.
+ */
+export const ACCREDITATION_AUTHORIZED_ROLES = [
+  "admin",
+  "superadmin",
+  "hostel_coordinator",
+  "coordinator",
+  "dean"
+];
+
+/**
+ * Normalizes system role strings to standard canonical form.
+ */
+export function normalizeRole(role?: string): string {
+  if (!role) return "student";
+  const r = role.toLowerCase().trim();
+  if (r === "hostel_coordinator" || r === "coordinator") return "coordinator";
+  if (r === "superadmin" || r === "admin") return "admin";
+  if (r === "hostel_manager" || r === "manager") return "manager";
+  return r;
+}
+
+/**
+ * Checks if a user or role has accreditation permissions.
+ */
+export function canAccreditHostel(userOrRole?: { role?: string } | string | null): boolean {
+  if (!userOrRole) return false;
+  const role = typeof userOrRole === "string" ? userOrRole : userOrRole.role;
+  if (!role) return false;
+  return ACCREDITATION_AUTHORIZED_ROLES.includes(role.toLowerCase().trim());
+}
+
+/**
  * Enforces that the caller must be authenticated.
  * Throws an Error with code 401 if unauthenticated.
  */
@@ -166,11 +200,33 @@ export async function requireAuth(req?: Request): Promise<AuthenticatedUser> {
 
 /**
  * Enforces that the caller must be authenticated with one of the allowed roles.
+ * Supports role aliases ('coordinator' <-> 'hostel_coordinator', 'admin' <-> 'superadmin', 'manager' <-> 'hostel_manager').
  * Throws an Error if unauthenticated (401) or forbidden (403).
  */
 export async function requireRole(allowedRoles: string[], req?: Request): Promise<AuthenticatedUser> {
   const user = await requireAuth(req);
-  if (!allowedRoles.includes(user.role)) {
+  
+  // Expand allowedRoles to include recognized aliases/variants
+  const expandedAllowed = new Set<string>();
+  for (const r of allowedRoles) {
+    const lower = r.toLowerCase().trim();
+    expandedAllowed.add(lower);
+    if (lower === "coordinator" || lower === "hostel_coordinator") {
+      expandedAllowed.add("coordinator");
+      expandedAllowed.add("hostel_coordinator");
+    }
+    if (lower === "admin" || lower === "superadmin") {
+      expandedAllowed.add("admin");
+      expandedAllowed.add("superadmin");
+    }
+    if (lower === "manager" || lower === "hostel_manager") {
+      expandedAllowed.add("manager");
+      expandedAllowed.add("hostel_manager");
+    }
+  }
+
+  const userRoleLower = (user.role || "").toLowerCase().trim();
+  if (!expandedAllowed.has(userRoleLower)) {
     throw new Error(`Forbidden: Role '${user.role}' does not have permission for this operation`);
   }
   return user;

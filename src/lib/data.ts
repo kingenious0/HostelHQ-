@@ -84,7 +84,7 @@ export type Hostel = {
   [key: string]: any;
 };
 
-export type UserRole = 'student' | 'hostel_manager' | 'manager' | 'admin' | 'dean' | 'pro_vc' | 'vc' | 'hostel_coordinator';
+export type UserRole = 'student' | 'hostel_manager' | 'manager' | 'admin' | 'superadmin' | 'dean' | 'pro_vc' | 'vc' | 'hostel_coordinator' | 'coordinator';
 
 export type AppUser = {
   id: string;

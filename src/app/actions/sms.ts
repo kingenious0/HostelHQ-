@@ -1,7 +1,7 @@
 'use server';
 
 import { sendSMS as wigalSendSMS } from '@/lib/wigal';
-import { requireAuth, requireRole } from '@/lib/auth-guard';
+import { requireAuth, requireRole, ACCREDITATION_AUTHORIZED_ROLES, normalizeRole } from '@/lib/auth-guard';
 
 /**
  * Server Action to send an SMS via Wigal.
@@ -10,7 +10,8 @@ import { requireAuth, requireRole } from '@/lib/auth-guard';
 export async function sendSMS(phoneNumber: string, message: string) {
     try {
         const caller = await requireAuth();
-        if (caller.role !== 'admin' && caller.role !== 'coordinator' && caller.role !== 'dean') {
+        const normalizedRole = normalizeRole(caller.role);
+        if (normalizedRole !== 'admin' && normalizedRole !== 'coordinator' && normalizedRole !== 'dean') {
             const callerPhone = caller.phone ? caller.phone.replace(/[^0-9]/g, '') : '';
             const destPhone = phoneNumber.replace(/[^0-9]/g, '');
             if (callerPhone && !destPhone.endsWith(callerPhone.slice(-9))) {
@@ -107,7 +108,7 @@ export async function notifyHostelAccreditationSMSAction(params: {
     rejectionReason?: string;
 }) {
     try {
-        await requireRole(['admin', 'dean', 'coordinator']);
+        await requireRole(ACCREDITATION_AUTHORIZED_ROLES);
         const { db } = await import('@/lib/firebase');
         const { doc, getDoc } = await import('firebase/firestore');
 

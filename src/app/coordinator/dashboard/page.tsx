@@ -133,7 +133,7 @@ export default function CoordinatorDashboardPage() {
         if (snap.exists()) {
           const role = snap.data().role;
           setUserRole(role);
-          if (role !== "hostel_coordinator" && role !== "admin") {
+          if (role !== "hostel_coordinator" && role !== "coordinator" && role !== "admin" && role !== "superadmin") {
             toast({
               title: "Access Denied",
               description: "This console is reserved exclusively for the University Hostel Coordinator.",
@@ -205,7 +205,7 @@ export default function CoordinatorDashboardPage() {
 
   // Real-time synchronization across Admin and Coordinator queues
   useEffect(() => {
-    if (loadingAuth || (userRole !== "hostel_coordinator" && userRole !== "admin")) {
+    if (loadingAuth || (userRole !== "hostel_coordinator" && userRole !== "coordinator" && userRole !== "admin" && userRole !== "superadmin")) {
       return;
     }
 
