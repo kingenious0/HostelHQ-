@@ -60,6 +60,8 @@ import {
   STAFF_ROLE_TITLES,
   STAFF_ROLE_DESCRIPTIONS,
 } from '@/lib/staff';
+import { HostelInspectionModal } from '@/components/dashboard/HostelInspectionModal';
+import { getHostelPhotos, getHostelVideos } from '@/lib/media-helpers';
 
 type Hostel = {
   id: string;
@@ -301,32 +303,52 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    // Real-time pending hostels
-    const unsubPending = onSnapshot(collection(db, 'pendingHostels'), (snapshot) => {
-      const hostelsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const date = (data.dateSubmitted as Timestamp)?.toDate ? (data.dateSubmitted as Timestamp).toDate().toLocaleDateString() : new Date(data.dateSubmitted).toLocaleDateString();
+    // Real-time pending hostels synchronized across Admin & Coordinator dashboards
+    const pendingHostelsQuery = query(
+      collection(db, 'hostels'),
+      where('status', 'in', ['pending', 'pending_review', 'pending_accreditation'])
+    );
+
+    const unsubPending = onSnapshot(pendingHostelsQuery, (snapshot) => {
+      const hostelsData = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        const date = (data.createdAt as Timestamp)?.toDate 
+          ? (data.createdAt as Timestamp).toDate().toLocaleDateString()
+          : (data.dateSubmitted || (data.createdAt ? new Date(data.createdAt).toLocaleDateString() : new Date().toLocaleDateString()));
+        const resolvedPhotos = getHostelPhotos(data);
+        const resolvedVideos = getHostelVideos(data);
+
         return {
-          id: doc.id,
+          ...data,
+          id: docSnap.id,
           name: data.name || 'No Name',
-          submittedBy: data.submittedBy || data.managerName || 'Hostel Management',
-          location: data.location || 'No Location',
+          submittedBy: data.statutoryUndertaking?.declarantName || data.submittedBy || data.managerName || data.managerEmail || 'Hostel Management',
+          location: data.location || data.address || 'No Location',
           dateSubmitted: date,
-          price: data.price || 0,
+          price: data.priceRange?.min || data.price || 0,
           description: data.description || 'No description provided.',
-          images: data.images || [],
+          images: resolvedPhotos,
+          photos: resolvedPhotos,
+          galleryUrls: resolvedPhotos,
+          videos: resolvedVideos,
           amenities: data.amenities || [],
-          roomTypes: [], // Will be fetched on review
-        } as PendingHostel
+          roomTypes: data.roomTypes || [],
+        } as PendingHostel;
       });
       setPendingHostels(hostelsData);
       setLoading(false);
     });
 
-    // Real-time approved hostels
+    // Real-time approved / accredited hostels (excluding pending or declined)
     const unsubApproved = onSnapshot(collection(db, 'hostels'), (snapshot) => {
-      const hostelsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
-      setApprovedHostels(hostelsData);
+      const allHostels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Hostel));
+      const liveHostels = allHostels.filter(h =>
+        h.status === 'approved' ||
+        h.status === 'accredited' ||
+        h.status === 'live' ||
+        (h.verified && h.status !== 'declined' && h.status !== 'rejected' && h.status !== 'pending' && h.status !== 'pending_review' && h.status !== 'pending_accreditation')
+      );
+      setApprovedHostels(liveHostels);
     });
 
     // Fetch all users
@@ -684,30 +706,34 @@ export default function AdminDashboard() {
   }
 
 
-  const openHostelReviewDialog = async (hostel: PendingHostel) => {
-    // Fetch full details including room types before opening dialog
-    const pendingDocRef = doc(db, 'pendingHostels', hostel.id);
-    const roomTypesRef = collection(pendingDocRef, 'roomTypes');
+  const openHostelReviewDialog = async (hostel: any) => {
+    let fullHostelData = { ...hostel };
+    try {
+      const cleanId = hostel.id.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+      const hostelRef = doc(db, 'hostels', cleanId);
+      const roomTypesRef = collection(hostelRef, 'roomTypes');
 
-    const [hostelSnap, roomTypesSnap] = await Promise.all([
-      getDoc(pendingDocRef),
-      getDocs(roomTypesRef)
-    ]);
+      const [hostelSnap, roomTypesSnap] = await Promise.all([
+        getDoc(hostelRef),
+        getDocs(roomTypesRef),
+      ]);
 
-    if (hostelSnap.exists()) {
-      const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as RoomType[];
-      const fullHostelData = {
-        ...hostelSnap.data(),
-        id: hostelSnap.id,
-        roomTypes: fetchedRoomTypes
-      } as PendingHostel;
-
-      setSelectedHostel(fullHostelData);
-      setIsHostelDialogOpen(true);
-    } else {
-      toast({ title: "Error", description: "Could not fetch hostel details.", variant: 'destructive' });
+      if (hostelSnap.exists()) {
+        const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as RoomType[];
+        fullHostelData = {
+          ...fullHostelData,
+          ...hostelSnap.data(),
+          id: cleanId,
+          roomTypes: fetchedRoomTypes.length > 0 ? fetchedRoomTypes : (hostelSnap.data().roomTypes || fullHostelData.roomTypes || []),
+        };
+      }
+    } catch (err) {
+      console.warn("Could not query room types subcollection:", err);
     }
-  }
+
+    setSelectedHostel(fullHostelData);
+    setIsHostelDialogOpen(true);
+  };
 
   const students = users.filter(u => u.role === 'student');
   const managers = users.filter(u => u.role === 'hostel_manager' || u.role === 'manager');
@@ -1475,7 +1501,15 @@ export default function AdminDashboard() {
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">{hostel.dateSubmitted}</TableCell>
                             <TableCell className="text-right">
-                              <Button variant="outline" size="sm" onClick={() => openHostelReviewDialog(hostel)}>Review</Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openHostelReviewDialog(hostel)}
+                                className="font-semibold text-xs border-primary/30 text-primary hover:bg-primary/10"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                                Review Filing
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1882,100 +1916,27 @@ export default function AdminDashboard() {
         </div>
       </main>
 
-      {selectedHostel && (
-        <Dialog open={isHostelDialogOpen} onOpenChange={setIsHostelDialogOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle className="font-headline text-2xl">Review: {selectedHostel.name}</DialogTitle>
-              <DialogDescription>
-                Location: {selectedHostel.location} {selectedHostel.submittedBy ? `| Submitted by: ${selectedHostel.submittedBy}` : ''}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Images</h3>
-                <Carousel className="w-full">
-                  <CarouselContent>
-                    {selectedHostel.images.map((img, index) => (
-                      <CarouselItem key={index}>
-                        <div className="relative h-64 w-full rounded-md overflow-hidden">
-                          <Image
-                            src={img}
-                            alt={`Hostel image ${index + 1}`}
-                            fill
-                            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 70vw, 50vw"
-                            style={{ objectFit: 'cover' }}
-                          />
-                        </div>
-                      </CarouselItem>
-                    ))}
-                  </CarouselContent>
-                  <CarouselPrevious className="left-4" />
-                  <CarouselNext className="right-4" />
-                </Carousel>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Room Types</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Room Name</TableHead>
-                      <TableHead>Price/Year</TableHead>
-
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedHostel.roomTypes.map((room) => (
-                      <TableRow key={room.id}>
-                        <TableCell className="font-medium">{room.name}</TableCell>
-                        <TableCell>GH₵{room.price.toLocaleString()}</TableCell>
-
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-semibold text-lg mb-2">Amenities</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {(selectedHostel.amenities as string[]).map(amenity => (
-                      <Badge key={amenity} variant="secondary">{amenity}</Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Description</h3>
-                <p className="text-sm text-foreground/80 bg-muted/50 p-3 rounded-md">{selectedHostel.description}</p>
-              </div>
-
-            </div>
-            <DialogFooter className="pt-4 border-t">
-              <Button
-                variant="destructive"
-                onClick={() => handleReject(selectedHostel.id)}
-                disabled={processingId === selectedHostel.id}
-              >
-                {processingId === selectedHostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <XCircle className="h-5 w-5" />}
-                <span className="ml-2">Reject</span>
-              </Button>
-              <Button
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => handleApprove(selectedHostel.id)}
-                disabled={processingId === selectedHostel.id}
-              >
-                {processingId === selectedHostel.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-                <span className="ml-2">Approve</span>
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* UNIFIED INSPECTION & AUDIT MODAL */}
+      <HostelInspectionModal
+        hostel={selectedHostel}
+        isOpen={isHostelDialogOpen}
+        onClose={() => {
+          setIsHostelDialogOpen(false);
+          setSelectedHostel(null);
+        }}
+        currentUser={auth.currentUser}
+        onDecisionComplete={(updatedHostel, action) => {
+          setPendingHostels((prev) =>
+            prev.filter((h) => h.id !== updatedHostel?.id && h.id !== selectedHostel?.id)
+          );
+          if (action === "approve" && updatedHostel) {
+            setApprovedHostels((prev) => [
+              updatedHostel,
+              ...prev.filter((h) => h.id !== updatedHostel.id),
+            ]);
+          }
+        }}
+      />
 
       {/* REJECT STUDENT VERIFICATION DIALOG */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

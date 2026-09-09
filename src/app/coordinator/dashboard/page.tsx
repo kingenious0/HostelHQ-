@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   fetchPendingHostelsAction,
@@ -31,6 +31,8 @@ import {
   updateHostelAction,
 } from "@/app/actions/db";
 import type { Hostel, RoomType } from "@/lib/data";
+import { HostelInspectionModal } from "@/components/dashboard/HostelInspectionModal";
+import { getHostelPhotos, getHostelVideos } from "@/lib/media-helpers";
 import {
   Building2,
   CheckCircle2,
@@ -102,6 +104,7 @@ export default function CoordinatorDashboardPage() {
   // Pending Hostels Queue State
   const [pendingHostels, setPendingHostels] = useState<Hostel[]>([]);
   const [selectedHostel, setSelectedHostel] = useState<Hostel | null>(null);
+  const [isInspectionModalOpen, setIsInspectionModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -158,40 +161,160 @@ export default function CoordinatorDashboardPage() {
     return () => unsub();
   }, [router, toast]);
 
-  // Load Data
+  // Load Data Manual Refresh / Fallback
   const loadData = async () => {
     setLoadingData(true);
     try {
-      const [pendRes, approvedRes] = await Promise.all([
-        fetchPendingHostelsAction(),
+      const pendingHostelsQuery = query(
+        collection(db, "hostels"),
+        where("status", "in", ["pending", "pending_review", "pending_accreditation"])
+      );
+      const [pendSnap, approvedRes] = await Promise.all([
+        getDocs(pendingHostelsQuery),
         fetchHostelsAction(),
       ]);
 
-      if (pendRes.success && pendRes.data) {
-        setPendingHostels(pendRes.data);
-      } else {
-        setPendingHostels([]);
-      }
+      const pendList = pendSnap.docs.map((d) => {
+        const data = d.data();
+        const resolvedPhotos = getHostelPhotos(data);
+        const resolvedVideos = getHostelVideos(data);
+        return {
+          ...data,
+          id: d.id,
+          images: resolvedPhotos,
+          photos: resolvedPhotos,
+          galleryUrls: resolvedPhotos,
+          videos: resolvedVideos,
+        } as Hostel;
+      });
+      setPendingHostels(pendList);
 
       if (approvedRes.success && approvedRes.data) {
         setApprovedHostels(approvedRes.data);
-      } else {
-        setApprovedHostels([]);
       }
     } catch (err) {
       console.error("Error loading coordinator data:", err);
-      setPendingHostels([]);
-      setApprovedHostels([]);
+      const pendRes = await fetchPendingHostelsAction();
+      if (pendRes.success && pendRes.data) {
+        setPendingHostels(pendRes.data);
+      }
     } finally {
       setLoadingData(false);
     }
   };
 
+  // Real-time synchronization across Admin and Coordinator queues
   useEffect(() => {
-    if (!loadingAuth && (userRole === "hostel_coordinator" || userRole === "admin")) {
-      loadData();
+    if (loadingAuth || (userRole !== "hostel_coordinator" && userRole !== "admin")) {
+      return;
     }
+
+    setLoadingData(true);
+
+    const pendingHostelsQuery = query(
+      collection(db, "hostels"),
+      where("status", "in", ["pending", "pending_review", "pending_accreditation"])
+    );
+
+    const unsubPending = onSnapshot(
+      pendingHostelsQuery,
+      (snapshot) => {
+        const hostelsData = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const resolvedPhotos = getHostelPhotos(data);
+          const resolvedVideos = getHostelVideos(data);
+          return {
+            ...data,
+            id: docSnap.id,
+            name: data.name || "Unnamed Property",
+            location: data.location || data.address || "Location Pending",
+            images: resolvedPhotos,
+            photos: resolvedPhotos,
+            galleryUrls: resolvedPhotos,
+            videos: resolvedVideos,
+            roomTypes: data.roomTypes || [],
+            amenities: data.amenities || [],
+          } as Hostel;
+        });
+        setPendingHostels(hostelsData);
+        setLoadingData(false);
+      },
+      (err) => {
+        console.warn("Coordinator pending hostels snapshot error, falling back to manual load:", err);
+        loadData();
+      }
+    );
+
+    const unsubApproved = onSnapshot(
+      collection(db, "hostels"),
+      (snapshot) => {
+        const allHostels = snapshot.docs.map((d) => {
+          const data = d.data();
+          const resolvedPhotos = getHostelPhotos(data);
+          const resolvedVideos = getHostelVideos(data);
+          return {
+            ...data,
+            id: d.id,
+            images: resolvedPhotos,
+            photos: resolvedPhotos,
+            galleryUrls: resolvedPhotos,
+            videos: resolvedVideos,
+          } as Hostel;
+        });
+
+        const liveHostels = allHostels.filter(
+          (h) =>
+            h.status === "approved" ||
+            h.status === "accredited" ||
+            h.status === "live" ||
+            (h.verified &&
+              h.status !== "declined" &&
+              h.status !== "rejected" &&
+              h.status !== "pending" &&
+              h.status !== "pending_review" &&
+              h.status !== "pending_accreditation")
+        );
+        setApprovedHostels(liveHostels);
+      },
+      (err) => {
+        console.warn("Coordinator approved hostels snapshot error:", err);
+      }
+    );
+
+    return () => {
+      unsubPending();
+      unsubApproved();
+    };
   }, [loadingAuth, userRole]);
+
+  const openHostelReviewDialog = async (hostel: any) => {
+    let fullHostelData = { ...hostel };
+    try {
+      const cleanId = hostel.id.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+      const hostelRef = doc(db, "hostels", cleanId);
+      const roomTypesRef = collection(hostelRef, "roomTypes");
+
+      const [hostelSnap, roomTypesSnap] = await Promise.all([
+        getDoc(hostelRef),
+        getDocs(roomTypesRef),
+      ]);
+
+      if (hostelSnap.exists()) {
+        const fetchedRoomTypes = roomTypesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as RoomType[];
+        fullHostelData = {
+          ...fullHostelData,
+          ...hostelSnap.data(),
+          id: cleanId,
+          roomTypes: fetchedRoomTypes.length > 0 ? fetchedRoomTypes : (hostelSnap.data().roomTypes || fullHostelData.roomTypes || []),
+        };
+      }
+    } catch (err) {
+      console.warn("Could not query room types subcollection:", err);
+    }
+
+    setSelectedHostel(fullHostelData);
+    setIsInspectionModalOpen(true);
+  };
 
   // Handle Hostel Approval
   const handleApproveHostel = async (hostel: Hostel) => {
@@ -800,30 +923,10 @@ export default function CoordinatorDashboardPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setSelectedHostel(hostel)}
-                                    className="h-8 text-xs font-medium"
+                                    onClick={() => openHostelReviewDialog(hostel)}
+                                    className="h-8 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10"
                                   >
-                                    <Eye className="h-3.5 w-3.5 mr-1" /> Inspect
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleApproveHostel(hostel)}
-                                    disabled={actionLoading}
-                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                                  >
-                                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setSelectedHostel(hostel);
-                                      setRejectDialogOpen(true);
-                                    }}
-                                    disabled={actionLoading}
-                                    className="h-8 text-xs text-destructive hover:bg-destructive/10"
-                                  >
-                                    <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                                    <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Review Filing
                                   </Button>
                                 </div>
                               </TableCell>
@@ -880,30 +983,10 @@ export default function CoordinatorDashboardPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setSelectedHostel(hostel)}
-                                className="h-7 text-xs px-2"
+                                onClick={() => openHostelReviewDialog(hostel)}
+                                className="h-7 text-xs px-2.5 font-semibold border-primary/30 text-primary hover:bg-primary/10"
                               >
-                                <Eye className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleApproveHostel(hostel)}
-                                disabled={actionLoading}
-                                className="h-7 text-xs px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                              >
-                                <Check className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedHostel(hostel);
-                                  setRejectDialogOpen(true);
-                                }}
-                                disabled={actionLoading}
-                                className="h-7 text-xs px-2 text-destructive hover:bg-destructive/10"
-                              >
-                                <XCircle className="h-3 w-3" />
+                                <ShieldCheck className="h-3 w-3 mr-1" /> Review Filing
                               </Button>
                             </div>
                           </div>
@@ -1045,10 +1128,10 @@ export default function CoordinatorDashboardPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setSelectedHostel(hostel)}
-                                    className="h-8 text-xs"
+                                    onClick={() => openHostelReviewDialog(hostel)}
+                                    className="h-8 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10"
                                   >
-                                    <Eye className="h-3.5 w-3.5 mr-1" /> Review
+                                    <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Review Filing
                                   </Button>
                                 </div>
                               </TableCell>
@@ -1410,244 +1493,27 @@ export default function CoordinatorDashboardPage() {
           </TabsContent>
         </Tabs>
 
-        {/* DIALOG: INSPECT PENDING HOSTEL */}
-        <Dialog open={!!selectedHostel && !rejectDialogOpen} onOpenChange={(open) => !open && setSelectedHostel(null)}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-            {selectedHostel && (
-              <>
-                <DialogHeader>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-xs">
-                      Pending Accreditation
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {selectedHostel.institution || "AAMUSTED"}
-                    </Badge>
-                  </div>
-                  <DialogTitle className="text-xl font-bold">{selectedHostel.name}</DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                    {selectedHostel.location}
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 py-2">
-                  {/* Photo Preview Strip */}
-                  {selectedHostel.images && selectedHostel.images.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden">
-                      {selectedHostel.images.slice(0, 2).map((img, idx) => (
-                        <div key={idx} className="relative h-40 bg-muted/30">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={img}
-                            alt={`${selectedHostel.name} inspection preview`}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Act 389 Statutory Undertaking Card if present */}
-                  {selectedHostel.statutoryUndertaking ? (
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 text-xs space-y-1.5">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
-                        <Scale className="h-4 w-4 shrink-0" />
-                        <span>Statutory Sworn Undertaking Verified (Act 389)</span>
-                      </div>
-                      <p className="text-muted-foreground">
-                        Declarant: <span className="font-semibold text-foreground">{selectedHostel.statutoryUndertaking.declarantName}</span> ({selectedHostel.statutoryUndertaking.declarantDesignation})
-                      </p>
-                      <p className="text-muted-foreground font-mono">
-                        Ghana Card: <span className="font-semibold text-foreground">{selectedHostel.statutoryUndertaking.ghanaCardNumber}</span>
-                      </p>
-                      <p className="text-[11px] text-muted-foreground pt-0.5">
-                        Attested on {new Date(selectedHostel.statutoryUndertaking.attestedAt).toLocaleDateString()} under penalty of Section 3 Perjury. Qualifies for rapid 1-year provisional desk pass.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-muted/40 border border-border/60 rounded-xl p-3 text-xs text-muted-foreground flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground/60 shrink-0" />
-                      <span>Legacy registration — sworn Act 389 digital attestation not on file.</span>
-                    </div>
-                  )}
-
-                  {/* Tariff Ceiling Check */}
-                  {selectedHostel.roomTypes?.some((r) => {
-                    const ceiling = getStatutoryTariffCeiling(r.name, r.capacity);
-                    return ceiling && typeof r.price === "number" && r.price > ceiling.maxPrice;
-                  }) && (
-                    <div className="bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                        <span>Room tariffs exceed campus statutory limits. Suspension flow applies.</span>
-                      </div>
-                      <Badge variant="outline" className="border-rose-600 text-rose-700 bg-rose-50 dark:bg-rose-950/40 text-[11px] font-semibold">
-                        Rent Cap Breach
-                      </Badge>
-                    </div>
-                  )}
-
-                  {/* Narrative Description */}
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                      Facility Overview & Specification
-                    </p>
-                    <p className="text-sm text-foreground bg-muted/40 p-3 rounded-lg border border-border/60 leading-relaxed">
-                      {selectedHostel.description}
-                    </p>
-                  </div>
-
-                  {/* Amenities */}
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                      Audited Amenities & Utilities
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedHostel.amenities && selectedHostel.amenities.length > 0 ? (
-                        selectedHostel.amenities.map((am, idx) => (
-                          <Badge key={idx} variant="secondary" className="text-xs">
-                            ✓ {am}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Standard utilities</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Room Inventory & Pricing */}
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
-                      Configured Room Inventory & Tariffs
-                    </p>
-                    <div className="border border-border/60 rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader className="bg-muted/40">
-                          <TableRow>
-                            <TableHead className="text-xs">Room Type</TableHead>
-                            <TableHead className="text-xs">Capacity</TableHead>
-                            <TableHead className="text-xs">Campus Ceiling</TableHead>
-                            <TableHead className="text-xs">Listed Tariff / Year</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedHostel.roomTypes && selectedHostel.roomTypes.length > 0 ? (
-                            selectedHostel.roomTypes.map((rt, idx) => {
-                              const ceiling = getStatutoryTariffCeiling(rt.name, rt.capacity);
-                              const exceeds = ceiling ? rt.price > ceiling.maxPrice : false;
-
-                              return (
-                                <TableRow key={idx}>
-                                  <TableCell className="text-xs font-medium">{rt.name}</TableCell>
-                                  <TableCell className="text-xs">{rt.capacity || 2} students</TableCell>
-                                  <TableCell className="text-xs font-mono text-muted-foreground">
-                                    {ceiling ? `GH₵${ceiling.maxPrice.toLocaleString()}` : "—"}
-                                  </TableCell>
-                                  <TableCell className={`text-xs font-semibold font-mono ${exceeds ? "text-rose-600" : "text-emerald-600"}`}>
-                                    GH₵{rt.price?.toLocaleString()}
-                                    {exceeds && <span className="ml-1 text-[10px] text-rose-500 font-normal">(!exceeds)</span>}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={4} className="text-center text-xs text-muted-foreground">
-                                No room types specified.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-
-                <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    onClick={() => handleApproveHostel(selectedHostel)}
-                    disabled={actionLoading}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1" /> Approve & Publish
-                  </Button>
-                  <Button
-                    onClick={() => handleGrantProvisionalPass(selectedHostel)}
-                    disabled={actionLoading}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 1-Yr Desk Pass (Act 389)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setRejectDialogOpen(true)}
-                    disabled={actionLoading}
-                    className="text-xs text-destructive hover:bg-destructive/10"
-                  >
-                    <XCircle className="h-3.5 w-3.5 mr-1" /> Reject Filing
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setSelectedHostel(null)}
-                    className="text-xs"
-                  >
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* DIALOG: REJECT HOSTEL */}
-        <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-destructive flex items-center gap-2">
-                <XCircle className="h-5 w-5" /> Reject Hostel Registration
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Document required improvements or non-compliance grounds for the hostel manager.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-2">
-              <label className="text-xs font-bold text-muted-foreground uppercase">
-                Rejection Grounds & Deficiencies
-              </label>
-              <Textarea
-                placeholder="e.g. Fire extinguishers missing, pricing exceeds university ceiling, sanitation verification incomplete..."
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                className="text-xs"
-              />
-            </div>
-
-            <DialogFooter className="gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => setRejectDialogOpen(false)}
-                className="text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (selectedHostel) {
-                    handleRejectHostel(selectedHostel.id, rejectReason);
-                  }
-                }}
-                disabled={actionLoading || !rejectReason.trim()}
-                className="text-xs font-semibold"
-              >
-                Confirm Rejection
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* UNIFIED INSPECTION & AUDIT MODAL */}
+        <HostelInspectionModal
+          hostel={selectedHostel}
+          isOpen={isInspectionModalOpen}
+          onClose={() => {
+            setIsInspectionModalOpen(false);
+            setSelectedHostel(null);
+          }}
+          currentUser={currentUser}
+          onDecisionComplete={(updatedHostel, action) => {
+            setPendingHostels((prev) =>
+              prev.filter((h) => h.id !== updatedHostel?.id && h.id !== selectedHostel?.id)
+            );
+            if (action === "approve" && updatedHostel) {
+              setApprovedHostels((prev) => [
+                updatedHostel,
+                ...prev.filter((h) => h.id !== updatedHostel.id),
+              ]);
+            }
+          }}
+        />
       </main>
     </div>
   );

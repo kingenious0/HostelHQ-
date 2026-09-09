@@ -28,68 +28,164 @@ export async function sendSMS(phoneNumber: string, message: string) {
 }
 
 /**
- * Notify admins when a new hostel is submitted for approval.
- * We call wait for the response from the API or call wigal directly.
+ * Notify Assigned Coordinators & Platform Admins when a new hostel is submitted for accreditation.
+ * Event 1: New Submission
+ * Template: [HostelHQ] New Property Filing: "{Hostel Name}" in {Location} submitted by {Manager Name}. Review pending on dashboard.
  */
-export async function notifyAdminsOfNewHostelSubmission(hostelName: string, submittedBy: string) {
+export async function notifyNewHostelSubmissionSMSAction(params: {
+    hostelName: string;
+    location: string;
+    managerName: string;
+}) {
     try {
-        await requireRole(['manager', 'admin']);
-        const message = `🏠 HOSTELHQ: New hostel submission alert!\n\nHostel: ${hostelName}\nSubmitted by: ${submittedBy}\nAction required: Please review and approve/reject in admin dashboard.\n\nLogin: https://hostel-hq.vercel.app/admin/dashboard`;
+        await requireRole(['manager', 'admin', 'coordinator', 'dean']);
+        const { hostelName, location, managerName } = params;
+        const message = `[HostelHQ] New Property Filing: "${hostelName}" in ${location} submitted by ${managerName}. Review pending on dashboard.`;
 
         const { db } = await import('@/lib/firebase');
         const { collection, query, where, getDocs } = await import('firebase/firestore');
 
         const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('role', '==', 'admin'));
-        const querySnapshot = await getDocs(q);
+        const [adminSnap, coordSnap, hostelCoordSnap] = await Promise.all([
+            getDocs(query(usersRef, where('role', '==', 'admin'))),
+            getDocs(query(usersRef, where('role', '==', 'coordinator'))),
+            getDocs(query(usersRef, where('role', '==', 'hostel_coordinator'))),
+        ]);
 
-        const phoneNumbers: string[] = [];
-        querySnapshot.forEach((doc: any) => {
-            const userData = doc.data();
-            if (userData.phone) {
-                phoneNumbers.push(userData.phone);
-            }
-        });
+        const phoneNumbers = new Set<string>();
+        const extractPhones = (snap: any) => {
+            snap.forEach((doc: any) => {
+                const data = doc.data();
+                const phone = data.phone || data.phoneNumber;
+                if (phone && isValidPhone(phone)) {
+                    phoneNumbers.add(phone.trim());
+                }
+            });
+        };
 
-        if (phoneNumbers.length === 0) return { success: false, error: 'No admin phones found' };
+        extractPhones(adminSnap);
+        extractPhones(coordSnap);
+        extractPhones(hostelCoordSnap);
 
-        const results = await Promise.all(phoneNumbers.map(phone => wigalSendSMS(phone, message)));
-        return { success: results.every(r => r.success) };
+        if (phoneNumbers.size === 0) {
+            console.warn('[SMS] No admin or coordinator phones found for new submission alert.');
+            return { success: false, error: 'No admin or coordinator phones found' };
+        }
+
+        const results = await Promise.all(
+            Array.from(phoneNumbers).map((phone) => wigalSendSMS(phone, message))
+        );
+        return { success: results.some((r) => r.success) };
     } catch (error: any) {
-        console.error('Error notifying admins:', error);
+        console.error('Error in notifyNewHostelSubmissionSMSAction:', error);
         return { success: false, error: error.message };
     }
 }
 
 /**
- * Notify hostel creator about approval status.
+ * Backward compatible alias for admin/coordinator notification
+ */
+export async function notifyAdminsOfNewHostelSubmission(hostelName: string, submittedBy: string, location?: string) {
+    return notifyNewHostelSubmissionSMSAction({
+        hostelName,
+        location: location || 'Campus Vicinity',
+        managerName: submittedBy,
+    });
+}
+
+/**
+ * Notify hostel manager upon accreditation approval or rejection.
+ * Event 2: Approval -> [HostelHQ] Congratulations! "{Hostel Name}" has been accredited and is now live for student bookings.
+ * Event 3: Rejection -> [HostelHQ] Notice: Filing for "{Hostel Name}" was declined. Reason: {rejectionReason}. Visit your portal to rectify and re-submit.
+ */
+export async function notifyHostelAccreditationSMSAction(params: {
+    hostelId?: string;
+    hostelName: string;
+    managerPhone?: string;
+    managerId?: string;
+    status: 'accredited' | 'declined' | 'approved' | 'rejected';
+    rejectionReason?: string;
+}) {
+    try {
+        await requireRole(['admin', 'dean', 'coordinator']);
+        const { db } = await import('@/lib/firebase');
+        const { doc, getDoc } = await import('firebase/firestore');
+
+        let targetPhone = params.managerPhone || '';
+
+        // Resolve phone from manager user profile if needed
+        if (!targetPhone && params.managerId) {
+            try {
+                const userSnap = await getDoc(doc(db, 'users', params.managerId));
+                if (userSnap.exists()) {
+                    const uData = userSnap.data();
+                    targetPhone = uData.phone || uData.phoneNumber || '';
+                }
+            } catch (uErr) {
+                console.warn('Error fetching manager user phone for SMS:', uErr);
+            }
+        }
+
+        // Resolve phone from hostel doc if still missing
+        if (!targetPhone && params.hostelId) {
+            try {
+                const cleanId = params.hostelId.replace(/^HOSTEL#/i, '').replace(/^PENDING_HOSTEL#/i, '').trim();
+                const hSnap = await getDoc(doc(db, 'hostels', cleanId));
+                if (hSnap.exists()) {
+                    const hData = hSnap.data();
+                    targetPhone = hData.managerPhone || hData.contactPhone || hData.phone || '';
+                    if (!targetPhone && hData.managerId) {
+                        const userSnap = await getDoc(doc(db, 'users', hData.managerId));
+                        if (userSnap.exists()) {
+                            const uData = userSnap.data();
+                            targetPhone = uData.phone || uData.phoneNumber || '';
+                        }
+                    }
+                }
+            } catch (hErr) {
+                console.warn('Error fetching hostel record for manager phone:', hErr);
+            }
+        }
+
+        if (!targetPhone || !isValidPhone(targetPhone)) {
+            console.warn(`[SMS] No valid manager phone number found for hostel "${params.hostelName}"`);
+            return { success: false, error: 'No valid manager phone number found' };
+        }
+
+        const isApproved = params.status === 'accredited' || params.status === 'approved';
+        let message = '';
+
+        if (isApproved) {
+            // Event 2: Approval
+            message = `[HostelHQ] Congratulations! "${params.hostelName}" has been accredited and is now live for student bookings.`;
+        } else {
+            // Event 3: Rejection / Remediation
+            const reason = params.rejectionReason || 'Requirements not met';
+            message = `[HostelHQ] Notice: Filing for "${params.hostelName}" was declined. Reason: ${reason}. Visit your portal to rectify and re-submit.`;
+        }
+
+        return await wigalSendSMS(targetPhone, message);
+    } catch (error: any) {
+        console.error('Error in notifyHostelAccreditationSMSAction:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Notify hostel creator about approval status (backward compatible wrapper).
  */
 export async function notifyCreatorOfHostelStatus(
     hostelName: string,
     creatorPhone: string,
-    status: 'approved' | 'rejected',
+    status: 'approved' | 'rejected' | 'accredited' | 'declined',
     reason?: string
 ) {
-    try {
-        await requireRole(['admin', 'dean', 'coordinator']);
-        const statusText = status === 'approved' ? '✅ APPROVED' : '❌ REJECTED';
-        const actionText = status === 'approved' ? 'is now live on the platform' : 'was not approved';
-
-        let message = `🏠 HOSTELHQ: Your hostel status update\n\nHostel: ${hostelName}\nStatus: ${statusText}\nYour hostel ${actionText}`;
-
-        if (status === 'rejected' && reason) {
-            message += `\n\nReason: ${reason}`;
-        }
-
-        if (status === 'approved') {
-            message += `\n\nStudents can now book visits and secure rooms at your hostel!`;
-        }
-
-        return await wigalSendSMS(creatorPhone, message);
-    } catch (error: any) {
-        console.error('Error notifying creator:', error);
-        return { success: false, error: error.message };
-    }
+    return notifyHostelAccreditationSMSAction({
+        hostelName,
+        managerPhone: creatorPhone,
+        status: (status === 'approved' || status === 'accredited') ? 'accredited' : 'declined',
+        rejectionReason: reason,
+    });
 }
 
 function isValidPhone(phone?: string | null): boolean {

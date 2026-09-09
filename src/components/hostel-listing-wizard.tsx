@@ -720,11 +720,17 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
     });
 
     try {
-      // 1. Upload photos to Cloudinary
+      // 1. Upload photos to Cloudinary and resolve to valid CDN URLs
       const uploadedImageUrls: string[] = [];
       for (const file of photos) {
-        const url = await uploadImage(file);
-        uploadedImageUrls.push(url);
+        try {
+          const url = await uploadImage(file);
+          if (url && typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"))) {
+            uploadedImageUrls.push(url);
+          }
+        } catch (imgErr) {
+          console.warn("Photo upload warning:", imgErr);
+        }
       }
 
       // 2. Upload per-room-type media (images and videos) to Cloudinary with auto-compression
@@ -739,10 +745,14 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
           try {
             if (item.type === "video") {
               const videoUrl = await uploadVideo(item.file);
-              roomVideos.push(videoUrl);
+              if (videoUrl && (videoUrl.startsWith("http://") || videoUrl.startsWith("https://"))) {
+                roomVideos.push(videoUrl);
+              }
             } else {
               const imgUrl = await uploadImage(item.file);
-              roomImages.push(imgUrl);
+              if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+                roomImages.push(imgUrl);
+              }
             }
           } catch (uploadErr) {
             console.warn(`Error uploading media for room ${rt.name || index}:`, uploadErr);
@@ -769,6 +779,8 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
 
       const isPending = mode === "manager";
       const hostelId = `hostel_${Date.now()}`;
+      const resolvedPhotos = uploadedImageUrls.length > 0 ? uploadedImageUrls : ["/hero-student-housing.jpg"];
+      const allRoomVideos = processedRoomTypes.flatMap((r: any) => r.videos || []);
 
       const hostelPayload: any = {
         id: hostelId,
@@ -787,14 +799,23 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         billsIncluded,
         billsExcluded,
         securityAndSafety,
-        images: uploadedImageUrls.length > 0 ? uploadedImageUrls : ["/hero-student-housing.jpg"],
+        // Normalized Media Bindings: cover both images and photos accessors
+        images: resolvedPhotos,
+        photos: resolvedPhotos,
+        galleryUrls: resolvedPhotos,
+        media: {
+          photos: resolvedPhotos,
+          videos: allRoomVideos,
+        },
+        videos: allRoomVideos,
         priceRange: { min: minPrice, max: maxPrice },
         roomTypes: processedRoomTypes,
         availability: "Available",
         rating: 5.0,
         reviewCount: 0,
         verified: mode === "admin",
-        status: isPending ? "pending" : "approved",
+        status: isPending ? "pending_review" : "accredited",
+        isPublished: !isPending,
         latitude: locationData.lat,
         longitude: locationData.lng,
         digitalAddress: locationData.digitalAddress || null,
@@ -833,7 +854,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         }
       }
 
-      // If manager mode, also log a hostel request entry for tracking
+      // If manager mode, also log a hostel request entry and dispatch Event 1 SMS
       if (mode === "manager") {
         await addDoc(collection(db, "hostelRequests"), {
           hostelId: hostelId,
@@ -841,9 +862,21 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
           location: locationData.address || nearbyLandmarks,
           managerId: currentUser.uid,
           managerEmail: currentUser.email,
-          status: "pending",
+          status: "pending_review",
           createdAt: new Date().toISOString(),
         });
+
+        // Trigger SMS Event 1: New Submission
+        try {
+          const { notifyNewHostelSubmissionSMSAction } = await import("@/app/actions/sms");
+          await notifyNewHostelSubmissionSMSAction({
+            hostelName: hostelName.trim(),
+            location: locationData.address || nearbyLandmarks,
+            managerName: declarantName.trim() || currentUser.displayName || currentUser.email || "Property Manager",
+          });
+        } catch (smsErr) {
+          console.warn("Could not dispatch submission notification SMS:", smsErr);
+        }
 
         toast({
           title: "Registration Submitted!",

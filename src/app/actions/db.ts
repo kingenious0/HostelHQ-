@@ -18,6 +18,7 @@ import {
   where,
   orderBy,
 } from "firebase/firestore";
+import { revalidatePath } from "next/cache";
 
 // ============================================================================
 // Hostel Server Actions
@@ -683,27 +684,247 @@ export async function fetchPendingHostelsAction() {
   }
 }
 
-export async function approvePendingHostelAction(hostelId: string, approvedBy?: string) {
+/**
+ * Atomic State Transition: Approve & Accredit Property
+ * Updates Firestore document to status: "accredited", isPublished: true, verified: true, reviewedBy, reviewedAt
+ * Syncs DynamoDB, notifies manager via SMS Event 2, and triggers cache revalidation.
+ */
+export async function approveHostelAccreditationAction(params: {
+  hostelId: string;
+  reviewerId?: string;
+  reviewerName?: string;
+}) {
   try {
     const caller = await requireRole(["admin", "dean", "coordinator"]);
-    const reviewer = approvedBy || caller.displayName || caller.email || caller.uid;
-    const data = await dynamoService.approvePendingHostel(hostelId, reviewer);
-    return { success: true, data };
+    const reviewerUid = params.reviewerId || caller.uid;
+    const reviewerName = params.reviewerName || caller.displayName || caller.email || "Institutional Reviewer";
+    const cleanId = params.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+    const timestamp = new Date().toISOString();
+
+    // 1. Atomic Firestore State Update
+    const hostelRef = doc(db, "hostels", cleanId);
+    const existingSnap = await getDoc(hostelRef);
+    let existingData: any = {};
+    if (existingSnap.exists()) {
+      existingData = existingSnap.data() || {};
+    }
+
+    const updatedHostelPayload = {
+      ...existingData,
+      id: cleanId,
+      originalId: cleanId,
+      status: "accredited",
+      isPublished: true,
+      verified: true,
+      reviewedBy: reviewerUid,
+      reviewedByName: reviewerName,
+      reviewedAt: timestamp,
+      approvedAt: timestamp,
+      rejectionReason: null,
+      updatedAt: timestamp,
+    };
+
+    await setDoc(hostelRef, updatedHostelPayload, { merge: true });
+
+    // Clean up / update legacy pendingHostels if present
+    try {
+      const pendingDocRef = doc(db, "pendingHostels", cleanId);
+      const pSnap = await getDoc(pendingDocRef);
+      if (pSnap.exists()) {
+        await updateDoc(pendingDocRef, {
+          status: "accredited",
+          isPublished: true,
+          reviewedBy: reviewerUid,
+          reviewedAt: timestamp,
+        });
+      }
+    } catch (_) {}
+
+    // Update matching hostelRequests
+    try {
+      const reqsQuery = query(collection(db, "hostelRequests"), where("hostelId", "==", cleanId));
+      const reqsSnap = await getDocs(reqsQuery);
+      for (const reqDoc of reqsSnap.docs) {
+        await updateDoc(reqDoc.ref, {
+          status: "accredited",
+          approvedAt: timestamp,
+          approvedBy: reviewerName,
+        });
+      }
+    } catch (_) {}
+
+    // 2. DynamoDB Sync
+    try {
+      await dynamoService.approvePendingHostel(cleanId, reviewerName);
+    } catch (dynErr) {
+      console.warn("DynamoDB sync note during approveHostelAccreditationAction:", dynErr);
+    }
+
+    // 3. Dispatch SMS Event 2: Approval
+    const hostelName = existingData.name || "your hostel";
+    const managerPhone = existingData.managerPhone || existingData.contactPhone;
+    const managerId = existingData.managerId;
+
+    try {
+      const { notifyHostelAccreditationSMSAction } = await import("@/app/actions/sms");
+      await notifyHostelAccreditationSMSAction({
+        hostelId: cleanId,
+        hostelName,
+        managerPhone,
+        managerId,
+        status: "accredited",
+      });
+    } catch (smsErr) {
+      console.warn("SMS dispatch warning upon approval:", smsErr);
+    }
+
+    // 4. Revalidate paths
+    try {
+      revalidatePath("/admin/dashboard");
+      revalidatePath("/coordinator/dashboard");
+      revalidatePath("/manager/dashboard");
+      revalidatePath("/hostels");
+    } catch (_) {}
+
+    return { success: true, data: updatedHostelPayload };
   } catch (error: any) {
-    console.error("approvePendingHostelAction error:", error);
-    return { success: false, error: error.message || "Failed to approve hostel" };
+    console.error("approveHostelAccreditationAction error:", error);
+    return { success: false, error: error.message || "Failed to accredit hostel" };
   }
 }
 
-export async function rejectPendingHostelAction(hostelId: string, reason?: string) {
+/**
+ * Backward compatible alias for approvePendingHostelAction
+ */
+export async function approvePendingHostelAction(hostelId: string, approvedBy?: string) {
+  return approveHostelAccreditationAction({
+    hostelId,
+    reviewerName: approvedBy,
+  });
+}
+
+/**
+ * Atomic State Transition: Decline Property / Request Changes
+ * Updates Firestore document to status: "declined", isPublished: false, rejectionReason: reasonText
+ * Syncs DynamoDB, notifies manager via SMS Event 3, and triggers cache revalidation.
+ */
+export async function rejectHostelAccreditationAction(params: {
+  hostelId: string;
+  reasonText: string;
+  reviewerId?: string;
+  reviewerName?: string;
+}) {
   try {
-    await requireRole(["admin", "dean", "coordinator"]);
-    const data = await dynamoService.rejectPendingHostel(hostelId, reason);
-    return { success: true, data };
+    const caller = await requireRole(["admin", "dean", "coordinator"]);
+    const reviewerUid = params.reviewerId || caller.uid;
+    const reviewerName = params.reviewerName || caller.displayName || caller.email || "Institutional Reviewer";
+    const cleanId = params.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+    const reasonText = params.reasonText?.trim() || "Requirements not met";
+    const timestamp = new Date().toISOString();
+
+    // 1. Atomic Firestore State Update
+    const hostelRef = doc(db, "hostels", cleanId);
+    const existingSnap = await getDoc(hostelRef);
+    let existingData: any = {};
+    if (existingSnap.exists()) {
+      existingData = existingSnap.data() || {};
+    }
+
+    const updatedHostelPayload = {
+      ...existingData,
+      id: cleanId,
+      originalId: cleanId,
+      status: "declined",
+      isPublished: false,
+      verified: false,
+      rejectionReason: reasonText,
+      reviewedBy: reviewerUid,
+      reviewedByName: reviewerName,
+      reviewedAt: timestamp,
+      rejectedAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    await setDoc(hostelRef, updatedHostelPayload, { merge: true });
+
+    // Clean up / update legacy pendingHostels if present
+    try {
+      const pendingDocRef = doc(db, "pendingHostels", cleanId);
+      const pSnap = await getDoc(pendingDocRef);
+      if (pSnap.exists()) {
+        await updateDoc(pendingDocRef, {
+          status: "declined",
+          isPublished: false,
+          rejectionReason: reasonText,
+          reviewedBy: reviewerUid,
+          reviewedAt: timestamp,
+        });
+      }
+    } catch (_) {}
+
+    // Update matching hostelRequests
+    try {
+      const reqsQuery = query(collection(db, "hostelRequests"), where("hostelId", "==", cleanId));
+      const reqsSnap = await getDocs(reqsQuery);
+      for (const reqDoc of reqsSnap.docs) {
+        await updateDoc(reqDoc.ref, {
+          status: "declined",
+          rejectionReason: reasonText,
+          rejectedAt: timestamp,
+          rejectedBy: reviewerName,
+        });
+      }
+    } catch (_) {}
+
+    // 2. DynamoDB Sync
+    try {
+      await dynamoService.rejectPendingHostel(cleanId, reasonText);
+    } catch (dynErr) {
+      console.warn("DynamoDB sync note during rejectHostelAccreditationAction:", dynErr);
+    }
+
+    // 3. Dispatch SMS Event 3: Rejection / Remediation
+    const hostelName = existingData.name || "your hostel";
+    const managerPhone = existingData.managerPhone || existingData.contactPhone;
+    const managerId = existingData.managerId;
+
+    try {
+      const { notifyHostelAccreditationSMSAction } = await import("@/app/actions/sms");
+      await notifyHostelAccreditationSMSAction({
+        hostelId: cleanId,
+        hostelName,
+        managerPhone,
+        managerId,
+        status: "declined",
+        rejectionReason: reasonText,
+      });
+    } catch (smsErr) {
+      console.warn("SMS dispatch warning upon rejection:", smsErr);
+    }
+
+    // 4. Revalidate paths
+    try {
+      revalidatePath("/admin/dashboard");
+      revalidatePath("/coordinator/dashboard");
+      revalidatePath("/manager/dashboard");
+      revalidatePath("/hostels");
+    } catch (_) {}
+
+    return { success: true, data: updatedHostelPayload };
   } catch (error: any) {
-    console.error("rejectPendingHostelAction error:", error);
-    return { success: false, error: error.message || "Failed to reject hostel" };
+    console.error("rejectHostelAccreditationAction error:", error);
+    return { success: false, error: error.message || "Failed to decline hostel" };
   }
+}
+
+/**
+ * Backward compatible alias for rejectPendingHostelAction
+ */
+export async function rejectPendingHostelAction(hostelId: string, reason?: string) {
+  return rejectHostelAccreditationAction({
+    hostelId,
+    reasonText: reason || "Requirements not met",
+  });
 }
 
 export async function fetchComplaintsAction(filter?: {
