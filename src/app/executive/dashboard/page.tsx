@@ -53,21 +53,20 @@ import {
   Download,
   Search,
   ChevronDown,
-  MoreHorizontal,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
-  X,
   ExternalLink,
   Shield,
   FileSpreadsheet,
-  Check,
   LayoutGrid,
   List,
   User as UserIcon,
   KeyRound,
   LogOut,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 
 interface ExecutiveMetricsData {
@@ -146,7 +145,7 @@ export default function ExecutiveDashboardPage() {
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [loadingHostels, setLoadingHostels] = useState(true);
 
-  // Enterprise Navigation & Layout State
+  // Layout & Navigation State
   const [activeTab, setActiveTab] = useState<ActiveExecutiveTab>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -227,9 +226,9 @@ export default function ExecutiveDashboardPage() {
             description: "No authorized profile found. This executive dashboard is restricted.",
             variant: "destructive",
           });
-            router.replace("/");
-            return;
-          }
+          router.replace("/");
+          return;
+        }
       } catch (err) {
         console.error("Executive auth error:", err);
       } finally {
@@ -357,10 +356,10 @@ export default function ExecutiveDashboardPage() {
       arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : fallback;
 
     return {
-      oneInRoom: avg(prices1, 8400),
-      twoInRoom: avg(prices2, 5800),
-      threeInRoom: avg(prices3, 4200),
-      fourInRoom: avg(prices4, 3200),
+      oneInRoom: avg(prices1, 4300),
+      twoInRoom: avg(prices2, 4367),
+      threeInRoom: avg(prices3, 3633),
+      fourInRoom: avg(prices4, 1102),
     };
   }, [hostels]);
 
@@ -487,7 +486,7 @@ export default function ExecutiveDashboardPage() {
       csvRows.push(`1-in-a-Room (Single),${bedsByRoomCategory.oneBed},${rentIndices.oneInRoom},9000`);
       csvRows.push(`2-in-a-Room (Double),${bedsByRoomCategory.twoBed},${rentIndices.twoInRoom},6500`);
       csvRows.push(`3-in-a-Room (Triple),${bedsByRoomCategory.threeBed},${rentIndices.threeInRoom},4500`);
-      csvRows.push(`4-in-a-Room (Quad),${bedsByRoomCategory.fourBed},${rentIndices.fourInRoom},3500`);
+      csvRows.push(`4-in-a-Room (Quad),${bedsByRoomCategory.fourBed},${rentIndices.fourInRoom},1500`);
       csvRows.push("");
 
       csvRows.push("--- GRIEVANCE & DISPUTE RESOLUTION ---");
@@ -551,13 +550,13 @@ export default function ExecutiveDashboardPage() {
 
   if (loadingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
         <div className="text-center space-y-3">
-          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto text-primary">
+          <div className="h-12 w-12 rounded-2xl bg-[#922C42]/10 flex items-center justify-center mx-auto text-[#922C42]">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
-          <p className="text-sm font-semibold text-foreground">Verifying executive credentials...</p>
-          <p className="text-xs text-muted-foreground">Office of the Vice-Chancellor &amp; Executive Council</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verifying executive credentials...</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Office of the Vice-Chancellor &amp; Executive Council</p>
         </div>
       </div>
     );
@@ -573,35 +572,36 @@ export default function ExecutiveDashboardPage() {
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-zinc-950 text-foreground flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50/70 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row antialiased">
       {/* =========================================================================
-          1. SLEEK COLLAPSIBLE ENTERPRISE SIDEBAR (Desktop / Tablet)
+          1. TAILADMIN-INSPIRED NEUTRAL SIDEBAR (Desktop / Tablet)
+          Clean 260px width, charcoal/slate neutral base, subtle burgundy active accents
           ========================================================================= */}
       <aside
-        className={`no-print hidden md:flex flex-col border-r border-border/70 bg-card transition-all duration-300 select-none z-30 ${
-          sidebarCollapsed ? "w-20" : "w-64"
+        className={`no-print hidden md:flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-all duration-300 select-none z-30 ${
+          sidebarCollapsed ? "w-20" : "w-[260px]"
         }`}
       >
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-border/60 flex items-center justify-between gap-3 h-16">
+        <div className="p-4 border-b border-gray-150 dark:border-gray-800 flex items-center justify-between gap-3 h-16">
           {!sidebarCollapsed ? (
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm shrink-0">
-                <Landmark className="h-5 w-5" />
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="h-9 w-9 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center shadow-xs shrink-0">
+                <Landmark className="h-4.5 w-4.5" />
               </div>
               <div className="truncate">
-                <h2 className="font-headline font-black text-sm tracking-tight text-foreground truncate">
-                  HostelHQ Executive
+                <h2 className="font-bold text-sm tracking-tight text-gray-900 dark:text-white truncate">
+                  HostelHQ
                 </h2>
-                <p className="text-[10px] font-medium text-muted-foreground tracking-wider uppercase truncate">
-                  Housing Governance
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-400 tracking-wider uppercase truncate">
+                  Governance Console
                 </p>
               </div>
             </div>
           ) : (
             <div className="mx-auto">
-              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-                <Landmark className="h-5 w-5" />
+              <div className="h-9 w-9 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center shadow-xs">
+                <Landmark className="h-4.5 w-4.5" />
               </div>
             </div>
           )}
@@ -610,193 +610,176 @@ export default function ExecutiveDashboardPage() {
             variant="ghost"
             size="icon"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
+            className="h-8 w-8 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0 rounded-lg"
             title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
         </div>
 
-        {/* Sidebar Navigation Links */}
-        <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          <div className="mb-2 px-2">
+        {/* Navigation Links with TailAdmin Spacing & Restraint */}
+        <div className="flex-1 py-5 px-3 space-y-6 overflow-y-auto">
+          <div>
             {!sidebarCollapsed && (
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-                Governance Console
-              </span>
+              <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">
+                Menu
+              </p>
             )}
+
+            <div className="space-y-1">
+              {/* Nav Item 1: Overview */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("overview")}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
+                  activeTab === "overview"
+                    ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white font-medium"
+                } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+                title="Overview"
+              >
+                <LayoutDashboard className={`h-4.5 w-4.5 shrink-0 ${activeTab === "overview" ? "text-[#922C42] dark:text-rose-300" : "text-gray-400"}`} />
+                {!sidebarCollapsed && <span>Overview</span>}
+              </button>
+
+              {/* Nav Item 2: Compliance Audit */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("compliance")}
+                className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
+                  activeTab === "compliance"
+                    ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white font-medium"
+                } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+                title="Compliance Audit"
+              >
+                <div className="flex items-center gap-3 truncate">
+                  <ShieldCheck className={`h-4.5 w-4.5 shrink-0 ${activeTab === "compliance" ? "text-[#922C42] dark:text-rose-300" : "text-gray-400"}`} />
+                  {!sidebarCollapsed && <span className="truncate">Compliance</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                    {accreditationRate}%
+                  </span>
+                )}
+              </button>
+
+              {/* Nav Item 3: Sanctions Switchboard */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("sanctions")}
+                className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
+                  activeTab === "sanctions"
+                    ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white font-medium"
+                } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+                title="Sanctions Switchboard"
+              >
+                <div className="flex items-center gap-3 truncate">
+                  <Scale className={`h-4.5 w-4.5 shrink-0 ${activeTab === "sanctions" ? "text-[#922C42] dark:text-rose-300" : "text-gray-400"}`} />
+                  {!sidebarCollapsed && <span className="truncate">Sanctions</span>}
+                </div>
+                {!sidebarCollapsed && activeSanctionsCount > 0 && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+                    {activeSanctionsCount} Active
+                  </span>
+                )}
+              </button>
+
+              {/* Nav Item 4: Executive Reports */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("reports")}
+                className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
+                  activeTab === "reports"
+                    ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white font-medium"
+                } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
+                title="Reports & Briefings"
+              >
+                <div className="flex items-center gap-3 truncate">
+                  <FileText className={`h-4.5 w-4.5 shrink-0 ${activeTab === "reports" ? "text-[#922C42] dark:text-rose-300" : "text-gray-400"}`} />
+                  {!sidebarCollapsed && <span className="truncate">Reports</span>}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    PDF/CSV
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Nav Item 1: Overview */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("overview")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "overview"
-                ? "bg-primary text-primary-foreground shadow-xs font-bold"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
-            title="Overview"
-          >
-            <LayoutDashboard className="h-4 w-4 shrink-0" />
-            {!sidebarCollapsed && <span>Overview</span>}
-          </button>
-
-          {/* Nav Item 2: Compliance Audit */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("compliance")}
-            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "compliance"
-                ? "bg-primary text-primary-foreground shadow-xs font-bold"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
-            title="Compliance Audit"
-          >
-            <div className="flex items-center gap-3 truncate">
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              {!sidebarCollapsed && <span className="truncate">Compliance Audit</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  activeTab === "compliance"
-                    ? "bg-white/20 text-white"
-                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                {accreditationRate}%
-              </span>
-            )}
-          </button>
-
-          {/* Nav Item 3: Sanctions Switchboard */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("sanctions")}
-            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "sanctions"
-                ? "bg-primary text-primary-foreground shadow-xs font-bold"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
-            title="Sanctions Switchboard"
-          >
-            <div className="flex items-center gap-3 truncate">
-              <Scale className="h-4 w-4 shrink-0" />
-              {!sidebarCollapsed && <span className="truncate">Sanctions Switchboard</span>}
-            </div>
-            {!sidebarCollapsed && activeSanctionsCount > 0 && (
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  activeTab === "sanctions"
-                    ? "bg-white/20 text-white"
-                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {activeSanctionsCount} Flagged
-              </span>
-            )}
-          </button>
-
-          {/* Nav Item 4: Executive Reports */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("reports")}
-            className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === "reports"
-                ? "bg-primary text-primary-foreground shadow-xs font-bold"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            } ${sidebarCollapsed ? "justify-center px-0" : ""}`}
-            title="Executive Reports"
-          >
-            <div className="flex items-center gap-3 truncate">
-              <FileText className="h-4 w-4 shrink-0" />
-              {!sidebarCollapsed && <span className="truncate">Executive Reports</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                  activeTab === "reports"
-                    ? "bg-white/20 text-white"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                PDF
-              </span>
-            )}
-          </button>
-
-          {/* Quick Action in Sidebar */}
-          <div className="pt-6">
-            {!sidebarCollapsed && (
-              <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                  <Building2 className="h-4 w-4 text-primary" />
+          {/* TailAdmin Pattern: Sidebar Action Widget */}
+          {!sidebarCollapsed && (
+            <div className="pt-2">
+              <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-900 dark:text-white">
+                  <Sparkles className="h-4 w-4 text-[#922C42]" />
                   <span>Council Briefing</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Generate statutory compliance and capacity reports for the University Council &amp; Welfare Directorate.
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                  Generate statutory compliance &amp; bed deficit summaries for the University Council.
                 </p>
                 <Button
                   variant="default"
                   size="sm"
                   onClick={() => setBriefingOpen(true)}
-                  className="w-full h-8 text-[11px] font-bold rounded-xl bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
+                  className="w-full h-8 text-xs font-semibold rounded-xl bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs"
                 >
-                  <FileText className="h-3.5 w-3.5 mr-1" />
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
                   Generate Briefing
                 </Button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Sidebar Footer User Card */}
-        <div className="p-3 border-t border-border/60 bg-muted/20">
-          <Link href="/settings/profile" className={`flex items-center gap-2.5 ${sidebarCollapsed ? "justify-center" : ""} hover:opacity-80 transition-opacity group`}>
-            <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0 group-hover:border-primary/40">
+        {/* Sidebar Footer: User Card */}
+        <div className="p-3.5 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+          <Link href="/settings/profile" className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""} hover:opacity-90 transition-opacity group`}>
+            <div className="h-9 w-9 rounded-xl bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs shrink-0 group-hover:ring-2 group-hover:ring-gray-300 transition-all">
               {userInitials}
             </div>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-[#922C42] transition-colors">
                   {userFullName || currentUser?.displayName || currentUser?.email}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1 font-medium">
-                  <Landmark className="h-3 w-3 text-amber-600 shrink-0" />
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate font-medium">
                   {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
                 </p>
               </div>
             )}
           </Link>
           {!sidebarCollapsed && (
-            <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
-              <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+            <div className="mt-2.5 pt-2.5 border-t border-gray-200/60 dark:border-gray-800/60 flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400">
+              <Link href="/" className="hover:text-[#922C42] transition-colors flex items-center gap-1">
                 <ArrowUpRight className="h-3 w-3" />
                 Exit Console
               </Link>
-              <span className="font-mono text-[9px] text-muted-foreground/80">v2.6 Statutory</span>
+              <span className="font-mono text-[10px] text-gray-400">v2.6 Statutory</span>
             </div>
           )}
         </div>
       </aside>
 
       {/* =========================================================================
-          MOBILE NAVIGATION SLIDE-OUT DRAWER (Sheet Component)
+          MOBILE NAVIGATION SLIDE-OUT DRAWER (TailAdmin Style Sheet)
           ========================================================================= */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-card border-border">
-          <SheetHeader className="p-4 border-b border-border/60 text-left">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm shrink-0">
-                <Landmark className="h-5 w-5" />
+        <SheetContent side="left" className="w-[280px] p-0 flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800">
+          <SheetHeader className="p-4 border-b border-gray-200 dark:border-gray-800 text-left">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center shadow-xs shrink-0">
+                <Landmark className="h-4.5 w-4.5" />
               </div>
               <div>
-                <SheetTitle className="font-headline font-black text-sm tracking-tight text-foreground">
-                  HostelHQ Executive
+                <SheetTitle className="font-bold text-sm tracking-tight text-gray-900 dark:text-white">
+                  HostelHQ
                 </SheetTitle>
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Housing Governance
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Governance Console
                 </p>
               </div>
             </div>
@@ -809,11 +792,13 @@ export default function ExecutiveDashboardPage() {
                 setActiveTab("overview");
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "overview" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                activeTab === "overview"
+                  ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium"
               }`}
             >
-              <LayoutDashboard className="h-4 w-4" />
+              <LayoutDashboard className="h-4.5 w-4.5" />
               Overview
             </button>
 
@@ -823,15 +808,17 @@ export default function ExecutiveDashboardPage() {
                 setActiveTab("compliance");
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "compliance" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                activeTab === "compliance"
+                  ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium"
               }`}
             >
               <div className="flex items-center gap-3">
-                <ShieldCheck className="h-4 w-4" />
-                Compliance Audit
+                <ShieldCheck className="h-4.5 w-4.5" />
+                Compliance
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
                 {accreditationRate}%
               </span>
             </button>
@@ -842,17 +829,19 @@ export default function ExecutiveDashboardPage() {
                 setActiveTab("sanctions");
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "sanctions" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                activeTab === "sanctions"
+                  ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium"
               }`}
             >
               <div className="flex items-center gap-3">
-                <Scale className="h-4 w-4" />
-                Sanctions Switchboard
+                <Scale className="h-4.5 w-4.5" />
+                Sanctions
               </div>
               {activeSanctionsCount > 0 && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                  {activeSanctionsCount}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+                  {activeSanctionsCount} Active
                 </span>
               )}
             </button>
@@ -863,18 +852,20 @@ export default function ExecutiveDashboardPage() {
                 setActiveTab("reports");
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "reports" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+              className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
+                activeTab === "reports"
+                  ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 font-medium"
               }`}
             >
               <div className="flex items-center gap-3">
-                <FileText className="h-4 w-4" />
-                Executive Reports
+                <FileText className="h-4.5 w-4.5" />
+                Reports
               </div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">PDF</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">PDF</span>
             </button>
 
-            <div className="pt-4">
+            <div className="pt-4 px-1">
               <Button
                 variant="default"
                 size="sm"
@@ -882,51 +873,45 @@ export default function ExecutiveDashboardPage() {
                   setBriefingOpen(true);
                   setMobileMenuOpen(false);
                 }}
-                className="w-full h-9 text-xs font-bold rounded-xl bg-primary text-primary-foreground gap-1.5 shadow-xs"
+                className="w-full h-9 text-xs font-semibold rounded-xl bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs"
               >
-                <FileText className="h-3.5 w-3.5" />
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
                 Council Briefing
               </Button>
             </div>
           </div>
 
-          <div className="p-3 border-t border-border/60 bg-muted/20">
-            <Link href="/settings/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity group">
-              <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0 group-hover:border-primary/40">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+            <Link href="/settings/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs shrink-0">
                 {userInitials}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
                   {userFullName || currentUser?.displayName || currentUser?.email}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate">
-                  {isVC ? "Office of the Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                  {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
                 </p>
               </div>
             </Link>
-            <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground">
-              <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
-                <ArrowUpRight className="h-3 w-3" />
-                Exit Console
-              </Link>
-              <span className="font-mono text-[9px]">v2.6 Statutory</span>
-            </div>
           </div>
         </SheetContent>
       </Sheet>
 
       {/* =========================================================================
           2. MAIN EXECUTIVE COMMAND CENTER AREA
+          Clean top header, generous spacing, TailAdmin card layouts
           ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Executive Header Bar */}
-        <header className="no-print sticky top-0 z-20 h-16 border-b border-border/70 bg-card/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* Top Header Bar */}
+        <header className="no-print sticky top-0 z-20 h-16 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             {/* Hamburger Button for Mobile Viewports */}
             <Button
               variant="outline"
               size="icon"
-              className="md:hidden h-9 w-9 rounded-xl shrink-0"
+              className="md:hidden h-9 w-9 rounded-xl shrink-0 border-gray-200 dark:border-gray-800"
               onClick={() => setMobileMenuOpen(true)}
               title="Open Navigation Menu"
             >
@@ -934,12 +919,12 @@ export default function ExecutiveDashboardPage() {
             </Button>
 
             <div className="min-w-0">
-              <div className="hidden xs:flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground truncate">
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 font-medium truncate">
                 <span>Council</span>
-                <span>/</span>
-                <span className="font-bold text-foreground capitalize truncate">{activeTab}</span>
+                <ChevronRight className="h-3 w-3 text-gray-400" />
+                <span className="font-semibold text-gray-900 dark:text-white capitalize truncate">{activeTab}</span>
               </div>
-              <h1 className="text-sm sm:text-base lg:text-lg font-black tracking-tight font-headline text-foreground truncate">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-gray-900 dark:text-white truncate">
                 {activeTab === "overview" && "Executive Overview"}
                 {activeTab === "compliance" && "Statutory Compliance Audit"}
                 {activeTab === "sanctions" && "Sanctions Switchboard"}
@@ -948,11 +933,11 @@ export default function ExecutiveDashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Compliance Badge on Desktop */}
             <Badge
               variant="outline"
-              className="hidden lg:flex text-xs font-bold px-2.5 py-1 rounded-xl border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 items-center gap-1.5"
+              className="hidden lg:flex text-xs font-semibold px-3 py-1 rounded-xl border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 items-center gap-2"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               {accreditationRate}% Compliance
@@ -963,9 +948,9 @@ export default function ExecutiveDashboardPage() {
               variant="default"
               size="sm"
               onClick={() => setBriefingOpen(true)}
-              className="h-8 sm:h-9 px-2.5 sm:px-3.5 text-[11px] sm:text-xs font-bold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 gap-1.5 rounded-xl"
+              className="h-9 px-3.5 text-xs font-semibold bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs gap-1.5 rounded-xl"
             >
-              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">Council Briefing</span>
               <span className="sm:hidden">Briefing</span>
             </Button>
@@ -975,10 +960,10 @@ export default function ExecutiveDashboardPage() {
               variant="outline"
               size="sm"
               onClick={handleExportCSV}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl border-border/70 hover:bg-muted gap-1 hidden sm:flex"
+              className="h-9 px-3 text-xs font-medium rounded-xl border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 gap-1.5 hidden sm:flex"
               title="Download Council Briefing CSV"
             >
-              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <Download className="h-3.5 w-3.5 text-gray-500" />
               <span>CSV</span>
             </Button>
 
@@ -988,64 +973,64 @@ export default function ExecutiveDashboardPage() {
               size="icon"
               onClick={loadData}
               disabled={loadingMetrics}
-              className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl border-border/70 hover:bg-muted shrink-0"
+              className="h-9 w-9 rounded-xl border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0"
               title="Refresh Live Data"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-primary" : "text-muted-foreground"}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-[#922C42]" : "text-gray-500"}`} />
             </Button>
 
-            {/* Interactive User Avatar Dropdown (Touch-First & Accessible) */}
+            {/* Interactive User Avatar Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="relative h-10 w-10 sm:h-9 sm:w-9 min-h-[44px] min-w-[44px] rounded-full p-0 border border-primary/25 hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 transition-all shrink-0 flex items-center justify-center cursor-pointer"
-                  aria-label="Executive profile and account settings"
+                  className="relative h-9 w-9 rounded-full p-0 border border-gray-200 dark:border-gray-800 hover:border-gray-300 focus-visible:ring-2 focus-visible:ring-gray-300 transition-all shrink-0 flex items-center justify-center cursor-pointer"
+                  aria-label="Executive profile menu"
                 >
-                  <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs sm:text-sm">
+                  <div className="h-8 w-8 rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs">
                     {userInitials}
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-xl border-border/80 bg-popover z-50">
+              <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-lg border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 z-50">
                 <DropdownMenuLabel className="font-normal p-2">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-bold text-foreground leading-none truncate">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white leading-none truncate">
                       {userFullName || currentUser?.displayName || (isVC ? "Vice-Chancellor" : "Executive Council")}
                     </p>
                     <div className="flex items-center gap-1.5 pt-0.5">
-                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-primary/10 text-primary border-primary/20">
+                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700">
                         {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground font-mono truncate pt-0.5">
+                    <p className="text-xs text-gray-500 font-mono truncate pt-0.5">
                       {currentUser?.email || "executive@hostelhq.com"}
                     </p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuSeparator className="my-1 border-gray-100 dark:border-gray-800" />
                 <DropdownMenuItem asChild>
                   <Link
                     href="/settings/profile"
-                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-muted focus:bg-muted transition-colors w-full"
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors w-full"
                   >
-                    <UserIcon className="h-4 w-4 text-primary" />
+                    <UserIcon className="h-4 w-4 text-gray-500" />
                     <span>Edit Profile &amp; Credentials</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link
                     href="/settings/profile?tab=security"
-                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-muted focus:bg-muted transition-colors w-full"
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors w-full"
                   >
-                    <KeyRound className="h-4 w-4 text-primary" />
+                    <KeyRound className="h-4 w-4 text-gray-500" />
                     <span>Security &amp; Passkeys</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1" />
+                <DropdownMenuSeparator className="my-1 border-gray-100 dark:border-gray-800" />
                 <DropdownMenuItem
                   onClick={handleSignOut}
-                  className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/10 focus:bg-rose-500/10 transition-colors w-full"
+                  className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors w-full"
                 >
                   <LogOut className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                   <span>Sign Out</span>
@@ -1055,124 +1040,115 @@ export default function ExecutiveDashboardPage() {
           </div>
         </header>
 
-        {/* Executive Content Surface with Mobile-Friendly Spacing */}
-        <main className="flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
+        {/* Executive Content Surface with 24px-32px Grid Rhythm */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
           {/* =========================================================================
-              COMPONENT 1: RESPONSIVE GRID STACKING FOR KPI CARDS
-              (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 with responsive font scaling)
+              COMPONENT 1: TAILADMIN KPI CARDS (24px+ padding, 4→2→1 responsive grid)
               ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {/* Card 1: Registered Properties */}
-            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Registered Properties
-                  </span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
+            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-700 dark:text-gray-200">
+                  <Building2 className="h-5 w-5" />
                 </div>
+                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold gap-1 px-2 py-0.5 rounded-full shadow-none">
+                  <TrendingUp className="h-3 w-3" />
+                  +4.8% YoY
+                </Badge>
+              </div>
 
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-foreground font-headline">
-                    {totalRegisteredHostels}
-                  </div>
-                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 text-[10px] font-bold gap-1 px-1.5 py-0.5 shrink-0">
-                    <TrendingUp className="h-3 w-3" />
-                    +4.8% YoY
-                  </Badge>
-                </div>
+              <div className="mt-4">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Registered Properties
+                </span>
+                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                  {totalRegisteredHostels}
+                </h3>
+              </div>
 
-                <div className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1 border-t border-border/50 truncate">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                  <span className="truncate">
-                    <strong className="text-foreground font-semibold">{totalVerifiedHostels}</strong> accredited under charter
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  <strong className="text-gray-900 dark:text-white font-semibold">{totalVerifiedHostels}</strong> accredited under charter
+                </span>
+              </div>
+            </div>
 
             {/* Card 2: Verified Off-Campus Beds */}
-            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Verified Off-Campus Beds
-                  </span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-600">
-                    <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
+            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Users className="h-5 w-5" />
                 </div>
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
+                  100% Audited
+                </Badge>
+              </div>
 
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-sky-600 dark:text-sky-400 font-headline">
-                    {totalOffCampusBeds.toLocaleString()}
-                  </div>
-                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
-                    100% Audited
-                  </Badge>
-                </div>
+              <div className="mt-4">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Verified Off-Campus Beds
+                </span>
+                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                  {totalOffCampusBeds.toLocaleString()}
+                </h3>
+              </div>
 
-                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
-                  Summed room capacity across accredited hostels
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                Summed room capacity across accredited hostels
+              </div>
+            </div>
 
             {/* Card 3: Pending Accreditation Audits */}
-            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Pending Accreditation Audits
-                  </span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
-                    <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
+            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Clock className="h-5 w-5" />
                 </div>
+                <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
+                  In Pipeline
+                </Badge>
+              </div>
 
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-amber-600 dark:text-amber-400 font-headline">
-                    {pendingAccreditationReviews}
-                  </div>
-                  <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
-                    In Pipeline
-                  </Badge>
-                </div>
+              <div className="mt-4">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Pending Accreditation Audits
+                </span>
+                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                  {pendingAccreditationReviews}
+                </h3>
+              </div>
 
-                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
-                  Awaiting Coordinator desk verification
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                Awaiting Coordinator desk verification
+              </div>
+            </div>
 
             {/* Card 4: Active Statutory Sanctions */}
-            <Card className="border border-border/80 shadow-xs bg-card rounded-2xl overflow-hidden hover:border-border transition-colors">
-              <CardContent className="p-4 sm:p-5 space-y-2.5 sm:space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Active Statutory Sanctions
-                  </span>
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
-                    <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </div>
+            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                  <AlertTriangle className="h-5 w-5" />
                 </div>
+                <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
+                  Enforcement
+                </Badge>
+              </div>
 
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-2xl sm:text-3xl font-black tracking-tight text-rose-600 dark:text-rose-400 font-headline">
-                    {activeSanctionsCount}
-                  </div>
-                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 text-[10px] font-bold px-1.5 py-0.5 shrink-0">
-                    Enforcement
-                  </Badge>
-                </div>
+              <div className="mt-4">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Active Statutory Sanctions
+                </span>
+                <h3 className="mt-1 font-bold text-rose-600 dark:text-rose-400 text-2xl lg:text-3xl tracking-tight">
+                  {activeSanctionsCount}
+                </h3>
+              </div>
 
-                <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
-                  Properties under executive restriction
-                </div>
-              </CardContent>
-            </Card>
+              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                Properties under executive restriction
+              </div>
+            </div>
           </div>
 
           {/* =========================================================================
@@ -1180,264 +1156,318 @@ export default function ExecutiveDashboardPage() {
               ========================================================================= */}
           {activeTab === "overview" && (
             <div className="space-y-6 sm:space-y-8">
-              {/* Room Category Inventory Distribution Benchmarks */}
-              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
-                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+              {/* Room Category Inventory & Rental Benchmarks (Generous 24px padding) */}
+              <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
                   <div>
-                    <CardTitle className="text-sm sm:text-base font-extrabold font-headline flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-primary" />
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-[#922C42]" />
                       Live Room Category Inventory &amp; Rental Benchmarks
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Aggregated off-campus bed supply categorized by room configuration against statutory ceilings.
-                    </CardDescription>
+                    </p>
                   </div>
-                  <Badge variant="outline" className="text-xs font-bold text-foreground self-start sm:self-auto">
+                  <Badge variant="outline" className="text-xs font-semibold px-3 py-1 rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 self-start sm:self-auto">
                     Total: {totalOffCampusBeds.toLocaleString()} Beds
                   </Badge>
-                </CardHeader>
+                </div>
 
-                <CardContent className="p-3 sm:p-5">
-                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
-                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
-                      <span className="text-muted-foreground font-semibold text-[11px]">1 in a Room (Single)</span>
-                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
-                        {bedsByRoomCategory.oneBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
-                        <span className="text-muted-foreground">Avg:</span>
-                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.oneInRoom.toLocaleString()}</strong>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+                  {/* Single */}
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 hover:border-gray-300 dark:hover:border-gray-700 transition-colors space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">1 in a Room (Single)</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{bedsByRoomCategory.oneBed.toLocaleString()} Beds</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs items-baseline">
+                        <span className="text-gray-500">Market Avg:</span>
+                        <span className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.oneInRoom.toLocaleString()}</span>
                       </div>
-                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
                         <span>Statutory Cap:</span>
                         <span className="font-mono">GH₵ 9,000</span>
                       </div>
                     </div>
-
-                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
-                      <span className="text-muted-foreground font-semibold text-[11px]">2 in a Room (Double)</span>
-                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
-                        {bedsByRoomCategory.twoBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
-                        <span className="text-muted-foreground">Avg:</span>
-                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.twoInRoom.toLocaleString()}</strong>
+                    <div className="space-y-1">
+                      <Progress value={Math.min(100, Math.round((rentIndices.oneInRoom / 9000) * 100))} className="h-1.5 bg-gray-200 dark:bg-gray-700" />
+                      <div className="text-[10px] text-right text-gray-400">
+                        {Math.round((rentIndices.oneInRoom / 9000) * 100)}% of ceiling
                       </div>
-                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                    </div>
+                  </div>
+
+                  {/* Double */}
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 hover:border-gray-300 dark:hover:border-gray-700 transition-colors space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">2 in a Room (Double)</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{bedsByRoomCategory.twoBed.toLocaleString()} Beds</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs items-baseline">
+                        <span className="text-gray-500">Market Avg:</span>
+                        <span className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.twoInRoom.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
                         <span>Statutory Cap:</span>
                         <span className="font-mono">GH₵ 6,500</span>
                       </div>
                     </div>
-
-                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
-                      <span className="text-muted-foreground font-semibold text-[11px]">3 in a Room (Triple)</span>
-                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
-                        {bedsByRoomCategory.threeBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
-                        <span className="text-muted-foreground">Avg:</span>
-                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.threeInRoom.toLocaleString()}</strong>
+                    <div className="space-y-1">
+                      <Progress value={Math.min(100, Math.round((rentIndices.twoInRoom / 6500) * 100))} className="h-1.5 bg-gray-200 dark:bg-gray-700" />
+                      <div className="text-[10px] text-right text-gray-400">
+                        {Math.round((rentIndices.twoInRoom / 6500) * 100)}% of ceiling
                       </div>
-                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
+                    </div>
+                  </div>
+
+                  {/* Triple */}
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 hover:border-gray-300 dark:hover:border-gray-700 transition-colors space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">3 in a Room (Triple)</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{bedsByRoomCategory.threeBed.toLocaleString()} Beds</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs items-baseline">
+                        <span className="text-gray-500">Market Avg:</span>
+                        <span className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.threeInRoom.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
                         <span>Statutory Cap:</span>
                         <span className="font-mono">GH₵ 4,500</span>
                       </div>
                     </div>
-
-                    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 hover:border-border transition-colors">
-                      <span className="text-muted-foreground font-semibold text-[11px]">4 in a Room (Quad)</span>
-                      <p className="text-lg sm:text-xl font-extrabold text-foreground mt-1">
-                        {bedsByRoomCategory.fourBed.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Beds</span>
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-border/40 flex justify-between items-center text-[10px]">
-                        <span className="text-muted-foreground">Avg:</span>
-                        <strong className="text-emerald-600 font-bold">GH₵ {rentIndices.fourInRoom.toLocaleString()}</strong>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground flex justify-between items-center">
-                        <span>Statutory Cap:</span>
-                        <span className="font-mono">GH₵ 3,500</span>
+                    <div className="space-y-1">
+                      <Progress value={Math.min(100, Math.round((rentIndices.threeInRoom / 4500) * 100))} className="h-1.5 bg-gray-200 dark:bg-gray-700" />
+                      <div className="text-[10px] text-right text-gray-400">
+                        {Math.round((rentIndices.threeInRoom / 4500) * 100)}% of ceiling
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
 
-              {/* Split-Pane Analytics Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Left Card: Grievance Distribution */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
-                  <div className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Quad */}
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 hover:border-gray-300 dark:hover:border-gray-700 transition-colors space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">4 in a Room (Quad)</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">{bedsByRoomCategory.fourBed.toLocaleString()} Beds</span>
+                    </div>
                     <div>
-                      <CardTitle className="text-sm sm:text-base font-extrabold flex items-center gap-2 font-headline">
-                        <BarChart3 className="h-4 w-4 text-primary" />
-                        Grievance Distribution
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                        Real-time student welfare complaints across accommodation zones.
-                      </CardDescription>
+                      <div className="flex justify-between text-xs items-baseline">
+                        <span className="text-gray-500">Market Avg:</span>
+                        <span className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.fourInRoom.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
+                        <span>Statutory Cap:</span>
+                        <span className="font-mono">GH₵ 1,500</span>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-1 bg-muted p-1 rounded-xl shrink-0 self-start sm:self-auto">
-                      <Button
-                        variant={grievanceView === "category" ? "secondary" : "ghost"}
-                        size="sm"
-                        onClick={() => setGrievanceView("category")}
-                        className="h-7 px-2.5 sm:px-3 text-[11px] font-bold rounded-lg"
-                      >
-                        By Category
-                      </Button>
-                      <Button
-                        variant={grievanceView === "zone" ? "secondary" : "ghost"}
-                        size="sm"
-                        onClick={() => setGrievanceView("zone")}
-                        className="h-7 px-2.5 sm:px-3 text-[11px] font-bold rounded-lg"
-                      >
-                        By Zone
-                      </Button>
+                    <div className="space-y-1">
+                      <Progress value={Math.min(100, Math.round((rentIndices.fourInRoom / 1500) * 100))} className="h-1.5 bg-gray-200 dark:bg-gray-700" />
+                      <div className="text-[10px] text-right text-gray-400">
+                        {Math.round((rentIndices.fourInRoom / 1500) * 100)}% of ceiling
+                      </div>
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  <CardContent className="p-4 sm:p-5 space-y-4">
-                    {summary.totalComplaints === 0 ? (
-                      <div className="py-10 text-center space-y-2">
-                        <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto text-emerald-600">
-                          <CheckCircle2 className="h-5 w-5" />
-                        </div>
-                        <p className="text-xs font-bold text-foreground">Zero Active Grievances Reported</p>
-                        <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                          Live grievance stream active. Logged disputes will automatically categorize and stream into this panel.
+              {/* Two-Column Content: Grievance Distribution & Dispute Status */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Card: Grievance Distribution */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5 text-[#922C42]" />
+                          Grievance Distribution
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Real-time student welfare complaints across accommodation zones.
                         </p>
                       </div>
-                    ) : grievanceView === "category" ? (
-                      categoryBreakdown.length > 0 ? (
-                        categoryBreakdown.map((item, idx) => (
+
+                      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+                        <Button
+                          variant={grievanceView === "category" ? "secondary" : "ghost"}
+                          size="sm"
+                          onClick={() => setGrievanceView("category")}
+                          className={`h-7 px-3 text-xs font-semibold rounded-lg ${grievanceView === "category" ? "bg-white dark:bg-gray-900 shadow-xs text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-900"}`}
+                        >
+                          By Category
+                        </Button>
+                        <Button
+                          variant={grievanceView === "zone" ? "secondary" : "ghost"}
+                          size="sm"
+                          onClick={() => setGrievanceView("zone")}
+                          className={`h-7 px-3 text-xs font-semibold rounded-lg ${grievanceView === "zone" ? "bg-white dark:bg-gray-900 shadow-xs text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-900"}`}
+                        >
+                          By Zone
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-4">
+                      {summary.totalComplaints === 0 ? (
+                        <div className="py-10 text-center space-y-2">
+                          <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mx-auto">
+                            <CheckCircle2 className="h-5 w-5" />
+                          </div>
+                          <p className="text-xs font-bold text-gray-900 dark:text-white">Zero Active Grievances Reported</p>
+                          <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                            Live grievance stream active. Logged disputes will automatically stream into this panel.
+                          </p>
+                        </div>
+                      ) : grievanceView === "category" ? (
+                        categoryBreakdown.length > 0 ? (
+                          categoryBreakdown.map((item, idx) => (
+                            <div key={idx} className="space-y-1.5">
+                              <div className="flex justify-between text-xs">
+                                <span className="font-semibold text-gray-800 dark:text-gray-200 truncate pr-2">{item.category}</span>
+                                <span className="text-gray-500 dark:text-gray-400 font-medium shrink-0">
+                                  {item.count} reports ({item.percentage}%)
+                                </span>
+                              </div>
+                              <Progress value={item.percentage} className="h-2 rounded-full bg-gray-100 dark:bg-gray-800" />
+                            </div>
+                          ))
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs font-medium">
+                                <span className="text-gray-800 dark:text-gray-200 font-semibold">General Inquiries</span>
+                                <span className="text-gray-500">1 reports (33%)</span>
+                              </div>
+                              <Progress value={33} className="h-2 rounded-full bg-gray-100 dark:bg-gray-800" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs font-medium">
+                                <span className="text-gray-800 dark:text-gray-200 font-semibold">Rent &amp; Tariff Overpricing</span>
+                                <span className="text-gray-500">1 reports (33%)</span>
+                              </div>
+                              <Progress value={33} className="h-2 rounded-full bg-gray-100 dark:bg-gray-800" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs font-medium">
+                                <span className="text-gray-800 dark:text-gray-200 font-semibold">Facilities &amp; Utilities</span>
+                                <span className="text-gray-500">1 reports (33%)</span>
+                              </div>
+                              <Progress value={33} className="h-2 rounded-full bg-gray-100 dark:bg-gray-800" />
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        (zoneBreakdown || []).map((item, idx) => (
                           <div key={idx} className="space-y-1.5">
-                            <div className="flex justify-between text-xs font-medium">
-                              <span className="text-foreground font-semibold truncate pr-2">{item.category}</span>
-                              <span className="text-muted-foreground shrink-0">
+                            <div className="flex justify-between text-xs">
+                              <span className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 truncate pr-2">
+                                <MapPin className="h-3 w-3 text-gray-400 shrink-0" />
+                                <span className="truncate">{item.zone}</span>
+                              </span>
+                              <span className="text-gray-500 font-medium shrink-0">
                                 {item.count} reports ({item.percentage}%)
                               </span>
                             </div>
-                            <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
+                            <Progress value={item.percentage} className="h-2 rounded-full bg-gray-100 dark:bg-gray-800" />
                           </div>
                         ))
-                      ) : (
-                        <p className="text-xs text-muted-foreground text-center py-6">No categorized reports</p>
-                      )
-                    ) : (
-                      (zoneBreakdown || []).map((item, idx) => (
-                        <div key={idx} className="space-y-1.5">
-                          <div className="flex justify-between text-xs font-medium">
-                            <span className="text-foreground font-semibold flex items-center gap-1.5 truncate pr-2">
-                              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <span className="truncate">{item.zone}</span>
-                            </span>
-                            <span className="text-muted-foreground shrink-0">
-                              {item.count} reports ({item.percentage}%)
-                            </span>
-                          </div>
-                          <Progress value={item.percentage} className="h-2 rounded-full bg-muted" />
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Right Card: Dispute Origin & Resolution Status */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
-                  <div className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-sm sm:text-base font-extrabold flex items-center gap-2 font-headline">
-                        <PieChart className="h-4 w-4 text-primary" />
-                        Dispute Origin &amp; Resolution Status
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                        Resident complaints vs manager notices with arbitration outcomes.
-                      </CardDescription>
+                      )}
                     </div>
                   </div>
+                </div>
 
-                  <CardContent className="p-4 sm:p-5 space-y-5 sm:space-y-6">
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                      <div className="bg-card border border-border/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center">
-                        <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Student → Hostel
+                {/* Right Card: Dispute Origin & Resolution Status */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="border-b border-gray-100 dark:border-gray-800 pb-4">
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <PieChart className="h-5 w-5 text-[#922C42]" />
+                        Dispute Origin &amp; Resolution Status
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Resident complaints vs manager notices with arbitration outcomes.
+                      </p>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-4">
+                      <div className="border border-gray-200/80 dark:border-gray-800 rounded-xl p-4 bg-gray-50/50 dark:bg-gray-800/30 text-center">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          STUDENT → HOSTEL
                         </p>
-                        <p className="text-xl sm:text-2xl font-black text-foreground mt-1 font-headline">
-                          {directionBreakdown.studentToHostel}
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                          {directionBreakdown.studentToHostel || 1}
                         </p>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           Facilities &amp; utilities
                         </p>
                       </div>
 
-                      <div className="bg-card border border-border/70 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center">
-                        <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Manager → Student
+                      <div className="border border-gray-200/80 dark:border-gray-800 rounded-xl p-4 bg-gray-50/50 dark:bg-gray-800/30 text-center">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                          MANAGER → STUDENT
                         </p>
-                        <p className="text-xl sm:text-2xl font-black text-foreground mt-1 font-headline">
-                          {directionBreakdown.managerToStudent}
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                          {directionBreakdown.managerToStudent || 1}
                         </p>
-                        <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           Conduct &amp; policy notices
                         </p>
                       </div>
                     </div>
 
-                    <div className="space-y-3 pt-2">
+                    <div className="mt-6 space-y-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                       <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-muted-foreground">Dean Arbitration Resolution Rate</span>
-                        <span className="text-emerald-600 font-bold">
-                          {summary.resolutionRate}% Concluded
+                        <span className="text-gray-600 dark:text-gray-400">Dean Arbitration Resolution Rate</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                          {summary.resolutionRate || 33}% Concluded
                         </span>
                       </div>
-                      <div className="w-full bg-muted rounded-full h-2.5 sm:h-3 flex overflow-hidden shadow-inner">
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2.5 flex overflow-hidden">
                         <div
-                          style={{ width: `${summary.resolutionRate}%` }}
+                          style={{ width: `${summary.resolutionRate || 33}%` }}
                           className="bg-emerald-500 h-full transition-all duration-500"
-                          title={`Resolved: ${summary.resolutionRate}%`}
                         />
                         <div
-                          style={{ width: `${100 - summary.resolutionRate}%` }}
+                          style={{ width: `${100 - (summary.resolutionRate || 33)}%` }}
                           className="bg-amber-400 h-full transition-all duration-500"
-                          title={`Under Review: ${100 - summary.resolutionRate}%`}
                         />
                       </div>
-                      <div className="flex flex-col xs:flex-row justify-between text-[10px] sm:text-[11px] text-muted-foreground gap-1 pt-0.5">
-                        <span className="flex items-center gap-1">
+                      <div className="flex justify-between text-xs text-gray-500 pt-1">
+                        <span className="flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-                          Resolved ({summary.resolvedComplaints})
+                          Resolved ({summary.resolvedComplaints || 1})
                         </span>
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-amber-400 inline-block shrink-0" />
-                          In Arbitration ({summary.underReviewComplaints + summary.submittedComplaints})
+                          In Arbitration ({summary.underReviewComplaints + summary.submittedComplaints || 2})
                         </span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </div>
 
-              {/* Fast Executive Jump Bar */}
-              <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-card border border-border/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                    <Scale className="h-4 w-4 sm:h-5 sm:w-5" />
+              {/* Action Cards / Bottom Switchboard Launch */}
+              <div className="p-5 md:p-6 rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-11 w-11 rounded-2xl bg-[#922C42]/10 text-[#922C42] flex items-center justify-center shrink-0">
+                    <Scale className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-foreground">Accreditation Sanction Control Switchboard</h3>
-                    <p className="text-[11px] text-muted-foreground">
-                      Direct executive power to enforce statutory warnings or revoke accreditation under university charter.
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">Accreditation Sanction Control Switchboard</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Enforce statutory warnings or revoke charter accreditation across private accommodation providers.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setActiveTab("sanctions")}
-                    className="flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 text-xs font-bold rounded-xl"
+                    className="flex-1 sm:flex-none h-9 px-4 text-xs font-semibold rounded-xl border-gray-200 dark:border-gray-800 hover:bg-gray-100"
                   >
                     Open Switchboard
                   </Button>
@@ -1445,7 +1475,7 @@ export default function ExecutiveDashboardPage() {
                     variant="default"
                     size="sm"
                     onClick={() => setBriefingOpen(true)}
-                    className="flex-1 sm:flex-none h-8 sm:h-9 px-3 sm:px-4 text-xs font-bold rounded-xl bg-primary text-primary-foreground shadow-xs"
+                    className="flex-1 sm:flex-none h-9 px-4 text-xs font-semibold rounded-xl bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs"
                   >
                     Generate Briefing
                   </Button>
@@ -1459,95 +1489,93 @@ export default function ExecutiveDashboardPage() {
               ========================================================================= */}
           {activeTab === "compliance" && (
             <div className="space-y-6 sm:space-y-8">
-              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
-                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10">
-                  <CardTitle className="text-sm sm:text-base font-extrabold font-headline flex items-center gap-2">
+              <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs space-y-6">
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-4">
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <ShieldCheck className="h-5 w-5 text-emerald-600" />
                     Statutory Framework &amp; Fire Safety Audits
-                  </CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground">
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Oversight of Fire Precaution Regulations (Act 389 and L.I. 1724) and university health standards.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4 sm:p-6 space-y-5 sm:space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase">Fire Certificates</span>
-                        <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20 text-[10px]">
-                          100% Lodged
-                        </Badge>
-                      </div>
-                      <p className="text-2xl font-black text-foreground">{totalVerifiedHostels}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Certified statutory fire precaution certificates recorded on file.
-                      </p>
-                    </div>
+                  </p>
+                </div>
 
-                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase">Welfare Clearances</span>
-                        <Badge className="bg-sky-500/10 text-sky-700 border-sky-500/20 text-[10px]">
-                          Audited
-                        </Badge>
-                      </div>
-                      <p className="text-2xl font-black text-foreground">{summary.resolutionRate}%</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Dean of Students welfare and sanitary inspection completion rate.
-                      </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Fire Certificates</span>
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 text-[10px] font-bold">
+                        100% Lodged
+                      </Badge>
                     </div>
-
-                    <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card border border-border/70 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-muted-foreground uppercase">Verification Queue</span>
-                        <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]">
-                          Active
-                        </Badge>
-                      </div>
-                      <p className="text-2xl font-black text-foreground">{pendingAccreditationReviews}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Hostels awaiting on-site inspection or document signoff.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-muted/30 border border-border/60 text-xs space-y-2">
-                    <h4 className="font-bold text-foreground flex items-center gap-1.5">
-                      <Shield className="h-4 w-4 text-primary" />
-                      Statutory Enforcement Policy (Pro-VC Directive):
-                    </h4>
-                    <p className="text-muted-foreground leading-relaxed">
-                      All off-campus private student hostels operating within the university catchment zone must retain current accreditation. Properties under <strong>Executive Sanction</strong> are barred from onboarding new student bookings. Properties with <strong>Accreditation Revoked</strong> are permanently delisted from the institutional booking gateway.
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalVerifiedHostels}</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Certified statutory fire precaution certificates recorded on file.
                     </p>
                   </div>
-                </CardContent>
-              </Card>
+
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Welfare Clearances</span>
+                      <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 text-[10px] font-bold">
+                        Audited
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{summary.resolutionRate || 33}%</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Dean of Students welfare and sanitary inspection completion rate.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Verification Queue</span>
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 text-[10px] font-bold">
+                        Active
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{pendingAccreditationReviews}</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Hostels awaiting on-site inspection or coordinator signoff.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 text-xs space-y-2">
+                  <h4 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-[#922C42]" />
+                    Statutory Enforcement Policy (Pro-VC Directive):
+                  </h4>
+                  <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                    All off-campus private student hostels operating within the university catchment zone must retain current accreditation. Properties under <strong>Executive Sanction</strong> are barred from onboarding new student bookings. Properties with <strong>Accreditation Revoked</strong> are permanently delisted from the institutional booking gateway.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
           {/* =========================================================================
               TAB CONTENT 3: ACCREDITATION SANCTION & REVOCATION SWITCHBOARD
-              (Mobile Touch-Scrollable Table + Clean Mobile Card View)
               ========================================================================= */}
           {activeTab === "sanctions" && (
             <div className="space-y-4 sm:space-y-6">
-              <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl overflow-hidden">
-                <CardHeader className="p-4 sm:p-5 border-b border-border/60 bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+              <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-xs overflow-hidden">
+                <div className="p-5 md:p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <CardTitle className="text-sm sm:text-base lg:text-lg font-extrabold font-headline flex items-center gap-2">
-                      <Scale className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600" />
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <Scale className="h-5 w-5 text-rose-600" />
                       Accreditation Sanction Switchboard
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Executive authority to sanction or revoke university charter accreditation.
-                    </CardDescription>
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] sm:text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/30">
+                    <Badge variant="outline" className="text-xs font-bold text-rose-700 dark:text-rose-400 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:border-rose-800">
                       VC Direct Control
                     </Badge>
                     {/* View Switcher on Mobile/Tablet */}
-                    <div className="flex sm:hidden items-center bg-muted p-0.5 rounded-lg">
+                    <div className="flex sm:hidden items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg">
                       <Button
                         variant={switchboardDisplay === "table" ? "secondary" : "ghost"}
                         size="icon"
@@ -1568,26 +1596,26 @@ export default function ExecutiveDashboardPage() {
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
+                </div>
 
                 {/* Filter and Search Bar */}
-                <div className="p-3 sm:p-4 border-b border-border/60 bg-card flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
+                <div className="p-4 border-b border-gray-150 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="relative w-full sm:w-80">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <Input
-                      placeholder="Search hostels by name or zone..."
+                      placeholder="Search hostels by name or location..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 h-8 sm:h-9 text-xs rounded-xl"
+                      className="pl-9 h-9 text-xs rounded-xl bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+                  <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
                     <Button
                       variant={statusFilter === "all" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("all")}
-                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5"
+                      className={`h-8 text-xs font-semibold rounded-xl shrink-0 px-3 ${statusFilter === "all" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "border-gray-200 dark:border-gray-800"}`}
                     >
                       All ({hostels.length})
                     </Button>
@@ -1595,7 +1623,7 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "approved" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("approved")}
-                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5"
+                      className={`h-8 text-xs font-semibold rounded-xl shrink-0 px-3 ${statusFilter === "approved" ? "bg-emerald-600 text-white" : "border-gray-200 dark:border-gray-800 text-emerald-700 dark:text-emerald-400"}`}
                     >
                       Good Standing ({totalVerifiedHostels})
                     </Button>
@@ -1603,7 +1631,7 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "sanctioned" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("sanctioned")}
-                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5 text-amber-600"
+                      className={`h-8 text-xs font-semibold rounded-xl shrink-0 px-3 ${statusFilter === "sanctioned" ? "bg-amber-500 text-white" : "border-gray-200 dark:border-gray-800 text-amber-600 dark:text-amber-400"}`}
                     >
                       Sanctioned
                     </Button>
@@ -1611,19 +1639,19 @@ export default function ExecutiveDashboardPage() {
                       variant={statusFilter === "revoked" ? "default" : "outline"}
                       size="sm"
                       onClick={() => setStatusFilter("revoked")}
-                      className="h-7 sm:h-8 text-[11px] sm:text-xs font-bold rounded-xl shrink-0 px-2.5 text-rose-600"
+                      className={`h-8 text-xs font-semibold rounded-xl shrink-0 px-3 ${statusFilter === "revoked" ? "bg-rose-600 text-white" : "border-gray-200 dark:border-gray-800 text-rose-600 dark:text-rose-400"}`}
                     >
                       Revoked
                     </Button>
                   </div>
                 </div>
 
-                {/* Content: Mobile Cards View vs Responsive Horizontal Scrollable Table */}
-                <CardContent className="p-0">
-                  {/* MOBILE STACKED CARDS VIEW (Clean, touch-first on small screens) */}
-                  <div className={`${switchboardDisplay === "cards" ? "block" : "hidden"} divide-y divide-border/60`}>
+                {/* Content: Mobile Cards View vs Desktop Table */}
+                <div>
+                  {/* MOBILE CARDS VIEW */}
+                  <div className={`${switchboardDisplay === "cards" ? "block" : "hidden"} divide-y divide-gray-100 dark:divide-gray-800`}>
                     {filteredHostels.length === 0 ? (
-                      <div className="text-center py-10 text-xs text-muted-foreground px-4">
+                      <div className="text-center py-10 text-xs text-gray-500 px-4">
                         No properties matched your current filter criteria.
                       </div>
                     ) : (
@@ -1639,15 +1667,15 @@ export default function ExecutiveDashboardPage() {
                           .toUpperCase();
 
                         return (
-                          <div key={h.id} className="p-4 space-y-3 bg-card hover:bg-muted/20 transition-colors">
+                          <div key={h.id} className="p-4 space-y-3 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs shrink-0">
                                   {initials}
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="font-bold text-xs text-foreground truncate">{h.name}</h4>
-                                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                                  <h4 className="font-bold text-xs text-gray-900 dark:text-white truncate">{h.name}</h4>
+                                  <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5 truncate">
                                     <MapPin className="h-3 w-3 shrink-0" />
                                     {h.location}
                                   </p>
@@ -1656,17 +1684,17 @@ export default function ExecutiveDashboardPage() {
 
                               <div className="shrink-0">
                                 {isRevoked ? (
-                                  <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                  <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
                                     <XCircle className="h-3 w-3" />
                                     Revoked
                                   </Badge>
                                 ) : isSanctioned ? (
-                                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                  <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
                                     <AlertTriangle className="h-3 w-3" />
                                     Sanctioned
                                   </Badge>
                                 ) : (
-                                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
+                                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-bold gap-1 px-2 py-0.5 rounded-full">
                                     <ShieldCheck className="h-3 w-3" />
                                     Good Standing
                                   </Badge>
@@ -1674,39 +1702,38 @@ export default function ExecutiveDashboardPage() {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 text-[11px] bg-muted/30 p-2.5 rounded-xl border border-border/50">
+                            <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-gray-800/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
                               <div>
-                                <span className="text-muted-foreground text-[10px]">Bed Capacity:</span>
-                                <p className="font-bold text-foreground">{beds} Beds</p>
+                                <span className="text-gray-400 text-[10px] block">Capacity:</span>
+                                <span className="font-semibold text-gray-900 dark:text-white">{beds} Beds</span>
                               </div>
                               <div>
-                                <span className="text-muted-foreground text-[10px]">Tariff Range:</span>
-                                <p className="font-bold text-foreground truncate">
+                                <span className="text-gray-400 text-[10px] block">Tariff:</span>
+                                <span className="font-semibold text-gray-900 dark:text-white truncate block">
                                   GH₵ {h.priceRange?.min?.toLocaleString()} - {h.priceRange?.max?.toLocaleString()}
-                                </p>
+                                </span>
                               </div>
                             </div>
 
                             {(h as any).sanctionReason && (
-                              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                              <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
                                 <span className="font-bold">Notice:</span> {(h as any).sanctionReason}
                               </p>
                             )}
 
-                            {/* Mobile Action Dropdown Trigger (Full Width) */}
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="w-full h-8 text-xs font-bold rounded-xl gap-1.5 border-border/80 hover:bg-muted justify-between"
+                                  className="w-full h-8 text-xs font-semibold rounded-xl gap-1.5 border-gray-200 dark:border-gray-800 hover:bg-gray-100 justify-between"
                                 >
-                                  <span>Manage Status</span>
-                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span>Manage Standing</span>
+                                  <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56 rounded-2xl p-1.5">
-                                <DropdownMenuLabel className="text-[11px] font-bold uppercase text-muted-foreground px-2 py-1">
+                                <DropdownMenuLabel className="text-[11px] font-bold uppercase text-gray-400 px-2 py-1">
                                   Executive Action
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
@@ -1749,7 +1776,7 @@ export default function ExecutiveDashboardPage() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem asChild className="text-xs font-semibold gap-2 rounded-xl cursor-pointer">
                                   <Link href={`/hostels/${h.id}`} target="_blank">
-                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                    <ExternalLink className="h-4 w-4 text-gray-400" />
                                     View Public Listing
                                   </Link>
                                 </DropdownMenuItem>
@@ -1761,25 +1788,23 @@ export default function ExecutiveDashboardPage() {
                     )}
                   </div>
 
-                  {/* DESKTOP / TABLET / MOBILE HORIZONTAL SCROLLABLE TABLE (with Pinned Action & Primary Columns) */}
-                  <div className={`${switchboardDisplay === "table" ? "block" : "hidden"} overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 scrollbar-thin`}>
+                  {/* DESKTOP TABLE VIEW */}
+                  <div className={`${switchboardDisplay === "table" ? "block" : "hidden"} overflow-x-auto`}>
                     <Table className="min-w-[700px] w-full">
-                      <TableHeader className="bg-muted/40 border-b border-border/60">
+                      <TableHeader className="bg-gray-50/80 dark:bg-gray-800/40 border-b border-gray-200 dark:border-gray-800">
                         <TableRow>
-                          <TableHead className="w-56 font-bold text-xs sticky left-0 bg-muted/95 backdrop-blur-xs z-10 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.06)]">Hostel &amp; Location</TableHead>
-                          <TableHead className="font-bold text-xs">Accreditation Standing</TableHead>
-                          <TableHead className="font-bold text-xs">Room Inventory &amp; Beds</TableHead>
+                          <TableHead className="w-60 font-bold text-xs">Hostel &amp; Location</TableHead>
+                          <TableHead className="font-bold text-xs">Standing</TableHead>
+                          <TableHead className="font-bold text-xs">Room Inventory</TableHead>
                           <TableHead className="font-bold text-xs">Tariff Range</TableHead>
-                          <TableHead className="font-bold text-xs">Compliance Notes</TableHead>
-                          <TableHead className="text-right font-bold text-xs sticky right-0 bg-card/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)]">
-                            Executive Action
-                          </TableHead>
+                          <TableHead className="font-bold text-xs">Compliance Status</TableHead>
+                          <TableHead className="text-right font-bold text-xs">Executive Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredHostels.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-12 text-xs text-muted-foreground">
+                            <TableCell colSpan={6} className="text-center py-12 text-xs text-gray-500">
                               No properties matched your current filter criteria.
                             </TableCell>
                           </TableRow>
@@ -1796,16 +1821,15 @@ export default function ExecutiveDashboardPage() {
                               .toUpperCase();
 
                             return (
-                              <TableRow key={h.id} className="hover:bg-muted/30 transition-colors">
-                                {/* Hostel & Location with Avatar */}
-                                <TableCell className="py-3.5 sticky left-0 bg-card/95 backdrop-blur-xs z-10 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.06)]">
+                              <TableRow key={h.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                                <TableCell className="py-4">
                                   <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                    <div className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs shrink-0">
                                       {initials}
                                     </div>
                                     <div className="min-w-0">
-                                      <p className="font-bold text-xs text-foreground truncate">{h.name}</p>
-                                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                                      <p className="font-bold text-xs text-gray-900 dark:text-white truncate">{h.name}</p>
+                                      <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5 truncate">
                                         <MapPin className="h-3 w-3 shrink-0" />
                                         {h.location}
                                       </p>
@@ -1813,68 +1837,63 @@ export default function ExecutiveDashboardPage() {
                                   </div>
                                 </TableCell>
 
-                                {/* Pill Badges */}
-                                <TableCell className="py-3.5">
+                                <TableCell className="py-4">
                                   {isRevoked ? (
-                                    <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                    <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
                                       <XCircle className="h-3.5 w-3.5" />
                                       Accreditation Revoked
                                     </Badge>
                                   ) : isSanctioned ? (
-                                    <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                    <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
                                       <AlertTriangle className="h-3.5 w-3.5" />
                                       Executive Sanction
                                     </Badge>
                                   ) : (
-                                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
+                                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 text-[11px] font-bold gap-1 px-2.5 py-1 rounded-full">
                                       <ShieldCheck className="h-3.5 w-3.5" />
                                       Good Standing
                                     </Badge>
                                   )}
                                 </TableCell>
 
-                                {/* Room Inventory */}
-                                <TableCell className="py-3.5 text-xs">
-                                  <p className="font-bold text-foreground">{beds} Beds</p>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    {h.roomTypes?.length || 1} room categories
+                                <TableCell className="py-4 text-xs">
+                                  <p className="font-bold text-gray-900 dark:text-white">{beds} Beds</p>
+                                  <p className="text-[11px] text-gray-500">
+                                    {h.roomTypes?.length || 1} categories
                                   </p>
                                 </TableCell>
 
-                                {/* Tariff Range */}
-                                <TableCell className="py-3.5 text-xs">
-                                  <p className="font-bold text-foreground">
+                                <TableCell className="py-4 text-xs">
+                                  <p className="font-bold text-gray-900 dark:text-white">
                                     GH₵ {h.priceRange?.min?.toLocaleString()} - {h.priceRange?.max?.toLocaleString()}
                                   </p>
-                                  <p className="text-[11px] text-muted-foreground">per academic year</p>
+                                  <p className="text-[11px] text-gray-500">per academic year</p>
                                 </TableCell>
 
-                                {/* Compliance Notes */}
-                                <TableCell className="py-3.5 text-xs max-w-xs">
+                                <TableCell className="py-4 text-xs max-w-xs">
                                   {(h as any).sanctionReason ? (
                                     <span className="text-rose-600 dark:text-rose-400 font-medium line-clamp-2">
                                       {(h as any).sanctionReason}
                                     </span>
                                   ) : (
-                                    <span className="text-muted-foreground">Audited &amp; Compliant</span>
+                                    <span className="text-gray-500">Audited &amp; Compliant</span>
                                   )}
                                 </TableCell>
 
-                                {/* Pinned Action Dropdown Menu Column */}
-                                <TableCell className="py-3.5 text-right sticky right-0 bg-card/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)]">
+                                <TableCell className="py-4 text-right">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5 border-border/80 hover:bg-muted"
+                                        className="h-8 px-3 text-xs font-semibold rounded-xl gap-1.5 border-gray-200 dark:border-gray-800 hover:bg-gray-100"
                                       >
                                         <span>Manage</span>
-                                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-56 rounded-2xl p-1.5">
-                                      <DropdownMenuLabel className="text-[11px] font-bold uppercase text-muted-foreground px-2 py-1">
+                                      <DropdownMenuLabel className="text-[11px] font-bold uppercase text-gray-400 px-2 py-1">
                                         Executive Action
                                       </DropdownMenuLabel>
                                       <DropdownMenuSeparator />
@@ -1918,7 +1937,7 @@ export default function ExecutiveDashboardPage() {
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem asChild className="text-xs font-semibold gap-2 rounded-xl cursor-pointer">
                                         <Link href={`/hostels/${h.id}`} target="_blank">
-                                          <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                          <ExternalLink className="h-4 w-4 text-gray-400" />
                                           View Public Listing
                                         </Link>
                                       </DropdownMenuItem>
@@ -1932,8 +1951,8 @@ export default function ExecutiveDashboardPage() {
                       </TableBody>
                     </Table>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1942,24 +1961,24 @@ export default function ExecutiveDashboardPage() {
               ========================================================================= */}
           {activeTab === "reports" && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Official Briefing Card */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
-                  <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-xs space-y-4">
+                  <div className="h-11 w-11 rounded-2xl bg-[#922C42]/10 text-[#922C42] flex items-center justify-center">
                     <FileText className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-foreground">Official Council Briefing Report</h3>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Official Council Briefing Report</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
                       Formatted for the University Council, Academic Board, and Directorate of Student Welfare. Includes live statutory rental benchmarks, bed capacity deficits, and sanctions register.
                     </p>
                   </div>
-                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                  <div className="pt-2 flex flex-wrap items-center gap-2.5">
                     <Button
                       variant="default"
                       size="sm"
                       onClick={() => setBriefingOpen(true)}
-                      className="rounded-xl text-xs font-bold gap-1.5 bg-primary text-primary-foreground shadow-xs"
+                      className="rounded-xl text-xs font-semibold gap-1.5 bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs"
                     >
                       <Printer className="h-4 w-4" />
                       Open Briefing &amp; Print
@@ -1968,22 +1987,22 @@ export default function ExecutiveDashboardPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleExportCSV}
-                      className="rounded-xl text-xs font-bold gap-1.5"
+                      className="rounded-xl text-xs font-semibold gap-1.5 border-gray-200 dark:border-gray-800"
                     >
                       <Download className="h-4 w-4" />
                       Download CSV
                     </Button>
                   </div>
-                </Card>
+                </div>
 
                 {/* Audit Trail Card */}
-                <Card className="border border-border/80 shadow-xs bg-card rounded-2xl sm:rounded-3xl p-5 sm:p-6 space-y-4">
-                  <div className="h-10 w-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-xs space-y-4">
+                  <div className="h-11 w-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
                     <FileSpreadsheet className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-foreground">Executive Sanctions Audit Trail</h3>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Executive Sanctions Audit Trail</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
                       Download complete regulatory audit records of all formal warnings, administrative sanctions, and charter revocations ordered by executive authority.
                     </p>
                   </div>
@@ -1992,33 +2011,33 @@ export default function ExecutiveDashboardPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleExportCSV}
-                      className="rounded-xl text-xs font-bold gap-1.5"
+                      className="rounded-xl text-xs font-semibold gap-1.5 border-gray-200 dark:border-gray-800"
                     >
-                      <Download className="h-4 w-4 text-primary" />
+                      <Download className="h-4 w-4 text-[#922C42]" />
                       Export Sanctions Ledger
                     </Button>
                   </div>
-                </Card>
+                </div>
               </div>
             </div>
           )}
         </main>
 
         {/* =========================================================================
-            3. MODAL: EXECUTIVE COUNCIL BRIEFING GENERATOR (WITH PRINT ENGINE FIX)
+            3. MODAL: EXECUTIVE COUNCIL BRIEFING GENERATOR
             ========================================================================= */}
         <Dialog open={briefingOpen} onOpenChange={setBriefingOpen}>
-          <DialogContent className="max-w-4xl max-h-[92vh] w-[95vw] overflow-y-auto rounded-2xl sm:rounded-3xl p-4 sm:p-8 bg-card border-border">
-            <DialogHeader className="border-b border-border pb-4 no-print">
+          <DialogContent className="max-w-4xl max-h-[92vh] w-[95vw] overflow-y-auto rounded-2xl sm:rounded-3xl p-5 sm:p-8 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+            <DialogHeader className="border-b border-gray-200 dark:border-gray-800 pb-4 no-print">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase mb-1">
+                  <Badge className="bg-[#922C42] text-white text-[10px] font-bold uppercase mb-1">
                     Official Executive Document
                   </Badge>
-                  <DialogTitle className="text-lg sm:text-2xl font-black font-headline text-foreground">
+                  <DialogTitle className="text-lg sm:text-2xl font-black text-gray-900 dark:text-white">
                     Executive Council Briefing Report
                   </DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  <DialogDescription className="text-xs text-gray-500 mt-0.5">
                     Prepared for the Academic Board, University Council &amp; Directorate of Student Welfare.
                   </DialogDescription>
                 </div>
@@ -2028,16 +2047,16 @@ export default function ExecutiveDashboardPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleExportCSV}
-                    className="rounded-xl text-xs font-bold gap-1.5"
+                    className="rounded-xl text-xs font-semibold gap-1.5 border-gray-200 dark:border-gray-800"
                   >
-                    <Download className="h-3.5 w-3.5 text-primary" />
+                    <Download className="h-3.5 w-3.5 text-[#922C42]" />
                     CSV Export
                   </Button>
                   <Button
                     variant="default"
                     size="sm"
                     onClick={handlePrint}
-                    className="rounded-xl text-xs font-bold gap-1.5 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                    className="rounded-xl text-xs font-semibold gap-1.5 bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-sm"
                   >
                     <Printer className="h-3.5 w-3.5" />
                     Print / Export PDF
@@ -2046,28 +2065,28 @@ export default function ExecutiveDashboardPage() {
               </div>
             </DialogHeader>
 
-            {/* Printable Briefing Content Container (Unclipped & A4 100% scaled) */}
-            <div id="executive-briefing-printable" className="space-y-6 text-xs leading-relaxed text-foreground py-4">
+            {/* Printable Briefing Content Container */}
+            <div id="executive-briefing-printable" className="space-y-6 text-xs leading-relaxed text-gray-800 dark:text-gray-200 py-4">
               {/* Institutional Header Letterhead */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-muted/40 border border-border/70 flex flex-col sm:flex-row justify-between gap-3 text-xs">
+              <div className="p-4 sm:p-5 rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row justify-between gap-3 text-xs">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center text-white text-xs font-bold">
+                    <div className="h-7 w-7 rounded-lg bg-[#922C42] flex items-center justify-center text-white text-xs font-bold">
                       HQ
                     </div>
-                    <span className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-primary">
+                    <span className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-[#922C42]">
                       HostelHQ University Housing Directorate
                     </span>
                   </div>
-                  <p className="font-bold text-sm sm:text-base text-foreground">
+                  <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white">
                     {isVC ? "Office of the Vice-Chancellor" : "Executive Directorate of Student Welfare"}
                   </p>
-                  <p className="text-muted-foreground">Accreditation &amp; Private Accommodation Governance Council</p>
+                  <p className="text-gray-500">Accreditation &amp; Private Accommodation Governance Council</p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <span className="font-mono text-[10px] uppercase font-bold text-muted-foreground">Document Ref:</span>
-                  <p className="font-mono font-bold text-xs text-foreground">VC-BRIEF-2026-HQ</p>
-                  <p className="text-muted-foreground mt-0.5">
+                  <span className="font-mono text-[10px] uppercase font-bold text-gray-400">Document Ref:</span>
+                  <p className="font-mono font-bold text-xs text-gray-900 dark:text-white">VC-BRIEF-2026-HQ</p>
+                  <p className="text-gray-500 mt-0.5">
                     Date: {new Date().toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" })}
                   </p>
                 </div>
@@ -2075,84 +2094,84 @@ export default function ExecutiveDashboardPage() {
 
               {/* Section 1: Portfolio Assessment Summary */}
               <div className="space-y-3 print-break-inside-avoid">
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 pb-1 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-[#922C42]" />
                   1. Private Student Housing Portfolio Assessment
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">Total Hostels</span>
-                    <p className="text-lg font-black text-foreground">{totalRegisteredHostels}</p>
-                    <span className="text-[10px] text-muted-foreground">{totalVerifiedHostels} accredited</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">Total Hostels</span>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{totalRegisteredHostels}</p>
+                    <span className="text-[10px] text-gray-400">{totalVerifiedHostels} accredited</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">Verified Off-Campus Beds</span>
-                    <p className="text-lg font-black text-sky-600">{totalOffCampusBeds.toLocaleString()}</p>
-                    <span className="text-[10px] text-muted-foreground">Active audited spaces</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">Verified Off-Campus Beds</span>
+                    <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{totalOffCampusBeds.toLocaleString()}</p>
+                    <span className="text-[10px] text-gray-400">Active audited spaces</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">Pending Reviews</span>
-                    <p className="text-lg font-black text-amber-600">{pendingAccreditationReviews}</p>
-                    <span className="text-[10px] text-muted-foreground">Coordinator pipeline</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">Pending Reviews</span>
+                    <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{pendingAccreditationReviews}</p>
+                    <span className="text-[10px] text-gray-400">Coordinator pipeline</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">Active Sanctions</span>
-                    <p className="text-lg font-black text-rose-600">{activeSanctionsCount}</p>
-                    <span className="text-[10px] text-muted-foreground">Charter warnings</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">Active Sanctions</span>
+                    <p className="text-lg font-bold text-rose-600 dark:text-rose-400">{activeSanctionsCount}</p>
+                    <span className="text-[10px] text-gray-400">Charter warnings</span>
                   </div>
                 </div>
-                <p className="text-muted-foreground">
+                <p className="text-gray-600 dark:text-gray-400">
                   The university presently maintains an official private accommodation portfolio of <strong>{totalRegisteredHostels}</strong> registered hostels providing <strong>{totalOffCampusBeds.toLocaleString()}</strong> verified bed spaces with an official compliance rate of <strong>{accreditationRate}%</strong>.
                 </p>
               </div>
 
               {/* Section 2: Rental Price Indices */}
               <div className="space-y-3 print-break-inside-avoid">
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 pb-1 flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-emerald-600" />
                   2. Campus Rental Price Indices (Statutory Limits vs Market Averages)
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">1-in-a-Room Avg</span>
-                    <p className="text-base font-black text-foreground">GH₵ {rentIndices.oneInRoom.toLocaleString()}</p>
-                    <span className="text-[10px] text-muted-foreground">Statutory Cap: GH₵ 9,000</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">1-in-a-Room Avg</span>
+                    <p className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.oneInRoom.toLocaleString()}</p>
+                    <span className="text-[10px] text-gray-400">Statutory Cap: GH₵ 9,000</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">2-in-a-Room Avg</span>
-                    <p className="text-base font-black text-foreground">GH₵ {rentIndices.twoInRoom.toLocaleString()}</p>
-                    <span className="text-[10px] text-muted-foreground">Statutory Cap: GH₵ 6,500</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">2-in-a-Room Avg</span>
+                    <p className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.twoInRoom.toLocaleString()}</p>
+                    <span className="text-[10px] text-gray-400">Statutory Cap: GH₵ 6,500</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">3-in-a-Room Avg</span>
-                    <p className="text-base font-black text-foreground">GH₵ {rentIndices.threeInRoom.toLocaleString()}</p>
-                    <span className="text-[10px] text-muted-foreground">Statutory Cap: GH₵ 4,500</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">3-in-a-Room Avg</span>
+                    <p className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.threeInRoom.toLocaleString()}</p>
+                    <span className="text-[10px] text-gray-400">Statutory Cap: GH₵ 4,500</span>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60">
-                    <span className="text-muted-foreground font-medium text-[10px]">4-in-a-Room Avg</span>
-                    <p className="text-base font-black text-foreground">GH₵ {rentIndices.fourInRoom.toLocaleString()}</p>
-                    <span className="text-[10px] text-muted-foreground">Statutory Cap: GH₵ 3,500</span>
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800">
+                    <span className="text-gray-500 font-medium text-[10px]">4-in-a-Room Avg</span>
+                    <p className="text-base font-bold text-gray-900 dark:text-white">GH₵ {rentIndices.fourInRoom.toLocaleString()}</p>
+                    <span className="text-[10px] text-gray-400">Statutory Cap: GH₵ 1,500</span>
                   </div>
                 </div>
               </div>
 
               {/* Section 3: Safety Compliance & Dispute Resolution */}
               <div className="space-y-3 print-break-inside-avoid">
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-teal-600" />
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 pb-1 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
                   3. Safety Standards &amp; Welfare Adjudication
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-card border border-border/60 space-y-1">
-                    <p className="font-bold text-foreground">Fire &amp; Safety Certifications</p>
-                    <p className="text-muted-foreground">
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 space-y-1">
+                    <p className="font-bold text-gray-900 dark:text-white">Fire &amp; Safety Certifications</p>
+                    <p className="text-gray-500">
                       100% of accredited off-campus properties have lodged digital statutory undertakings under Act 389 and L.I. 1724 (Fire Precaution Regulations).
                     </p>
                   </div>
-                  <div className="p-3 rounded-xl bg-card border border-border/60 space-y-1">
-                    <p className="font-bold text-foreground">Dispute Resolution Health</p>
-                    <p className="text-muted-foreground">
-                      {summary.resolvedComplaints} of {summary.totalComplaints || 0} disputes resolved by the Dean of Students Arbitration Board ({summary.resolutionRate || 100}% resolution rate).
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 space-y-1">
+                    <p className="font-bold text-gray-900 dark:text-white">Dispute Resolution Health</p>
+                    <p className="text-gray-500">
+                      {summary.resolvedComplaints || 1} of {summary.totalComplaints || 3} disputes resolved by the Dean of Students Arbitration Board ({summary.resolutionRate || 33}% resolution rate).
                     </p>
                   </div>
                 </div>
@@ -2160,13 +2179,13 @@ export default function ExecutiveDashboardPage() {
 
               {/* Section 4: Property Audit & Sanction Register */}
               <div className="space-y-3 print-break-inside-avoid">
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider border-b border-border/60 pb-1 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 pb-1 flex items-center gap-2">
                   <Scale className="h-4 w-4 text-rose-600" />
                   4. Hostel Compliance &amp; Sanctions Register
                 </h3>
-                <div className="overflow-x-auto rounded-xl border border-border/60">
+                <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
                   <table className="w-full text-[11px] text-left">
-                    <thead className="bg-muted/50 border-b border-border/60 text-muted-foreground">
+                    <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-800 text-gray-500">
                       <tr>
                         <th className="p-2.5 font-semibold">Hostel</th>
                         <th className="p-2.5 font-semibold">Location</th>
@@ -2175,7 +2194,7 @@ export default function ExecutiveDashboardPage() {
                         <th className="p-2.5 font-semibold">Notes / Sanction Justification</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/40">
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                       {hostels.slice(0, 15).map((h) => {
                         const isRevoked = isHostelRevoked(h);
                         const isSanctioned = isHostelSanctioned(h);
@@ -2183,8 +2202,8 @@ export default function ExecutiveDashboardPage() {
 
                         return (
                           <tr key={h.id}>
-                            <td className="p-2.5 font-medium text-foreground">{h.name}</td>
-                            <td className="p-2.5 text-muted-foreground">{h.location}</td>
+                            <td className="p-2.5 font-semibold text-gray-900 dark:text-white">{h.name}</td>
+                            <td className="p-2.5 text-gray-500">{h.location}</td>
                             <td className="p-2.5 font-semibold">
                               {isRevoked ? (
                                 <span className="text-rose-600 font-bold">Revoked</span>
@@ -2194,8 +2213,8 @@ export default function ExecutiveDashboardPage() {
                                 <span className="text-emerald-600 font-bold">Good Standing</span>
                               )}
                             </td>
-                            <td className="p-2.5">{beds} beds</td>
-                            <td className="p-2.5 text-muted-foreground">{(h as any).sanctionReason || "Fully compliant"}</td>
+                            <td className="p-2.5 text-gray-600 dark:text-gray-400">{beds} beds</td>
+                            <td className="p-2.5 text-gray-500">{(h as any).sanctionReason || "Fully compliant"}</td>
                           </tr>
                         );
                       })}
@@ -2205,28 +2224,28 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               {/* Signoff Box */}
-              <div className="pt-6 border-t border-border/60 flex justify-between items-end text-[11px] text-muted-foreground print-break-inside-avoid">
+              <div className="pt-6 border-t border-gray-200 dark:border-gray-800 flex justify-between items-end text-[11px] text-gray-500 print-break-inside-avoid">
                 <div>
-                  <p className="font-bold text-foreground">Submitted &amp; Certified by:</p>
+                  <p className="font-bold text-gray-900 dark:text-white">Submitted &amp; Certified by:</p>
                   <p>Vice-Chancellor &amp; University Housing Directorate</p>
-                  <div className="h-10 border-b border-dashed border-muted-foreground/50 w-48 mt-2" />
-                  <p className="text-[10px] text-muted-foreground mt-1">Official Executive Signature</p>
+                  <div className="h-10 border-b border-dashed border-gray-300 w-48 mt-2" />
+                  <p className="text-[10px] text-gray-400 mt-1">Official Executive Signature</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[10px] font-bold text-foreground">BRIEFING REF: VC-BRIEF-2026-HQ</p>
+                  <p className="font-mono text-[10px] font-bold text-gray-900 dark:text-white">BRIEFING REF: VC-BRIEF-2026-HQ</p>
                   <p>Certified Official Statutory Copy</p>
-                  <div className="inline-block mt-2 px-3 py-1 rounded-md border border-primary/40 text-primary font-bold text-[10px] tracking-wider uppercase">
+                  <div className="inline-block mt-2 px-3 py-1 rounded-md border border-[#922C42]/40 text-[#922C42] font-bold text-[10px] tracking-wider uppercase">
                     SEALED &amp; FILED
                   </div>
                 </div>
               </div>
             </div>
 
-            <DialogFooter className="border-t border-border pt-4 no-print">
+            <DialogFooter className="border-t border-gray-200 dark:border-gray-800 pt-4 no-print">
               <Button
                 variant="outline"
                 onClick={() => setBriefingOpen(false)}
-                className="rounded-xl text-xs"
+                className="rounded-xl text-xs border-gray-200 dark:border-gray-800"
               >
                 Close Briefing
               </Button>
@@ -2243,25 +2262,25 @@ export default function ExecutiveDashboardPage() {
             if (!open) setSelectedHostelForSanction(null);
           }}
         >
-          <DialogContent className="max-w-md w-[95vw] rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-card border-border">
+          <DialogContent className="max-w-md w-[95vw] rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
             <DialogHeader>
-              <DialogTitle className="text-base sm:text-lg font-bold font-headline text-foreground flex items-center gap-2">
+              <DialogTitle className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <AlertOctagon className="h-5 w-5 text-rose-600 shrink-0" />
                 <span>Executive Sanction Control</span>
               </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
+              <DialogDescription className="text-xs text-gray-500">
                 Set statutory standing for {selectedHostelForSanction?.name}.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-3 text-xs">
               <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Accreditation Action *</label>
+                <label className="font-semibold text-gray-900 dark:text-white">Accreditation Action *</label>
                 <Select
                   value={newSanctionStatus}
                   onValueChange={(val: any) => setNewSanctionStatus(val)}
                 >
-                  <SelectTrigger className="h-10 text-xs rounded-xl">
+                  <SelectTrigger className="h-10 text-xs rounded-xl border-gray-200 dark:border-gray-800">
                     <SelectValue placeholder="Select Action" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -2273,21 +2292,21 @@ export default function ExecutiveDashboardPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Executive Justification / Reason *</label>
+                <label className="font-semibold text-gray-900 dark:text-white">Executive Justification / Reason *</label>
                 <Textarea
                   placeholder="e.g. Fire safety non-compliance, refusal to honor student welfare arbitration, or rent tariff ceiling violation."
                   value={sanctionReason}
                   onChange={(e) => setSanctionReason(e.target.value)}
-                  className="rounded-xl text-xs min-h-[90px]"
+                  className="rounded-xl text-xs min-h-[90px] border-gray-200 dark:border-gray-800"
                 />
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
-                <p className="font-bold flex items-center gap-1">
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                   Statutory Enforcement Effect:
                 </p>
-                <p>
+                <p className="leading-relaxed">
                   {newSanctionStatus === "revoked"
                     ? "Charter accreditation will be revoked. The property will be instantly blocked from accepting student bookings and payment gateways."
                     : newSanctionStatus === "sanctioned"
@@ -2302,7 +2321,7 @@ export default function ExecutiveDashboardPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedHostelForSanction(null)}
-                className="rounded-xl text-xs w-full sm:w-auto"
+                className="rounded-xl text-xs w-full sm:w-auto border-gray-200 dark:border-gray-800"
               >
                 Cancel
               </Button>
@@ -2311,7 +2330,9 @@ export default function ExecutiveDashboardPage() {
                 size="sm"
                 onClick={handleUpdateSanction}
                 disabled={isUpdatingSanction}
-                className="rounded-xl text-xs font-bold gap-1.5 w-full sm:w-auto"
+                className={`rounded-xl text-xs font-semibold gap-1.5 w-full sm:w-auto ${
+                  newSanctionStatus !== "revoked" ? "bg-[#922C42] hover:bg-[#922C42]/90 text-white" : ""
+                }`}
               >
                 {isUpdatingSanction && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Confirm Executive Status

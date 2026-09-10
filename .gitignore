@@ -43,3 +43,6 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# design reference
+src/app/free-react-tailwind-admin-dashboard-main/

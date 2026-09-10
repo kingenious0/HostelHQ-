@@ -43,7 +43,7 @@ export async function secureBedReservation({
 }) {
   const hostelRef = doc(db, "hostels", hostelId);
 
-  return await runTransaction(db, async (transaction: Transaction) => {
+  return await runTransaction(db, async (transaction: any) => {
     const hostelDoc = await transaction.get(hostelRef);
     if (!hostelDoc.exists()) throw new Error("Hostel not found");
 
