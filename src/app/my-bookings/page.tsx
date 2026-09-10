@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Header } from '@/components/header';
@@ -16,7 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
 import { submitComplaintAction, completeVisitByStudentAction } from '@/app/actions/db';
-import type { ComplaintCategory } from '@/lib/data';
+import { getHostel, type ComplaintCategory } from '@/lib/data';
+import { cleanHostelId } from '@/lib/dynamodb-service';
 import {
     Loader2,
     AlertTriangle,
@@ -63,6 +64,8 @@ type EnhancedBooking = {
         fullName: string;
         email: string;
     };
+    managerId?: string;
+    managerName?: string;
 }
 
 type EnhancedVisit = {
@@ -104,6 +107,8 @@ export default function MyBookingsPage() {
 
     // Complaint submission state
     const [complaintDialogOpen, setComplaintDialogOpen] = useState(false);
+    const [selectedBookingId, setSelectedBookingId] = useState<string>('');
+    const [isManualHostel, setIsManualHostel] = useState(false);
     const [complaintHostelName, setComplaintHostelName] = useState('');
     const [complaintHostelId, setComplaintHostelId] = useState('');
     const [complaintRoomNumber, setComplaintRoomNumber] = useState('');
@@ -112,20 +117,65 @@ export default function MyBookingsPage() {
     const [complaintDescription, setComplaintDescription] = useState('');
     const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
 
+    // Active secured bookings (confirmed or active tenancies)
+    const activeSecuredBookings = useMemo(() => {
+        const confirmed = bookings.filter((b: EnhancedBooking) => b.status === 'confirmed' || (b.status as string) === 'active');
+        if (confirmed.length > 0) return confirmed;
+        return bookings.filter((b: EnhancedBooking) => b.status !== 'cancelled');
+    }, [bookings]);
+
     const handleOpenComplaint = (booking?: EnhancedBooking | null) => {
         if (booking) {
-            setComplaintHostelName(booking.hostelName || '');
+            setSelectedBookingId(booking.id);
+            setComplaintHostelName(booking.hostelName && booking.hostelName !== 'Unknown Hostel' ? booking.hostelName : '');
             setComplaintHostelId(booking.hostelId || '');
-            setComplaintRoomNumber(booking.roomNumber || '');
+            const assignedRoom = booking.roomNumber && booking.roomNumber !== 'Not Assigned' ? booking.roomNumber : '';
+            setComplaintRoomNumber(assignedRoom);
+            setIsManualHostel(false);
         } else {
-            setComplaintHostelName(bookings[0]?.hostelName || '');
-            setComplaintHostelId(bookings[0]?.hostelId || '');
-            setComplaintRoomNumber(bookings[0]?.roomNumber || '');
+            // Opened from top "File Complaint to Dean" button
+            if (activeSecuredBookings.length > 0) {
+                const first = activeSecuredBookings[0];
+                setSelectedBookingId(first.id);
+                setComplaintHostelName(first.hostelName && first.hostelName !== 'Unknown Hostel' ? first.hostelName : '');
+                setComplaintHostelId(first.hostelId || '');
+                const assignedRoom = first.roomNumber && first.roomNumber !== 'Not Assigned' ? first.roomNumber : '';
+                setComplaintRoomNumber(assignedRoom);
+                setIsManualHostel(false);
+            } else {
+                setSelectedBookingId('manual');
+                setComplaintHostelName('');
+                setComplaintHostelId('');
+                setComplaintRoomNumber('');
+                setIsManualHostel(true);
+            }
         }
         setComplaintSubject('');
         setComplaintDescription('');
         setComplaintCategory('Sanitation & Water');
         setComplaintDialogOpen(true);
+    };
+
+    const handleSelectSecuredBooking = (bookingId: string) => {
+        if (bookingId === 'manual') {
+            setIsManualHostel(true);
+            setSelectedBookingId('manual');
+            setComplaintHostelId('');
+            setComplaintHostelName('');
+            setComplaintRoomNumber('');
+            return;
+        }
+
+        setIsManualHostel(false);
+        setSelectedBookingId(bookingId);
+        const chosen = activeSecuredBookings.find((b: EnhancedBooking) => b.id === bookingId);
+        if (chosen) {
+            setComplaintHostelId(chosen.hostelId || '');
+            setComplaintHostelName(chosen.hostelName && chosen.hostelName !== 'Unknown Hostel' ? chosen.hostelName : '');
+            // Automatically fetch and populate the assigned room number for chosen hostel!
+            const assignedRoom = chosen.roomNumber && chosen.roomNumber !== 'Not Assigned' ? chosen.roomNumber : '';
+            setComplaintRoomNumber(assignedRoom);
+        }
     };
 
     const handleSubmitComplaint = async (e: React.FormEvent) => {
@@ -142,6 +192,11 @@ export default function MyBookingsPage() {
             const studentEmail = appUser?.email || currentUser?.email || '';
             const studentPhone = appUser?.phone || '';
 
+            // Resolve manager details if available from selected booking
+            const chosen = activeSecuredBookings.find((b: EnhancedBooking) => b.id === selectedBookingId);
+            const managerId = chosen?.managerId || undefined;
+            const managerName = chosen?.managerName || undefined;
+
             const res = await submitComplaintAction({
                 direction: 'student_to_hostel',
                 status: 'Submitted',
@@ -154,6 +209,8 @@ export default function MyBookingsPage() {
                 studentPhone,
                 hostelId: complaintHostelId || `hostel_${Date.now()}`,
                 hostelName: complaintHostelName.trim(),
+                managerId,
+                managerName,
                 roomNumber: complaintRoomNumber.trim() || undefined,
                 createdAt: new Date().toISOString(),
             });
@@ -185,7 +242,7 @@ export default function MyBookingsPage() {
     };
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (user: any) => {
             setCurrentUser(user);
             setLoadingAuth(false);
             if (!user) {
@@ -201,7 +258,7 @@ export default function MyBookingsPage() {
 
         // Listen for real-time updates to the user's profile
         const userDocRef = doc(db, "users", currentUser.uid);
-        const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap) => {
+        const unsubscribeUserProfile = onSnapshot(userDocRef, (docSnap: any) => {
             if (docSnap.exists()) {
                 const userData = docSnap.data() as any;
 
@@ -226,7 +283,7 @@ export default function MyBookingsPage() {
             } else {
                 setAppUser(null);
             }
-        }, (error) => {
+        }, (error: any) => {
             console.error("Error fetching user profile:", error);
             setAppUser(null);
         });
@@ -234,10 +291,44 @@ export default function MyBookingsPage() {
         setLoading(true);
 
         const bookingsQuery = query(collection(db, "bookings"), where("studentId", "==", currentUser.uid));
-        const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot) => {
-            const bookingsData = await Promise.all(snapshot.docs.map(async (d) => {
+        const unsubscribeBookings = onSnapshot(bookingsQuery, async (snapshot: any) => {
+            const bookingsData = await Promise.all(snapshot.docs.map(async (d: any) => {
                 const data = d.data();
-                const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                
+                // 1. Robust Hostel Name & Management Resolution
+                let hostelName = data.hostelName || '';
+                let managerId = data.managerId || '';
+                let managerName = data.managerName || '';
+
+                if ((!hostelName || hostelName === 'Unknown Hostel') && data.hostelId) {
+                    try {
+                        const cleanId = cleanHostelId(data.hostelId);
+                        let hostelSnap = cleanId ? await getDoc(doc(db, 'hostels', cleanId)) : null;
+                        if ((!hostelSnap || !hostelSnap.exists()) && cleanId !== data.hostelId) {
+                            hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                        }
+                        if ((!hostelSnap || !hostelSnap.exists()) && cleanId) {
+                            hostelSnap = await getDoc(doc(db, 'hostels', `HOSTEL#${cleanId}`));
+                        }
+                        if (hostelSnap && hostelSnap.exists()) {
+                            const hData = hostelSnap.data();
+                            hostelName = hData.name || hData.hostelName || hostelName;
+                            managerId = managerId || hData.managerId || '';
+                            managerName = managerName || hData.managerName || hData.contactPerson || '';
+                        } else {
+                            const h = await getHostel(data.hostelId);
+                            if (h?.name) {
+                                hostelName = h.name;
+                                managerId = managerId || (h as any).managerId || '';
+                                managerName = managerName || (h as any).managerName || '';
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Booking hostel resolution note:', e);
+                    }
+                }
+
+                if (!hostelName) hostelName = 'Unknown Hostel';
 
                 let date;
                 if (data.bookingDate instanceof Timestamp) {
@@ -248,20 +339,28 @@ export default function MyBookingsPage() {
                     date = new Date();
                 }
 
+                // 2. Robust Room Number Resolution
+                let resolvedRoom = data.roomNumber || data.room?.roomNumber || data.roomDetails?.roomNumber || '';
+                if (!resolvedRoom || resolvedRoom === 'Not Assigned') {
+                    resolvedRoom = 'Not Assigned';
+                }
+
                 return {
                     id: d.id,
-                    hostelId: data.hostelId,
-                    hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
+                    hostelId: data.hostelId || '',
+                    hostelName,
                     bookingDate: date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
                     paymentReference: data.paymentReference,
                     status: data.status || 'confirmed',
-                    roomNumber: data.roomNumber || 'Not Assigned',
+                    roomNumber: resolvedRoom,
                     roomType: data.roomType || 'Standard',
                     bookedBy: data.studentDetails?.fullName || currentUser.displayName || 'Unknown',
                     studentDetails: {
                         fullName: data.studentDetails?.fullName || currentUser.displayName || 'Unknown',
                         email: currentUser.email || 'Unknown'
-                    }
+                    },
+                    managerId,
+                    managerName,
                 } as EnhancedBooking;
             }));
 
@@ -269,15 +368,36 @@ export default function MyBookingsPage() {
         });
 
         const visitsQuery = query(collection(db, "visits"), where("studentId", "==", currentUser.uid));
-        const unsubscribeVisits = onSnapshot(visitsQuery, async (snapshot) => {
-            const visitsData = await Promise.all(snapshot.docs.map(async (d) => {
+        const unsubscribeVisits = onSnapshot(visitsQuery, async (snapshot: any) => {
+            const visitsData = await Promise.all(snapshot.docs.map(async (d: any) => {
                 const data = d.data();
-                const hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
-
+                
+                let hostelName = data.hostelName || '';
                 let managerName = 'Hostel Management';
-                if (hostelSnap.exists()) {
-                    const hData = hostelSnap.data();
-                    managerName = hData.managerName || hData.contactPerson || 'Hostel Management';
+
+                if (data.hostelId) {
+                    try {
+                        const cleanId = cleanHostelId(data.hostelId);
+                        let hostelSnap = cleanId ? await getDoc(doc(db, 'hostels', cleanId)) : null;
+                        if ((!hostelSnap || !hostelSnap.exists()) && cleanId !== data.hostelId) {
+                            hostelSnap = await getDoc(doc(db, 'hostels', data.hostelId));
+                        }
+                        if (hostelSnap && hostelSnap.exists()) {
+                            const hData = hostelSnap.data();
+                            if (!hostelName || hostelName === 'Unknown Hostel') {
+                                hostelName = hData.name || hData.hostelName || '';
+                            }
+                            managerName = hData.managerName || hData.contactPerson || 'Hostel Management';
+                        } else if (!hostelName || hostelName === 'Unknown Hostel') {
+                            const h = await getHostel(data.hostelId);
+                            if (h?.name) {
+                                hostelName = h.name;
+                                managerName = (h as any).managerName || managerName;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Visit hostel resolution note:', e);
+                    }
                 }
 
                 let visitDate = 'N/A';
@@ -289,7 +409,7 @@ export default function MyBookingsPage() {
                 return {
                     id: d.id,
                     hostelId: data.hostelId,
-                    hostelName: hostelSnap.exists() ? hostelSnap.data().name : 'Unknown Hostel',
+                    hostelName: hostelName || 'Unknown Hostel',
                     visitDate: visitDate,
                     visitTime: data.visitTime || 'N/A',
                     status: data.status || 'pending',
@@ -584,16 +704,69 @@ export default function MyBookingsPage() {
                                 </DialogHeader>
 
                                 <form onSubmit={handleSubmitComplaint} className="space-y-4 pt-2">
+                                    {/* Dynamic Secured Hostel Selector */}
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="complaint-hostel" className="text-xs font-semibold">Hostel Name</Label>
-                                        <Input
-                                            id="complaint-hostel"
-                                            placeholder="Enter hostel name"
-                                            value={complaintHostelName}
-                                            onChange={(e) => setComplaintHostelName(e.target.value)}
-                                            required
-                                            className="h-10 rounded-xl"
-                                        />
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="complaint-hostel-select" className="text-xs font-semibold">
+                                                {activeSecuredBookings.length > 0 && !isManualHostel ? "Select Secured Hostel" : "Hostel Name"}
+                                            </Label>
+                                            {activeSecuredBookings.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isManualHostel) {
+                                                            handleSelectSecuredBooking(activeSecuredBookings[0].id);
+                                                        } else {
+                                                            handleSelectSecuredBooking('manual');
+                                                        }
+                                                    }}
+                                                    className="text-[11px] font-medium text-primary hover:underline transition-all"
+                                                >
+                                                    {isManualHostel ? "← Pick from my secured hostels" : "Other hostel / Enter manually"}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {activeSecuredBookings.length > 0 && !isManualHostel ? (
+                                            <Select
+                                                value={selectedBookingId}
+                                                onValueChange={handleSelectSecuredBooking}
+                                            >
+                                                <SelectTrigger id="complaint-hostel-select" className="h-11 rounded-xl bg-background border-border/80 focus:ring-primary/20">
+                                                    <SelectValue placeholder="Choose a secured hostel to report..." />
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl shadow-xl border-border/60">
+                                                    {activeSecuredBookings.map((b: EnhancedBooking) => {
+                                                        const hasRoom = b.roomNumber && b.roomNumber !== 'Not Assigned';
+                                                        return (
+                                                            <SelectItem key={b.id} value={b.id} className="py-2.5 rounded-lg cursor-pointer">
+                                                                <div className="flex items-center justify-between gap-4 w-full">
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        <Building2 className="h-4 w-4 text-primary shrink-0" />
+                                                                        <span className="font-semibold text-foreground truncate">{b.hostelName}</span>
+                                                                    </div>
+                                                                    <span className={cn(
+                                                                        "text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wider",
+                                                                        hasRoom ? "bg-primary/10 text-primary border border-primary/20" : "bg-muted text-muted-foreground"
+                                                                    )}>
+                                                                        {hasRoom ? (b.roomNumber?.toLowerCase().startsWith('room') ? b.roomNumber : `Room ${b.roomNumber}`) : 'Room Not Assigned'}
+                                                                    </span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        );
+                                                    })}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <Input
+                                                id="complaint-hostel"
+                                                placeholder="Enter hostel name"
+                                                value={complaintHostelName}
+                                                onChange={(e) => setComplaintHostelName(e.target.value)}
+                                                required
+                                                className="h-10 rounded-xl"
+                                            />
+                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
@@ -619,10 +792,17 @@ export default function MyBookingsPage() {
                                         </div>
 
                                         <div className="space-y-1.5">
-                                            <Label htmlFor="complaint-room" className="text-xs font-semibold">Room Number (Optional)</Label>
+                                            <div className="flex items-center justify-between">
+                                                <Label htmlFor="complaint-room" className="text-xs font-semibold">Room Number (Optional)</Label>
+                                                {complaintRoomNumber && !isManualHostel && (
+                                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
+                                                        <CheckCircle className="h-3 w-3" /> Auto-fetched
+                                                    </span>
+                                                )}
+                                            </div>
                                             <Input
                                                 id="complaint-room"
-                                                placeholder="e.g. A12"
+                                                placeholder="e.g. Room 1 or Common Area"
                                                 value={complaintRoomNumber}
                                                 onChange={(e) => setComplaintRoomNumber(e.target.value)}
                                                 className="h-10 rounded-xl"
