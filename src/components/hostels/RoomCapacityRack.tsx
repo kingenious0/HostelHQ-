@@ -19,6 +19,14 @@ export function RoomCapacityRack({
   onSelectRoom,
   interactive = false,
 }: RoomCapacityRackProps) {
+  if (summary.totalRooms === 0) {
+    return (
+      <div className="text-sm text-slate-500 italic p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800">
+        No registered rooms currently open for this tier.
+      </div>
+    );
+  }
+
   const isSoldOut = summary.isSoldOut || summary.totalAvailableBeds === 0;
   const percentOccupied = isSoldOut
     ? 100

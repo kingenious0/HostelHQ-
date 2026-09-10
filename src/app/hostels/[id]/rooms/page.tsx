@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
+import { LiveVacancyMeter, fetchAllLiveRooms, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
 
 interface AppUser {
   uid: string;
@@ -61,6 +61,7 @@ export default function RoomsPage() {
   const [hasSecuredHostel, setHasSecuredHostel] = useState<boolean>(false);
   const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
   const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
+  const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
   const [selectedRoomsByType, setSelectedRoomsByType] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'oldest'>('price-low');
@@ -346,6 +347,14 @@ export default function RoomsPage() {
         
         setRoomOccupancy(counts);
         setConfirmedBookings(bookingsList);
+
+        // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
+        try {
+          const liveRooms = await fetchAllLiveRooms(id, bookingsList);
+          setLiveRoomsByTier(liveRooms);
+        } catch (liveErr) {
+          console.error('Error hydrating live rooms for rooms page:', liveErr);
+        }
       } catch (error) {
         console.error('Error loading room occupancy for hostel rooms page:', error);
       }
@@ -683,20 +692,30 @@ export default function RoomsPage() {
                       </Button>
                     </div>
 
-                    {/* Real-Time Bed & Room Allocation Rack */}
-                    <RoomCapacityRack
-                      summary={calculateRoomTypeInventory(roomTypeForInventory, confirmedBookings)}
-                      interactive={!isTypeSoldOut}
-                      selectedRoomNumber={selectedRoomsByType[typeName]}
-                      onSelectRoom={(r) => {
-                        if (r.status !== 'full' && !isTypeSoldOut) {
-                          setSelectedRoomsByType(prev => ({
-                            ...prev,
-                            [typeName]: r.roomNumber
-                          }));
-                        }
-                      }}
-                    />
+                    {/* Real-Time Database Vacancy Meter & Dynamic Aggregation */}
+                    {(() => {
+                      const tierRooms =
+                        liveRoomsByTier[matchingType?.id || typeName] ||
+                        liveRoomsByTier[typeName] ||
+                        liveRoomsByTier[typeName.toLowerCase()] ||
+                        [];
+                      const tierCap = Number(matchingType?.capacity || roomsForType[0]?.capacity) || 1;
+
+                      return (
+                        <LiveVacancyMeter
+                          rooms={tierRooms}
+                          tierCapacity={tierCap}
+                          interactive={!isTypeSoldOut}
+                          selectedRoomNumber={selectedRoomsByType[typeName]}
+                          onSelectRoom={(r) => {
+                            setSelectedRoomsByType((prev) => ({
+                              ...prev,
+                              [typeName]: r.roomNumber,
+                            }));
+                          }}
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div
@@ -981,6 +1000,25 @@ export default function RoomsPage() {
                   <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs font-bold px-3 py-1">
                     Standard University Term
                   </Badge>
+                </div>
+              )}
+
+              {/* Real-Time Database Vacancy Meter & Dynamic Aggregation */}
+              {modalRoomType && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                    <Bed className="h-4 w-4 text-primary" />
+                    Live Inventory & Bed Vacancy ({modalRoomType.name})
+                  </h4>
+                  <LiveVacancyMeter
+                    rooms={
+                      liveRoomsByTier[modalRoomType.id || modalRoomType.name] ||
+                      liveRoomsByTier[modalRoomType.name] ||
+                      liveRoomsByTier[modalRoomType.name?.toLowerCase()] ||
+                      []
+                    }
+                    tierCapacity={Number(modalRoomType.capacity) || 1}
+                  />
                 </div>
               )}
 

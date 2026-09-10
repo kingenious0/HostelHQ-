@@ -35,9 +35,12 @@ export function calculateRoomTypeInventory(
   confirmedBookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = []
 ): RoomTypeInventorySummary {
   const capacityPerRoom = Number(roomType.capacity) || 1;
+  const numConfigured = Number(roomType.numberOfRooms) || 0;
   const configuredRoomNumbers = roomType.roomNumbers && roomType.roomNumbers.length > 0
     ? roomType.roomNumbers
-    : Array.from({ length: Number(roomType.numberOfRooms) || 1 }, (_, i) => `Room ${i + 1}`);
+    : numConfigured > 0
+      ? Array.from({ length: numConfigured }, (_, i) => `Room ${i + 1}`)
+      : [];
 
   const totalRooms = configuredRoomNumbers.length;
   const totalBeds = totalRooms * capacityPerRoom;
@@ -117,7 +120,7 @@ export function isRoomTypeSoldOut(
 
   // 2. Direct capacity vs occupancy check
   const capacityPerRoom = Number(roomType.capacity) || 1;
-  const numRooms = Number(roomType.numberOfRooms) || (roomType.roomNumbers ? roomType.roomNumbers.length : 1);
+  const numRooms = Number(roomType.numberOfRooms) || (roomType.roomNumbers ? roomType.roomNumbers.length : 0);
   const totalConfiguredCapacity = capacityPerRoom * numRooms;
 
   if (roomType.occupancy !== undefined && totalConfiguredCapacity > 0) {

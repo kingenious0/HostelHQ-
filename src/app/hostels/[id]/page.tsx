@@ -40,7 +40,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapboxMap } from '@/components/map';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { RoomCapacityRack } from '@/components/hostels/RoomCapacityRack';
+import { LiveVacancyMeter, fetchAllLiveRooms, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -110,6 +110,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
     const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
+    const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
 
     const isRevoked = useMemo(() => isHostelRevoked(hostel), [hostel]);
     const isSanctioned = useMemo(() => isHostelSanctioned(hostel), [hostel]);
@@ -241,6 +242,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 });
                 setRoomOccupancy(counts);
                 setConfirmedBookings(bookingsList);
+
+                // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
+                try {
+                    const liveRooms = await fetchAllLiveRooms(hostel.id, bookingsList);
+                    setLiveRoomsByTier(liveRooms);
+                } catch (liveErr) {
+                    console.error('Error hydrating live rooms for hostel detail page:', liveErr);
+                }
             } catch (error) {
                 console.error('Error loading room occupancy for hostel detail page:', error);
             }
@@ -1530,7 +1539,15 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     </div>
                                                 </div>
                                             </div>
-                                            <RoomCapacityRack summary={inventorySummary} />
+                                            {(() => {
+                                                const tierRooms =
+                                                    liveRoomsByTier[room.id || room.name] ||
+                                                    liveRoomsByTier[room.name] ||
+                                                    liveRoomsByTier[room.name?.toLowerCase()] ||
+                                                    [];
+                                                const tierCapacity = Number(room.capacity) || 1;
+                                                return <LiveVacancyMeter rooms={tierRooms} tierCapacity={tierCapacity} />;
+                                            })()}
                                         </div>
                                     );
                                 })
@@ -1633,6 +1650,25 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Real-Time Database Vacancy Meter for Selected Room Tier */}
+                                    <div className="space-y-2 pt-1 border-b border-border/60 pb-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                                <Bed className="h-3.5 w-3.5 text-primary" />
+                                                Live Inventory & Bed Vacancy ({activeRoom.name})
+                                            </span>
+                                        </div>
+                                        <LiveVacancyMeter
+                                            rooms={
+                                                liveRoomsByTier[activeRoom.id || activeRoom.name] ||
+                                                liveRoomsByTier[activeRoom.name] ||
+                                                liveRoomsByTier[activeRoom.name?.toLowerCase()] ||
+                                                []
+                                            }
+                                            tierCapacity={Number(activeRoom.capacity) || 1}
+                                        />
+                                    </div>
 
                                     {/* 3-column responsive grid for Inclusions, Security, and Utilities */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
