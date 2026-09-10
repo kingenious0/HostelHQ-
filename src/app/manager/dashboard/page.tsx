@@ -859,6 +859,15 @@ export default function ManagerDashboard() {
         try {
             await deleteDoc(doc(db, 'hostels', roomsHostelId, 'rooms', room.id));
             setRooms((prev) => prev.filter((r) => r.id !== room.id));
+            try {
+                const hostelRef = doc(db, 'hostels', roomsHostelId);
+                const hostelSnap = await getDoc(hostelRef);
+                if (hostelSnap.exists()) {
+                    const currentRooms: any[] = hostelSnap.data().rooms || [];
+                    const updated = currentRooms.filter((r: any) => r.id !== room.id && r.roomNumber !== room.roomNumber);
+                    await updateDoc(hostelRef, { rooms: updated });
+                }
+            } catch (_) {}
             toast({ title: 'Room deleted', description: `Room "${room.roomNumber}" has been deleted.` });
         } catch (error) {
             console.error('Error deleting room:', error);
@@ -896,12 +905,23 @@ export default function ManagerDashboard() {
             const createOne = (label: string) => {
                 const raw = label.trim();
                 const roomNumber = raw.toLowerCase().startsWith('room ') ? raw : `Room ${raw}`;
-                const roomData: Omit<Room, 'id'> = {
+                const beds = Array.from({ length: capacity }, (_, i) => ({
+                    id: `bed-${i + 1}`,
+                    isOccupied: false,
+                    studentId: null,
+                    bookedAt: null,
+                    bookingRef: null,
+                }));
+                const roomData: any = {
                     roomNumber,
                     roomTypeId: newRoomTypeId,
+                    tierId: newRoomTypeId,
                     capacity,
+                    tierCapacity: capacity,
                     currentOccupancy: 0,
                     status: 'active',
+                    isFullyBooked: false,
+                    beds,
                 };
                 const p = addDoc(roomsCol, roomData).then((ref) => {
                     setRooms((prev) => [...prev, { ...roomData, id: ref.id }]);
@@ -924,12 +944,26 @@ export default function ManagerDashboard() {
             }
 
             await Promise.all(creations);
+
+            // Sync updated rooms to parent hostel document for atomic queries
+            try {
+                const hostelRef = doc(db, 'hostels', roomsHostelId);
+                const hostelSnap = await getDoc(hostelRef);
+                if (hostelSnap.exists()) {
+                    const allSubRoomsSnap = await getDocs(roomsCol);
+                    const allSubRooms = allSubRoomsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+                    await updateDoc(hostelRef, { rooms: allSubRooms });
+                }
+            } catch (syncErr) {
+                console.warn('Could not sync rooms array to hostel doc:', syncErr);
+            }
+
             setNewRoomNumber('');
             setNewRoomTypeId('');
             setNewRoomCapacity('');
             setNewNumberOfRooms('');
             setNewRoomNumbers([]);
-            toast({ title: 'Room(s) created', description: 'The selected rooms have been added.' });
+            toast({ title: 'Room(s) created', description: 'The selected rooms have been added with bed units.' });
         } catch (error) {
             console.error('Error creating room:', error);
             toast({ title: 'Could not create room', description: 'Please try again later.', variant: 'destructive' });

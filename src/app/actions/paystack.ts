@@ -404,15 +404,96 @@ export async function verifyAndProcessBooking(reference: string, bookingData: an
                 }
             }
 
+            // Locate target physical room and bed in hostelData.rooms array for atomic mutation
+            let updatedRooms: any[] | null = null;
+            if (Array.isArray(hostelData?.rooms) && hostelData.rooms.length > 0) {
+                const rooms = [...hostelData.rooms];
+                const roomIndex = rooms.findIndex((r: any) =>
+                    (bookingData.roomId && r.id === bookingData.roomId) ||
+                    (bookingData.roomNumber && (
+                        r.roomNumber === bookingData.roomNumber ||
+                        r.roomNumber === `Room ${bookingData.roomNumber}` ||
+                        `room-${r.roomNumber}` === bookingData.roomNumber ||
+                        r.id === bookingData.roomNumber
+                    ))
+                );
+
+                if (roomIndex !== -1) {
+                    const targetRoom = { ...rooms[roomIndex] };
+                    const roomCap = Number(targetRoom.capacity || targetRoom.tierCapacity) || 1;
+
+                    if (!Array.isArray(targetRoom.beds) || targetRoom.beds.length !== roomCap) {
+                        targetRoom.beds = Array.from({ length: roomCap }, (_, i) => {
+                            const existing = Array.isArray(targetRoom.beds) ? targetRoom.beds[i] : null;
+                            return {
+                                id: existing?.id || `bed-${i + 1}`,
+                                isOccupied: Boolean(existing?.isOccupied),
+                                studentId: existing?.studentId || null,
+                                bookedAt: existing?.bookedAt || null,
+                                bookingRef: existing?.bookingRef || null,
+                            };
+                        });
+                    } else {
+                        targetRoom.beds = targetRoom.beds.map((b: any) => ({ ...b }));
+                    }
+
+                    let bedIndex = -1;
+                    if (bookingData.bedId) {
+                        bedIndex = targetRoom.beds.findIndex((b: any) => b.id === bookingData.bedId);
+                    }
+                    if (bedIndex === -1) {
+                        bedIndex = targetRoom.beds.findIndex((b: any) => !b.isOccupied);
+                    }
+
+                    if (bedIndex !== -1) {
+                        targetRoom.beds[bedIndex] = {
+                            ...targetRoom.beds[bedIndex],
+                            isOccupied: true,
+                            studentId,
+                            bookedAt: new Date().toISOString(),
+                            bookingRef: reference,
+                        };
+                        const remainingOpenBeds = targetRoom.beds.filter((b: any) => !b.isOccupied).length;
+                        targetRoom.isFullyBooked = remainingOpenBeds === 0;
+                        targetRoom.currentOccupancy = targetRoom.beds.filter((b: any) => b.isOccupied).length;
+                        rooms[roomIndex] = targetRoom;
+                        updatedRooms = rooms;
+                    }
+                }
+            }
+
             // A. Create Booking (Write)
             t.set(bookingRef, bookingPayload);
 
-            // B. Update Occupancy (Write)
+            // B. Update Occupancy & Standardized Bed Mutation (Write)
+            if (updatedRooms) {
+                t.update(hostelRef, { rooms: updatedRooms });
+            }
             if (rtRef && rtSnap && rtSnap.exists) {
                 t.update(rtRef, { occupancy: FieldValue.increment(1) });
             }
             if (rRef && rSnap && rSnap.exists) {
-                t.update(rRef, { currentOccupancy: FieldValue.increment(1) });
+                const rData = rSnap.data();
+                const rCap = Number(rData?.capacity) || 1;
+                let rBeds = Array.isArray(rData?.beds) && rData.beds.length === rCap
+                    ? rData.beds.map((b: any) => ({ ...b }))
+                    : Array.from({ length: rCap }, (_, i) => ({ id: `bed-${i + 1}`, isOccupied: false }));
+                let bedIdx = bookingData.bedId ? rBeds.findIndex((b: any) => b.id === bookingData.bedId) : -1;
+                if (bedIdx === -1) bedIdx = rBeds.findIndex((b: any) => !b.isOccupied);
+                if (bedIdx !== -1) {
+                    rBeds[bedIdx] = {
+                        ...rBeds[bedIdx],
+                        isOccupied: true,
+                        studentId,
+                        bookedAt: new Date().toISOString(),
+                        bookingRef: reference,
+                    };
+                }
+                t.update(rRef, {
+                    currentOccupancy: FieldValue.increment(1),
+                    beds: rBeds,
+                    isFullyBooked: rBeds.every((b: any) => b.isOccupied),
+                });
             }
 
             // C. Update Manager Wallet (Earnings Ledger) (Write)

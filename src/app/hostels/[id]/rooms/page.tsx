@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { LiveVacancyMeter, fetchAllLiveRooms, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
+import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
 
 interface AppUser {
   uid: string;
@@ -62,6 +62,7 @@ export default function RoomsPage() {
   const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
   const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
   const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
+  const [allLiveRooms, setAllLiveRooms] = useState<DatabaseRoomUnit[]>([]);
   const [selectedRoomsByType, setSelectedRoomsByType] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'price-low' | 'price-high' | 'newest' | 'oldest'>('price-low');
@@ -350,6 +351,8 @@ export default function RoomsPage() {
 
         // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
         try {
+          const liveRoomsList = await fetchAllLiveRoomsList(id, bookingsList);
+          setAllLiveRooms(liveRoomsList);
           const liveRooms = await fetchAllLiveRooms(id, bookingsList);
           setLiveRoomsByTier(liveRooms);
         } catch (liveErr) {
@@ -694,12 +697,47 @@ export default function RoomsPage() {
 
                     {/* Real-Time Database Vacancy Meter & Dynamic Aggregation */}
                     {(() => {
-                      const tierRooms =
-                        liveRoomsByTier[matchingType?.id || typeName] ||
-                        liveRoomsByTier[typeName] ||
-                        liveRoomsByTier[typeName.toLowerCase()] ||
-                        [];
+                      const tierSlug = typeName.toLowerCase().replace(/\s+/g, '-');
                       const tierCap = Number(matchingType?.capacity || roomsForType[0]?.capacity) || 1;
+
+                      // 1. Primary: Use normalized getRoomsForTier from live database units
+                      let tierRooms = getRoomsForTier(allLiveRooms, {
+                        id: matchingType?.id,
+                        slug: tierSlug,
+                        name: typeName,
+                        capacity: tierCap,
+                      });
+
+                      // 2. Fallback: match against (hostel as any)?.rooms
+                      if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
+                        tierRooms = getRoomsForTier((hostel as any).rooms, {
+                          id: matchingType?.id,
+                          slug: tierSlug,
+                          name: typeName,
+                          capacity: tierCap,
+                        });
+                      }
+
+                      // 3. Fallback: derive from roomsForType with authentic beds
+                      if (tierRooms.length === 0 && roomsForType.length > 0) {
+                        tierRooms = roomsForType.map((r, idx) => {
+                          const cap = Number(r.capacity || tierCap) || 1;
+                          const occ = Number(r.occupancy) || 0;
+                          return {
+                            id: r.id || `room-${idx + 1}`,
+                            hostelId: id,
+                            roomNumber: r.roomNumber || r.label || `Room ${idx + 1}`,
+                            tierId: matchingType?.id || typeName,
+                            tierCapacity: cap,
+                            capacity: cap,
+                            beds: Array.from({ length: cap }, (_, bIdx) => ({
+                              id: `bed-${bIdx + 1}`,
+                              isOccupied: bIdx < occ,
+                            })),
+                            status: occ >= cap ? 'full' : 'active',
+                          } as DatabaseRoomUnit;
+                        });
+                      }
 
                       return (
                         <LiveVacancyMeter
@@ -1011,12 +1049,25 @@ export default function RoomsPage() {
                     Live Inventory & Bed Vacancy ({modalRoomType.name})
                   </h4>
                   <LiveVacancyMeter
-                    rooms={
-                      liveRoomsByTier[modalRoomType.id || modalRoomType.name] ||
-                      liveRoomsByTier[modalRoomType.name] ||
-                      liveRoomsByTier[modalRoomType.name?.toLowerCase()] ||
-                      []
-                    }
+                    rooms={(() => {
+                      const tierSlug = modalRoomType.name.toLowerCase().replace(/\s+/g, '-');
+                      const tierCap = Number(modalRoomType.capacity) || 1;
+                      let matched = getRoomsForTier(allLiveRooms, {
+                        id: modalRoomType.id,
+                        slug: tierSlug,
+                        name: modalRoomType.name,
+                        capacity: tierCap,
+                      });
+                      if (matched.length === 0 && Array.isArray((hostel as any)?.rooms)) {
+                        matched = getRoomsForTier((hostel as any).rooms, {
+                          id: modalRoomType.id,
+                          slug: tierSlug,
+                          name: modalRoomType.name,
+                          capacity: tierCap,
+                        });
+                      }
+                      return matched;
+                    })()}
                     tierCapacity={Number(modalRoomType.capacity) || 1}
                   />
                 </div>

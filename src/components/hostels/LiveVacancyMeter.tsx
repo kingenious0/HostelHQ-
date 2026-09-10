@@ -288,7 +288,146 @@ export async function fetchAllLiveRooms(
 }
 
 /**
- * 2. Dynamic Real-Time Aggregator
+ * 2. Normalize Tier Query & Matching Keys
+ * Eliminates false-negative filters caused by discrepancies between tierId, tierSlug, tierName, and numerical capacity.
+ */
+export function getRoomsForTier(allRooms: any[], tier: any): DatabaseRoomUnit[] {
+  if (!Array.isArray(allRooms) || !tier) return [];
+
+  const tierIdStr = String(tier.id || '').trim().toLowerCase();
+  const tierSlugStr = String(tier.slug || tier.id || '').trim().toLowerCase();
+  const tierNameStr = String(tier.name || tier.typeName || '').trim().toLowerCase();
+  const tierCap = Number(tier.capacity || tier.tierCapacity) || 0;
+
+  return allRooms.filter((room) => {
+    if (!room) return false;
+
+    const roomTierIdStr = String(room.tierId || room.roomTypeId || '').trim().toLowerCase();
+    const roomTierSlugStr = String(room.tierSlug || '').trim().toLowerCase();
+    const roomTierNameStr = String(room.tierName || room.roomType || room.type || '').trim().toLowerCase();
+    const roomCap = Number(room.capacity || room.tierCapacity) || 0;
+
+    const tierMatch =
+      (roomTierIdStr && (roomTierIdStr === tierIdStr || roomTierIdStr === tierSlugStr)) ||
+      (roomTierSlugStr && (roomTierSlugStr === tierSlugStr || roomTierSlugStr === tierIdStr)) ||
+      (roomTierNameStr && tierNameStr && roomTierNameStr === tierNameStr) ||
+      (roomTierIdStr && tierNameStr && roomTierIdStr.replace(/[^a-z0-9]/g, '') === tierNameStr.replace(/[^a-z0-9]/g, '')) ||
+      (roomCap > 0 && tierCap > 0 && roomCap === tierCap);
+
+    return Boolean(tierMatch);
+  });
+}
+
+/**
+ * Returns a flat list of all physical room units for a hostel.
+ */
+export async function fetchAllLiveRoomsList(
+  hostelId: string,
+  confirmedBookings?: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string; studentId?: string }>
+): Promise<DatabaseRoomUnit[]> {
+  const cleanId = cleanHostelId(hostelId);
+  if (!cleanId) return [];
+
+  try {
+    const roomsRef = collection(db, "hostels", cleanId, "rooms");
+    const snapshot = await getDocs(roomsRef);
+    const result: DatabaseRoomUnit[] = [];
+
+    if (!snapshot.empty) {
+      snapshot.docs.forEach((docSnap: any, index: number) => {
+        const data = docSnap.data();
+        const capacity = Number(data.tierCapacity || data.capacity) || 1;
+        const roomNum = data.roomNumber || data.number || data.name || `Room ${index + 1}`;
+        const tierKey = data.tierId || data.roomTypeId || data.roomType || "default";
+
+        let beds = Array.isArray(data.beds) && data.beds.length === capacity ? data.beds : null;
+
+        if (!beds) {
+          const bookingsForRoom = (confirmedBookings || []).filter(
+            (b) => b.roomId === docSnap.id || b.roomNumber === roomNum
+          );
+          const occupiedCount = Math.min(
+            capacity,
+            bookingsForRoom.length > 0 ? bookingsForRoom.length : Number(data.currentOccupancy || data.occupancy || 0)
+          );
+
+          beds = Array.from({ length: capacity }, (_, i) => ({
+            id: `${docSnap.id}-bed-${i + 1}`,
+            isOccupied: i < occupiedCount,
+            studentId: bookingsForRoom[i]?.studentId || null,
+          }));
+        }
+
+        result.push({
+          id: docSnap.id,
+          hostelId: cleanId,
+          roomNumber: roomNum,
+          tierId: tierKey,
+          tierCapacity: capacity,
+          capacity,
+          beds,
+          status: data.status || "active",
+          ...data,
+        } as DatabaseRoomUnit);
+      });
+
+      return result;
+    }
+
+    // Fallback: parent hostel document nested `rooms` array
+    const hostelDocSnap = await getDoc(doc(db, "hostels", cleanId));
+    if (hostelDocSnap.exists()) {
+      const hData = hostelDocSnap.data();
+      if (Array.isArray(hData.rooms) && hData.rooms.length > 0) {
+        hData.rooms.forEach((r: any, index: number) => {
+          const capacity = Number(r.tierCapacity || r.capacity) || 1;
+          const roomNum = r.roomNumber || r.number || r.name || `Room ${index + 1}`;
+          const roomId = r.id || `${cleanId}-nested-${index + 1}`;
+          const tierKey = r.tierId || r.roomTypeId || r.roomType || r.type || "default";
+
+          let beds = Array.isArray(r.beds) && r.beds.length === capacity ? r.beds : null;
+
+          if (!beds) {
+            const bookingsForRoom = (confirmedBookings || []).filter(
+              (b) => b.roomId === roomId || b.roomNumber === roomNum
+            );
+            const occupiedCount = Math.min(
+              capacity,
+              bookingsForRoom.length > 0 ? bookingsForRoom.length : Number(r.currentOccupancy || r.occupancy || 0)
+            );
+
+            beds = Array.from({ length: capacity }, (_, i) => ({
+              id: `${roomId}-bed-${i + 1}`,
+              isOccupied: i < occupiedCount,
+              studentId: bookingsForRoom[i]?.studentId || null,
+            }));
+          }
+
+          result.push({
+            id: roomId,
+            hostelId: cleanId,
+            roomNumber: roomNum,
+            tierId: tierKey,
+            tierCapacity: capacity,
+            capacity,
+            beds,
+            status: r.status || "active",
+            ...r,
+          } as DatabaseRoomUnit);
+        });
+        return result;
+      }
+    }
+
+    return [];
+  } catch (error) {
+    console.error("Error fetching live rooms list:", error);
+    return [];
+  }
+}
+
+/**
+ * Dynamic Real-Time Aggregator
  * Calculates metrics on the fly using runtime DB units.
  */
 export function computeTierAvailability(rooms: DatabaseRoomUnit[], expectedCapacity: number) {
@@ -345,7 +484,8 @@ export function LiveVacancyMeter({
     tierCapacity
   );
 
-  if (rooms.length === 0) {
+  // Display "No registered rooms currently open for this tier" only if tierRooms.length === 0 or openBeds === 0.
+  if (rooms.length === 0 || openBeds === 0) {
     return (
       <div className="text-sm text-slate-500 italic p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800">
         No registered rooms currently open for this tier.
@@ -404,8 +544,8 @@ export function LiveVacancyMeter({
                     isRoomFull ? "bg-rose-500" : "bg-emerald-500"
                   }`}
                 />
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {roomOpenBeds === tierCapacity ? "Empty" : isRoomFull ? "Full • 0 beds open" : `${roomOpenBeds} beds open`}
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  {isRoomFull ? "Full • 0 beds open" : `${roomOpenBeds} beds open`}
                 </span>
               </div>
 

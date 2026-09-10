@@ -9,13 +9,13 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/c
 import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
-import {AlertTriangle, Edit, Loader2, PlusCircle, Repeat, Trash2, Users} from "lucide-react";
+import {AlertTriangle, Edit, Loader2, PlusCircle, Repeat, Trash2, Users, Wrench} from "lucide-react";
 import {db, auth} from "@/lib/firebase";
 import {collection, doc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query, where} from "firebase/firestore";
 import {onAuthStateChanged, type User} from "firebase/auth";
 import type {Hostel, RoomType} from "@/lib/data";
 import {useToast} from "@/hooks/use-toast";
-import {fetchHostelOccupanciesAction} from "@/app/actions/db";
+import {fetchHostelOccupanciesAction, repairAllHostelInventoriesAction} from "@/app/actions/db";
 
 type ListingRow = {
   id: string;
@@ -77,8 +77,39 @@ export default function AdminListingsPage() {
   const [pendingHostels, setPendingHostels] = useState<ListingRow[]>([]);
   const [realtimeOccupancy, setRealtimeOccupancy] = useState<Record<string, number>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
   const {toast} = useToast();
   const router = useRouter();
+
+  const handleRepairAllInventories = async () => {
+    if (!confirm("Run Global Inventory Healing?\\n\\nThis will scan all hostels, enforce bed-level contracts (beds.length === capacity), link physical rooms to room tiers, and ensure open beds remain visible to students.")) {
+      return;
+    }
+    setRepairing(true);
+    try {
+      const res = await repairAllHostelInventoriesAction();
+      if (res.success && res.data) {
+        toast({
+          title: "Inventory Schema Healed",
+          description: `Successfully audited ${res.data.totalHostels} hostels and repaired ${res.data.totalRoomsRepaired} room units.`,
+        });
+      } else {
+        toast({
+          title: "Repair notice",
+          description: res.error || "Failed to repair inventories",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Repair error",
+        description: err.message || "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
@@ -259,9 +290,18 @@ export default function AdminListingsPage() {
               <h1 className="text-3xl font-headline font-bold">Admin Listings</h1>
               <p className="text-sm text-muted-foreground">Create, audit, and edit every hostel on the platform.</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="outline" onClick={() => router.push("/admin/dashboard")}>
                 Dashboard
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleRepairAllInventories}
+                disabled={repairing}
+                className="gap-2 border-emerald-500/30 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              >
+                {repairing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                Heal & Sync Inventory Schema
               </Button>
               <Link href="/admin/upload">
                 <Button>

@@ -782,6 +782,47 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
       const resolvedPhotos = uploadedImageUrls.length > 0 ? uploadedImageUrls : ["/hero-student-housing.jpg"];
       const allRoomVideos = processedRoomTypes.flatMap((r: any) => r.videos || []);
 
+      // 2b. Synthesize physical room inventory with individual beds (beds.length === capacity)
+      const physicalRooms: any[] = [];
+      processedRoomTypes.forEach((rt, rtIdx) => {
+        const numRooms = Number(rt.numberOfRooms) || (Array.isArray(rt.roomNumbers) ? rt.roomNumbers.length : 0) || 1;
+        const capacity = Number(rt.capacity) || 1;
+        const tierSlug = (rt.name || `tier-${rtIdx + 1}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)+/g, "");
+
+        for (let rIdx = 0; rIdx < numRooms; rIdx++) {
+          const explicitNumber = Array.isArray(rt.roomNumbers) && rt.roomNumbers[rIdx]
+            ? String(rt.roomNumbers[rIdx])
+            : `Room ${rtIdx + 1}${String.fromCharCode(65 + rIdx)}`;
+
+          const roomId = `room-${hostelId}-${rt.id}-${rIdx + 1}`;
+          const beds = Array.from({ length: capacity }, (_, bIdx) => ({
+            id: `bed-${bIdx + 1}`,
+            isOccupied: false,
+            studentId: null,
+            bookedAt: null,
+            bookingRef: null,
+          }));
+
+          physicalRooms.push({
+            id: roomId,
+            roomNumber: explicitNumber,
+            tierId: rt.id,
+            roomTypeId: rt.id,
+            tierSlug,
+            tierName: rt.name || "Standard Room",
+            capacity,
+            tierCapacity: capacity,
+            currentOccupancy: 0,
+            status: "active",
+            isFullyBooked: false,
+            beds,
+          });
+        }
+      });
+
       const hostelPayload: any = {
         id: hostelId,
         originalId: hostelId,
@@ -810,6 +851,7 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
         videos: allRoomVideos,
         priceRange: { min: minPrice, max: maxPrice },
         roomTypes: processedRoomTypes,
+        rooms: physicalRooms,
         availability: "Available",
         rating: 5.0,
         reviewCount: 0,
@@ -850,6 +892,17 @@ export function HostelListingWizard({ mode }: HostelListingWizardProps) {
             await setDoc(doc(db, "hostels", hostelId, "roomTypes", rt.id), rt);
           } catch (rtErr) {
             console.warn("Subcollection room write warning:", rtErr);
+          }
+        }
+      }
+
+      // Also persist physical rooms subcollection for atomic bed-level reservation
+      if (Array.isArray(hostelPayload.rooms)) {
+        for (const room of hostelPayload.rooms) {
+          try {
+            await setDoc(doc(db, "hostels", hostelId, "rooms", room.id), room);
+          } catch (rErr) {
+            console.warn("Subcollection physical room write warning:", rErr);
           }
         }
       }

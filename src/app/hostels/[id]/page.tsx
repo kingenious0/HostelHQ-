@@ -40,7 +40,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapboxMap } from '@/components/map';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { LiveVacancyMeter, fetchAllLiveRooms, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
+import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -111,6 +111,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
     const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
     const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
+    const [allLiveRooms, setAllLiveRooms] = useState<DatabaseRoomUnit[]>([]);
 
     const isRevoked = useMemo(() => isHostelRevoked(hostel), [hostel]);
     const isSanctioned = useMemo(() => isHostelSanctioned(hostel), [hostel]);
@@ -245,6 +246,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
                 // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
                 try {
+                    const liveRoomsList = await fetchAllLiveRoomsList(hostel.id, bookingsList);
+                    setAllLiveRooms(liveRoomsList);
                     const liveRooms = await fetchAllLiveRooms(hostel.id, bookingsList);
                     setLiveRoomsByTier(liveRooms);
                 } catch (liveErr) {
@@ -1540,12 +1543,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                 </div>
                                             </div>
                                             {(() => {
-                                                const tierRooms =
-                                                    liveRoomsByTier[room.id || room.name] ||
-                                                    liveRoomsByTier[room.name] ||
-                                                    liveRoomsByTier[room.name?.toLowerCase()] ||
-                                                    [];
+                                                const tierSlug = room.name.toLowerCase().replace(/\s+/g, '-');
                                                 const tierCapacity = Number(room.capacity) || 1;
+                                                let tierRooms = getRoomsForTier(allLiveRooms, {
+                                                    id: room.id,
+                                                    slug: tierSlug,
+                                                    name: room.name,
+                                                    capacity: tierCapacity,
+                                                });
+                                                if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
+                                                    tierRooms = getRoomsForTier((hostel as any).rooms, {
+                                                        id: room.id,
+                                                        slug: tierSlug,
+                                                        name: room.name,
+                                                        capacity: tierCapacity,
+                                                    });
+                                                }
                                                 return <LiveVacancyMeter rooms={tierRooms} tierCapacity={tierCapacity} />;
                                             })()}
                                         </div>
@@ -1660,12 +1673,25 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                             </span>
                                         </div>
                                         <LiveVacancyMeter
-                                            rooms={
-                                                liveRoomsByTier[activeRoom.id || activeRoom.name] ||
-                                                liveRoomsByTier[activeRoom.name] ||
-                                                liveRoomsByTier[activeRoom.name?.toLowerCase()] ||
-                                                []
-                                            }
+                                            rooms={(() => {
+                                                const tierSlug = activeRoom.name.toLowerCase().replace(/\s+/g, '-');
+                                                const tierCapacity = Number(activeRoom.capacity) || 1;
+                                                let tierRooms = getRoomsForTier(allLiveRooms, {
+                                                    id: activeRoom.id,
+                                                    slug: tierSlug,
+                                                    name: activeRoom.name,
+                                                    capacity: tierCapacity,
+                                                });
+                                                if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
+                                                    tierRooms = getRoomsForTier((hostel as any).rooms, {
+                                                        id: activeRoom.id,
+                                                        slug: tierSlug,
+                                                        name: activeRoom.name,
+                                                        capacity: tierCapacity,
+                                                    });
+                                                }
+                                                return tierRooms;
+                                            })()}
                                             tierCapacity={Number(activeRoom.capacity) || 1}
                                         />
                                     </div>

@@ -1536,4 +1536,24 @@ export async function completeVisitByStudentAction(visitId: string) {
   }
 }
 
+/**
+ * Administrative Global Inventory Healing & Schema Migration
+ * Scans all hostels and normalizes physical room units and bed arrays to single-source-of-truth.
+ */
+export async function repairAllHostelInventoriesAction() {
+  try {
+    await requireRole(["admin"]);
+    const { repairAllHostelInventories } = await import("@/lib/inventory-repair");
+    const result = await repairAllHostelInventories();
+    revalidatePath("/");
+    revalidatePath("/hostels");
+    revalidatePath("/admin/listings");
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error("repairAllHostelInventoriesAction error:", error);
+    return { success: false, error: error.message || "Failed to repair hostel inventories" };
+  }
+}
+
+
 
