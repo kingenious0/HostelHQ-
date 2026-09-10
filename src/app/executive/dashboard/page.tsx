@@ -334,6 +334,41 @@ export default function ExecutiveDashboardPage() {
     ? Math.round((totalVerifiedHostels / totalRegisteredHostels) * 100) 
     : 100;
 
+  // Total potential beds across all registered properties (including pending/unverified)
+  const totalPotentialBeds = useMemo(() => {
+    return hostels.reduce((acc, h) => {
+      const roomCapacity = (h.roomTypes || []).reduce((rAcc, rt) => {
+        return rAcc + ((rt.numberOfRooms || 1) * (rt.capacity || 1));
+      }, 0);
+      return acc + roomCapacity;
+    }, 0);
+  }, [hostels]);
+
+  // Live Audit coverage percentage of physical off-campus beds
+  const bedAuditRate = totalPotentialBeds > 0 
+    ? Math.round((totalOffCampusBeds / totalPotentialBeds) * 100) 
+    : 100;
+
+  // Live YoY registration trend calculated from live hostel submission/creation dates
+  const yoyGrowthText = useMemo(() => {
+    if (!hostels.length) return "+0.0% YoY";
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const recent = hostels.filter((h) => {
+      const d = h.createdAt || h.submittedAt || (h.createdBy as any)?.createdAt;
+      return d && new Date(d) >= oneYearAgo;
+    }).length;
+
+    if (recent === 0) {
+      return `${accreditationRate}% Active`;
+    }
+    const prior = hostels.length - recent;
+    if (prior <= 0) return `+${recent} New YoY`;
+    const rate = Math.round((recent / prior) * 100);
+    return `+${rate}% YoY`;
+  }, [hostels, accreditationRate]);
+
   // Rental Indices Calculations from live roomTypes prices
   const rentIndices = useMemo(() => {
     const prices1: number[] = [];
@@ -1054,7 +1089,7 @@ export default function ExecutiveDashboardPage() {
                 </div>
                 <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold gap-1 px-2 py-0.5 rounded-full shadow-none">
                   <TrendingUp className="h-3 w-3" />
-                  +4.8% YoY
+                  {yoyGrowthText}
                 </Badge>
               </div>
 
@@ -1082,7 +1117,7 @@ export default function ExecutiveDashboardPage() {
                   <Users className="h-5 w-5" />
                 </div>
                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
-                  100% Audited
+                  {bedAuditRate}% Audited
                 </Badge>
               </div>
 
@@ -1106,8 +1141,12 @@ export default function ExecutiveDashboardPage() {
                 <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
                   <Clock className="h-5 w-5" />
                 </div>
-                <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
-                  In Pipeline
+                <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
+                  pendingAccreditationReviews > 0
+                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                }`}>
+                  {pendingAccreditationReviews > 0 ? "In Pipeline" : "Audits Cleared"}
                 </Badge>
               </div>
 
@@ -1131,8 +1170,12 @@ export default function ExecutiveDashboardPage() {
                 <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
                   <AlertTriangle className="h-5 w-5" />
                 </div>
-                <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
-                  Enforcement
+                <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
+                  activeSanctionsCount > 0
+                    ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                }`}>
+                  {activeSanctionsCount > 0 ? "Enforcement" : "Zero Sanctions"}
                 </Badge>
               </div>
 
