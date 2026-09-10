@@ -443,8 +443,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     };
 
     const getVisitButton = (room: RoomType) => {
-        // RBAC: Only student role can request visits, secure rooms, or track visits
-        if (!currentUser || currentUser.role !== 'student') {
+        // RBAC: Non-students (e.g. managers, owners, coordinators) shouldn't see student booking actions
+        if (currentUser && currentUser.role !== 'student') {
             return null;
         }
 
@@ -602,8 +602,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const canSecure = existingVisit && existingVisit.status === 'completed' && existingVisit.studentCompleted === true;
 
     const renderPrimaryAction = (size: 'default' | 'lg' = 'default') => {
-        // RBAC: Only student role can request visits, secure rooms, or track visits
-        if (!currentUser || currentUser.role !== 'student') {
+        // RBAC: Non-students (e.g. managers, owners, coordinators) shouldn't see student booking actions
+        if (currentUser && currentUser.role !== 'student') {
             return null;
         }
 
@@ -668,7 +668,22 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     )}
                 >
                     <Ticket className="h-4 w-4" />
-                    View Visits
+                    Request Visit
+                </Button>
+            );
+        }
+
+        if (currentUser && (existingVisit === undefined || existingBooking === undefined)) {
+            return (
+                <Button
+                    disabled
+                    className={cn(
+                        "flex-1 bg-primary/80 text-primary-foreground font-bold rounded-xl shadow-md text-xs sm:text-sm flex items-center justify-center gap-2 cursor-wait",
+                        buttonHeight
+                    )}
+                >
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking Visits...
                 </Button>
             );
         }
@@ -745,7 +760,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 )}
             >
                 <Ticket className="h-4 w-4" />
-                View Visits
+                Request Visit
             </Button>
         );
     };
@@ -839,7 +854,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <span className="text-xs font-semibold text-muted-foreground">/year</span>
                     </div>
 
-                    {/* Bottom Row: [View Visits] [Save to Shortlist] */}
+                    {/* Bottom Row: [Request Visit] [Save to Shortlist] */}
                     <div className="flex items-center gap-2 pt-0.5">
                         {renderPrimaryAction('default')}
                         {renderShortlistAction('default')}
