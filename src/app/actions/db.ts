@@ -755,7 +755,8 @@ export async function approveHostelAccreditationAction(params: {
 
     // 2. DynamoDB Sync
     try {
-      await dynamoService.approvePendingHostel(cleanId, reviewerName);
+      await dynamoService.saveHostel(updatedHostelPayload, false);
+      await dynamoService.deleteHostel(cleanId, true);
     } catch (dynErr) {
       console.warn("DynamoDB sync note during approveHostelAccreditationAction:", dynErr);
     }
@@ -780,10 +781,11 @@ export async function approveHostelAccreditationAction(params: {
 
     // 4. Revalidate paths
     try {
+      revalidatePath("/");
+      revalidatePath("/hostels");
       revalidatePath("/admin/dashboard");
       revalidatePath("/coordinator/dashboard");
       revalidatePath("/manager/dashboard");
-      revalidatePath("/hostels");
     } catch (_) {}
 
     return { success: true, data: updatedHostelPayload };

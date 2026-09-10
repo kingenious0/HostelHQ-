@@ -75,7 +75,7 @@ export type Hostel = {
     role: 'manager' | 'admin' | 'hostel_coordinator';
     createdAt: string;
   };
-  status?: 'pending' | 'approved' | 'rejected' | 'live' | 'suspended_overpriced' | 'suspended' | 'sold-out';
+  status?: 'pending' | 'pending_review' | 'pending_accreditation' | 'approved' | 'accredited' | 'rejected' | 'declined' | 'revoked' | 'live' | 'suspended_overpriced' | 'suspended' | 'sold-out' | string;
   isPublished?: boolean;
   suspensionReason?: string | null;
   submittedAt?: string;
@@ -301,10 +301,16 @@ const normalizeText = (value?: string) => (value ?? '').toString().trim().toLowe
 const normalizeRoomTypeTag = (value?: string) => (value ?? '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
 
 const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
-  // Delist suspended or unpublished listings from student directory
+  // Delist suspended, revoked, pending, or unpublished listings from student directory
   if (
     hostel.status === "suspended_overpriced" ||
     hostel.status === "suspended" ||
+    hostel.status === "revoked" ||
+    hostel.status === "pending" ||
+    hostel.status === "pending_review" ||
+    hostel.status === "pending_accreditation" ||
+    hostel.status === "rejected" ||
+    hostel.status === "declined" ||
     hostel.isPublished === false
   ) {
     return false;
@@ -509,44 +515,43 @@ export async function getHostel(hostelId: string): Promise<Hostel | null> {
 
 
 export async function getHostels(options: GetHostelsOptions = {}): Promise<Hostel[]> {
+    const hostelMap = new Map<string, Hostel>();
+
     // 1. PRIMARY: Query DynamoDB (Main High-Performance Database)
-    if (typeof window !== 'undefined') {
-        try {
+    try {
+        let dynamoHostels: Hostel[] = [];
+        if (typeof window !== 'undefined') {
             const { fetchHostelsAction } = await import('@/app/actions/db');
             const res = await fetchHostelsAction({
                 featured: options.featured,
                 search: options.search,
                 location: options.location,
             });
-            if (res.success && res.data && res.data.length > 0) {
-                const filtered = res.data.filter((hostel) => hostelMatchesOptions(hostel, options));
-                if (filtered.length > 0) {
-                    return filtered;
-                }
+            if (res.success && res.data) {
+                dynamoHostels = res.data;
             }
-        } catch (dynamoErr) {
-            console.warn("[Data Layer] DynamoDB server action fetchHostelsAction failed, falling back to Firestore backup:", dynamoErr);
-        }
-    } else {
-        try {
+        } else {
             const { listHostels } = await import('./dynamodb-service');
-            const dynamoHostels = await listHostels({
+            dynamoHostels = await listHostels({
                 featuredOnly: options.featured,
                 search: options.search,
                 location: options.location,
             });
-            if (dynamoHostels && dynamoHostels.length > 0) {
-                const filtered = dynamoHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-                if (filtered.length > 0) {
-                    return filtered;
+        }
+
+        if (Array.isArray(dynamoHostels)) {
+            for (const h of dynamoHostels) {
+                const cleanId = (h.originalId || h.id || '').replace(/^HOSTEL#/i, '').replace(/^PENDING_HOSTEL#/i, '').trim();
+                if (cleanId) {
+                    hostelMap.set(cleanId, { ...h, id: cleanId, originalId: cleanId });
                 }
             }
-        } catch (dynamoErr) {
-            console.warn("[Data Layer] DynamoDB primary query failed, falling back to Firestore backup:", dynamoErr);
         }
+    } catch (dynamoErr) {
+        console.warn("[Data Layer] DynamoDB fetch note:", dynamoErr);
     }
 
-    // 2. SECONDARY: Firestore Backup / Fallback
+    // 2. SECONDARY: Firestore Backup & Real-Time Sync
     try {
         const querySnapshot = await getDocs(collection(db, 'hostels'));
 
@@ -599,6 +604,7 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
 
                 return convertTimestamps({ 
                     id: docSnap.id, 
+                    originalId: docSnap.id,
                     ...data, 
                     lat: hostelLat ?? staticHostels[0].lat,
                     lng: hostelLng ?? staticHostels[0].lng, 
@@ -611,11 +617,32 @@ export async function getHostels(options: GetHostelsOptions = {}): Promise<Hoste
                 }) as Hostel;
             }));
 
-            const filteredFirestore = firestoreHostels.filter((hostel) => hostelMatchesOptions(hostel, options));
-            return filteredFirestore;
+            // Merge Firestore records into hostelMap (Firestore has coordinator real-time updates)
+            for (const fh of firestoreHostels) {
+                const existing = hostelMap.get(fh.id);
+                if (!existing) {
+                    hostelMap.set(fh.id, fh);
+                } else {
+                    hostelMap.set(fh.id, {
+                        ...existing,
+                        ...fh,
+                        status: fh.status || existing.status,
+                        isPublished: fh.isPublished ?? existing.isPublished,
+                        verified: fh.verified ?? existing.verified,
+                        roomTypes: (fh.roomTypes && fh.roomTypes.length > 0) ? fh.roomTypes : existing.roomTypes,
+                        images: (fh.images && fh.images.length > 0) ? fh.images : existing.images,
+                    });
+                }
+            }
         }
     } catch (e: any) {
         console.error("Error fetching hostels from Firestore backup: ", e);
+    }
+
+    const allMerged = Array.from(hostelMap.values());
+    if (allMerged.length > 0) {
+        const filtered = allMerged.filter((hostel) => hostelMatchesOptions(hostel, options));
+        return filtered;
     }
 
     // 3. TERTIARY: Static fallback safety net

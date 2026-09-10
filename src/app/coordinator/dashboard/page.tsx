@@ -333,10 +333,12 @@ export default function CoordinatorDashboardPage() {
             {
               ...hostel,
               id: targetId,
-              status: "approved",
+              status: "accredited",
+              isPublished: true,
               verified: true,
               approvedAt: new Date().toISOString(),
               approvedBy: coordName,
+              rejectionReason: null,
             },
             { merge: true }
           );

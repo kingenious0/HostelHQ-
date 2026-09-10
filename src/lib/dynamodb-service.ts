@@ -631,14 +631,31 @@ export async function listPendingHostels(): Promise<Hostel[]> {
 export async function approvePendingHostel(hostelId: string, approvedBy?: string): Promise<Hostel | null> {
   const cleanId = cleanHostelId(hostelId);
   const pendingKey = formatKey.pendingHostel(cleanId);
-  const pendingData = await getItem<any>(pendingKey.id, pendingKey.entityType);
+  let pendingData = await getItem<any>(pendingKey.id, pendingKey.entityType);
+
+  // Fallback to Firestore if pending data is not found in DynamoDB
+  if (!pendingData) {
+    try {
+      const { db } = await import("./firebase");
+      const { doc, getDoc } = await import("firebase/firestore");
+      const fSnap = await getDoc(doc(db, "hostels", cleanId));
+      if (fSnap.exists()) {
+        pendingData = fSnap.data();
+      }
+    } catch (fErr) {
+      console.warn("Firestore fallback lookup in approvePendingHostel warning:", fErr);
+    }
+  }
+
   if (!pendingData) return null;
 
   const liveHostel = {
     ...pendingData,
     id: cleanId,
     originalId: cleanId,
-    status: "approved",
+    status: "accredited",
+    isPublished: true,
+    verified: true,
     approvedAt: new Date().toISOString(),
     approvedBy: approvedBy || "Hostel Coordinator",
   };
