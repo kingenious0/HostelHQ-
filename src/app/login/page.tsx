@@ -20,7 +20,7 @@ import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithCustomToken, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, setDoc, limit } from 'firebase/firestore';
 import { isPlatformAuthenticatorAvailable, base64ToArrayBuffer, arrayBufferToBase64 } from '@/lib/webauthn';
-import { cn } from '@/lib/utils';
+import { cn, parseStudentCredentials } from '@/lib/utils';
 import { AppLoader } from '@/components/ui/app-loader';
 
 function LoginPageInner() {
@@ -113,13 +113,19 @@ function LoginPageInner() {
 
             let role = 'student';
             if (!userDocSnap.exists()) {
+                const autoParsedId = parseStudentCredentials(user.email || '');
                 await setDoc(userDocRef, {
                     uid: user.uid,
                     email: user.email,
+                    institutionalEmail: user.email,
                     fullName: user.displayName || 'Student',
                     role: 'student',
                     createdAt: new Date().toISOString(),
                     profileImage: user.photoURL || '',
+                    avatarUrl: user.photoURL || '',
+                    studentId: autoParsedId || '',
+                    studentIndexNumber: autoParsedId || '',
+                    isStudentIdVerified: !!autoParsedId,
                 });
             } else {
                 role = (userDocSnap.data() as any).role || 'student';

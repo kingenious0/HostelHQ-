@@ -143,10 +143,22 @@ export async function setPayoutAutoApprove(enabled: boolean) {
 export async function requestWithdrawal(userId: string, amount: number, paymentDetails?: { network: string, number: string }) {
     try {
         const caller = await requireAuth();
-        if (caller.uid !== userId && caller.role !== 'admin') {
+        const ALLOWED_PAYOUT_ROLES = [
+            "manager",
+            "hostel_manager",
+            "property_manager",
+            "admin",
+            "superadmin"
+        ];
+
+        // Retrieve user document directly or verify decoded session token
+        const callerDoc = await getDoc(doc(db, "users", caller.uid));
+        const userRole = (callerDoc.data()?.role || caller.role || "").toLowerCase().trim();
+
+        if (caller.uid !== userId && userRole !== 'admin' && userRole !== 'superadmin') {
             return { success: false, message: "Forbidden: Cannot request withdrawal for another user." };
         }
-        if (!['manager', 'admin'].includes(caller.role)) {
+        if (!ALLOWED_PAYOUT_ROLES.includes(userRole)) {
             return { success: false, message: "Forbidden: Only hostel managers or administrators can request payouts." };
         }
 
@@ -215,7 +227,7 @@ export async function requestWithdrawal(userId: string, amount: number, paymentD
 
 
         // 2. Initial Transaction: Deduct Balance & Create Pending Request
-        await runTransaction(db, async (transaction) => {
+        await runTransaction(db, async (transaction: any) => {
             // Re-read user to be safe in transaction
             const tUserDoc = await transaction.get(userRef);
             if (!tUserDoc.exists()) throw new Error("User does not exist!");
@@ -311,7 +323,7 @@ export async function getPendingWithdrawals() {
             where('status', '==', 'pending')
         );
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PayoutRequest));
+        return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as PayoutRequest));
     } catch (error) {
         console.error("Fetch Pending Withdrawals Failed:", error);
         return [];
@@ -378,7 +390,7 @@ export async function processWithdrawalAction(requestId: string) {
 export async function rejectWithdrawalAction(requestId: string, reason: string) {
     try {
         await requireRole(['admin']);
-        await runTransaction(db, async (transaction) => {
+        await runTransaction(db, async (transaction: any) => {
             const requestRef = doc(db, 'payout_requests', requestId);
             const requestDoc = await transaction.get(requestRef);
 

@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
-import { cn } from '@/lib/utils';
+import { cn, parseStudentCredentials } from '@/lib/utils';
 import { uploadImage } from '@/lib/cloudinary';
 import { submitStudentVerificationAction } from '@/app/actions/db';
 
@@ -298,9 +298,12 @@ export default function SignupPage() {
             const user = userCredential.user;
 
             // 3. Build unified user profile
+            const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
+            const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
             const userData: any = {
                 uid: user.uid,
                 email: email.trim().toLowerCase(),
+                institutionalEmail: email.trim().toLowerCase(),
                 fullName: fullName.trim(),
                 phone: formattedPhone,
                 phoneNumber: formattedPhone,
@@ -308,11 +311,17 @@ export default function SignupPage() {
                 role: selectedRole,
                 createdAt: new Date().toISOString(),
                 verificationStatus: 'verified',
+                avatarUrl: user.photoURL || '',
+                profileImage: user.photoURL || '',
             };
 
             if ((selectedRole as string) === 'student') {
-                if (studentIndexNumber.trim()) {
-                    userData.studentIndexNumber = studentIndexNumber.trim();
+                if (finalStudentId) {
+                    userData.studentIndexNumber = finalStudentId;
+                    userData.studentId = finalStudentId;
+                    if (autoParsedId) {
+                        userData.isStudentIdVerified = true;
+                    }
                 }
                 if (faculty) userData.faculty = faculty;
                 if (department) userData.department = department;
@@ -410,9 +419,12 @@ export default function SignupPage() {
             const user = userCredential.user;
 
             // 3. Build unified user profile with 'pending' verification status
+            const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
+            const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
             const userData: any = {
                 uid: user.uid,
                 email: email.trim().toLowerCase(),
+                institutionalEmail: email.trim().toLowerCase(),
                 fullName: fullName.trim(),
                 phone: formattedPhone,
                 phoneNumber: formattedPhone,
@@ -422,9 +434,13 @@ export default function SignupPage() {
                 verificationStatus: 'pending',
                 verificationDocUrl: uploadedUrl,
                 verificationDocType: documentType,
-                studentIndexNumber: studentIndexNumber.trim(),
+                studentIndexNumber: finalStudentId,
+                studentId: finalStudentId,
+                isStudentIdVerified: !!autoParsedId,
                 faculty: faculty || '',
                 department: department || '',
+                avatarUrl: user.photoURL || '',
+                profileImage: user.photoURL || '',
             };
 
             // 4. Save to Firestore
@@ -514,15 +530,21 @@ export default function SignupPage() {
             const userDocSnap = await getDoc(userDocRef);
 
             if (!userDocSnap.exists()) {
+                const autoParsedId = parseStudentCredentials(user.email || '');
                 await setDoc(userDocRef, {
                     uid: user.uid,
                     email: user.email,
+                    institutionalEmail: user.email,
                     fullName: user.displayName || 'Student',
                     role: 'student',
                     createdAt: new Date().toISOString(),
                     profileImage: user.photoURL || '',
+                    avatarUrl: user.photoURL || '',
                     authProvider: 'google',
                     verificationStatus: 'verified_email',
+                    studentId: autoParsedId || '',
+                    studentIndexNumber: autoParsedId || '',
+                    isStudentIdVerified: !!autoParsedId,
                 });
             }
 

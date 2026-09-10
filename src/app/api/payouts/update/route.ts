@@ -3,6 +3,7 @@ import { getPaystackKeys, verifyPaystackToken } from "@/lib/paystack-utils";
 import { db } from "@/lib/firebase";
 import {
   doc,
+  getDoc,
   updateDoc,
   addDoc,
   collection,
@@ -154,6 +155,31 @@ export async function POST(req: NextRequest) {
       accountData.createdAt = serverTimestamp();
       const newDocRef = await addDoc(collection(db, "bankAccounts"), accountData);
       savedId = newDocRef.id;
+    }
+
+    // Manager MoMo Identity Binding
+    if (managerId) {
+      try {
+        const userRef = doc(db, "users", managerId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          const updatePayload: Record<string, any> = {
+            contactPhone: targetNumber,
+            isIdentityVerified: true,
+            updatedAt: new Date().toISOString(),
+          };
+          if (!uData.fullName || !uData.isIdentityVerified) {
+            updatePayload.fullName = targetName;
+          }
+          if (!uData.phone) {
+            updatePayload.phone = targetNumber;
+          }
+          await updateDoc(userRef, updatePayload);
+        }
+      } catch (bindErr) {
+        console.warn("[Identity Binding] Failed to bind manager identity in payouts/update:", bindErr);
+      }
     }
 
     return NextResponse.json({

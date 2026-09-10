@@ -49,10 +49,12 @@ import {
   Fingerprint,
   RefreshCw,
   Trash2,
-  Plus
+  Plus,
+  Briefcase,
+  Landmark
 } from 'lucide-react';
 import { BackButton } from '@/components/ui/back-button';
-import { cn } from '@/lib/utils';
+import { cn, parseStudentCredentials } from '@/lib/utils';
 import { isBiometricSupported, getDeviceTypeName, arrayBufferToBase64 } from '@/lib/webauthn';
 
 export interface AppUser {
@@ -75,6 +77,18 @@ export interface AppUser {
   biometricCredential?: any;
   biometricCredentialId?: any;
   passkeyRegisteredAt?: string | null;
+  // Role-adaptive profile fields
+  businessName?: string;
+  businessAddress?: string;
+  contactPhone?: string;
+  officialTitle?: string;
+  staffId?: string;
+  directorate?: string;
+  institutionalEmail?: string;
+  officeExtension?: string;
+  isIdentityVerified?: boolean;
+  isStudentIdVerified?: boolean;
+  avatarUrl?: string;
   [key: string]: any;
 }
 
@@ -147,6 +161,32 @@ const getRoleConfig = (role?: string) => {
   return ROLE_CONFIG[normalized] || ROLE_CONFIG.student;
 };
 
+export const isStudentRole = (role?: string) => {
+  const r = (role || 'student').toLowerCase().trim();
+  return r === 'student' || r === 'resident';
+};
+
+export const isManagerRole = (role?: string) => {
+  const r = (role || '').toLowerCase().trim();
+  return ['manager', 'hostel_manager', 'property_manager'].includes(r);
+};
+
+export const isInstitutionalRole = (role?: string) => {
+  const r = (role || '').toLowerCase().trim();
+  return [
+    'dean',
+    'coordinator',
+    'hostel_coordinator',
+    'vc',
+    'provost',
+    'pro_vc',
+    'executive',
+    'registrar',
+    'admin',
+    'superadmin'
+  ].includes(r);
+};
+
 export default function ProfilePage() {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,6 +204,17 @@ export default function ProfilePage() {
     emergencyContact: '',
     momoNumber: '',
     momoNetwork: 'MTN',
+    businessName: '',
+    businessAddress: '',
+    contactPhone: '',
+    officialTitle: '',
+    staffId: '',
+    directorate: '',
+    institutionalEmail: '',
+    officeExtension: '',
+    isIdentityVerified: false,
+    isStudentIdVerified: false,
+    avatarUrl: '',
   });
   const [activeTab, setActiveTab] = useState<'personal' | 'contact' | 'security'>('personal');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -211,37 +262,71 @@ export default function ProfilePage() {
               }
             }
 
+            // Auto-parse student credentials if available
+            const parsedStudentId = parseStudentCredentials(user.email);
+            const resolvedStudentId = rawData.studentId || parsedStudentId || '';
+            const isStudentIdAutoParsed = Boolean(parsedStudentId && (!rawData.studentId || rawData.studentId === parsedStudentId));
+
             const currentUser: AppUser = {
               uid: user.uid,
               email: user.email!,
               fullName: rawData.fullName || user.displayName || '',
               role: rawData.role || 'student',
-              profileImage: rawData.profileImage || user.photoURL || '',
-              phone: rawData.phone || '',
-              address: rawData.address || '',
+              profileImage: rawData.profileImage || rawData.avatarUrl || user.photoURL || '',
+              avatarUrl: rawData.avatarUrl || rawData.profileImage || user.photoURL || '',
+              phone: rawData.phone || rawData.contactPhone || '',
+              address: rawData.address || rawData.businessAddress || '',
               bio: rawData.bio || '',
               nationality: rawData.nationality || 'Ghanaian',
               gender: rawData.gender || '',
-              department: rawData.department || '',
-              studentId: rawData.studentId || '',
+              department: rawData.department || rawData.faculty || '',
+              studentId: resolvedStudentId,
+              isStudentIdVerified: rawData.isStudentIdVerified ?? isStudentIdAutoParsed,
               emergencyContact: rawData.emergencyContact || '',
               momoNumber: rawData.momoNumber || rawData.phone || '',
               momoNetwork: rawData.momoNetwork || 'MTN',
+              businessName: rawData.businessName || '',
+              businessAddress: rawData.businessAddress || rawData.address || '',
+              contactPhone: rawData.contactPhone || rawData.phone || '',
+              officialTitle: rawData.officialTitle || '',
+              staffId: rawData.staffId || '',
+              directorate: rawData.directorate || rawData.department || '',
+              institutionalEmail: rawData.institutionalEmail || user.email || '',
+              officeExtension: rawData.officeExtension || rawData.phone || '',
+              isIdentityVerified: !!rawData.isIdentityVerified,
               hasBiometricAuth: isEnrolled,
               biometricCredential: rawData.biometricCredential,
               passkeyRegisteredAt: rawData.passkeyRegisteredAt || rawData.biometricCredential?.createdAt,
             };
             setAppUser(currentUser);
             setProfileData(currentUser);
+
+            // Persist auto-parsed studentId to Firestore if not yet recorded
+            if (parsedStudentId && !rawData.studentId) {
+              try {
+                await updateDoc(userDocRef, {
+                  studentId: parsedStudentId,
+                  isStudentIdVerified: true,
+                  updatedAt: new Date().toISOString(),
+                });
+              } catch (pErr) {
+                console.warn("Could not auto-persist parsed studentId:", pErr);
+              }
+            }
           } else {
+            const parsedStudentId = parseStudentCredentials(user.email);
             const newUser: AppUser = {
               uid: user.uid,
               email: user.email!,
               fullName: user.displayName || '',
               role: 'student',
               profileImage: user.photoURL || '',
+              avatarUrl: user.photoURL || '',
               nationality: 'Ghanaian',
               momoNetwork: 'MTN',
+              institutionalEmail: user.email!,
+              studentId: parsedStudentId || '',
+              isStudentIdVerified: !!parsedStudentId,
             };
             await updateDoc(userDocRef, newUser as any, { merge: true });
             setAppUser(newUser);
@@ -291,14 +376,92 @@ export default function ProfilePage() {
     setIsSavingProfile(true);
     try {
       const userDocRef = doc(db, "users", appUser.uid);
-      await updateDoc(userDocRef, {
-        ...profileData,
-        updatedAt: new Date().toISOString()
+      const role = (appUser.role || 'student').toLowerCase().trim();
+
+      // Base payload with common identity fields
+      let cleanPayload: Record<string, any> = {
+        fullName: profileData.fullName?.trim() || '',
+        nationality: profileData.nationality?.trim() || 'Ghanaian',
+        profileImage: profileData.profileImage || '',
+        avatarUrl: profileData.profileImage || '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (isManagerRole(role)) {
+        // Manager payload: exclude student fields
+        cleanPayload = {
+          ...cleanPayload,
+          businessName: profileData.businessName?.trim() || '',
+          businessAddress: profileData.businessAddress?.trim() || profileData.address?.trim() || '',
+          address: profileData.businessAddress?.trim() || profileData.address?.trim() || '',
+          contactPhone: profileData.contactPhone?.trim() || profileData.phone?.trim() || '',
+          phone: profileData.contactPhone?.trim() || profileData.phone?.trim() || '',
+          isIdentityVerified: !!profileData.isIdentityVerified,
+        };
+        // Clean out student and institutional attributes so records remain clean
+        delete cleanPayload.studentId;
+        delete cleanPayload.faculty;
+        delete cleanPayload.department;
+        delete cleanPayload.bio;
+        delete cleanPayload.roommateBio;
+        delete cleanPayload.officialTitle;
+        delete cleanPayload.staffId;
+        delete cleanPayload.directorate;
+      } else if (isInstitutionalRole(role)) {
+        // Institutional / University Leadership payload: exclude student fields and roommate preferences
+        cleanPayload = {
+          ...cleanPayload,
+          officialTitle: profileData.officialTitle?.trim() || '',
+          staffId: profileData.staffId?.trim() || '',
+          directorate: profileData.directorate?.trim() || '',
+          department: profileData.directorate?.trim() || '',
+          institutionalEmail: profileData.institutionalEmail?.trim() || appUser.email || '',
+          officeExtension: profileData.officeExtension?.trim() || '',
+          contactPhone: profileData.officeExtension?.trim() || profileData.phone?.trim() || '',
+          phone: profileData.officeExtension?.trim() || profileData.phone?.trim() || '',
+        };
+        // Clean out student and residential attributes
+        delete cleanPayload.studentId;
+        delete cleanPayload.faculty;
+        delete cleanPayload.bio;
+        delete cleanPayload.roommateBio;
+        delete cleanPayload.address;
+        delete cleanPayload.businessName;
+        delete cleanPayload.businessAddress;
+      } else {
+        // Student role (default): include student identity & academic attributes
+        cleanPayload = {
+          ...cleanPayload,
+          studentId: profileData.studentId?.trim() || '',
+          department: profileData.department?.trim() || '',
+          faculty: profileData.department?.trim() || '',
+          gender: profileData.gender || '',
+          address: profileData.address?.trim() || '',
+          bio: profileData.bio?.trim() || '',
+          isStudentIdVerified: !!profileData.isStudentIdVerified,
+        };
+        // Clean out manager and institutional attributes
+        delete cleanPayload.businessName;
+        delete cleanPayload.businessAddress;
+        delete cleanPayload.officialTitle;
+        delete cleanPayload.staffId;
+        delete cleanPayload.directorate;
+        delete cleanPayload.officeExtension;
+      }
+
+      // Remove undefined/null keys
+      Object.keys(cleanPayload).forEach(key => {
+        if (cleanPayload[key] === undefined || cleanPayload[key] === null) {
+          delete cleanPayload[key];
+        }
       });
-      setAppUser(prev => prev ? { ...prev, ...profileData } as AppUser : null);
+
+      await updateDoc(userDocRef, cleanPayload);
+      setAppUser(prev => prev ? { ...prev, ...cleanPayload } as AppUser : null);
+      setProfileData(prev => ({ ...prev, ...cleanPayload }));
       toast({
         title: 'Profile changes saved!',
-        description: 'Your personal information and preferences have been securely updated.'
+        description: 'Your profile information and credentials have been securely updated.'
       });
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -694,16 +857,32 @@ export default function ProfilePage() {
                     </Button>
                   </div>
 
-                  {/* Department / Programme */}
+                  {/* Department / Programme / Role-Adaptive Metadata */}
                   <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-gray-50/80 dark:bg-muted/30 border border-border/50">
                     <div className="space-y-0.5 min-w-0">
-                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Academic Department</p>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {isManagerRole(appUser?.role)
+                          ? "Property Agency"
+                          : isInstitutionalRole(appUser?.role)
+                          ? "Institutional Office"
+                          : "Academic Department"}
+                      </p>
                       <p className="text-xs font-medium text-foreground truncate">
-                        {profileData.department || "Faculty of Science & Computing"}
+                        {isManagerRole(appUser?.role)
+                          ? (profileData.businessName || "Private Property Management")
+                          : isInstitutionalRole(appUser?.role)
+                          ? (profileData.directorate || "Executive Directorate")
+                          : (profileData.department || "Faculty of Science & Computing")}
                       </p>
                     </div>
                     <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <GraduationCap className="h-4 w-4" />
+                      {isManagerRole(appUser?.role) ? (
+                        <Building2 className="h-4 w-4" />
+                      ) : isInstitutionalRole(appUser?.role) ? (
+                        <ShieldCheck className="h-4 w-4" />
+                      ) : (
+                        <GraduationCap className="h-4 w-4" />
+                      )}
                     </div>
                   </div>
 
@@ -795,11 +974,29 @@ export default function ProfilePage() {
                       "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
                       activeTab === 'personal' ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
                     )}>
-                      <User className="h-5 w-5" />
+                      {isManagerRole(appUser?.role) ? (
+                        <Building2 className="h-5 w-5" />
+                      ) : isInstitutionalRole(appUser?.role) ? (
+                        <ShieldCheck className="h-5 w-5" />
+                      ) : (
+                        <User className="h-5 w-5" />
+                      )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-foreground truncate">Personal & Academic</p>
-                      <p className="text-[11px] text-muted-foreground truncate">Identity & campus details</p>
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {isManagerRole(appUser?.role)
+                          ? "Manager Profile"
+                          : isInstitutionalRole(appUser?.role)
+                          ? "Institutional Office"
+                          : "Personal & Academic"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {isManagerRole(appUser?.role)
+                          ? "Business credentials"
+                          : isInstitutionalRole(appUser?.role)
+                          ? "Statutory credentials"
+                          : "Identity & campus details"}
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-muted-foreground", activeTab === 'personal' && "text-primary translate-x-0.5")} />
@@ -866,148 +1063,432 @@ export default function ProfilePage() {
 
             {/* 5. Progressive Disclosure Form Stack via Tabs */}
             <Tabs value={activeTab} onValueChange={(val: string) => setActiveTab(val as any)} className="w-full">
-              {/* Tab 1: Personal & Academic Details */}
+              {/* Tab 1: Role-Adaptive Profile Details */}
               <TabsContent value="personal" className="mt-0 focus-visible:outline-none">
                 <Card className="rounded-3xl border border-border/70 bg-white dark:bg-card shadow-xs">
-                  <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
-                    <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
-                      <User className="h-4 w-4 text-primary" />
-                      Personal & Academic Details
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Update your legal identification, academic program, and roommate profile.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-5 sm:p-6 space-y-5">
-                    {/* Full Name & Student ID */}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">
-                          Full Legal Name
-                        </Label>
-                        <div className="relative">
-                          <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="fullName"
-                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                            placeholder="e.g. Kwame Mensah"
-                            value={profileData.fullName || ''}
-                            onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))}
+                  {/* GROUP A: Student Role */}
+                  {(!appUser?.role || isStudentRole(appUser?.role)) && (
+                    <>
+                      <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                        <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                          <User className="h-4 w-4 text-primary" />
+                          Personal & Academic Details
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          Update your verified student identity, academic program, and roommate profile.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-5 sm:p-6 space-y-5">
+                        {/* Full Name & Student ID */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">
+                              Full Legal Name
+                            </Label>
+                            <div className="relative">
+                              <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="fullName"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                                placeholder="e.g. Kwame Mensah"
+                                value={profileData.fullName || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="studentId" className="text-xs font-semibold text-foreground">
+                                Student ID / Index Number
+                              </Label>
+                              {profileData.isStudentIdVerified && (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 font-semibold">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> SSO Verified
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="studentId"
+                                className={cn(
+                                  "pl-10 h-11 sm:h-12 text-sm rounded-xl border-border/80 font-mono",
+                                  profileData.isStudentIdVerified
+                                    ? "bg-muted/40 text-foreground cursor-not-allowed border-emerald-500/30"
+                                    : "bg-background"
+                                )}
+                                placeholder="e.g. 20849312"
+                                value={profileData.studentId || ''}
+                                disabled={profileData.isStudentIdVerified}
+                                onChange={(e) => setProfileData(p => ({ ...p, studentId: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Department & Nationality */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="department" className="text-xs font-semibold text-foreground">
+                              Department & Faculty
+                            </Label>
+                            <Input
+                              id="department"
+                              className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="e.g. Department of IT Education, USTED"
+                              value={profileData.department || ''}
+                              onChange={(e) => setProfileData(p => ({ ...p, department: e.target.value }))}
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="nationality" className="text-xs font-semibold text-foreground">
+                              Nationality
+                            </Label>
+                            <Input
+                              id="nationality"
+                              className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="Ghanaian"
+                              value={profileData.nationality || ''}
+                              onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Gender & Campus Address */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="gender" className="text-xs font-semibold text-foreground">
+                              Gender
+                            </Label>
+                            <Select
+                              value={profileData.gender || ''}
+                              onValueChange={(val) => setProfileData(p => ({ ...p, gender: val }))}
+                            >
+                              <SelectTrigger className="w-full h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80">
+                                <SelectValue placeholder="Select Gender" />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-xl">
+                                <SelectItem value="male">Male</SelectItem>
+                                <SelectItem value="female">Female</SelectItem>
+                                <SelectItem value="other">Other / Prefer not to say</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="address" className="text-xs font-semibold text-foreground">
+                              Campus / Residential Address
+                            </Label>
+                            <div className="relative">
+                              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="address"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                                placeholder="e.g. Ayeduase Gate, Kumasi"
+                                value={profileData.address || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, address: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bio & Roommate Preferences */}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="bio" className="text-xs font-semibold text-foreground">
+                            Bio & Roommate Preferences
+                          </Label>
+                          <Textarea
+                            id="bio"
+                            rows={3}
+                            className="text-sm bg-background resize-none rounded-xl border-border/80"
+                            placeholder="Share your study habits, sleeping schedule, and what you look for in a prospective roommate..."
+                            value={profileData.bio || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, bio: e.target.value }))}
                           />
                         </div>
-                      </div>
 
-                      <div className="space-y-1.5">
-                        <Label htmlFor="studentId" className="text-xs font-semibold text-foreground">
-                          Student ID / Index Number
-                        </Label>
-                        <div className="relative">
-                          <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="studentId"
-                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                            placeholder="e.g. 20849312"
-                            value={profileData.studentId || ''}
-                            onChange={(e) => setProfileData(p => ({ ...p, studentId: e.target.value }))}
-                          />
+                        {/* Inline Action Button */}
+                        <div className="flex justify-end pt-2 border-t border-border/40">
+                          <Button
+                            onClick={handleSaveProfile}
+                            disabled={isSavingProfile}
+                            className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                          >
+                            {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            Save Personal Details
+                          </Button>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </>
+                  )}
 
-                    {/* Department & Nationality */}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="department" className="text-xs font-semibold text-foreground">
-                          Department / Faculty
-                        </Label>
-                        <Input
-                          id="department"
-                          className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                          placeholder="e.g. Computer Science, KNUST"
-                          value={profileData.department || ''}
-                          onChange={(e) => setProfileData(p => ({ ...p, department: e.target.value }))}
-                        />
-                      </div>
+                  {/* GROUP B: Property Manager Role */}
+                  {isManagerRole(appUser?.role) && (
+                    <>
+                      <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                        <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                          <Building2 className="h-4 w-4 text-primary" />
+                          Manager Identity & Business Profile
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          Manage your property management credentials and contact routing.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-5 sm:p-6 space-y-5">
+                        {/* Full Legal Name & Business Registration Name */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="managerFullName" className="text-xs font-semibold text-foreground">
+                                Full Legal Name
+                              </Label>
+                              {profileData.isIdentityVerified && (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 font-semibold">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> MoMo Verified
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="managerFullName"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                                placeholder="e.g. Samuel Mensah"
+                                value={profileData.fullName || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))}
+                              />
+                            </div>
+                          </div>
 
-                      <div className="space-y-1.5">
-                        <Label htmlFor="nationality" className="text-xs font-semibold text-foreground">
-                          Nationality
-                        </Label>
-                        <Input
-                          id="nationality"
-                          className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                          placeholder="Ghanaian"
-                          value={profileData.nationality || ''}
-                          onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Gender & Campus Address */}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="gender" className="text-xs font-semibold text-foreground">
-                          Gender
-                        </Label>
-                        <Select
-                          value={profileData.gender || ''}
-                          onValueChange={(val) => setProfileData(p => ({ ...p, gender: val }))}
-                        >
-                          <SelectTrigger className="w-full h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80">
-                            <SelectValue placeholder="Select Gender" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl">
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                            <SelectItem value="other">Other / Prefer not to say</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="address" className="text-xs font-semibold text-foreground">
-                          Campus / Residential Address
-                        </Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="address"
-                            className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                            placeholder="e.g. Ayeduase Gate, Kumasi"
-                            value={profileData.address || ''}
-                            onChange={(e) => setProfileData(p => ({ ...p, address: e.target.value }))}
-                          />
+                          <div className="space-y-1.5">
+                            <Label htmlFor="businessName" className="text-xs font-semibold text-foreground">
+                              Business / Agency Registration Name <span className="text-muted-foreground font-normal">(Optional)</span>
+                            </Label>
+                            <div className="relative">
+                              <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="businessName"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                                placeholder="e.g. Apex Property Management Ltd."
+                                value={profileData.businessName || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, businessName: e.target.value }))}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Bio & Roommate Preferences */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="bio" className="text-xs font-semibold text-foreground">
-                        Bio & Roommate Preferences
-                      </Label>
-                      <Textarea
-                        id="bio"
-                        rows={3}
-                        className="text-sm bg-background resize-none rounded-xl border-border/80"
-                        placeholder="Share your study habits, sleeping schedule, and what you look for in a prospective roommate..."
-                        value={profileData.bio || ''}
-                        onChange={(e) => setProfileData(p => ({ ...p, bio: e.target.value }))}
-                      />
-                    </div>
+                        {/* Business Contact Number & Nationality */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="contactPhone" className="text-xs font-semibold text-foreground">
+                                Business Contact Number (MoMo Linked)
+                              </Label>
+                              {profileData.isIdentityVerified && (
+                                <span className="text-[10px] text-emerald-600 font-semibold">Paystack Bound</span>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="contactPhone"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80 font-mono"
+                                placeholder="e.g. 0244123456"
+                                value={profileData.contactPhone || profileData.phone || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, contactPhone: e.target.value, phone: e.target.value }))}
+                              />
+                            </div>
+                          </div>
 
-                    {/* Inline Action Button */}
-                    <div className="flex justify-end pt-2 border-t border-border/40">
-                      <Button
-                        onClick={handleSaveProfile}
-                        disabled={isSavingProfile}
-                        className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-                      >
-                        {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        Save Personal Details
-                      </Button>
-                    </div>
-                  </CardContent>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="managerNationality" className="text-xs font-semibold text-foreground">
+                              Nationality
+                            </Label>
+                            <Input
+                              id="managerNationality"
+                              className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="Ghanaian"
+                              value={profileData.nationality || ''}
+                              onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Office / Physical Address */}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="businessAddress" className="text-xs font-semibold text-foreground">
+                            Office / Physical Business Address
+                          </Label>
+                          <div className="relative">
+                            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="businessAddress"
+                              className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="e.g. Suite 204, Campus Commercial Square, Ayeduase, Kumasi"
+                              value={profileData.businessAddress || profileData.address || ''}
+                              onChange={(e) => setProfileData(p => ({ ...p, businessAddress: e.target.value, address: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Inline Action Button */}
+                        <div className="flex justify-end pt-2 border-t border-border/40">
+                          <Button
+                            onClick={handleSaveProfile}
+                            disabled={isSavingProfile}
+                            className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                          >
+                            {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            Save Manager Profile
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </>
+                  )}
+
+                  {/* GROUP C: Institutional / University Leadership Roles */}
+                  {isInstitutionalRole(appUser?.role) && (
+                    <>
+                      <CardHeader className="p-5 sm:p-6 pb-4 border-b border-border/50">
+                        <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                          <ShieldCheck className="h-4 w-4 text-primary" />
+                          Institutional Office & Credentials
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          Statutory administrative identity and institutional delegation credentials.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-5 sm:p-6 space-y-5">
+                        {/* Official Title & Full Legal Name */}
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div className="space-y-1.5 sm:col-span-1">
+                            <Label htmlFor="officialTitle" className="text-xs font-semibold text-foreground">
+                              Official Title
+                            </Label>
+                            <Select
+                              value={profileData.officialTitle || 'Prof.'}
+                              onValueChange={(val) => setProfileData(p => ({ ...p, officialTitle: val }))}
+                            >
+                              <SelectTrigger className="w-full h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80">
+                                <SelectValue placeholder="Title" />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-xl">
+                                <SelectItem value="Prof.">Prof.</SelectItem>
+                                <SelectItem value="Dr.">Dr.</SelectItem>
+                                <SelectItem value="Rev.">Rev.</SelectItem>
+                                <SelectItem value="Ing.">Ing.</SelectItem>
+                                <SelectItem value="Mr.">Mr.</SelectItem>
+                                <SelectItem value="Mrs.">Mrs.</SelectItem>
+                                <SelectItem value="Ms.">Ms.</SelectItem>
+                                <SelectItem value="Hon.">Hon.</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <Label htmlFor="instFullName" className="text-xs font-semibold text-foreground">
+                              Full Legal Name
+                            </Label>
+                            <div className="relative">
+                              <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="instFullName"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                                placeholder="e.g. Kwabena Agyeman-Prempeh"
+                                value={profileData.fullName || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, fullName: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Staff / Institutional ID & Directorate */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="staffId" className="text-xs font-semibold text-foreground">
+                              Staff / Institutional ID
+                            </Label>
+                            <div className="relative">
+                              <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="staffId"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80 font-mono"
+                                placeholder="e.g. STAFF-20849 or KNUST/ADM/014"
+                                value={profileData.staffId || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, staffId: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="directorate" className="text-xs font-semibold text-foreground">
+                              Directorate / Office
+                            </Label>
+                            <Input
+                              id="directorate"
+                              className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                              placeholder="e.g. Office of the Dean of Students, Welfare Directorate"
+                              value={profileData.directorate || profileData.department || ''}
+                              onChange={(e) => setProfileData(p => ({ ...p, directorate: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Official Institutional Email & Extension */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="institutionalEmail" className="text-xs font-semibold text-foreground">
+                                Official Institutional Email
+                              </Label>
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
+                                <Lock className="h-3 w-3" /> Read-Only
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="institutionalEmail"
+                                disabled
+                                className="pl-10 h-11 sm:h-12 text-sm bg-muted/40 rounded-xl border-border/80 font-mono text-muted-foreground cursor-not-allowed"
+                                value={profileData.institutionalEmail || profileData.email || appUser?.email || ''}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label htmlFor="officeExtension" className="text-xs font-semibold text-foreground">
+                              Official Contact Extension / Mobile
+                            </Label>
+                            <div className="relative">
+                              <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="officeExtension"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80 font-mono"
+                                placeholder="e.g. Ext. 4092 / 0244123456"
+                                value={profileData.officeExtension || profileData.phone || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, officeExtension: e.target.value, phone: e.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Inline Action Button */}
+                        <div className="flex justify-end pt-2 border-t border-border/40">
+                          <Button
+                            onClick={handleSaveProfile}
+                            disabled={isSavingProfile}
+                            className="rounded-xl h-11 px-6 text-sm font-semibold shadow-sm bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                          >
+                            {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            Save Institutional Credentials
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </>
+                  )}
                 </Card>
               </TabsContent>
 
@@ -1064,12 +1545,14 @@ export default function ProfilePage() {
                       {/* Emergency Contact */}
                       <div className="space-y-1.5">
                         <Label htmlFor="emergencyContact" className="text-xs font-semibold text-foreground">
-                          Emergency Contact (Parent / Guardian)
+                          {isStudentRole(appUser?.role)
+                            ? "Emergency Contact (Parent / Guardian)"
+                            : "Alternative Emergency Contact"}
                         </Label>
                         <Input
                           id="emergencyContact"
                           className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                          placeholder="e.g. 020XXXXXXX (Father)"
+                          placeholder={isStudentRole(appUser?.role) ? "e.g. 020XXXXXXX (Father)" : "e.g. 020XXXXXXX (Next of Kin / Office)"}
                           value={profileData.emergencyContact || ''}
                           onChange={(e) => setProfileData(p => ({ ...p, emergencyContact: e.target.value }))}
                         />
@@ -1081,11 +1564,13 @@ export default function ProfilePage() {
                       <div className="flex items-center gap-2">
                         <Smartphone className="h-4 w-4 text-amber-600" />
                         <span className="text-xs font-bold text-amber-950 dark:text-amber-200 uppercase tracking-wider">
-                          Mobile Money (MoMo) Escrow Wallet
+                          {isManagerRole(appUser?.role) ? "Mobile Money (MoMo) Payout Account" : "Mobile Money (MoMo) Escrow Wallet"}
                         </span>
                       </div>
                       <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                        Specify your registered mobile money account. In the event of booking cancellation or overpayment, refunds are routed directly to this wallet.
+                        {isManagerRole(appUser?.role)
+                          ? "Specify your verified mobile money account for withdrawal payouts and rent disbursement."
+                          : "Specify your registered mobile money account. In the event of booking cancellation or overpayment, refunds are routed directly to this wallet."}
                       </p>
 
                       <div className="grid gap-4 sm:grid-cols-2 pt-1">
@@ -1339,7 +1824,7 @@ export default function ProfilePage() {
                         Ghana Data Protection Act (Act 843) Certified
                       </p>
                       <p className="text-[11px] leading-relaxed text-blue-800 dark:text-blue-400">
-                        HostelHQ encrypts all student credentials in transit and at rest. Your phone number and MoMo identifiers are exclusively utilized for university room reservation receipts and escrow verification.
+                        HostelHQ encrypts all institutional and residential credentials in transit and at rest. Your phone number and MoMo identifiers are exclusively utilized for university room reservation receipts, payout routing, and escrow verification.
                       </p>
                     </div>
                   </CardContent>

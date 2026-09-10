@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaystackKeys, generatePaystackVerificationToken } from "@/lib/paystack-utils";
+import { getAuthenticatedUser } from "@/lib/auth-guard";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,6 +68,32 @@ export async function GET(req: NextRequest) {
       resolvedName,
       secretKey
     );
+
+    // Manager MoMo Identity Binding:
+    const managerId = searchParams.get("manager_id") || searchParams.get("uid") || (await getAuthenticatedUser(req))?.uid;
+    if (managerId) {
+      try {
+        const userRef = doc(db, "users", managerId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          const updatePayload: Record<string, any> = {
+            contactPhone: resolvedNumber,
+            isIdentityVerified: true,
+            updatedAt: new Date().toISOString(),
+          };
+          if (!uData.fullName || !uData.isIdentityVerified) {
+            updatePayload.fullName = resolvedName;
+          }
+          if (!uData.phone) {
+            updatePayload.phone = resolvedNumber;
+          }
+          await updateDoc(userRef, updatePayload);
+        }
+      } catch (bindErr) {
+        console.warn("[Identity Binding] Failed to auto-bind manager MoMo identity in resolve:", bindErr);
+      }
+    }
 
     return NextResponse.json({
       status: true,
