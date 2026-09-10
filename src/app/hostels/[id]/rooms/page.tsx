@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Link from 'next/link';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
+import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit, synthesizeRoomsFromRoomTypes } from '@/components/hostels/LiveVacancyMeter';
 
 interface AppUser {
   uid: string;
@@ -351,12 +351,18 @@ export default function RoomsPage() {
 
         // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
         try {
-          const liveRoomsList = await fetchAllLiveRoomsList(id, bookingsList);
+          let liveRoomsList = await fetchAllLiveRoomsList(id, bookingsList);
+          if (liveRoomsList.length === 0 && Array.isArray((hostel as any)?.roomTypes) && (hostel as any).roomTypes.length > 0) {
+            liveRoomsList = synthesizeRoomsFromRoomTypes(id, (hostel as any).roomTypes, bookingsList);
+          }
           setAllLiveRooms(liveRoomsList);
           const liveRooms = await fetchAllLiveRooms(id, bookingsList);
           setLiveRoomsByTier(liveRooms);
         } catch (liveErr) {
           console.error('Error hydrating live rooms for rooms page:', liveErr);
+          if (Array.isArray((hostel as any)?.roomTypes) && (hostel as any).roomTypes.length > 0) {
+            setAllLiveRooms(synthesizeRoomsFromRoomTypes(id, (hostel as any).roomTypes, bookingsList));
+          }
         }
       } catch (error) {
         console.error('Error loading room occupancy for hostel rooms page:', error);
@@ -1057,6 +1063,9 @@ export default function RoomsPage() {
                         slug: tierSlug,
                         name: modalRoomType.name,
                         capacity: tierCap,
+                        numberOfRooms: modalRoomType.numberOfRooms,
+                        roomNumbers: modalRoomType.roomNumbers,
+                        availability: modalRoomType.availability,
                       });
                       if (matched.length === 0 && Array.isArray((hostel as any)?.rooms)) {
                         matched = getRoomsForTier((hostel as any).rooms, {
@@ -1064,7 +1073,13 @@ export default function RoomsPage() {
                           slug: tierSlug,
                           name: modalRoomType.name,
                           capacity: tierCap,
+                          numberOfRooms: modalRoomType.numberOfRooms,
+                          roomNumbers: modalRoomType.roomNumbers,
+                          availability: modalRoomType.availability,
                         });
+                      }
+                      if (matched.length === 0) {
+                        matched = synthesizeRoomsFromRoomTypes(id, [modalRoomType], confirmedBookings);
                       }
                       return matched;
                     })()}

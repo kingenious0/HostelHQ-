@@ -34,13 +34,22 @@ export function calculateRoomTypeInventory(
   roomType: RoomType,
   confirmedBookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = []
 ): RoomTypeInventorySummary {
-  const capacityPerRoom = Number(roomType.capacity) || 1;
-  const numConfigured = Number(roomType.numberOfRooms) || 0;
+  const capacityPerRoom = Math.max(1, Number(roomType.capacity) || 1);
+  const rawNumConfigured = Number(roomType.numberOfRooms);
+  // Default to at least 1 room if not explicitly 0 and availability is not Full
+  const numConfigured = !isNaN(rawNumConfigured) && rawNumConfigured > 0
+    ? rawNumConfigured
+    : (Array.isArray(roomType.roomNumbers) && roomType.roomNumbers.length > 0)
+      ? roomType.roomNumbers.length
+      : roomType.availability === 'Full'
+        ? 0
+        : 1;
+
   const configuredRoomNumbers = roomType.roomNumbers && roomType.roomNumbers.length > 0
     ? roomType.roomNumbers
     : numConfigured > 0
       ? Array.from({ length: numConfigured }, (_, i) => `Room ${i + 1}`)
-      : [];
+      : ['Room 1'];
 
   const totalRooms = configuredRoomNumbers.length;
   const totalBeds = totalRooms * capacityPerRoom;
@@ -87,7 +96,7 @@ export function calculateRoomTypeInventory(
     (roomType as any).status === 'full' ||
     roomType.availability === 'Full';
 
-  const isSoldOut = isExplicitSoldOut || totalAvailableBeds <= 0;
+  const isSoldOut = isExplicitSoldOut || (totalBeds > 0 && totalAvailableBeds <= 0);
 
   return {
     roomTypeId: roomType.id || '',
@@ -119,8 +128,13 @@ export function isRoomTypeSoldOut(
   if (roomType.availability === 'Full') return true;
 
   // 2. Direct capacity vs occupancy check
-  const capacityPerRoom = Number(roomType.capacity) || 1;
-  const numRooms = Number(roomType.numberOfRooms) || (roomType.roomNumbers ? roomType.roomNumbers.length : 0);
+  const capacityPerRoom = Math.max(1, Number(roomType.capacity) || 1);
+  const rawNumRooms = Number(roomType.numberOfRooms);
+  const numRooms = !isNaN(rawNumRooms) && rawNumRooms > 0
+    ? rawNumRooms
+    : (roomType.roomNumbers && roomType.roomNumbers.length > 0)
+      ? roomType.roomNumbers.length
+      : 1;
   const totalConfiguredCapacity = capacityPerRoom * numRooms;
 
   if (roomType.occupancy !== undefined && totalConfiguredCapacity > 0) {
@@ -132,7 +146,7 @@ export function isRoomTypeSoldOut(
   // 3. Real-time calculated inventory from confirmed bookings if provided
   if (confirmedBookings && confirmedBookings.length > 0) {
     const summary = calculateRoomTypeInventory(roomType, confirmedBookings);
-    if (summary.totalAvailableBeds <= 0) {
+    if (summary.isSoldOut) {
       return true;
     }
   }

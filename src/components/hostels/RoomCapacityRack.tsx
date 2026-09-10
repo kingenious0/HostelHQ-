@@ -21,8 +21,8 @@ export function RoomCapacityRack({
 }: RoomCapacityRackProps) {
   if (summary.totalRooms === 0) {
     return (
-      <div className="text-sm text-slate-500 italic p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800">
-        No registered rooms currently open for this tier.
+      <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-500 font-medium">
+        <span>Room inventory details updating for this tier.</span>
       </div>
     );
   }

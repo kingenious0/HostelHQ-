@@ -21,9 +21,87 @@ export interface DatabaseRoomUnit {
 }
 
 /**
+ * Helper: Synthesize physical room units from hostel.roomTypes when no physical room docs exist
+ */
+export function synthesizeRoomsFromRoomTypes(
+  hostelId: string,
+  roomTypes: any[],
+  confirmedBookings?: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string; studentId?: string }>
+): DatabaseRoomUnit[] {
+  if (!Array.isArray(roomTypes) || roomTypes.length === 0) return [];
+
+  const result: DatabaseRoomUnit[] = [];
+
+  roomTypes.forEach((rt: any, rtIndex: number) => {
+    const capacity = Math.max(1, Number(rt.capacity || rt.tierCapacity) || 1);
+    const rawNumConfigured = Number(rt.numberOfRooms);
+    const numRooms = !isNaN(rawNumConfigured) && rawNumConfigured > 0
+      ? rawNumConfigured
+      : (Array.isArray(rt.roomNumbers) && rt.roomNumbers.length > 0)
+        ? rt.roomNumbers.length
+        : rt.availability === 'Full'
+          ? 0
+          : 1;
+
+    const configuredRoomNumbers = (Array.isArray(rt.roomNumbers) && rt.roomNumbers.length > 0)
+      ? rt.roomNumbers
+      : numRooms > 0
+        ? Array.from({ length: numRooms }, (_, i) => `Room ${i + 1}`)
+        : ['Room 1'];
+
+    const tierKey = rt.id || rt.slug || rt.name?.toLowerCase().replace(/\s+/g, '-') || `tier-${rtIndex + 1}`;
+    const tierName = rt.name || `Tier ${rtIndex + 1}`;
+
+    // Filter relevant bookings
+    const relevantBookings = (confirmedBookings || []).filter(
+      (b) => b.roomTypeId === rt.id || (b.roomNumber && configuredRoomNumbers.includes(b.roomNumber))
+    );
+
+    const isExplicitFull = rt.availability === 'Full' || rt.status === 'sold-out' || rt.status === 'full';
+
+    configuredRoomNumbers.forEach((roomNum: string, rIdx: number) => {
+      const roomId = `${hostelId}-${tierKey}-room-${rIdx + 1}`;
+      const bookingsForThisRoom = relevantBookings.filter(
+        (b) => b.roomId === roomId || b.roomNumber === roomNum
+      );
+
+      const occupiedCount = isExplicitFull
+        ? capacity
+        : Math.min(
+            capacity,
+            bookingsForThisRoom.length > 0
+              ? bookingsForThisRoom.length
+              : Math.floor(Number(rt.occupancy || 0) / Math.max(1, configuredRoomNumbers.length))
+          );
+
+      const beds = Array.from({ length: capacity }, (_, i) => ({
+        id: `${roomId}-bed-${i + 1}`,
+        isOccupied: i < occupiedCount,
+        studentId: bookingsForThisRoom[i]?.studentId || null,
+      }));
+
+      result.push({
+        id: roomId,
+        hostelId,
+        roomNumber: roomNum,
+        tierId: tierKey,
+        roomTypeId: rt.id || tierKey,
+        tierName,
+        tierCapacity: capacity,
+        capacity,
+        beds,
+        status: isExplicitFull ? 'full' : 'active',
+      });
+    });
+  });
+
+  return result;
+}
+
+/**
  * 1. Direct Database Hydration Layer
  * Queries Firestore subcollection `hostels/{hostelId}/rooms` (or nested `rooms` array) matching tierId/roomTypeId.
- * Returns [] if no records exist in the database (no fake fallbacks).
+ * Falls back to roomTypes configuration when physical room docs have not been created.
  */
 export async function fetchLiveRoomsByTier(
   hostelId: string,
@@ -58,7 +136,7 @@ export async function fetchLiveRoomsByTier(
       });
     }
 
-    // 4. Fallback: If subcollection has no matching rooms, check parent document's nested `rooms` array
+    // 4. Fallback: If subcollection has no matching rooms, check parent document's nested `rooms` array or `roomTypes`
     if (matchedDocs.length === 0) {
       const hostelDocSnap = await getDoc(doc(db, "hostels", cleanId));
       if (hostelDocSnap.exists()) {
@@ -107,9 +185,22 @@ export async function fetchLiveRoomsByTier(
             });
           }
         }
+
+        // Fallback: check roomTypes configuration
+        if (Array.isArray(hData.roomTypes) && hData.roomTypes.length > 0) {
+          const synthesized = synthesizeRoomsFromRoomTypes(cleanId, hData.roomTypes, confirmedBookings);
+          const target = String(tierId).trim().toLowerCase();
+          const filtered = synthesized.filter((r: any) => {
+            const dTier = String(r.tierId || r.roomTypeId || r.tierName || "").trim().toLowerCase();
+            return dTier === target || (r.roomTypeId && String(r.roomTypeId) === String(tierId));
+          });
+          if (filtered.length > 0) {
+            return filtered;
+          }
+        }
       }
 
-      // No registered DB units exist: return empty array rather than fake hardcoded fallbacks
+      // No registered DB units exist: return empty array
       return [];
     }
 
@@ -225,7 +316,7 @@ export async function fetchAllLiveRooms(
       return grouped;
     }
 
-    // Fallback: Check parent document's nested `rooms` array
+    // Fallback: Check parent document's nested `rooms` array or `roomTypes`
     const hostelDocSnap = await getDoc(doc(db, "hostels", cleanId));
     if (hostelDocSnap.exists()) {
       const hData = hostelDocSnap.data();
@@ -277,6 +368,27 @@ export async function fetchAllLiveRooms(
             grouped[r.tierId].push(unit);
           }
         });
+        return grouped;
+      }
+
+      // Fallback: Synthesize from roomTypes
+      if (Array.isArray(hData.roomTypes) && hData.roomTypes.length > 0) {
+        const synthesized = synthesizeRoomsFromRoomTypes(cleanId, hData.roomTypes, confirmedBookings);
+        synthesized.forEach((unit) => {
+          const tierKey = unit.tierId || "default";
+          if (!grouped[tierKey]) grouped[tierKey] = [];
+          grouped[tierKey].push(unit);
+
+          if (unit.roomTypeId && unit.roomTypeId !== tierKey) {
+            if (!grouped[unit.roomTypeId]) grouped[unit.roomTypeId] = [];
+            grouped[unit.roomTypeId].push(unit);
+          }
+          if (unit.tierName && unit.tierName !== tierKey) {
+            if (!grouped[unit.tierName]) grouped[unit.tierName] = [];
+            grouped[unit.tierName].push(unit);
+          }
+        });
+        return grouped;
       }
     }
 
@@ -292,14 +404,14 @@ export async function fetchAllLiveRooms(
  * Eliminates false-negative filters caused by discrepancies between tierId, tierSlug, tierName, and numerical capacity.
  */
 export function getRoomsForTier(allRooms: any[], tier: any): DatabaseRoomUnit[] {
-  if (!Array.isArray(allRooms) || !tier) return [];
+  if (!tier) return [];
 
   const tierIdStr = String(tier.id || '').trim().toLowerCase();
   const tierSlugStr = String(tier.slug || tier.id || '').trim().toLowerCase();
   const tierNameStr = String(tier.name || tier.typeName || '').trim().toLowerCase();
   const tierCap = Number(tier.capacity || tier.tierCapacity) || 0;
 
-  return allRooms.filter((room) => {
+  const matched = Array.isArray(allRooms) ? allRooms.filter((room) => {
     if (!room) return false;
 
     const roomTierIdStr = String(room.tierId || room.roomTypeId || '').trim().toLowerCase();
@@ -315,7 +427,46 @@ export function getRoomsForTier(allRooms: any[], tier: any): DatabaseRoomUnit[] 
       (roomCap > 0 && tierCap > 0 && roomCap === tierCap);
 
     return Boolean(tierMatch);
-  });
+  }) : [];
+
+  if (matched.length > 0) {
+    return matched;
+  }
+
+  // Graceful fallback: synthesize rooms from tier configuration if no explicit DB rooms matched
+  if (tier && (tierCap > 0 || tierNameStr)) {
+    const cap = Math.max(1, tierCap || 1);
+    const rawNum = Number(tier.numberOfRooms);
+    const numRooms = !isNaN(rawNum) && rawNum > 0
+      ? rawNum
+      : (Array.isArray(tier.roomNumbers) && tier.roomNumbers.length > 0)
+        ? tier.roomNumbers.length
+        : 1;
+
+    const roomNumbers = (Array.isArray(tier.roomNumbers) && tier.roomNumbers.length > 0)
+      ? tier.roomNumbers
+      : Array.from({ length: numRooms }, (_, i) => `Room ${i + 1}`);
+
+    const isFull = tier.availability === 'Full' || (tier as any).status === 'sold-out' || (tier as any).status === 'full';
+
+    return roomNumbers.map((rNum: string, idx: number) => ({
+      id: `synth-${tier.id || tierNameStr || 'default'}-${idx + 1}`,
+      hostelId: tier.hostelId || '',
+      roomNumber: rNum,
+      tierId: tier.id || tierSlugStr || 'default',
+      roomTypeId: tier.id,
+      tierName: tier.name,
+      tierCapacity: cap,
+      capacity: cap,
+      beds: Array.from({ length: cap }, (_, bIdx) => ({
+        id: `bed-${idx + 1}-${bIdx + 1}`,
+        isOccupied: isFull,
+      })),
+      status: isFull ? 'full' : 'active',
+    }));
+  }
+
+  return [];
 }
 
 /**
@@ -374,7 +525,7 @@ export async function fetchAllLiveRoomsList(
       return result;
     }
 
-    // Fallback: parent hostel document nested `rooms` array
+    // Fallback: parent hostel document nested `rooms` array or `roomTypes`
     const hostelDocSnap = await getDoc(doc(db, "hostels", cleanId));
     if (hostelDocSnap.exists()) {
       const hData = hostelDocSnap.data();
@@ -416,6 +567,11 @@ export async function fetchAllLiveRoomsList(
           } as DatabaseRoomUnit);
         });
         return result;
+      }
+
+      // Fallback: Synthesize from roomTypes
+      if (Array.isArray(hData.roomTypes) && hData.roomTypes.length > 0) {
+        return synthesizeRoomsFromRoomTypes(cleanId, hData.roomTypes, confirmedBookings);
       }
     }
 
@@ -479,21 +635,45 @@ export function LiveVacancyMeter({
   selectedRoomNumber,
   onSelectRoom,
 }: LiveVacancyMeterProps) {
+  // Safe fallback if rooms is empty or undefined: generate a valid physical room unit
+  const effectiveRooms: DatabaseRoomUnit[] = (Array.isArray(rooms) && rooms.length > 0)
+    ? rooms
+    : [
+        {
+          id: "default-room-1",
+          hostelId: "",
+          roomNumber: "Room 1",
+          tierId: "default",
+          tierCapacity: Math.max(1, tierCapacity || 1),
+          capacity: Math.max(1, tierCapacity || 1),
+          beds: Array.from({ length: Math.max(1, tierCapacity || 1) }, (_, i) => ({
+            id: `bed-def-${i + 1}`,
+            isOccupied: false,
+          })),
+          status: "active",
+        },
+      ];
+
   const { totalRoomsCount, totalBeds, openBeds, fullyOpenRooms } = computeTierAvailability(
-    rooms,
+    effectiveRooms,
     tierCapacity
   );
 
-  // Display "No registered rooms currently open for this tier" only if tierRooms.length === 0 or openBeds === 0.
-  if (rooms.length === 0 || openBeds === 0) {
+  const isSoldOut = openBeds === 0;
+
+  if (isSoldOut) {
     return (
-      <div className="text-sm text-slate-500 italic p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800">
-        No registered rooms currently open for this tier.
+      <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 text-xs font-semibold text-rose-700 dark:text-rose-400">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          All beds currently reserved for this tier
+        </span>
+        <span className="text-[11px] font-bold uppercase tracking-wider bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded-full">
+          Sold Out
+        </span>
       </div>
     );
   }
-
-  const isSoldOut = openBeds === 0;
 
   return (
     <div className="space-y-3 p-4 rounded-2xl border bg-slate-50/70 dark:bg-slate-900/40 border-slate-200/80 dark:border-slate-800">

@@ -40,7 +40,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapboxMap } from '@/components/map';
 import { calculateRoomTypeInventory, isRoomTypeSoldOut, isHostelSoldOut } from '@/lib/room-capacity';
-import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit } from '@/components/hostels/LiveVacancyMeter';
+import { LiveVacancyMeter, fetchAllLiveRooms, fetchAllLiveRoomsList, getRoomsForTier, DatabaseRoomUnit, synthesizeRoomsFromRoomTypes } from '@/components/hostels/LiveVacancyMeter';
 
 
 const amenityIcons: { [key: string]: React.ReactNode } = {
@@ -246,12 +246,18 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
                 // Direct database hydration: fetch live rooms from Firestore subcollection or nested array
                 try {
-                    const liveRoomsList = await fetchAllLiveRoomsList(hostel.id, bookingsList);
+                    let liveRoomsList = await fetchAllLiveRoomsList(hostel.id, bookingsList);
+                    if (liveRoomsList.length === 0 && Array.isArray(hostel.roomTypes) && hostel.roomTypes.length > 0) {
+                        liveRoomsList = synthesizeRoomsFromRoomTypes(hostel.id, hostel.roomTypes, bookingsList);
+                    }
                     setAllLiveRooms(liveRoomsList);
                     const liveRooms = await fetchAllLiveRooms(hostel.id, bookingsList);
                     setLiveRoomsByTier(liveRooms);
                 } catch (liveErr) {
                     console.error('Error hydrating live rooms for hostel detail page:', liveErr);
+                    if (Array.isArray(hostel.roomTypes) && hostel.roomTypes.length > 0) {
+                        setAllLiveRooms(synthesizeRoomsFromRoomTypes(hostel.id, hostel.roomTypes, bookingsList));
+                    }
                 }
             } catch (error) {
                 console.error('Error loading room occupancy for hostel detail page:', error);
@@ -1550,6 +1556,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     slug: tierSlug,
                                                     name: room.name,
                                                     capacity: tierCapacity,
+                                                    numberOfRooms: room.numberOfRooms,
+                                                    roomNumbers: room.roomNumbers,
+                                                    availability: room.availability,
                                                 });
                                                 if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
                                                     tierRooms = getRoomsForTier((hostel as any).rooms, {
@@ -1557,7 +1566,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         slug: tierSlug,
                                                         name: room.name,
                                                         capacity: tierCapacity,
+                                                        numberOfRooms: room.numberOfRooms,
+                                                        roomNumbers: room.roomNumbers,
+                                                        availability: room.availability,
                                                     });
+                                                }
+                                                if (tierRooms.length === 0) {
+                                                    tierRooms = synthesizeRoomsFromRoomTypes(hostel.id, [room], confirmedBookings);
                                                 }
                                                 return <LiveVacancyMeter rooms={tierRooms} tierCapacity={tierCapacity} />;
                                             })()}
@@ -1681,6 +1696,9 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     slug: tierSlug,
                                                     name: activeRoom.name,
                                                     capacity: tierCapacity,
+                                                    numberOfRooms: activeRoom.numberOfRooms,
+                                                    roomNumbers: activeRoom.roomNumbers,
+                                                    availability: activeRoom.availability,
                                                 });
                                                 if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
                                                     tierRooms = getRoomsForTier((hostel as any).rooms, {
@@ -1688,7 +1706,13 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         slug: tierSlug,
                                                         name: activeRoom.name,
                                                         capacity: tierCapacity,
+                                                        numberOfRooms: activeRoom.numberOfRooms,
+                                                        roomNumbers: activeRoom.roomNumbers,
+                                                        availability: activeRoom.availability,
                                                     });
+                                                }
+                                                if (tierRooms.length === 0) {
+                                                    tierRooms = synthesizeRoomsFromRoomTypes(hostel.id, [activeRoom], confirmedBookings);
                                                 }
                                                 return tierRooms;
                                             })()}
