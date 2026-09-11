@@ -584,20 +584,6 @@ export default function ExecutiveDashboardPage() {
     }
   };
 
-  if (loadingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
-        <div className="text-center space-y-3">
-          <div className="h-12 w-12 rounded-2xl bg-[#922C42]/10 flex items-center justify-center mx-auto text-[#922C42]">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verifying executive credentials...</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Office of the Vice-Chancellor &amp; Executive Council</p>
-        </div>
-      </div>
-    );
-  }
-
   const { summary, categoryBreakdown, zoneBreakdown, directionBreakdown } = metrics;
   const isVC = userRole === "vc";
   const userInitials = (currentUser?.displayName || currentUser?.email || (isVC ? "VC" : "PVC"))
@@ -607,7 +593,7 @@ export default function ExecutiveDashboardPage() {
     .slice(0, 2)
     .toUpperCase();
 
-  // Formal A4 Institutional Briefing Data
+  // Formal A4 Institutional Briefing Data (must be called unconditionally before any early return)
   const briefingData = useMemo(() => {
     return {
       totalHostels: totalRegisteredHostels,
@@ -670,6 +656,20 @@ export default function ExecutiveDashboardPage() {
     summary.resolutionRate,
     hostels,
   ]);
+
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-4">
+        <div className="text-center space-y-3">
+          <div className="h-12 w-12 rounded-2xl bg-[#922C42]/10 flex items-center justify-center mx-auto text-[#922C42]">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verifying executive credentials...</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Office of the Vice-Chancellor &amp; Executive Council</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50/70 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row antialiased">
