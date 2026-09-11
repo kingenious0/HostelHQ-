@@ -107,7 +107,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [draftReview, setDraftReview] = useState('');
     const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
     const { isShortlisted, toggleShortlist } = useShortlist();
-    const [selectedRoomIndex, setSelectedRoomIndex] = useState<number>(0);
+    const [selectedRoomIndex, setSelectedRoomIndex] = useState<number | null>(null);
     const [roomOccupancy, setRoomOccupancy] = useState<Record<string, number>>({});
     const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
     const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
@@ -119,7 +119,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
     const activeRoom = useMemo<RoomType | null>(() => {
         if (hostel.roomTypes && hostel.roomTypes.length > 0) {
-            return hostel.roomTypes[selectedRoomIndex] || hostel.roomTypes[0];
+            const idx = selectedRoomIndex ?? 0;
+            return hostel.roomTypes[idx] || hostel.roomTypes[0];
         }
         return null;
     }, [hostel.roomTypes, selectedRoomIndex]);
@@ -1321,12 +1322,33 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             <CheckCircle2 className="h-3.5 w-3.5" /> University-Approved ✓
                         </Badge>
                     )}
-                    <Badge
-                        variant="outline"
-                        className={cn("text-xs font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}
-                    >
-                        {currentAvailability.text}
-                    </Badge>
+                    {(() => {
+                        // Derive live availability from confirmed booking data
+                        const roomTypes = hostel.roomTypes || [];
+                        if (roomTypes.length > 0 && confirmedBookings.length >= 0) {
+                            const allFull = roomTypes.every(rt => isRoomTypeSoldOut(rt, confirmedBookings));
+                            const anyFull = roomTypes.some(rt => isRoomTypeSoldOut(rt, confirmedBookings));
+                            if (allFull || hostel.availability === 'Full') {
+                                return (
+                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-red-100 text-red-800 border-red-200">
+                                        <Lock className="h-3 w-3 mr-1" /> Hostel Full
+                                    </Badge>
+                                );
+                            }
+                            if (anyFull || hostel.availability === 'Limited') {
+                                return (
+                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-yellow-100 text-yellow-800 border-yellow-200">
+                                        <Clock className="h-3 w-3 mr-1" /> Limited Rooms
+                                    </Badge>
+                                );
+                            }
+                        }
+                        return (
+                            <Badge variant="outline" className={cn("text-xs font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}>
+                                {currentAvailability.text}
+                            </Badge>
+                        );
+                    })()}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-muted-foreground">
@@ -1430,6 +1452,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             {(hostel.roomTypes && hostel.roomTypes.length > 0) ? (
                                 hostel.roomTypes.map((room, idx) => {
                                     const isSelected = selectedRoomIndex === idx;
+                                    const isUserSelected = selectedRoomIndex !== null && isSelected;
+                                    const roomSoldOutLive = isRoomTypeSoldOut(room, confirmedBookings);
                                     const roomAny = room as any;
                                     const roomPhotos: string[] = (room.images && room.images.length > 0) ? room.images : [];
                                     const roomImg = roomPhotos[0] || roomAny.image || primaryImages[(idx + 1) % primaryImages.length] || primaryImages[0];
@@ -1437,6 +1461,10 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     const bedsNum = Number(room.beds) || 0;
                                     const capacityNum = Number(room.capacity) || 0;
                                     const hasRoomVideos = Boolean(room.videos && room.videos.length > 0);
+
+                                    // Derive live availability label from booking data
+                                    const liveAvailabilityLabel = roomSoldOutLive ? 'Sold Out' : room.availability;
+                                    const liveAvailabilityVariant = roomSoldOutLive ? 'destructive' : getRoomAvailabilityVariant(room.availability);
 
                                     const inventorySummary = calculateRoomTypeInventory(room, confirmedBookings);
 
@@ -1446,7 +1474,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                 onClick={() => setSelectedRoomIndex(idx)}
                                                 className={cn(
                                                     "rounded-3xl border p-5 sm:p-6 transition-all flex flex-col md:flex-row gap-6 items-start md:items-center justify-between cursor-pointer",
-                                                    isSelected
+                                                    isUserSelected
                                                         ? "border-primary bg-primary/[0.04] shadow-md ring-2 ring-primary/40"
                                                         : "border-border/70 bg-card/60 backdrop-blur-sm shadow-sm hover:border-primary/40 hover:shadow-md"
                                                 )}
@@ -1491,14 +1519,14 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         <div className="flex items-center gap-2.5 flex-wrap">
                                                             <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
                                                             <Badge
-                                                                variant={getRoomAvailabilityVariant(room.availability)}
+                                                                variant={liveAvailabilityVariant}
                                                                 className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
                                                             >
-                                                                {room.availability}
+                                                                {liveAvailabilityLabel}
                                                             </Badge>
-                                                            {isSelected && (
-                                                                <Badge className="bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                                                                    Selected Room
+                                                            {isUserSelected && (
+                                                                <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+                                                                    ✓ Viewing
                                                                 </Badge>
                                                             )}
                                                         </div>
