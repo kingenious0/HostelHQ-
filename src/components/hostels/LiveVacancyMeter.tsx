@@ -21,6 +21,58 @@ export interface DatabaseRoomUnit {
 }
 
 /**
+ * Parses numeric capacity from room names such as "1 in a room", "3 in a room", "4-in-a-room"
+ */
+export function parseCapacityFromName(value?: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/(\d+)\s*(?:in|bed|person|sharing|seater)/i) || value.match(/(\d+)/);
+  if (!match) return null;
+  const parsed = parseInt(match[1] || match[0], 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Safely determines if a confirmed booking belongs to a given room and room-tier.
+ * Prevents booking leakage where a booking for "Room 1" in "3-in-a-room"
+ * would accidentally occupy "Room 1" in "1-in-a-room".
+ */
+export function bookingMatchesRoom(
+  booking: { roomId?: string; roomNumber?: string; roomTypeId?: string },
+  room: { id?: string; roomNumber?: string; roomTypeId?: string; tierId?: string }
+): boolean {
+  if (!booking) return false;
+
+  // 1. If booking specifies an explicit roomId, it must match
+  if (booking.roomId && room.id) {
+    if (booking.roomId === room.id) return true;
+  }
+
+  // 2. If booking has a roomTypeId, it MUST match the room's roomTypeId or tierId
+  const roomTierId = String(room.roomTypeId || room.tierId || '').trim().toLowerCase();
+  const bookingTierId = String(booking.roomTypeId || '').trim().toLowerCase();
+
+  if (bookingTierId && roomTierId) {
+    if (bookingTierId !== roomTierId && !roomTierId.includes(bookingTierId) && !bookingTierId.includes(roomTierId)) {
+      return false; // Belongs to a completely different tier!
+    }
+  }
+
+  // 3. If room numbers match
+  if (booking.roomNumber && room.roomNumber) {
+    const bNum = String(booking.roomNumber).trim().toLowerCase();
+    const rNum = String(room.roomNumber).trim().toLowerCase();
+    if (bNum === rNum) return true;
+  }
+
+  // 4. If booking had no room number but roomTypeId matched
+  if (!booking.roomNumber && bookingTierId && roomTierId && bookingTierId === roomTierId) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Helper: Synthesize physical room units from hostel.roomTypes when no physical room docs exist
  */
 export function synthesizeRoomsFromRoomTypes(
@@ -33,7 +85,9 @@ export function synthesizeRoomsFromRoomTypes(
   const result: DatabaseRoomUnit[] = [];
 
   roomTypes.forEach((rt: any, rtIndex: number) => {
-    const capacity = Math.max(1, Number(rt.capacity || rt.tierCapacity) || 1);
+    const parsedCap = parseCapacityFromName(rt.name);
+    const configuredCap = Number(rt.capacity || rt.tierCapacity);
+    const capacity = Math.max(1, (parsedCap && parsedCap > (configuredCap || 0)) ? parsedCap : (configuredCap || 1));
     const rawNumConfigured = Number(rt.numberOfRooms);
     const numRooms = !isNaN(rawNumConfigured) && rawNumConfigured > 0
       ? rawNumConfigured
@@ -52,17 +106,23 @@ export function synthesizeRoomsFromRoomTypes(
     const tierKey = rt.id || rt.slug || rt.name?.toLowerCase().replace(/\s+/g, '-') || `tier-${rtIndex + 1}`;
     const tierName = rt.name || `Tier ${rtIndex + 1}`;
 
-    // Filter relevant bookings
-    const relevantBookings = (confirmedBookings || []).filter(
-      (b) => b.roomTypeId === rt.id || (b.roomNumber && configuredRoomNumbers.includes(b.roomNumber))
-    );
+    // Filter relevant bookings: strictly must belong to this room type
+    const relevantBookings = (confirmedBookings || []).filter((b) => {
+      if (b.roomTypeId) {
+        const bRt = String(b.roomTypeId).trim().toLowerCase();
+        const curRt = String(rt.id || '').trim().toLowerCase();
+        const curTier = String(tierKey || '').trim().toLowerCase();
+        return bRt === curRt || bRt === curTier;
+      }
+      return b.roomNumber && configuredRoomNumbers.includes(b.roomNumber);
+    });
 
     const isExplicitFull = rt.availability === 'Full' || rt.status === 'sold-out' || rt.status === 'full';
 
     configuredRoomNumbers.forEach((roomNum: string, rIdx: number) => {
       const roomId = `${hostelId}-${tierKey}-room-${rIdx + 1}`;
-      const bookingsForThisRoom = relevantBookings.filter(
-        (b) => b.roomId === roomId || b.roomNumber === roomNum
+      const bookingsForThisRoom = relevantBookings.filter((b) =>
+        bookingMatchesRoom(b, { id: roomId, roomNumber: roomNum, roomTypeId: rt.id, tierId: tierKey })
       );
 
       const occupiedCount = isExplicitFull
@@ -157,8 +217,8 @@ export async function fetchLiveRoomsByTier(
               let beds = Array.isArray(r.beds) && r.beds.length > 0 ? r.beds : null;
 
               if (!beds) {
-                const bookingsForRoom = (confirmedBookings || []).filter(
-                  (b) => b.roomId === roomId || b.roomNumber === roomNum
+                const bookingsForRoom = (confirmedBookings || []).filter((b) =>
+                  bookingMatchesRoom(b, { id: roomId, roomNumber: roomNum, roomTypeId: r.roomTypeId || tierId, tierId })
                 );
                 const occupiedCount = Math.min(
                   capacity,
@@ -214,8 +274,8 @@ export async function fetchLiveRoomsByTier(
 
       if (!beds) {
         // Synthesize beds based on confirmed bookings or currentOccupancy
-        const bookingsForRoom = (confirmedBookings || []).filter(
-          (b) => b.roomId === docSnap.id || b.roomNumber === roomNum
+        const bookingsForRoom = (confirmedBookings || []).filter((b) =>
+          bookingMatchesRoom(b, { id: docSnap.id, roomNumber: roomNum, roomTypeId: data.roomTypeId || data.tierId || tierId, tierId })
         );
         const occupiedCount = Math.min(
           capacity,
@@ -272,8 +332,8 @@ export async function fetchAllLiveRooms(
         let beds = Array.isArray(data.beds) && data.beds.length > 0 ? data.beds : null;
 
         if (!beds) {
-          const bookingsForRoom = (confirmedBookings || []).filter(
-            (b) => b.roomId === docSnap.id || b.roomNumber === roomNum
+          const bookingsForRoom = (confirmedBookings || []).filter((b) =>
+            bookingMatchesRoom(b, { id: docSnap.id, roomNumber: roomNum, roomTypeId: data.roomTypeId || data.tierId || tierKey, tierId: tierKey })
           );
           const occupiedCount = Math.min(
             capacity,
@@ -330,8 +390,8 @@ export async function fetchAllLiveRooms(
           let beds = Array.isArray(r.beds) && r.beds.length > 0 ? r.beds : null;
 
           if (!beds) {
-            const bookingsForRoom = (confirmedBookings || []).filter(
-              (b) => b.roomId === roomId || b.roomNumber === roomNum
+            const bookingsForRoom = (confirmedBookings || []).filter((b) =>
+              bookingMatchesRoom(b, { id: roomId, roomNumber: roomNum, roomTypeId: r.roomTypeId || r.tierId || tierKey, tierId: tierKey })
             );
             const occupiedCount = Math.min(
               capacity,
@@ -423,8 +483,7 @@ export function getRoomsForTier(allRooms: any[], tier: any): DatabaseRoomUnit[] 
       (roomTierIdStr && (roomTierIdStr === tierIdStr || roomTierIdStr === tierSlugStr)) ||
       (roomTierSlugStr && (roomTierSlugStr === tierSlugStr || roomTierSlugStr === tierIdStr)) ||
       (roomTierNameStr && tierNameStr && roomTierNameStr === tierNameStr) ||
-      (roomTierIdStr && tierNameStr && roomTierIdStr.replace(/[^a-z0-9]/g, '') === tierNameStr.replace(/[^a-z0-9]/g, '')) ||
-      (roomCap > 0 && tierCap > 0 && roomCap === tierCap);
+      (roomTierIdStr && tierNameStr && roomTierIdStr.replace(/[^a-z0-9]/g, '') === tierNameStr.replace(/[^a-z0-9]/g, ''));
 
     return Boolean(tierMatch);
   }) : [];
@@ -494,8 +553,8 @@ export async function fetchAllLiveRoomsList(
         let beds = Array.isArray(data.beds) && data.beds.length === capacity ? data.beds : null;
 
         if (!beds) {
-          const bookingsForRoom = (confirmedBookings || []).filter(
-            (b) => b.roomId === docSnap.id || b.roomNumber === roomNum
+          const bookingsForRoom = (confirmedBookings || []).filter((b) =>
+            bookingMatchesRoom(b, { id: docSnap.id, roomNumber: roomNum, roomTypeId: data.roomTypeId || data.tierId || tierKey, tierId: tierKey })
           );
           const occupiedCount = Math.min(
             capacity,

@@ -19,11 +19,23 @@ export interface RoomTypeInventorySummary {
   totalBeds: number;
   totalOccupiedBeds: number;
   totalAvailableBeds: number;
+  availableBeds: number;
   emptyRoomsCount: number;
   partialRoomsCount: number;
   fullRoomsCount: number;
   rooms: PhysicalRoomState[];
   isSoldOut: boolean;
+}
+
+/**
+ * Parses numeric capacity from room names such as "1 in a room", "3 in a room", "4-in-a-room"
+ */
+export function parseCapacityFromName(value?: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/(\d+)\s*(?:in|bed|person|sharing|seater)/i) || value.match(/(\d+)/);
+  if (!match) return null;
+  const parsed = parseInt(match[1] || match[0], 10);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 /**
@@ -34,7 +46,9 @@ export function calculateRoomTypeInventory(
   roomType: RoomType,
   confirmedBookings: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = []
 ): RoomTypeInventorySummary {
-  const capacityPerRoom = Math.max(1, Number(roomType.capacity) || 1);
+  const parsedCap = parseCapacityFromName(roomType.name);
+  const configuredCap = Number(roomType.capacity);
+  const capacityPerRoom = Math.max(1, (parsedCap && parsedCap > (configuredCap || 0)) ? parsedCap : (configuredCap || 1));
   const rawNumConfigured = Number(roomType.numberOfRooms);
   // Default to at least 1 room if not explicitly 0 and availability is not Full
   const numConfigured = !isNaN(rawNumConfigured) && rawNumConfigured > 0
@@ -106,6 +120,7 @@ export function calculateRoomTypeInventory(
     totalBeds,
     totalOccupiedBeds,
     totalAvailableBeds,
+    availableBeds: totalAvailableBeds,
     emptyRoomsCount,
     partialRoomsCount,
     fullRoomsCount,
@@ -128,7 +143,9 @@ export function isRoomTypeSoldOut(
   if (roomType.availability === 'Full') return true;
 
   // 2. Direct capacity vs occupancy check
-  const capacityPerRoom = Math.max(1, Number(roomType.capacity) || 1);
+  const parsedCap = parseCapacityFromName(roomType.name);
+  const configuredCap = Number(roomType.capacity);
+  const capacityPerRoom = Math.max(1, (parsedCap && parsedCap > (configuredCap || 0)) ? parsedCap : (configuredCap || 1));
   const rawNumRooms = Number(roomType.numberOfRooms);
   const numRooms = !isNaN(rawNumRooms) && rawNumRooms > 0
     ? rawNumRooms

@@ -33,7 +33,7 @@ import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from '@
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
@@ -112,6 +112,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
     const [confirmedBookings, setConfirmedBookings] = useState<Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }>>([]);
     const [liveRoomsByTier, setLiveRoomsByTier] = useState<Record<string, DatabaseRoomUnit[]>>({});
     const [allLiveRooms, setAllLiveRooms] = useState<DatabaseRoomUnit[]>([]);
+    const [detailModalRoomIndex, setDetailModalRoomIndex] = useState<number | null>(null);
 
     const isRevoked = useMemo(() => isHostelRevoked(hostel), [hostel]);
     const isSanctioned = useMemo(() => isHostelSanctioned(hostel), [hostel]);
@@ -168,21 +169,21 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
             if (!visitSnapshot.empty) {
                 // Find a visit that is completed AND the student has marked as completed
                 const completedVisit = visitSnapshot.docs
-                    .map(doc => ({
+                    .map((doc: any) => ({
                         id: doc.id,
                         status: doc.data().status,
                         studentCompleted: doc.data().studentCompleted
                     } as Visit))
-                    .find(visit => visit.status === 'completed' && visit.studentCompleted === true);
+                    .find((visit: any) => visit.status === 'completed' && visit.studentCompleted === true);
 
                 // If no completed visit, find any non-cancelled visit
                 const activeOrCompletedVisit = completedVisit || visitSnapshot.docs
-                    .map(doc => ({
+                    .map((doc: any) => ({
                         id: doc.id,
                         status: doc.data().status,
                         studentCompleted: doc.data().studentCompleted
                     } as Visit))
-                    .find(visit => visit.status !== 'cancelled');
+                    .find((visit: any) => visit.status !== 'cancelled');
 
                 setExistingVisit(activeOrCompletedVisit || null);
             } else {
@@ -226,7 +227,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                 const snapshot = await getDocs(bookingsQuery);
                 const counts: Record<string, number> = {};
                 const bookingsList: Array<{ roomId?: string; roomNumber?: string; roomTypeId?: string }> = [];
-                snapshot.forEach((docSnap) => {
+                snapshot.forEach((docSnap: any) => {
                     const data = docSnap.data() as any;
                     bookingsList.push({
                         roomId: data.roomId,
@@ -309,7 +310,34 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         return Number.isNaN(parsed) ? null : parsed;
     };
 
-    const primaryImages = hostel.images?.length ? hostel.images : ['/AAMUSTED-Full-shot.jpeg'];
+    const allGalleryImages = useMemo(() => {
+        const list: string[] = [];
+        if (Array.isArray(hostel.images)) {
+            list.push(...hostel.images);
+        }
+        if (Array.isArray(hostel.roomTypes)) {
+            for (const rt of hostel.roomTypes) {
+                if (Array.isArray(rt.images)) {
+                    list.push(...rt.images);
+                }
+            }
+        }
+        if (Array.isArray((hostel as any).rooms)) {
+            for (const r of (hostel as any).rooms) {
+                if (Array.isArray(r.images)) {
+                    list.push(...r.images);
+                } else if (r.image) {
+                    list.push(r.image);
+                } else if (r.imageUrl) {
+                    list.push(r.imageUrl);
+                }
+            }
+        }
+        const unique = Array.from(new Set(list.filter((img): img is string => typeof img === 'string' && img.trim().length > 0)));
+        return unique.length > 0 ? unique : ['/AAMUSTED-Full-shot.jpeg'];
+    }, [hostel]);
+
+    const primaryImages = allGalleryImages;
 
     const openLightbox = useCallback((index: number, customImages?: string[]) => {
         const imgs = customImages || (primaryImages.length > 0 ? primaryImages : ['/AAMUSTED-Full-shot.jpeg']);
@@ -1096,37 +1124,223 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
         return (
             <>
                 {/* Desktop Grid Layout (Airbnb Style) */}
-                <div className="hidden md:grid md:grid-cols-4 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
-                    {/* Hero Image (Left 2 cols, 2 rows) */}
+                {images.length === 1 && (
                     <div
-                        className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted group/hero"
+                        className="hidden md:block h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group cursor-pointer"
                         onClick={() => openLightbox(0)}
-                        title="Click to view photo"
                     >
                         <Image
                             src={images[0]}
                             alt={`${hostel.name} main photo`}
                             fill
-                            className="object-cover transition-transform duration-700 group-hover/hero:scale-105"
+                            className="object-cover transition-transform duration-700 group-hover:scale-105"
                             priority
-                            sizes="(max-width: 1024px) 50vw, 50vw"
+                            sizes="100vw"
                         />
-                        <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
-                            <span className="opacity-0 group-hover/hero:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
                                 <Eye className="w-3.5 h-3.5" /> Click to View Photo
                             </span>
                         </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                        >
+                            <Grid className="h-4 w-4" />
+                            Show all 1 photo
+                        </Button>
                     </div>
+                )}
 
-                    {/* 4 Thumbnails (Right 2 cols, 2x2) */}
-                    {Array.from({ length: 4 }).map((_, i) => {
-                        const img = images[i + 1] || images[0];
-                        const imgIndex = i + 1 < images.length ? i + 1 : 0;
-                        return (
+                {images.length === 2 && (
+                    <div className="hidden md:grid md:grid-cols-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
+                        {images.map((img, i) => (
+                            <div
+                                key={i}
+                                className="relative cursor-pointer overflow-hidden bg-muted group/item"
+                                onClick={() => openLightbox(i)}
+                            >
+                                <Image
+                                    src={img}
+                                    alt={`${hostel.name} photo ${i + 1}`}
+                                    fill
+                                    className="object-cover transition-transform duration-700 group-hover/item:scale-105"
+                                    priority={i === 0}
+                                    sizes="50vw"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover/item:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                    <span className="opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
+                                        <Eye className="w-3.5 h-3.5" /> View Photo
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                        >
+                            <Grid className="h-4 w-4" />
+                            Show all 2 photos
+                        </Button>
+                    </div>
+                )}
+
+                {images.length === 3 && (
+                    <div className="hidden md:grid md:grid-cols-3 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
+                        <div
+                            className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted group/hero"
+                            onClick={() => openLightbox(0)}
+                        >
+                            <Image
+                                src={images[0]}
+                                alt={`${hostel.name} main photo`}
+                                fill
+                                className="object-cover transition-transform duration-700 group-hover/hero:scale-105"
+                                priority
+                                sizes="66vw"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                <span className="opacity-0 group-hover/hero:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
+                                    <Eye className="w-3.5 h-3.5" /> View Photo
+                                </span>
+                            </div>
+                        </div>
+                        {images.slice(1, 3).map((img, i) => (
                             <div
                                 key={i}
                                 className="relative cursor-pointer overflow-hidden bg-muted group/thumb"
-                                onClick={() => openLightbox(imgIndex)}
+                                onClick={() => openLightbox(i + 1)}
+                            >
+                                <Image
+                                    src={img}
+                                    alt={`${hostel.name} photo ${i + 2}`}
+                                    fill
+                                    className="object-cover transition-transform duration-700 group-hover/thumb:scale-110"
+                                    sizes="33vw"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                    <span className="opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg">
+                                        <Eye className="w-3 h-3" /> View
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                        >
+                            <Grid className="h-4 w-4" />
+                            Show all 3 photos
+                        </Button>
+                    </div>
+                )}
+
+                {images.length === 4 && (
+                    <div className="hidden md:grid md:grid-cols-4 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
+                        <div
+                            className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted group/hero"
+                            onClick={() => openLightbox(0)}
+                        >
+                            <Image
+                                src={images[0]}
+                                alt={`${hostel.name} main photo`}
+                                fill
+                                className="object-cover transition-transform duration-700 group-hover/hero:scale-105"
+                                priority
+                                sizes="50vw"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                <span className="opacity-0 group-hover/hero:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-xl">
+                                    <Eye className="w-3.5 h-3.5" /> View Photo
+                                </span>
+                            </div>
+                        </div>
+                        <div
+                            className="col-span-2 relative cursor-pointer overflow-hidden bg-muted group/thumb"
+                            onClick={() => openLightbox(1)}
+                        >
+                            <Image
+                                src={images[1]}
+                                alt={`${hostel.name} photo 2`}
+                                fill
+                                className="object-cover transition-transform duration-700 group-hover/thumb:scale-110"
+                                sizes="50vw"
+                            />
+                        </div>
+                        {images.slice(2, 4).map((img, i) => (
+                            <div
+                                key={i}
+                                className="relative cursor-pointer overflow-hidden bg-muted group/thumb"
+                                onClick={() => openLightbox(i + 2)}
+                            >
+                                <Image
+                                    src={img}
+                                    alt={`${hostel.name} photo ${i + 3}`}
+                                    fill
+                                    className="object-cover transition-transform duration-700 group-hover/thumb:scale-110"
+                                    sizes="25vw"
+                                />
+                            </div>
+                        ))}
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                        >
+                            <Grid className="h-4 w-4" />
+                            Show all 4 photos
+                        </Button>
+                    </div>
+                )}
+
+                {images.length >= 5 && (
+                    <div className="hidden md:grid md:grid-cols-4 md:grid-rows-2 gap-3 h-[420px] lg:h-[480px] rounded-3xl overflow-hidden relative group">
+                        {/* Hero Image (Left 2 cols, 2 rows) */}
+                        <div
+                            className="col-span-2 row-span-2 relative cursor-pointer overflow-hidden bg-muted group/hero"
+                            onClick={() => openLightbox(0)}
+                            title="Click to view photo"
+                        >
+                            <Image
+                                src={images[0]}
+                                alt={`${hostel.name} main photo`}
+                                fill
+                                className="object-cover transition-transform duration-700 group-hover/hero:scale-105"
+                                priority
+                                sizes="(max-width: 1024px) 50vw, 50vw"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover/hero:bg-black/25 transition-colors flex items-center justify-center pointer-events-none">
+                                <span className="opacity-0 group-hover/hero:opacity-100 transition-opacity bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl">
+                                    <Eye className="w-3.5 h-3.5" /> Click to View Photo
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* 4 Thumbnails (Right 2 cols, 2x2) */}
+                        {images.slice(1, 5).map((img, i) => (
+                            <div
+                                key={i}
+                                className="relative cursor-pointer overflow-hidden bg-muted group/thumb"
+                                onClick={() => openLightbox(i + 1)}
                                 title="Click to view photo"
                             >
                                 <Image
@@ -1142,23 +1356,23 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     </span>
                                 </div>
                             </div>
-                        );
-                    })}
+                        ))}
 
-                    {/* Show All Photos Floating Pill Button */}
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setRoomsDialogOpen(true);
-                        }}
-                        className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
-                    >
-                        <Grid className="h-4 w-4" />
-                        Show all {images.length} photos
-                    </Button>
-                </div>
+                        {/* Show All Photos Floating Pill Button */}
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomsDialogOpen(true);
+                            }}
+                            className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-md hover:bg-background text-foreground shadow-lg border border-border/60 rounded-xl font-bold gap-2 px-4 py-2 text-xs"
+                        >
+                            <Grid className="h-4 w-4" />
+                            Show all {images.length} photos
+                        </Button>
+                    </div>
+                )}
 
                 {/* Mobile Gallery Layout */}
                 <div
@@ -1202,7 +1416,7 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                         <DialogHeader className="mb-4">
                             <DialogTitle className="text-2xl font-bold font-headline">{hostel.name} — Photo Gallery</DialogTitle>
                             <DialogDescription>
-                                High resolution photos of bedrooms, common study rooms, and amenities. Click any image to view in fullscreen.
+                                High resolution photos of bedrooms, common study rooms, and amenities ({images.length} photos). Click any image to view in fullscreen.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1325,23 +1539,28 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                     {(() => {
                         // Derive live availability from confirmed booking data
                         const roomTypes = hostel.roomTypes || [];
-                        if (roomTypes.length > 0 && confirmedBookings.length >= 0) {
+                        if (roomTypes.length > 0) {
                             const allFull = roomTypes.every(rt => isRoomTypeSoldOut(rt, confirmedBookings));
                             const anyFull = roomTypes.some(rt => isRoomTypeSoldOut(rt, confirmedBookings));
                             if (allFull || hostel.availability === 'Full') {
                                 return (
-                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-red-100 text-red-800 border-red-200">
-                                        <Lock className="h-3 w-3 mr-1" /> Hostel Full
+                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800">
+                                        <Lock className="h-3.5 w-3.5 mr-1" /> Sold Out
                                     </Badge>
                                 );
                             }
                             if (anyFull || hostel.availability === 'Limited') {
                                 return (
-                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-yellow-100 text-yellow-800 border-yellow-200">
-                                        <Clock className="h-3 w-3 mr-1" /> Limited Rooms
+                                    <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                        <Clock className="h-3.5 w-3.5 mr-1" /> Limited Rooms Available
                                     </Badge>
                                 );
                             }
+                            return (
+                                <Badge variant="outline" className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Rooms Available
+                                </Badge>
+                            );
                         }
                         return (
                             <Badge variant="outline" className={cn("text-xs font-bold uppercase tracking-wider px-3 py-1", currentAvailability.className)}>
@@ -1518,15 +1737,20 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                     <div className="space-y-2">
                                                         <div className="flex items-center gap-2.5 flex-wrap">
                                                             <h4 className="text-lg font-bold text-foreground font-headline">{room.name}</h4>
-                                                            <Badge
-                                                                variant={liveAvailabilityVariant}
-                                                                className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
-                                                            >
-                                                                {liveAvailabilityLabel}
-                                                            </Badge>
-                                                            {isUserSelected && (
-                                                                <Badge className="bg-primary/15 text-primary border border-primary/30 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
-                                                                    ✓ Viewing
+                                                            {roomSoldOutLive ? (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                                                                >
+                                                                    <Lock className="w-3 h-3 mr-1 inline" /> Sold Out
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                                                                >
+                                                                    <CheckCircle2 className="w-3 h-3 mr-1 inline text-emerald-600" />
+                                                                    {inventorySummary.availableBeds > 0 ? `${inventorySummary.availableBeds} Available` : 'Available'}
                                                                 </Badge>
                                                             )}
                                                         </div>
@@ -1571,8 +1795,23 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Annual Rate</p>
                                                         <p className="text-xl font-extrabold text-primary">GH₵{room.price.toLocaleString()}</p>
                                                     </div>
-                                                    <div onClick={(e) => e.stopPropagation()}>
-                                                        {getVisitButton(room)}
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded-xl text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-9"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedRoomIndex(idx);
+                                                                setDetailModalRoomIndex(idx);
+                                                            }}
+                                                        >
+                                                            <Info className="h-3.5 w-3.5 mr-1" />
+                                                            Details & Specs
+                                                        </Button>
+                                                        <div onClick={(e) => e.stopPropagation()}>
+                                                            {getVisitButton(room)}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1614,238 +1853,246 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                             )}
                         </div>
 
-                        {/* Interactive Inclusions Showcase for Selected Room Type */}
-                        {activeRoom && (() => {
-                            const activeRoomAmenities = (activeRoom.roomAmenities && activeRoom.roomAmenities.length > 0)
-                                ? activeRoom.roomAmenities
-                                : (activeRoom as any).amenities?.length > 0
-                                ? (activeRoom as any).amenities
-                                : [
-                                    `${activeRoom.capacity || 1} Student Bedding`,
-                                    'Lockable Wardrobe',
-                                    'Study Desk & Chair',
-                                    'Ceiling Fan',
-                                    'Washroom Facilities',
-                                    'Electrical Power Outlet'
-                                ];
+                        {/* Per-Room-Type Details & Specifications Modal Dialog */}
+                        <Dialog
+                            open={detailModalRoomIndex !== null}
+                            onOpenChange={(open) => {
+                                if (!open) setDetailModalRoomIndex(null);
+                            }}
+                        >
+                            {detailModalRoomIndex !== null && hostel.roomTypes && hostel.roomTypes[detailModalRoomIndex] && (() => {
+                                const modalRoom = hostel.roomTypes[detailModalRoomIndex];
+                                const modalRoomAmenities = (modalRoom.roomAmenities && modalRoom.roomAmenities.length > 0)
+                                    ? modalRoom.roomAmenities
+                                    : (modalRoom as any).amenities?.length > 0
+                                    ? (modalRoom as any).amenities
+                                    : [
+                                        `${modalRoom.capacity || 1} Student Bedding`,
+                                        'Lockable Wardrobe',
+                                        'Study Desk & Chair',
+                                        'Ceiling Fan',
+                                        'Washroom Facilities',
+                                        'Electrical Power Outlet'
+                                    ];
 
-                            const matchingPhysicalRoom = (hostel as any)?.rooms?.find(
-                                (r: any) => String(r.roomTypeId || '') === String(activeRoom.id || '') ||
-                                            String(r.roomType || r.type || '').toLowerCase().trim() === String(activeRoom.name || '').toLowerCase().trim()
-                            );
-                            const targetRoomLink = matchingPhysicalRoom?.id 
-                                ? `/hostels/${hostel.id}/rooms/${matchingPhysicalRoom.id}`
-                                : `/hostels/${hostel.id}/rooms`;
+                                const matchingPhysicalRoom = (hostel as any)?.rooms?.find(
+                                    (r: any) => String(r.roomTypeId || '') === String(modalRoom.id || '') ||
+                                                String(r.roomType || r.type || '').toLowerCase().trim() === String(modalRoom.name || '').toLowerCase().trim()
+                                );
+                                const targetRoomLink = matchingPhysicalRoom?.id 
+                                    ? `/hostels/${hostel.id}/rooms/${matchingPhysicalRoom.id}`
+                                    : `/hostels/${hostel.id}/rooms`;
 
-                            return (
-                                <div className="mt-4 rounded-3xl border-2 border-primary/30 bg-gradient-to-br from-primary/[0.04] via-card to-background p-6 sm:p-7 shadow-sm space-y-6">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
-                                                    Room Inclusions & Specs
-                                                </Badge>
-                                                <span className="text-xs text-muted-foreground font-medium">Standard for every student</span>
-                                            </div>
-                                            <h4 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
-                                                <Bed className="h-5 w-5 text-primary" />
-                                                What's Included in &ldquo;{activeRoom.name}&rdquo;
-                                            </h4>
-                                        </div>
+                                const tierSlug = modalRoom.name.toLowerCase().replace(/\s+/g, '-');
+                                const tierCapacity = Number(modalRoom.capacity) || 1;
+                                let tierRooms = getRoomsForTier(allLiveRooms, {
+                                    id: modalRoom.id,
+                                    slug: tierSlug,
+                                    name: modalRoom.name,
+                                    capacity: tierCapacity,
+                                    numberOfRooms: modalRoom.numberOfRooms,
+                                    roomNumbers: modalRoom.roomNumbers,
+                                    availability: modalRoom.availability,
+                                });
+                                if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
+                                    tierRooms = getRoomsForTier((hostel as any).rooms, {
+                                        id: modalRoom.id,
+                                        slug: tierSlug,
+                                        name: modalRoom.name,
+                                        capacity: tierCapacity,
+                                        numberOfRooms: modalRoom.numberOfRooms,
+                                        roomNumbers: modalRoom.roomNumbers,
+                                        availability: modalRoom.availability,
+                                    });
+                                }
+                                if (tierRooms.length === 0) {
+                                    tierRooms = synthesizeRoomsFromRoomTypes(hostel.id, [modalRoom], confirmedBookings);
+                                }
 
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-right">
-                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Official Rate</span>
-                                                <span className="text-xl font-extrabold text-primary">
-                                                    GH₵{activeRoom.price.toLocaleString()}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground ml-1">/ yr</span>
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-xl border-primary/30 text-primary hover:bg-primary hover:text-white font-bold text-xs h-9"
-                                                asChild
-                                            >
-                                                <Link href={targetRoomLink}>
-                                                    <span>Room Specs & Photos</span>
-                                                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                                                </Link>
-                                            </Button>
-                                        </div>
-                                    </div>
+                                const isSoldOut = isRoomTypeSoldOut(modalRoom, confirmedBookings);
 
-                                    {/* Room Photos Showcase Strip if Available */}
-                                    {activeRoom.images && activeRoom.images.length > 0 && (
-                                        <div className="space-y-2 pt-1 border-b border-border/60 pb-4">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                                                    <Camera className="h-3.5 w-3.5 text-primary" />
-                                                    Photos of {activeRoom.name} ({activeRoom.images.length})
-                                                </span>
-                                                <span className="text-[11px] text-muted-foreground">Click any photo to enlarge</span>
-                                            </div>
-                                            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
-                                                {activeRoom.images.map((imgUrl, pIdx) => (
-                                                    <div
-                                                        key={pIdx}
-                                                        className="relative h-20 w-28 sm:h-24 sm:w-36 rounded-xl overflow-hidden shrink-0 border border-border bg-muted cursor-pointer group shadow-xs"
-                                                        onClick={() => openLightbox(pIdx, activeRoom.images!)}
+                                return (
+                                    <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8">
+                                        <DialogHeader className="space-y-2 border-b border-border/60 pb-4">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className="bg-primary/20 text-primary border-primary/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                                                        Room Tier Details
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={cn(
+                                                            "text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full",
+                                                            isSoldOut
+                                                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                                        )}
                                                     >
-                                                        <Image
-                                                            src={imgUrl}
-                                                            alt={`${activeRoom.name} photo ${pIdx + 1}`}
-                                                            fill
-                                                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                                                        />
-                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                                            <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Real-Time Database Vacancy Meter for Selected Room Tier */}
-                                    <div className="space-y-2 pt-1 border-b border-border/60 pb-4">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                                                <Bed className="h-3.5 w-3.5 text-primary" />
-                                                Live Inventory & Bed Vacancy ({activeRoom.name})
-                                            </span>
-                                        </div>
-                                        <LiveVacancyMeter
-                                            rooms={(() => {
-                                                const tierSlug = activeRoom.name.toLowerCase().replace(/\s+/g, '-');
-                                                const tierCapacity = Number(activeRoom.capacity) || 1;
-                                                let tierRooms = getRoomsForTier(allLiveRooms, {
-                                                    id: activeRoom.id,
-                                                    slug: tierSlug,
-                                                    name: activeRoom.name,
-                                                    capacity: tierCapacity,
-                                                    numberOfRooms: activeRoom.numberOfRooms,
-                                                    roomNumbers: activeRoom.roomNumbers,
-                                                    availability: activeRoom.availability,
-                                                });
-                                                if (tierRooms.length === 0 && Array.isArray((hostel as any)?.rooms)) {
-                                                    tierRooms = getRoomsForTier((hostel as any).rooms, {
-                                                        id: activeRoom.id,
-                                                        slug: tierSlug,
-                                                        name: activeRoom.name,
-                                                        capacity: tierCapacity,
-                                                        numberOfRooms: activeRoom.numberOfRooms,
-                                                        roomNumbers: activeRoom.roomNumbers,
-                                                        availability: activeRoom.availability,
-                                                    });
-                                                }
-                                                if (tierRooms.length === 0) {
-                                                    tierRooms = synthesizeRoomsFromRoomTypes(hostel.id, [activeRoom], confirmedBookings);
-                                                }
-                                                return tierRooms;
-                                            })()}
-                                            tierCapacity={Number(activeRoom.capacity) || 1}
-                                        />
-                                    </div>
-
-                                    {/* 3-column responsive grid for Inclusions, Security, and Utilities */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                                        {/* Column 1: In-Room Amenities */}
-                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
-                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                                                <DoorOpen className="h-4 w-4 text-primary" />
-                                                In-Room Amenities
-                                            </h5>
-                                            <div className="space-y-2">
-                                                {activeRoomAmenities.map((amenity: string, i: number) => (
-                                                    <div key={i} className="flex items-center gap-2 text-xs font-medium text-foreground">
-                                                        <div className="h-5 w-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                                            <Check className="h-3 w-3" />
-                                                        </div>
-                                                        <span>{amenity}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Column 2: Security & Protection */}
-                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
-                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                                                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                                Security Standards
-                                            </h5>
-                                            <div className="space-y-2">
-                                                {[
-                                                    'Lockable Room Door with Key',
-                                                    ...(hostel.securityAndSafety && hostel.securityAndSafety.length > 0
-                                                        ? hostel.securityAndSafety.slice(0, 3)
-                                                        : ['CCTV in Corridors', '24-hour Access Gate', 'Fenced Compound'])
-                                                ].map((sec: string, i: number) => (
-                                                    <div key={i} className="flex items-center gap-2 text-xs font-medium text-foreground">
-                                                        <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                                                            <ShieldCheck className="h-3 w-3" />
-                                                        </div>
-                                                        <span>{sec}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Column 3: Utility Bills Policy */}
-                                        <div className="space-y-3 bg-card/60 p-4 rounded-2xl border border-border/60">
-                                            <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                                                <Zap className="h-4 w-4 text-amber-500" />
-                                                Utilities & Bills
-                                            </h5>
-                                            <div className="space-y-2.5 text-xs">
-                                                <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 text-[11px]">
-                                                        <CheckCircle2 className="h-3.5 w-3.5" /> Included in Rent
-                                                    </span>
-                                                    <p className="text-muted-foreground mt-0.5 text-[11px]">
-                                                        {hostel.billsIncluded && hostel.billsIncluded.length > 0
-                                                            ? hostel.billsIncluded.join(', ')
-                                                            : 'Water & municipal sanitation included'}
-                                                    </p>
+                                                        {isSoldOut ? "Sold Out" : "Available"}
+                                                    </Badge>
                                                 </div>
-                                                <div className="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                                                    <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 text-[11px]">
-                                                        <Zap className="h-3.5 w-3.5" /> Prepaid Electricity
+                                                <div className="text-right">
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Official Rate</span>
+                                                    <span className="text-xl font-extrabold text-primary">
+                                                        GH₵{modalRoom.price.toLocaleString()}
                                                     </span>
-                                                    <p className="text-muted-foreground mt-0.5 text-[11px]">
-                                                        Prepaid meter allocated to this room type
-                                                    </p>
+                                                    <span className="text-xs text-muted-foreground ml-1">/ yr</span>
+                                                </div>
+                                            </div>
+                                            <DialogTitle className="text-2xl font-bold font-headline flex items-center gap-2 text-foreground">
+                                                <Bed className="h-6 w-6 text-primary" />
+                                                {modalRoom.name}
+                                            </DialogTitle>
+                                            <DialogDescription className="text-xs text-muted-foreground">
+                                                Specifications, included furnishings, and live bed vacancy for this room configuration.
+                                            </DialogDescription>
+                                        </DialogHeader>
+
+                                        <div className="space-y-6 pt-2">
+                                            {/* Room Photos Showcase Strip if Available */}
+                                            {modalRoom.images && modalRoom.images.length > 0 && (
+                                                <div className="space-y-2 border-b border-border/60 pb-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                                            <Camera className="h-3.5 w-3.5 text-primary" />
+                                                            Photos of {modalRoom.name} ({modalRoom.images.length})
+                                                        </span>
+                                                        <span className="text-[11px] text-muted-foreground">Click any photo to enlarge</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+                                                        {modalRoom.images.map((imgUrl, pIdx) => (
+                                                            <div
+                                                                key={pIdx}
+                                                                className="relative h-20 w-28 sm:h-24 sm:w-36 rounded-xl overflow-hidden shrink-0 border border-border bg-muted cursor-pointer group shadow-xs"
+                                                                onClick={() => openLightbox(pIdx, modalRoom.images!)}
+                                                            >
+                                                                <Image
+                                                                    src={imgUrl}
+                                                                    alt={`${modalRoom.name} photo ${pIdx + 1}`}
+                                                                    fill
+                                                                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                                                />
+                                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                                    <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Real-Time Database Vacancy Meter for Selected Room Tier */}
+                                            <div className="space-y-2 border-b border-border/60 pb-4">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                                        <Bed className="h-3.5 w-3.5 text-primary" />
+                                                        Live Inventory & Bed Vacancy ({modalRoom.name})
+                                                    </span>
+                                                </div>
+                                                <LiveVacancyMeter
+                                                    rooms={tierRooms}
+                                                    tierCapacity={tierCapacity}
+                                                />
+                                            </div>
+
+                                            {/* Inclusions & Amenities in this specific Room */}
+                                            <div className="space-y-3">
+                                                <h5 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                                                    <DoorOpen className="h-4 w-4 text-primary" />
+                                                    In-Room Amenities (Included in {modalRoom.name})
+                                                </h5>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                    {modalRoomAmenities.map((amenity: string, i: number) => (
+                                                        <div key={i} className="flex items-center gap-2 p-2.5 rounded-xl bg-card border border-border/60 text-xs font-medium text-foreground">
+                                                            <div className="h-5 w-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                                <Check className="h-3 w-3" />
+                                                            </div>
+                                                            <span>{amenity}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Security & Utilities Highlights for Room */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                                                <div className="p-3.5 rounded-2xl bg-card border border-border/60 space-y-2">
+                                                    <h6 className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                                                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                                                        Security Standards
+                                                    </h6>
+                                                    <ul className="space-y-1 text-xs text-muted-foreground">
+                                                        <li className="flex items-center gap-1.5">
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                                            Individual key-lockable room door
+                                                        </li>
+                                                        <li className="flex items-center gap-1.5">
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                                            Secure personal wardrobe lock latch
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                                <div className="p-3.5 rounded-2xl bg-card border border-border/60 space-y-2">
+                                                    <h6 className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                                                        <Zap className="h-3.5 w-3.5 text-amber-500" />
+                                                        Utilities & Power
+                                                    </h6>
+                                                    <ul className="space-y-1 text-xs text-muted-foreground">
+                                                        <li className="flex items-center gap-1.5">
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                            Continuous running water supply
+                                                        </li>
+                                                        <li className="flex items-center gap-1.5">
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                                                            Prepaid electric meter allocated per room
+                                                        </li>
+                                                    </ul>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-muted-foreground">
-                                        <span className="flex items-center gap-1.5">
-                                            <Info className="h-3.5 w-3.5 text-primary" />
-                                            Select any room type above to compare specifications and pricing.
-                                        </span>
-                                        <Link
-                                            href={`/hostels/${hostel.id}/rooms`}
-                                            className="font-bold text-primary hover:underline flex items-center gap-1 shrink-0"
-                                        >
-                                            Compare all {hostel.roomTypes?.length || 0} room types side-by-side
-                                            <ArrowRight className="h-3.5 w-3.5" />
-                                        </Link>
-                                    </div>
-                                </div>
-                            );
-                        })()}
+                                        <DialogFooter className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 border-t border-border/60 pt-4 mt-6">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setDetailModalRoomIndex(null)}
+                                                className="rounded-xl text-xs font-semibold"
+                                            >
+                                                Close
+                                            </Button>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-xl border-primary/30 text-primary font-bold text-xs h-9"
+                                                    asChild
+                                                >
+                                                    <Link href={targetRoomLink}>
+                                                        <span>Full Room Page</span>
+                                                        <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                                                    </Link>
+                                                </Button>
+                                                {getVisitButton(modalRoom)}
+                                            </div>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                );
+                            })()}
+                        </Dialog>
                     </div>
 
                     <Separator />
 
                     {/* 3. Amenities Icon Grid */}
                     <div className="space-y-6">
-                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
-                            <Sparkles className="h-6 w-6 text-primary" />
-                            Hostel Amenities
-                        </h3>
+                        <div>
+                            <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                                <Sparkles className="h-6 w-6 text-primary" />
+                                Hostel Amenities
+                            </h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Building facilities and common services available to all residents across the property.
+                            </p>
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
                             {hostel.amenities.map((amenity: string) => {
                                 const key = amenity.toLowerCase().replace(/\s+/g, '-');
@@ -1871,48 +2118,67 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
 
                     {/* 4. Financial Breakdown */}
                     <div className="space-y-6">
-                        <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
-                            <Receipt className="h-6 w-6 text-primary" />
-                            Bills & Utilities Included
-                        </h3>
+                        <div>
+                            <h3 className="text-2xl font-extrabold font-headline flex items-center gap-3 tracking-tight">
+                                <Receipt className="h-6 w-6 text-primary" />
+                                Bills & Utilities Breakdown
+                            </h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Clear transparency on all living costs so you never encounter surprise expenses.
+                            </p>
+                        </div>
                         <div className="grid sm:grid-cols-2 gap-4">
-                            <div className="p-5 bg-emerald-500/10 dark:bg-emerald-950/20 rounded-3xl border border-emerald-500/20 space-y-3">
-                                <p className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2 uppercase text-xs tracking-wider">
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Included in Rent
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {hostel.billsIncluded && hostel.billsIncluded.length > 0 ? (
-                                        hostel.billsIncluded.map((bill) => (
-                                            <Badge key={bill} variant="outline" className="bg-background/80 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs py-1">
-                                                {bill}
-                                            </Badge>
-                                        ))
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">Water & regular waste sanitation included</span>
-                                    )}
+                            <div className="p-6 bg-emerald-500/5 dark:bg-emerald-950/20 rounded-3xl border border-emerald-500/30 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2 uppercase text-xs tracking-wider">
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Included in Rent
+                                    </span>
+                                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-bold">
+                                        Zero Extra Charge
+                                    </Badge>
+                                </div>
+                                <div className="space-y-2.5">
+                                    {(hostel.billsIncluded && hostel.billsIncluded.length > 0 
+                                        ? hostel.billsIncluded 
+                                        : ['Water Supply', 'Trash & Waste Disposal', 'Compound Security & Cleaning', 'Standard Facility Maintenance']
+                                    ).map((bill) => (
+                                        <div key={bill} className="flex items-center gap-2.5 text-xs text-foreground font-medium">
+                                            <div className="h-5 w-5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                <Check className="h-3 w-3" />
+                                            </div>
+                                            <span>{bill}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div className="p-5 bg-amber-500/10 dark:bg-amber-950/20 rounded-3xl border border-amber-500/20 space-y-3">
-                                <p className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-2 uppercase text-xs tracking-wider">
-                                    <AlertTriangle className="h-4 w-4 text-amber-600" /> Extra / Pay-As-You-Go
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {hostel.billsExcluded && hostel.billsExcluded.length > 0 ? (
-                                        hostel.billsExcluded.map((bill) => (
-                                            <Badge key={bill} variant="outline" className="bg-background/80 border-amber-500/30 text-amber-700 dark:text-amber-300 rounded-lg text-xs py-1">
-                                                {bill}
-                                            </Badge>
-                                        ))
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">Electricity prepaid meter per room</span>
-                                    )}
+                            <div className="p-6 bg-amber-500/5 dark:bg-amber-950/20 rounded-3xl border border-amber-500/30 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-2 uppercase text-xs tracking-wider">
+                                        <AlertTriangle className="h-4 w-4 text-amber-600" /> Extra / Pay-As-You-Go
+                                    </span>
+                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-bold">
+                                        Student Meter
+                                    </Badge>
+                                </div>
+                                <div className="space-y-2.5">
+                                    {(hostel.billsExcluded && hostel.billsExcluded.length > 0 
+                                        ? hostel.billsExcluded 
+                                        : ['Electricity (Prepaid Meter per Room)', 'Personal Room Cooking Gas', 'Personal Laundry Services']
+                                    ).map((bill) => (
+                                        <div key={bill} className="flex items-center gap-2.5 text-xs text-foreground font-medium">
+                                            <div className="h-5 w-5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                                                <Zap className="h-3 w-3" />
+                                            </div>
+                                            <span>{bill}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                             <Info className="h-3.5 w-3.5 text-primary shrink-0" />
-                            HostelHQ operates with 100% transparent pricing — zero hidden middleman fees or viewing charges.
+                            HostelHQ operates with 100% transparent pricing — zero hidden middleman fees, booking commissions, or viewing charges.
                         </p>
                     </div>
 
@@ -2117,8 +2383,8 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     {hostel.reviews.map((review) => (
                                         <div key={review.id} className="flex gap-4 rounded-2xl border border-border/50 bg-background/80 p-4">
                                             <Avatar>
-                                                {review.userProfileImage ? (
-                                                    <AvatarImage src={review.userProfileImage} alt={review.studentName} />
+                                                {(review as any).userProfileImage ? (
+                                                    <AvatarImage src={(review as any).userProfileImage} alt={review.studentName} />
                                                 ) : (
                                                     <AvatarFallback>{review.studentName.charAt(0)}</AvatarFallback>
                                                 )}
@@ -2224,9 +2490,27 @@ function FullHostelDetails({ hostel, currentUser }: { hostel: Hostel, currentUse
                                     className="w-full h-11 rounded-xl font-bold text-xs"
                                     onClick={() => router.push(`/hostels/${hostel.id}/rooms`)}
                                 >
-                                    Compare All {hostel.roomTypes?.length} Room Options
+                                    {(hostel.roomTypes?.length ?? 0) >= 4
+                                        ? 'View All Room Options'
+                                        : `Compare All ${hostel.roomTypes?.length} Room Options`}
                                 </Button>
                             )}
+                        </div>
+
+                        {/* Quick Highlights Summary */}
+                        <div className="rounded-2xl bg-muted/40 border border-border/60 p-4 space-y-2.5 text-xs">
+                            <div className="flex items-center justify-between text-muted-foreground">
+                                <span>Inspection Fee</span>
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">GH₵0 Free</span>
+                            </div>
+                            <div className="flex items-center justify-between text-muted-foreground">
+                                <span>Water Supply</span>
+                                <span className="font-bold text-foreground">Included in Rent</span>
+                            </div>
+                            <div className="flex items-center justify-between text-muted-foreground">
+                                <span>Electricity</span>
+                                <span className="font-bold text-foreground">Prepaid Meter</span>
+                            </div>
                         </div>
 
                         {/* University Oversight & Direct Booking Guarantees */}
@@ -2540,7 +2824,7 @@ export default function HostelDetailPage() {
         };
         fetchHostelData();
 
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user: any) => {
             if (user) {
                 const userDocRef = doc(db, "users", user.uid);
                 const userDocSnap = await getDoc(userDocRef);
