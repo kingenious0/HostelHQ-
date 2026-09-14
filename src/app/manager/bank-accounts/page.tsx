@@ -51,6 +51,7 @@ import {
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { isAccountBoundToHostel } from '@/lib/payout-accounts';
 
 // Official Ghana Banks Directory with Paystack Bank Codes
 export const GHANA_BANKS = [
@@ -85,6 +86,7 @@ export interface BankAccount {
     managerId: string;
     managerEmail?: string;
     type: 'bank' | 'momo';
+    accountType?: 'bank' | 'momo';
     hostelId?: string;
     hostelName?: string;
     bankName: string;
@@ -92,6 +94,7 @@ export interface BankAccount {
     branch?: string;
     accountNumber: string;
     accountName: string;
+    accountHolderName?: string;
     momoNetwork?: string;
     momoNumber?: string;
     momoName?: string;
@@ -100,6 +103,8 @@ export interface BankAccount {
     verifiedViaPaystack?: boolean;
     verificationToken?: string;
     status?: string;
+    scopeType?: 'single_hostel' | 'all_managed_hostels';
+    boundHostelIds?: string[];
     createdAt?: any;
     updatedAt?: any;
 }
@@ -137,6 +142,8 @@ export default function ManagerBankAccountsPage() {
     // Form states
     const [accountType, setAccountType] = useState<'bank' | 'momo'>('bank');
     const [formHostelId, setFormHostelId] = useState('all');
+    const [scopeOption, setScopeOption] = useState<'single_hostel' | 'all_managed_hostels'>('all_managed_hostels');
+    const [selectedHostelIds, setSelectedHostelIds] = useState<string[]>([]);
     const [selectedBankCode, setSelectedBankCode] = useState('040100'); // GCB default
     const [customBankName, setCustomBankName] = useState('');
     const [bankBranch, setBankBranch] = useState('');
@@ -219,6 +226,7 @@ export default function ManagerBankAccountsPage() {
                     managerId: data.managerId,
                     managerEmail: data.managerEmail,
                     type: data.type || (data.momoNumber ? 'momo' : 'bank'),
+                    accountType: data.accountType || data.type || (data.momoNumber ? 'momo' : 'bank'),
                     hostelId: data.hostelId || '',
                     hostelName: data.hostelName || '',
                     bankName: data.bankName || (data.type === 'momo' ? data.momoNetwork : 'Bank Account'),
@@ -226,6 +234,7 @@ export default function ManagerBankAccountsPage() {
                     branch: data.branch || '',
                     accountNumber: String(data.accountNumber || data.momoNumber || ''),
                     accountName: data.accountName || data.momoName || 'Official Account',
+                    accountHolderName: data.accountHolderName || data.accountName || data.momoName || 'Official Account',
                     momoNetwork: data.momoNetwork,
                     momoNumber: data.momoNumber,
                     momoName: data.momoName,
@@ -234,6 +243,10 @@ export default function ManagerBankAccountsPage() {
                     verifiedViaPaystack: !!(data.verifiedViaPaystack || data.isVerified),
                     verificationToken: data.verificationToken,
                     status: data.status || 'active',
+                    scopeType: data.scopeType || (data.hostelId === 'all' || !data.hostelId ? 'all_managed_hostels' : 'single_hostel'),
+                    boundHostelIds: Array.isArray(data.boundHostelIds)
+                        ? data.boundHostelIds
+                        : (data.hostelId && data.hostelId !== 'all' ? [data.hostelId] : []),
                     createdAt: data.createdAt,
                     updatedAt: data.updatedAt,
                 };
@@ -390,6 +403,11 @@ export default function ManagerBankAccountsPage() {
         resetForm();
         if (activeHostelFilter !== 'all') {
             setFormHostelId(activeHostelFilter);
+            setScopeOption('single_hostel');
+            setSelectedHostelIds([activeHostelFilter]);
+        } else {
+            setScopeOption('all_managed_hostels');
+            setSelectedHostelIds(hostels.map(h => h.id));
         }
         setAddDialogOpen(true);
     };
@@ -399,6 +417,12 @@ export default function ManagerBankAccountsPage() {
         setSelectedAccount(account);
         setAccountType(account.type);
         setFormHostelId(account.hostelId || 'all');
+        const isSingle = account.scopeType === 'single_hostel' || (account.hostelId && account.hostelId !== 'all');
+        setScopeOption(isSingle ? 'single_hostel' : 'all_managed_hostels');
+        const initialBound = Array.isArray(account.boundHostelIds) && account.boundHostelIds.length > 0
+            ? account.boundHostelIds
+            : (account.hostelId && account.hostelId !== 'all' ? [account.hostelId] : hostels.map(h => h.id));
+        setSelectedHostelIds(initialBound);
         setIsPrimary(account.isPrimary);
         setIsResolved(!!account.isVerified || !!account.verifiedViaPaystack);
         setResolutionError(null);
@@ -449,6 +473,8 @@ export default function ManagerBankAccountsPage() {
     const resetForm = () => {
         setAccountType('bank');
         setFormHostelId('all');
+        setScopeOption('all_managed_hostels');
+        setSelectedHostelIds([]);
         setSelectedBankCode('040100');
         setCustomBankName('');
         setBankBranch('');
@@ -510,11 +536,24 @@ export default function ManagerBankAccountsPage() {
             bankCodeFinal = selectedMomoNetwork;
         }
 
-        // Determine hostel assignment
+        // Determine scope and hostel assignment
         let assignedHostelName = 'All Managed Hostels';
-        if (formHostelId !== 'all') {
-            const matched = hostels.find(h => h.id === formHostelId);
-            if (matched) assignedHostelName = matched.name;
+        let finalBoundIds: string[] = [];
+        let finalHostelId = 'all';
+
+        if (scopeOption === 'all_managed_hostels') {
+            assignedHostelName = 'All Managed Hostels';
+            finalBoundIds = hostels.map(h => h.id);
+            finalHostelId = 'all';
+        } else {
+            finalBoundIds = selectedHostelIds.length > 0
+                ? selectedHostelIds
+                : (formHostelId !== 'all' ? [formHostelId] : (hostels.length > 0 ? [hostels[0].id] : []));
+            finalHostelId = finalBoundIds[0] || 'all';
+            const matchedNames = finalBoundIds
+                .map(id => hostels.find(h => h.id === id)?.name)
+                .filter(Boolean);
+            assignedHostelName = matchedNames.length > 0 ? matchedNames.join(', ') : 'Selected Hostels';
         }
 
         try {
@@ -528,16 +567,20 @@ export default function ManagerBankAccountsPage() {
                     managerId: currentUser.uid,
                     managerEmail: currentUser.email || '',
                     type: accountType,
+                    accountType: accountType,
                     bankName: bankNameFinal,
                     bankCode: bankCodeFinal,
                     accountNumber: num,
                     accountName: name,
+                    accountHolderName: name,
                     momoNetwork: !isBank ? selectedMomoNetwork : undefined,
                     momoNumber: !isBank ? num : undefined,
                     momoName: !isBank ? name : undefined,
                     branch: isBank ? bankBranch.trim() : undefined,
-                    hostelId: formHostelId,
+                    hostelId: finalHostelId,
                     hostelName: assignedHostelName,
+                    scopeType: scopeOption,
+                    boundHostelIds: finalBoundIds,
                     isPrimary,
                     verificationToken,
                 }),
@@ -552,7 +595,7 @@ export default function ManagerBankAccountsPage() {
             resetForm();
             toast({
                 title: 'Payment Account Linked!',
-                description: `${bankNameFinal} account (${num}) is verified and active for ${assignedHostelName}.`,
+                description: `${bankNameFinal} account (${num}) is verified and scoped to ${assignedHostelName}.`,
             });
         } catch (error: any) {
             console.error('Error adding bank account:', error);
@@ -610,10 +653,24 @@ export default function ManagerBankAccountsPage() {
             bankCodeFinal = selectedMomoNetwork;
         }
 
+        // Determine scope and hostel assignment
         let assignedHostelName = 'All Managed Hostels';
-        if (formHostelId !== 'all') {
-            const matched = hostels.find(h => h.id === formHostelId);
-            if (matched) assignedHostelName = matched.name;
+        let finalBoundIds: string[] = [];
+        let finalHostelId = 'all';
+
+        if (scopeOption === 'all_managed_hostels') {
+            assignedHostelName = 'All Managed Hostels';
+            finalBoundIds = hostels.map(h => h.id);
+            finalHostelId = 'all';
+        } else {
+            finalBoundIds = selectedHostelIds.length > 0
+                ? selectedHostelIds
+                : (formHostelId !== 'all' ? [formHostelId] : (hostels.length > 0 ? [hostels[0].id] : []));
+            finalHostelId = finalBoundIds[0] || 'all';
+            const matchedNames = finalBoundIds
+                .map(id => hostels.find(h => h.id === id)?.name)
+                .filter(Boolean);
+            assignedHostelName = matchedNames.length > 0 ? matchedNames.join(', ') : 'Selected Hostels';
         }
 
         try {
@@ -628,16 +685,20 @@ export default function ManagerBankAccountsPage() {
                     managerId: currentUser.uid,
                     managerEmail: currentUser.email || '',
                     type: accountType,
+                    accountType: accountType,
                     bankName: bankNameFinal,
                     bankCode: bankCodeFinal,
                     accountNumber: num,
                     accountName: name,
+                    accountHolderName: name,
                     momoNetwork: !isBank ? selectedMomoNetwork : undefined,
                     momoNumber: !isBank ? num : undefined,
                     momoName: !isBank ? name : undefined,
                     branch: isBank ? bankBranch.trim() : undefined,
-                    hostelId: formHostelId,
+                    hostelId: finalHostelId,
                     hostelName: assignedHostelName,
+                    scopeType: scopeOption,
+                    boundHostelIds: finalBoundIds,
                     isPrimary,
                     verificationToken,
                 }),
@@ -652,7 +713,7 @@ export default function ManagerBankAccountsPage() {
             resetForm();
             toast({
                 title: 'Account Updated',
-                description: `Payment details for ${assignedHostelName} updated successfully.`,
+                description: `Payment details updated successfully for ${assignedHostelName}.`,
             });
         } catch (error: any) {
             console.error('Error updating bank account:', error);
@@ -736,7 +797,7 @@ export default function ManagerBankAccountsPage() {
         return bankAccounts.filter(acc => {
             // Hostel filter
             if (activeHostelFilter !== 'all') {
-                if (acc.hostelId && acc.hostelId !== 'all' && acc.hostelId !== activeHostelFilter) {
+                if (!isAccountBoundToHostel(acc, activeHostelFilter)) {
                     return false;
                 }
             }
@@ -997,6 +1058,17 @@ export default function ManagerBankAccountsPage() {
                                                     Unverified
                                                 </Badge>
                                             )}
+
+                                            {/* Scope Badge */}
+                                            {account.scopeType === 'all_managed_hostels' || account.hostelId === 'all' || !account.hostelId ? (
+                                                <Badge variant="secondary" className="text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 py-0.5">
+                                                    Global (All Hostels)
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 py-0.5">
+                                                    Scoped ({account.boundHostelIds?.length || 1} {account.boundHostelIds?.length === 1 ? 'Hostel' : 'Hostels'})
+                                                </Badge>
+                                            )}
                                         </div>
 
                                         {/* Bank / Provider Name */}
@@ -1158,25 +1230,95 @@ export default function ManagerBankAccountsPage() {
                             </Tabs>
                         </div>
 
-                        {/* Property Assignment Dropdown */}
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Associated Property / Hostel *</Label>
-                            <Select value={formHostelId} onValueChange={setFormHostelId}>
-                                <SelectTrigger className="h-10 text-xs rounded-xl">
-                                    <SelectValue placeholder="Select hostel" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                    <SelectItem value="all">All My Hostels (Global Default)</SelectItem>
-                                    {hostels.map(h => (
-                                        <SelectItem key={h.id} value={h.id}>
-                                            {h.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <p className="text-[11px] text-muted-foreground">
-                                Students booking this specific hostel will see this account on their checkout/deposit guide.
-                            </p>
+                        {/* Property Scoping Selector (Option A vs Option B) */}
+                        <div className="space-y-2 p-3 rounded-2xl border border-border/70 bg-muted/30">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-semibold">Account Scoping & Binding *</Label>
+                                <Badge variant={scopeOption === 'all_managed_hostels' ? 'secondary' : 'outline'} className="text-[10px]">
+                                    {scopeOption === 'all_managed_hostels' ? 'Option B: Global' : 'Option A: Specific'}
+                                </Badge>
+                            </div>
+
+                            <Tabs
+                                value={scopeOption}
+                                onValueChange={(val) => {
+                                    setScopeOption(val as 'single_hostel' | 'all_managed_hostels');
+                                    if (val === 'all_managed_hostels') {
+                                        setSelectedHostelIds(hostels.map(h => h.id));
+                                    } else if (selectedHostelIds.length === 0 && hostels.length > 0) {
+                                        setSelectedHostelIds([hostels[0].id]);
+                                    }
+                                }}
+                            >
+                                <TabsList className="grid grid-cols-2 h-9 rounded-xl bg-background/80 p-1">
+                                    <TabsTrigger value="single_hostel" className="text-xs rounded-lg gap-1.5">
+                                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                        <span>Option A: Specific Hostel</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="all_managed_hostels" className="text-xs rounded-lg gap-1.5">
+                                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                                        <span>Option B: All My Hostels</span>
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            {scopeOption === 'all_managed_hostels' ? (
+                                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground space-y-1">
+                                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                                        Apply to all hostels managed by me
+                                    </p>
+                                    <p className="text-[11px]">
+                                        Binds this account across all current ({hostels.length}) and future properties owned or managed by you.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 pt-1">
+                                    <Label className="text-[11px] font-semibold text-muted-foreground">
+                                        Apply to specific hostel(s) (Multi-Select):
+                                    </Label>
+                                    {hostels.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground italic">No hostels found in your portfolio.</p>
+                                    ) : (
+                                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                            {hostels.map((h) => {
+                                                const isChecked = selectedHostelIds.includes(h.id);
+                                                return (
+                                                    <label
+                                                        key={h.id}
+                                                        className={cn(
+                                                            "flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition-colors",
+                                                            isChecked
+                                                                ? "bg-primary/10 border-primary/40 font-medium text-foreground"
+                                                                : "bg-background border-border/60 hover:bg-muted/40 text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedHostelIds(prev => [...prev, h.id]);
+                                                                    } else {
+                                                                        setSelectedHostelIds(prev => prev.filter(id => id !== h.id));
+                                                                    }
+                                                                }}
+                                                                className="rounded h-4 w-4 text-primary focus:ring-primary"
+                                                            />
+                                                            <span>{h.name}</span>
+                                                        </div>
+                                                        {isChecked && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Only students booking these selected hostels will view this payout account.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Conditional Form Fields */}
@@ -1437,22 +1579,95 @@ export default function ManagerBankAccountsPage() {
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
-                        {/* Property Assignment Dropdown */}
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Associated Property / Hostel *</Label>
-                            <Select value={formHostelId} onValueChange={setFormHostelId}>
-                                <SelectTrigger className="h-10 text-xs rounded-xl">
-                                    <SelectValue placeholder="Select hostel" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                    <SelectItem value="all">All My Hostels (Global Default)</SelectItem>
-                                    {hostels.map(h => (
-                                        <SelectItem key={h.id} value={h.id}>
-                                            {h.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        {/* Property Scoping Selector (Option A vs Option B) */}
+                        <div className="space-y-2 p-3 rounded-2xl border border-border/70 bg-muted/30">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-semibold">Account Scoping & Binding *</Label>
+                                <Badge variant={scopeOption === 'all_managed_hostels' ? 'secondary' : 'outline'} className="text-[10px]">
+                                    {scopeOption === 'all_managed_hostels' ? 'Option B: Global' : 'Option A: Specific'}
+                                </Badge>
+                            </div>
+
+                            <Tabs
+                                value={scopeOption}
+                                onValueChange={(val) => {
+                                    setScopeOption(val as 'single_hostel' | 'all_managed_hostels');
+                                    if (val === 'all_managed_hostels') {
+                                        setSelectedHostelIds(hostels.map(h => h.id));
+                                    } else if (selectedHostelIds.length === 0 && hostels.length > 0) {
+                                        setSelectedHostelIds([hostels[0].id]);
+                                    }
+                                }}
+                            >
+                                <TabsList className="grid grid-cols-2 h-9 rounded-xl bg-background/80 p-1">
+                                    <TabsTrigger value="single_hostel" className="text-xs rounded-lg gap-1.5">
+                                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                        <span>Option A: Specific Hostel</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="all_managed_hostels" className="text-xs rounded-lg gap-1.5">
+                                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                                        <span>Option B: All My Hostels</span>
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            {scopeOption === 'all_managed_hostels' ? (
+                                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground space-y-1">
+                                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                                        Apply to all hostels managed by me
+                                    </p>
+                                    <p className="text-[11px]">
+                                        Binds this account across all current ({hostels.length}) and future properties owned or managed by you.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 pt-1">
+                                    <Label className="text-[11px] font-semibold text-muted-foreground">
+                                        Apply to specific hostel(s) (Multi-Select):
+                                    </Label>
+                                    {hostels.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground italic">No hostels found in your portfolio.</p>
+                                    ) : (
+                                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                            {hostels.map((h) => {
+                                                const isChecked = selectedHostelIds.includes(h.id);
+                                                return (
+                                                    <label
+                                                        key={h.id}
+                                                        className={cn(
+                                                            "flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition-colors",
+                                                            isChecked
+                                                                ? "bg-primary/10 border-primary/40 font-medium text-foreground"
+                                                                : "bg-background border-border/60 hover:bg-muted/40 text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedHostelIds(prev => [...prev, h.id]);
+                                                                    } else {
+                                                                        setSelectedHostelIds(prev => prev.filter(id => id !== h.id));
+                                                                    }
+                                                                }}
+                                                                className="rounded h-4 w-4 text-primary focus:ring-primary"
+                                                            />
+                                                            <span>{h.name}</span>
+                                                        </div>
+                                                        {isChecked && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Only students booking these selected hostels will view this payout account.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {accountType === 'bank' ? (

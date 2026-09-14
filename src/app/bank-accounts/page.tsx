@@ -55,6 +55,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isAccountBoundToHostel, type ScopeType } from "@/lib/payout-accounts";
 
 export interface DynamicBankAccount {
   id: string;
@@ -69,6 +70,8 @@ export interface DynamicBankAccount {
   momoName?: string;
   hostelId?: string;
   hostelName?: string;
+  scopeType?: ScopeType;
+  boundHostelIds?: string[];
   isPrimary?: boolean;
   isActive?: boolean;
   isVerified?: boolean;
@@ -207,6 +210,8 @@ function StudentBankAccountsContent() {
                   momoName: data.momoName,
                   hostelId: data.hostelId || "",
                   hostelName: data.hostelName || "",
+                  scopeType: data.scopeType || (data.hostelId === "all" || !data.hostelId ? "all_managed_hostels" : "single_hostel"),
+                  boundHostelIds: Array.isArray(data.boundHostelIds) ? data.boundHostelIds : (data.hostelId && data.hostelId !== "all" ? [data.hostelId] : []),
                   isPrimary: !!data.isPrimary,
                   isVerified: !!(data.isVerified || data.verifiedViaPaystack),
                 };
@@ -240,13 +245,13 @@ function StudentBankAccountsContent() {
             ...acc,
             hostelName:
               acc.hostelName ||
-              (acc.hostelId && acc.hostelId !== "all" ? hostelNameMap[acc.hostelId] : "") ||
-              "All Campus Hostels",
+              (acc.hostelId && hostelNameMap[acc.hostelId]) ||
+              (acc.scopeType === "all_managed_hostels" ? "All Managed Hostels" : "Campus Property"),
           }));
 
           setBankAccounts(enriched);
         } catch (err) {
-          console.error("Error fetching bankAccounts from Firestore:", err);
+          console.error("Error processing bankAccounts snapshot:", err);
           setBankAccounts([]);
         } finally {
           setLoadingAccounts(false);
@@ -264,13 +269,9 @@ function StudentBankAccountsContent() {
   // Filter accounts based on selected hostel & type
   const filteredAccounts = useMemo(() => {
     return bankAccounts.filter((acc) => {
-      // Hostel filter
+      // Strictly scoped hostel filter
       if (selectedHostelId !== "all") {
-        const matchesHostel =
-          acc.hostelId === selectedHostelId ||
-          acc.hostelId === "all" ||
-          !acc.hostelId;
-        if (!matchesHostel) return false;
+        if (!isAccountBoundToHostel(acc, selectedHostelId)) return false;
       }
 
       // Type filter
@@ -392,14 +393,22 @@ function StudentBankAccountsContent() {
 
       {/* Selected Hostel Notice Pill */}
       {selectedHostelId !== "all" && (
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-primary/5 border border-primary/20 text-xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-2xl bg-primary/5 border border-primary/20 text-xs">
           <div className="flex items-center gap-2 text-foreground font-medium truncate">
             <Building2 className="h-4 w-4 text-primary shrink-0" />
             <span>Showing verified accounts configured for: <strong>{selectedHostelName}</strong></span>
           </div>
-          <Badge variant="outline" className="text-[10px] font-semibold border-primary/30 text-primary shrink-0">
-            {filteredAccounts.length} {filteredAccounts.length === 1 ? "Account" : "Accounts"}
-          </Badge>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="outline" className="text-[10px] font-semibold border-primary/30 text-primary">
+              {filteredAccounts.length} {filteredAccounts.length === 1 ? "Account" : "Accounts"}
+            </Badge>
+            <Button asChild size="sm" className="h-7 text-[11px] rounded-lg gap-1 font-semibold">
+              <Link href={`/hostels/${selectedHostelId}/pay`}>
+                <span>Proceed to Pay</span>
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
 

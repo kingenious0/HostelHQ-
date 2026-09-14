@@ -6,6 +6,7 @@ import {
   getDoc,
   updateDoc,
   addDoc,
+  setDoc,
   collection,
   getDocs,
   query,
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
       momoName,
       hostelId = "all",
       hostelName = "All Managed Hostels",
+      scopeType = "single_hostel",
+      boundHostelIds = [],
       branch,
       isPrimary = false,
       verificationToken,
@@ -91,6 +94,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resolve scopeType and boundHostelIds
+    const finalScopeType: "single_hostel" | "all_managed_hostels" =
+      scopeType === "all_managed_hostels" || hostelId === "all"
+        ? "all_managed_hostels"
+        : "single_hostel";
+
+    let finalBoundHostelIds: string[] = Array.isArray(boundHostelIds)
+      ? [...boundHostelIds]
+      : [];
+
+    if (finalScopeType === "all_managed_hostels") {
+      // Query all manager's hostels to ensure boundHostelIds contains all property IDs
+      try {
+        const hostelsSnap = await getDocs(
+          query(collection(db, "hostels"), where("managerId", "==", managerId))
+        );
+        const managerHostelIds = hostelsSnap.docs.map((d) => d.id);
+        finalBoundHostelIds = Array.from(
+          new Set([...finalBoundHostelIds, ...managerHostelIds])
+        );
+      } catch (err) {
+        console.warn("Error resolving manager hostels for global scope:", err);
+      }
+    } else if (finalBoundHostelIds.length === 0 && hostelId && hostelId !== "all") {
+      finalBoundHostelIds = [hostelId];
+    }
+
     // Handle primary account demotion for siblings if isPrimary is set
     if (isPrimary) {
       try {
@@ -117,10 +147,12 @@ export async function POST(req: NextRequest) {
       managerId,
       managerEmail: managerEmail || "",
       type,
+      accountType: type,
       bankName: bankName || (isBank ? "Bank Account" : `${momoNetwork} Mobile Money`),
       bankCode: targetBankCode,
       accountNumber: targetNumber,
       accountName: targetName,
+      accountHolderName: targetName,
       isPrimary: !!isPrimary,
       isVerified: true,
       verifiedViaPaystack: true,
@@ -130,6 +162,8 @@ export async function POST(req: NextRequest) {
       status: "active",
       hostelId: hostelId || "all",
       hostelName: hostelName || "All Managed Hostels",
+      scopeType: finalScopeType,
+      boundHostelIds: finalBoundHostelIds,
     };
 
     if (isBank) {
@@ -147,14 +181,30 @@ export async function POST(req: NextRequest) {
     let savedId = accountId;
 
     if (accountId) {
-      // Update existing document
+      // Update existing document in bankAccounts
       const accountRef = doc(db, "bankAccounts", accountId);
       await updateDoc(accountRef, accountData);
+
+      // Mirror to payout_accounts for forward compatibility
+      try {
+        const payoutRef = doc(db, "payout_accounts", accountId);
+        await setDoc(payoutRef, accountData, { merge: true });
+      } catch (mirrorErr) {
+        console.warn("Could not mirror to payout_accounts:", mirrorErr);
+      }
     } else {
       // Create new document
       accountData.createdAt = serverTimestamp();
       const newDocRef = await addDoc(collection(db, "bankAccounts"), accountData);
       savedId = newDocRef.id;
+
+      // Mirror to payout_accounts with identical ID
+      try {
+        const payoutRef = doc(db, "payout_accounts", savedId);
+        await setDoc(payoutRef, accountData);
+      } catch (mirrorErr) {
+        console.warn("Could not mirror to payout_accounts:", mirrorErr);
+      }
     }
 
     // Manager MoMo Identity Binding

@@ -1,0 +1,42 @@
+name: Preview to Production CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'refactor/**'
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  validate-and-preview:
+    name: Validate Code & Architecture Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type Check & Schema Safety (No Build)
+        run: npx tsc --noEmit
+
+      - name: Deployment Stage Reporter
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Stage: Production Promotion (Blue Environment)"
+            echo "Branch: main - Production live deployment triggered on Vercel."
+          else
+            echo "Stage: Preview Build (Green Environment)"
+            echo "Branch: ${{ github.ref_name }} - Isolated preview URL triggered on Vercel."
+          fi
