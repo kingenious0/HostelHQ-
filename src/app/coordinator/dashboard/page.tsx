@@ -55,8 +55,10 @@ import {
   Scale,
   ShieldCheck,
   Gavel,
+  Download,
 } from "lucide-react";
 
+import { exportToCSV } from "@/lib/exportUtils";
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
 import {
   STATUTORY_TARIFF_CEILINGS,
@@ -642,6 +644,71 @@ export default function CoordinatorDashboardPage() {
     return matchesSearch && matchesAvailability;
   });
 
+  // Export Hostels to CSV
+  const handleExportHostelsCSV = () => {
+    const allHostels = [...pendingHostels, ...approvedHostels];
+    if (allHostels.length === 0) {
+      toast({
+        title: "No Hostels",
+        description: "No hostel records available to export.",
+      });
+      return;
+    }
+
+    const exportRows = allHostels.map((h) => ({
+      Hostel_ID: h.id,
+      Name: h.name,
+      Status: h.status,
+      Verified: h.verified ? "Yes" : "No",
+      Institution: h.institution || "AAMUSTED",
+      Location: h.location,
+      Manager_Name: h.managerName || (h as any).contactPerson || "N/A",
+      Manager_Phone: h.phone || (h as any).contactPhone || "N/A",
+      Manager_Email: h.email || "N/A",
+      Room_Types_Count: h.roomTypes?.length || 0,
+      Availability: h.availability || "Available",
+      Act_389_Provisional: (h as any).provisionalAccreditation ? "Yes" : "No",
+      Provisional_Expiry: (h as any).provisionalExpiry || "N/A",
+      Approved_At: (h as any).approvedAt || "N/A",
+    }));
+
+    exportToCSV(exportRows, "hostelhq_coordinator_hostels");
+    toast({
+      title: "Hostels Exported",
+      description: `Downloaded ${exportRows.length} hostel records as CSV.`,
+    });
+  };
+
+  // Export Rent Cap Compliance Logs to CSV
+  const handleExportComplianceCSV = () => {
+    if (tariffViolations.length === 0) {
+      toast({
+        title: "No Compliance Breaches",
+        description: "All hostels currently comply with campus rent caps.",
+      });
+      return;
+    }
+
+    const exportRows = tariffViolations.map((v) => ({
+      Hostel_ID: v.hostelId,
+      Hostel_Name: v.hostelName,
+      Campus_Institution: v.institution || "AAMUSTED",
+      Location: v.location || "N/A",
+      Room_Type: v.roomTypeName,
+      Posted_Price_GHS: v.postedPrice,
+      Statutory_Cap_GHS: v.statutoryCap,
+      Excess_Over_Cap_GHS: v.excess,
+      Status: v.status,
+      Timestamp: new Date().toISOString(),
+    }));
+
+    exportToCSV(exportRows, "hostelhq_rent_cap_compliance_logs");
+    toast({
+      title: "Compliance Logs Exported",
+      description: `Downloaded ${exportRows.length} rent cap violation records as CSV.`,
+    });
+  };
+
   if (loadingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -677,16 +744,36 @@ export default function CoordinatorDashboardPage() {
             </p>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadData}
-            disabled={loadingData}
-            className="h-9 px-3 text-xs font-semibold self-start sm:self-auto"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingData ? "animate-spin" : ""}`} />
-            Refresh Feed
-          </Button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportHostelsCSV}
+              className="min-h-[44px] py-2.5 px-4 text-xs font-semibold rounded-xl"
+            >
+              <Download className="h-4 w-4 mr-2 text-primary" />
+              Export Hostels (CSV)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportComplianceCSV}
+              className="min-h-[44px] py-2.5 px-4 text-xs font-semibold rounded-xl"
+            >
+              <Download className="h-4 w-4 mr-2 text-rose-500" />
+              Export Compliance (CSV)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadData}
+              disabled={loadingData}
+              className="min-h-[44px] py-2.5 px-4 text-xs font-semibold rounded-xl"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 mr-2 ${loadingData ? "animate-spin" : ""}`} />
+              Refresh Feed
+            </Button>
+          </div>
         </div>
 
         {/* Metric Cards */}

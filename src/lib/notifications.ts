@@ -1,0 +1,211 @@
+import { db } from "./firebase";
+import { collection, addDoc } from "firebase/firestore";
+
+export interface InAppNotification {
+  id: string;
+  userId: string; // recipient user ID (student or manager)
+  title: string;
+  message: string;
+  type: "dispute" | "booking" | "payout" | "system";
+  linkUrl?: string; // e.g. "/student/dashboard" or "/manager/dashboard"
+  isRead: boolean;
+  createdAt: string;
+}
+
+/**
+ * Normalizes a phone number to standard Ghanaian 233 format
+ */
+export function normalizePhoneNumber(phone: string): string {
+  if (!phone) return "";
+  let cleaned = phone.trim().replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("+")) {
+    cleaned = cleaned.substring(1);
+  }
+
+  // 024XXXXXXX (10 digits) -> 23324XXXXXXX
+  if (cleaned.startsWith("0") && cleaned.length === 10) {
+    return "233" + cleaned.substring(1);
+  }
+
+  // 24XXXXXXX (9 digits) -> 23324XXXXXXX
+  if (cleaned.length === 9) {
+    return "233" + cleaned;
+  }
+
+  // Already 233XXXXXXXXX
+  if (cleaned.startsWith("233")) {
+    return cleaned;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Lightweight, zero-dependency audio alert using Web Audio API
+ * Plays a subtle D5 chime when a notification arrives
+ */
+export function playNotificationSound(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtxClass) return;
+    const audioCtx = new AudioCtxClass();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.3);
+  } catch (e) {
+    console.warn("Audio Context blocked or unsupported", e);
+  }
+}
+
+/**
+ * Client & server helper to dispatch SMS via the FrogWigal gateway endpoint
+ */
+export async function sendSmsNotification({
+  recipientPhone,
+  message,
+}: {
+  recipientPhone: string;
+  message: string;
+}): Promise<any> {
+  const formattedPhone = normalizePhoneNumber(recipientPhone);
+
+  try {
+    const res = await fetch("/api/notifications/sms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        recipientPhone: formattedPhone,
+        message,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.warn(`SMS endpoint warning: ${errorText}`);
+      return { success: false, error: errorText };
+    }
+
+    return await res.json();
+  } catch (err: any) {
+    console.warn(`SMS dispatch encountered error: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Writes persistent in-app notification to Firestore notifications collection
+ */
+export async function dispatchInAppNotification({
+  userId,
+  title,
+  message,
+  type = "system",
+  linkUrl = "/dashboard",
+}: {
+  userId: string;
+  title: string;
+  message: string;
+  type: "dispute" | "booking" | "payout" | "system";
+  linkUrl?: string;
+}): Promise<string | null> {
+  if (!userId) {
+    console.warn("dispatchInAppNotification: userId is required");
+    return null;
+  }
+
+  try {
+    const notifData = {
+      userId,
+      title,
+      message,
+      type,
+      linkUrl,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const docRef = await addDoc(collection(db, "notifications"), notifData);
+    return docRef.id;
+  } catch (err) {
+    console.error("Error creating in-app notification:", err);
+    return null;
+  }
+}
+
+/**
+ * Dispatches formal Dean Summons:
+ * - Role-specific FrogWigal SMS templates to student & manager
+ * - Persistent in-app notifications in Firestore notifications collection
+ */
+export async function dispatchDeanSummons({
+  studentPhone,
+  studentId,
+  managerPhone,
+  managerId,
+  hostelName,
+  hearingDate,
+  venue,
+}: {
+  studentPhone: string;
+  studentId: string;
+  managerPhone: string;
+  managerId: string;
+  hostelName: string;
+  hearingDate: string;
+  venue: string;
+}): Promise<void> {
+  // 1. Student Message
+  const studentSms = `[HostelHQ] Dean of Students: Your reported dispute regarding ${hostelName} has been scheduled for a meeting. Date: ${hearingDate}. Venue: ${venue}. Check your dashboard.`;
+
+  // 2. Manager Message (with consequence warning)
+  const managerSms = `[HostelHQ] Dean of Students Notice: A formal student complaint has been logged against ${hostelName}. Mandatory meeting: ${hearingDate} at ${venue}. Failure to attend will lead to listing suspension.`;
+
+  // Dispatch via FrogWigal SMS Gateway (concurrently)
+  const smsPromises: Promise<any>[] = [];
+  if (studentPhone) {
+    smsPromises.push(sendSmsNotification({ recipientPhone: studentPhone, message: studentSms }));
+  }
+  if (managerPhone) {
+    smsPromises.push(sendSmsNotification({ recipientPhone: managerPhone, message: managerSms }));
+  }
+
+  // Dispatch In-App Notifications (concurrently)
+  const inAppPromises: Promise<any>[] = [];
+  if (studentId) {
+    inAppPromises.push(
+      dispatchInAppNotification({
+        userId: studentId,
+        title: "Dean's Meeting Scheduled",
+        message: `A meeting regarding ${hostelName} is scheduled for ${hearingDate} at ${venue}. Check your dashboard.`,
+        type: "dispute",
+        linkUrl: "/dashboard",
+      })
+    );
+  }
+  if (managerId) {
+    inAppPromises.push(
+      dispatchInAppNotification({
+        userId: managerId,
+        title: "Mandatory Dean's Notice: Complaint Hearing",
+        message: `A formal hearing regarding ${hostelName} has been scheduled for ${hearingDate} at ${venue}. Mandatory attendance to avoid listing suspension.`,
+        type: "dispute",
+        linkUrl: "/manager/dashboard",
+      })
+    );
+  }
+
+  await Promise.allSettled([...smsPromises, ...inAppPromises]);
+}

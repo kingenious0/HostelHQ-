@@ -57,10 +57,13 @@ import {
   Lock,
   Unlock,
   Scale,
+  Download,
 } from "lucide-react";
 
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
 import { getStatutoryTariffCeiling } from "@/lib/tariff-limits";
+import { dispatchDeanSummons } from "@/lib/notifications";
+import { exportToCSV } from "@/lib/exportUtils";
 
 export default function DeanDashboardPage() {
   const router = useRouter();
@@ -255,6 +258,35 @@ export default function DeanDashboardPage() {
       const deanName = currentUser?.displayName || "Dean of Students Welfare Directorate";
       const complaintRef = doc(db, "complaints", complaintForArbitration.id);
 
+      // Dispatch Role-Specific FrogWigal SMS & Persistent In-App Notifications
+      const matchedHostel = hostels.find(
+        (h) => h.id === complaintForArbitration.hostelId || h.name === complaintForArbitration.hostelName
+      );
+      const studentPhone = complaintForArbitration.studentPhone || "";
+      const studentId = complaintForArbitration.studentId || "";
+      const managerPhone =
+        complaintForArbitration.managerPhone ||
+        matchedHostel?.phone ||
+        matchedHostel?.contactPhone ||
+        "";
+      const managerId =
+        complaintForArbitration.managerId || matchedHostel?.managerId || "";
+      const hearingDateTime = `${hearingDate} at ${hearingTime}`;
+
+      try {
+        await dispatchDeanSummons({
+          studentPhone,
+          studentId,
+          managerPhone,
+          managerId,
+          hostelName: complaintForArbitration.hostelName,
+          hearingDate: hearingDateTime,
+          venue: hearingVenue,
+        });
+      } catch (summonsErr) {
+        console.warn("Automated summons dispatch note:", summonsErr);
+      }
+
       const hearingPayload = {
         date: hearingDate,
         time: hearingTime,
@@ -287,8 +319,8 @@ export default function DeanDashboardPage() {
       );
 
       toast({
-        title: "Arbitration Hearing Dispatched!",
-        description: `Formal summons scheduled for ${hearingDate} at ${hearingTime}. Automated SMS notices dispatched to ${complaintForArbitration.studentName} and management.`,
+        title: "Hearing Scheduled & Summons Dispatched!",
+        description: `Summons for ${hearingDate} at ${hearingTime} dispatched via FrogWigal SMS and persistent in-app notifications.`,
       });
 
       setArbitrationDialogOpen(false);
@@ -303,6 +335,78 @@ export default function DeanDashboardPage() {
     } finally {
       setIsSchedulingHearing(false);
     }
+  };
+
+  // Export Disputes to CSV
+  const handleExportComplaintsCSV = () => {
+    if (complaints.length === 0) {
+      toast({
+        title: "No Complaints",
+        description: "No dispute records available for export.",
+      });
+      return;
+    }
+
+    const exportRows = complaints.map((c) => ({
+      Complaint_ID: c.id,
+      Status: c.status,
+      Category: c.category,
+      Subject: c.subject,
+      Description: c.description,
+      Direction: c.direction === "student_to_hostel" ? "Student -> Hostel" : "Manager -> Student",
+      Student_Name: c.studentName,
+      Student_Phone: c.studentPhone || "N/A",
+      Student_Email: c.studentEmail || "N/A",
+      Hostel_Name: c.hostelName,
+      Room_Number: c.roomNumber || "N/A",
+      Gateway_Frozen: c.welfareFreeze ? "Yes" : "No",
+      Hearing_Date: c.arbitrationHearing?.date || "N/A",
+      Hearing_Time: c.arbitrationHearing?.time || "N/A",
+      Hearing_Venue: c.arbitrationHearing?.venue || "N/A",
+      Hearing_Officers: c.arbitrationHearing?.officers || "N/A",
+      SMS_Dispatched: c.arbitrationHearing?.smsDispatched ? "Yes" : "No",
+      Created_At: c.createdAt,
+      Resolved_At: c.resolvedAt || "N/A",
+      Resolution_Notes: c.resolutionNotes || "N/A",
+    }));
+
+    exportToCSV(exportRows, "hostelhq_dean_disputes");
+    toast({
+      title: "Disputes Exported",
+      description: `Downloaded ${exportRows.length} dispute records as CSV.`,
+    });
+  };
+
+  // Export Student Verifications to CSV
+  const handleExportVerificationsCSV = () => {
+    if (verifications.length === 0) {
+      toast({
+        title: "No Verifications",
+        description: "No student verifications available for export.",
+      });
+      return;
+    }
+
+    const exportRows = verifications.map((v) => ({
+      Verification_ID: v.id,
+      User_ID: v.userId,
+      Full_Name: v.fullName,
+      Email: v.email,
+      Phone: v.phone || "N/A",
+      Student_ID_Number: v.studentIdNumber,
+      Institution: v.institution || "AAMUSTED",
+      Status: v.status,
+      Rejection_Reason: v.rejectionReason || "N/A",
+      Submitted_At: v.submittedAt,
+      Reviewed_At: v.reviewedAt || "N/A",
+      Reviewed_By: v.reviewedBy || "N/A",
+    }));
+
+    exportToCSV(exportRows, "hostelhq_student_verifications");
+    toast({
+      title: "Verifications Exported",
+      description: `Downloaded ${exportRows.length} verification records as CSV.`,
+    });
   };
 
   // Welfare Investigation Freeze Switch
@@ -650,11 +754,21 @@ export default function DeanDashboardPage() {
                         setStatusFilter("all");
                         setSearchQuery("");
                       }}
-                      className="h-8 text-xs text-muted-foreground hover:text-foreground px-2"
+                      className="min-h-[44px] sm:min-h-0 h-8 text-xs text-muted-foreground hover:text-foreground px-2"
                     >
                       Reset
                     </Button>
                   )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportComplaintsCSV}
+                    className="min-h-[44px] py-2.5 px-3.5 text-xs font-semibold rounded-xl"
+                  >
+                    <Download className="h-4 w-4 mr-1.5 text-primary" />
+                    Export Disputes (CSV)
+                  </Button>
                 </div>
               </div>
 
@@ -803,93 +917,121 @@ export default function DeanDashboardPage() {
                       </Table>
                     </div>
 
-                    {/* Mobile Stacked Card View */}
-                    <div className="block md:hidden divide-y divide-border/60">
+                    {/* Mobile Responsive Card View (max-md:block md:hidden) */}
+                    <div className="max-md:block md:hidden p-3 space-y-3">
                       {filteredComplaints.map((complaint) => (
-                        <div key={complaint.id} className="p-4 space-y-3">
+                        <div
+                          key={complaint.id}
+                          className="bg-card border border-border/70 rounded-2xl p-4 shadow-xs space-y-3"
+                        >
                           <div className="flex items-center justify-between gap-2 flex-wrap">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {complaint.status === "Submitted" && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                                   <Clock className="h-3 w-3" /> Submitted
                                 </span>
                               )}
                               {complaint.status === "Under Review" && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                                   <AlertTriangle className="h-3 w-3" /> Under Review
                                 </span>
                               )}
                               {complaint.status === "Resolved" && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                                   <CheckCircle2 className="h-3 w-3" /> Resolved
                                 </span>
                               )}
                               {complaint.welfareFreeze && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-destructive/15 text-destructive border border-destructive/30">
-                                  <Lock className="h-2.5 w-2.5" /> Frozen
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-destructive/15 text-destructive border border-destructive/30">
+                                  <Lock className="h-3 w-3" /> Gateway Frozen
                                 </span>
                               )}
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(complaint.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                            <span className="text-xs text-muted-foreground font-medium">
+                              {new Date(complaint.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                             </span>
                           </div>
 
                           <div>
-                            <p className="font-semibold text-foreground text-sm">{complaint.subject}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                            <p className="font-semibold text-foreground text-sm leading-snug">{complaint.subject}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
                               {complaint.category} • {complaint.direction === "student_to_hostel" ? "Student → Hostel" : "Manager → Student"}
                             </p>
                           </div>
 
+                          <div className="p-3 bg-muted/40 rounded-xl text-xs space-y-1 border border-border/40">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Complainant:</span>
+                              <span className="font-medium text-foreground">{complaint.studentName}</span>
+                            </div>
+                            {complaint.studentPhone && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Phone:</span>
+                                <a href={`tel:${complaint.studentPhone}`} className="font-mono text-primary hover:underline">
+                                  {complaint.studentPhone}
+                                </a>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">Hostel:</span>
+                              <span className="font-medium text-foreground">{complaint.hostelName} {complaint.roomNumber ? `(Rm ${complaint.roomNumber})` : ""}</span>
+                            </div>
+                          </div>
+
                           {complaint.arbitrationHearing && (
-                            <div className="p-2 bg-primary/5 border border-primary/20 rounded-md text-xs space-y-0.5">
-                              <p className="font-semibold text-primary flex items-center gap-1">
-                                <Scale className="h-3 w-3" /> Hearing: {new Date(complaint.arbitrationHearing.date).toLocaleDateString()} @ {complaint.arbitrationHearing.time}
+                            <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl text-xs space-y-1">
+                              <p className="font-semibold text-primary flex items-center gap-1.5">
+                                <Scale className="h-3.5 w-3.5" /> Scheduled Hearing
                               </p>
-                              <p className="text-muted-foreground text-[11px]">{complaint.arbitrationHearing.venue}</p>
+                              <p className="text-foreground font-medium">
+                                {new Date(complaint.arbitrationHearing.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })} @ {complaint.arbitrationHearing.time}
+                              </p>
+                              <p className="text-muted-foreground text-[11px] leading-snug">{complaint.arbitrationHearing.venue}</p>
                             </div>
                           )}
 
-                          <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40 gap-2 flex-wrap">
-                            <div>
-                              <span className="font-medium text-foreground">{complaint.studentName}</span>
-                              <span className="text-muted-foreground"> • {complaint.hostelName}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedComplaint(complaint);
-                                  setResolutionNotes(complaint.resolutionNotes || "");
-                                }}
-                                className="h-7 text-xs font-medium px-2"
-                              >
-                                Investigate
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setComplaintForArbitration(complaint);
-                                  setHearingDate(new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]);
-                                  setArbitrationDialogOpen(true);
-                                }}
-                                className="h-7 text-xs font-medium px-2 text-primary"
-                              >
-                                <Scale className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={complaint.welfareFreeze ? "destructive" : "outline"}
-                                onClick={() => handleToggleWelfareFreeze(complaint)}
-                                disabled={actionLoading}
-                                className="h-7 text-xs font-medium px-2"
-                              >
-                                {complaint.welfareFreeze ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3 text-rose-500" />}
-                              </Button>
-                            </div>
+                          {/* 44px Minimum Touch Targets */}
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40">
+                            <Button
+                              size="default"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedComplaint(complaint);
+                                setResolutionNotes(complaint.resolutionNotes || "");
+                              }}
+                              className="min-h-[44px] py-2.5 px-3 text-xs font-semibold rounded-xl"
+                            >
+                              Investigate
+                            </Button>
+                            <Button
+                              size="default"
+                              variant="outline"
+                              onClick={() => {
+                                setComplaintForArbitration(complaint);
+                                setHearingDate(new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]);
+                                setArbitrationDialogOpen(true);
+                              }}
+                              className="min-h-[44px] py-2.5 px-3 text-xs font-semibold rounded-xl text-primary hover:text-primary"
+                            >
+                              <Scale className="h-4 w-4 mr-1" /> Arbitrate
+                            </Button>
+                            <Button
+                              size="default"
+                              variant={complaint.welfareFreeze ? "destructive" : "outline"}
+                              onClick={() => handleToggleWelfareFreeze(complaint)}
+                              disabled={actionLoading}
+                              className="min-h-[44px] py-2.5 px-3 text-xs font-semibold rounded-xl"
+                            >
+                              {complaint.welfareFreeze ? (
+                                <>
+                                  <Unlock className="h-3.5 w-3.5 mr-1" /> Unlock
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="h-3.5 w-3.5 mr-1 text-rose-500" /> Freeze
+                                </>
+                              )}
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -902,6 +1044,21 @@ export default function DeanDashboardPage() {
 
           {/* TAB 2: STUDENT VERIFICATION QUEUE */}
           <TabsContent value="verifications" className="space-y-4 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border/60">
+              <div>
+                <p className="text-sm font-semibold">Student Verification Queue</p>
+                <p className="text-xs text-muted-foreground">Verify student identities, admission letters, and student cards.</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportVerificationsCSV}
+                className="min-h-[44px] py-2.5 px-4 text-xs font-semibold rounded-xl self-start sm:self-auto"
+              >
+                <Download className="h-4 w-4 mr-2 text-primary" />
+                Export Verifications (CSV)
+              </Button>
+            </div>
             <StudentVerificationQueue
               verifications={verifications}
               actionLoading={actionLoading}

@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Bell, Loader2, ExternalLink, Sparkles } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import {
   collection,
   doc,
   onSnapshot,
-  orderBy,
-  limit,
   updateDoc,
   query,
+  where,
 } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,34 +24,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-
-interface AppNotification {
-  id: string;
-  title: string;
-  body: string;
-  url?: string;
-  createdAt?: string;
-  read: boolean;
-}
+import { playNotificationSound, InAppNotification } from "@/lib/notifications";
 
 export function NotificationBell() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const initialLoadDone = useRef(false);
+  const knownIdsRef = useRef<Set<string>>(new Set());
 
   // Watch auth state
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, (u: any) => {
       setUser(u);
     });
     return () => unsub();
   }, []);
 
-  // Subscribe to notifications
+  // Subscribe to persistent in-app notifications
   useEffect(() => {
     if (!user) {
       setNotifications([]);
@@ -59,31 +52,52 @@ export function NotificationBell() {
       return;
     }
 
+    // Query notifications collection where userId == user.uid
     const q = query(
-      collection(db, "users", user.uid, "notifications"),
-      orderBy("createdAt", "desc"),
-      limit(20)
+      collection(db, "notifications"),
+      where("userId", "==", user.uid)
     );
 
     const unsub = onSnapshot(
       q,
       (snap: any) => {
-        const list: AppNotification[] = snap.docs.map((d: any) => {
-          const data = d.data() as any;
+        const list: InAppNotification[] = snap.docs.map((d: any) => {
+          const data = d.data();
           return {
             id: d.id,
+            userId: data.userId || user.uid,
             title: data.title || "Notification",
-            body: data.body || "",
-            url: data.url || "/",
-            createdAt: data.createdAt,
-            read: !!data.read,
+            message: data.message || data.body || "",
+            type: data.type || "system",
+            linkUrl: data.linkUrl || data.url || "/dashboard",
+            isRead: Boolean(data.isRead || data.read),
+            createdAt: data.createdAt || new Date().toISOString(),
           };
         });
+
+        // Client-side sort descending by createdAt
+        list.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        // Chime if new unread notification arrives
+        if (initialLoadDone.current) {
+          const hasNewUnread = list.some(
+            (n) => !knownIdsRef.current.has(n.id) && !n.isRead
+          );
+          if (hasNewUnread) {
+            playNotificationSound();
+          }
+        } else {
+          initialLoadDone.current = true;
+        }
+
+        knownIdsRef.current = new Set(list.map((n) => n.id));
         setNotifications(list);
         setLoading(false);
       },
       (err: any) => {
-        console.error("Error loading notifications", err);
+        console.error("Error loading notifications in bell", err);
         setLoading(false);
       }
     );
@@ -91,27 +105,7 @@ export function NotificationBell() {
     return () => unsub();
   }, [user]);
 
-  // Mark all as read when menu opens
-  useEffect(() => {
-    if (!menuOpen || !user) return;
-    const unread = notifications.filter((n) => !n.read);
-    if (unread.length === 0) return;
-
-    // Fire and forget marking as read
-    (async () => {
-      try {
-        await Promise.all(
-          unread.map((n) =>
-            updateDoc(doc(db, "users", user.uid, "notifications", n.id), {
-              read: true,
-            })
-          )
-        );
-      } catch (e) {
-        console.error("Failed to mark notifications as read", e);
-      }
-    })();
-  }, [menuOpen, notifications, user]);
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   if (!user) {
     return null;
@@ -123,70 +117,98 @@ export function NotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className="relative min-h-[44px] min-w-[44px] rounded-full"
           aria-label="Notifications"
         >
           {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           ) : (
             <Bell className="h-5 w-5" />
           )}
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            <span className="absolute top-1 right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-background">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 max-h-[360px] overflow-y-auto">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notifications</span>
-          {unreadCount > 0 && (
-            <Badge variant="destructive" className="text-[10px]">
-              {unreadCount} new
-            </Badge>
-          )}
+      <DropdownMenuContent align="end" className="w-80 sm:w-96 max-h-[420px] overflow-y-auto rounded-2xl p-2 shadow-2xl border-border/60">
+        <DropdownMenuLabel className="flex items-center justify-between py-2 px-3">
+          <span className="font-semibold text-sm">Notifications</span>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                {unreadCount} new
+              </Badge>
+            )}
+            <Link
+              href="/notifications"
+              onClick={() => setMenuOpen(false)}
+              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium ml-1"
+            >
+              View Hub <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {loading ? (
-          <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" /> Loading notifications...
           </div>
         ) : notifications.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            No notifications yet.
+          <div className="py-8 text-center px-4 space-y-2">
+            <div className="h-10 w-10 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <p className="text-sm font-medium">You're all caught up!</p>
+            <p className="text-xs text-muted-foreground">No alerts right now.</p>
           </div>
         ) : (
-          notifications.map((n) => (
-            <DropdownMenuItem
-              key={n.id}
-              className={`flex flex-col items-start gap-1 whitespace-normal ${
-                !n.read ? "bg-muted/60" : ""
-              }`}
-              onClick={() => {
-                if (!user) return;
-                // Mark this one as read (best-effort)
-                if (!n.read) {
-                  updateDoc(
-                    doc(db, "users", user.uid, "notifications", n.id),
-                    { read: true }
-                  ).catch((e: any) =>
-                    console.error("Failed to mark single notification read", e)
-                  );
-                }
-                if (n.url) {
-                  router.push(n.url);
-                }
-              }}
-            >
-              <div className="flex w-full items-center justify-between">
-                <span className="text-sm font-medium leading-snug">{n.title}</span>
-                {!n.read && <span className="h-2 w-2 rounded-full bg-primary" />}
-              </div>
-              <p className="text-xs text-muted-foreground leading-snug">{n.body}</p>
-            </DropdownMenuItem>
-          ))
+          <div className="space-y-1">
+            {notifications.slice(0, 5).map((n) => (
+              <DropdownMenuItem
+                key={n.id}
+                className={`flex flex-col items-start gap-1 p-3 rounded-xl cursor-pointer whitespace-normal transition-colors ${
+                  !n.isRead ? "bg-primary/[0.06] hover:bg-primary/[0.1] font-medium" : "hover:bg-muted/60"
+                }`}
+                onClick={async () => {
+                  setMenuOpen(false);
+                  if (!n.isRead) {
+                    try {
+                      await updateDoc(doc(db, "notifications", n.id), {
+                        isRead: true,
+                      });
+                    } catch (e) {
+                      console.error("Failed to mark single notification read", e);
+                    }
+                  }
+                  if (n.linkUrl) {
+                    router.push(n.linkUrl);
+                  }
+                }}
+              >
+                <div className="flex w-full items-center justify-between gap-2">
+                  <span className="text-sm font-semibold leading-snug line-clamp-1">{n.title}</span>
+                  {!n.isRead && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-primary" />}
+                </div>
+                <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{n.message}</p>
+              </DropdownMenuItem>
+            ))}
+          </div>
         )}
+        <DropdownMenuSeparator />
+        <div className="p-1">
+          <Button
+            variant="ghost"
+            className="w-full text-xs min-h-[40px] text-primary hover:text-primary justify-center font-medium rounded-xl"
+            asChild
+            onClick={() => setMenuOpen(false)}
+          >
+            <Link href="/notifications">
+              Open Full Notification Center
+            </Link>
+          </Button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
