@@ -43,6 +43,7 @@ export const formatKey = {
   review: (id: string) => ({ id: `REVIEW#${id}`, entityType: "REVIEW" }),
   complaint: (id: string) => ({ id: `COMPLAINT#${id}`, entityType: "COMPLAINT" }),
   studentVerification: (id: string) => ({ id: `STUDENT_VERIFICATION#${id}`, entityType: "STUDENT_VERIFICATION" }),
+  notification: (id: string) => ({ id: `NOTIFICATION#${id}`, entityType: "NOTIFICATION" }),
 };
 
 // ============================================================================
@@ -795,6 +796,64 @@ export async function updateRoomPendingPrice(
   return updateItem(key.id, key.entityType, {
     pendingPrice,
     pendingPriceRequestedAt: new Date().toISOString(),
+  });
+}
+
+// ============================================================================
+// 10. NOTIFICATION OPERATIONS (DUAL-DATABASE ENGINE)
+// ============================================================================
+
+export async function saveNotification(notificationData: Record<string, any>): Promise<any> {
+  const notifId = notificationData.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const key = formatKey.notification(notifId);
+  const itemToSave = {
+    ...notificationData,
+    id: key.id,
+    entityType: key.entityType,
+    originalId: notifId,
+    userId: notificationData.userId,
+    title: notificationData.title || "",
+    message: notificationData.message || "",
+    type: notificationData.type || "system",
+    linkUrl: notificationData.linkUrl || "/dashboard",
+    isRead: notificationData.isRead ?? false,
+    createdAt: notificationData.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await putItem(itemToSave);
+  return { ...itemToSave, id: notifId };
+}
+
+export async function listNotificationsByUserId(userId: string): Promise<any[]> {
+  const notifs = await scanEntities<any>({
+    entityType: "NOTIFICATION",
+  });
+  const filtered = notifs
+    .filter((n) => n.userId === userId)
+    .map((n) => ({
+      ...n,
+      id: n.originalId || n.id.replace(/^NOTIFICATION#/i, ""),
+    }));
+
+  // Sort descending by createdAt
+  filtered.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  return filtered;
+}
+
+export async function updateNotificationReadStatus(
+  notificationId: string,
+  isRead: boolean = true
+): Promise<any> {
+  const cleanId = notificationId.replace(/^NOTIFICATION#/i, "");
+  const key = formatKey.notification(cleanId);
+  return updateItem(key.id, key.entityType, {
+    isRead,
+    updatedAt: new Date().toISOString(),
   });
 }
 

@@ -17,6 +17,8 @@ import {
 import {
   InAppNotification,
   playNotificationSound,
+  markNotificationAsRead,
+  fetchUserNotifications,
 } from "@/lib/notifications";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +73,24 @@ export default function NotificationsPage() {
       collection(db, "notifications"),
       where("userId", "==", user.uid)
     );
+
+    // Initial dual-database fetch from DynamoDB to merge
+    fetchUserNotifications(user.uid)
+      .then((dualItems) => {
+        if (dualItems && dualItems.length > 0) {
+          setNotifications((prev) => {
+            const map = new Map<string, InAppNotification>();
+            for (const item of [...prev, ...dualItems]) {
+              if (item.id) map.set(item.id, item);
+            }
+            const sorted = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            return sorted;
+          });
+        }
+      })
+      .catch((err) => console.warn("Initial DynamoDB notifications load note:", err));
 
     const unsubscribe = onSnapshot(
       q,
@@ -130,8 +150,7 @@ export default function NotificationsPage() {
   const handleNotificationClick = async (notif: InAppNotification) => {
     try {
       if (!notif.isRead) {
-        const notifRef = doc(db, "notifications", notif.id);
-        await updateDoc(notifRef, { isRead: true });
+        await markNotificationAsRead(notif.id, true);
       }
     } catch (err) {
       console.warn("Could not mark notification read:", err);
@@ -146,8 +165,13 @@ export default function NotificationsPage() {
     if (!user || unreadCount === 0) return;
     setActionLoading(true);
     try {
-      const batch = writeBatch(db);
       const unreadList = notifications.filter((n) => !n.isRead);
+      // Dual-database update for all unread items
+      await Promise.allSettled(
+        unreadList.map((item) => markNotificationAsRead(item.id, true))
+      );
+      // Also commit to Firestore batch for real-time local snapshot sync
+      const batch = writeBatch(db);
       for (const item of unreadList) {
         const ref = doc(db, "notifications", item.id);
         batch.update(ref, { isRead: true });

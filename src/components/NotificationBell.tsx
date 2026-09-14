@@ -24,7 +24,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { playNotificationSound, InAppNotification } from "@/lib/notifications";
+import {
+  playNotificationSound,
+  InAppNotification,
+  markNotificationAsRead,
+  fetchUserNotifications,
+} from "@/lib/notifications";
 
 export function NotificationBell() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -57,6 +62,24 @@ export function NotificationBell() {
       collection(db, "notifications"),
       where("userId", "==", user.uid)
     );
+
+    // Dual-database fetch to merge DynamoDB items
+    fetchUserNotifications(user.uid)
+      .then((items) => {
+        if (items && items.length > 0) {
+          setNotifications((prev) => {
+            const map = new Map<string, InAppNotification>();
+            for (const x of [...prev, ...items]) {
+              if (x.id) map.set(x.id, x);
+            }
+            const sorted = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            return sorted;
+          });
+        }
+      })
+      .catch((e) => console.warn("Initial dual notifications bell fetch note:", e));
 
     const unsub = onSnapshot(
       q,
@@ -175,9 +198,7 @@ export function NotificationBell() {
                   setMenuOpen(false);
                   if (!n.isRead) {
                     try {
-                      await updateDoc(doc(db, "notifications", n.id), {
-                        isRead: true,
-                      });
+                      await markNotificationAsRead(n.id, true);
                     } catch (e) {
                       console.error("Failed to mark single notification read", e);
                     }

@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 
 import { exportToCSV } from "@/lib/exportUtils";
+import { dispatchInAppNotification } from "@/lib/notifications";
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
 import {
   STATUTORY_TARIFF_CEILINGS,
@@ -547,17 +548,16 @@ export default function CoordinatorDashboardPage() {
         suspensionReason,
       });
 
-      // 3. In-App Manager Notification into notifications
+      // 3. In-App Manager Notification (dual-write to Firestore & DynamoDB)
       const managerRecipientId = v.hostel.managerId || v.hostel.contactPhone || "";
       if (managerRecipientId) {
         try {
-          await addDoc(collection(db, "notifications"), {
-            recipientId: managerRecipientId,
+          await dispatchInAppNotification({
+            userId: managerRecipientId,
             title: "Listing Suspended: Rent Cap Exceeded",
             message: `Your ${v.roomTypeName} rate of GH₵${v.postedPrice.toLocaleString()} at "${v.hostelName}" exceeds the campus ceiling of GH₵${v.statutoryCap.toLocaleString()}. Your listing is currently hidden from students. Lower your tariff to restore visibility.`,
-            type: "rent_cap_breach",
-            createdAt: new Date().toISOString(),
-            read: false,
+            type: "system",
+            linkUrl: "/manager/dashboard",
           });
         } catch (notifErr) {
           console.warn("In-app notification write warning:", notifErr);

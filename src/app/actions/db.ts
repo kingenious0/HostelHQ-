@@ -1555,5 +1555,138 @@ export async function repairAllHostelInventoriesAction() {
   }
 }
 
+// ============================================================================
+// Dual-Database Notification Actions (DynamoDB & Firebase Firestore)
+// ============================================================================
 
+export async function saveNotificationAction(notificationData: any) {
+  try {
+    const caller = await requireAuth();
+    const notifId = notificationData.id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const payload = {
+      ...notificationData,
+      id: notifId,
+      userId: notificationData.userId || caller.uid,
+      title: notificationData.title || "Notification",
+      message: notificationData.message || "",
+      type: notificationData.type || "system",
+      linkUrl: notificationData.linkUrl || "/dashboard",
+      isRead: notificationData.isRead ?? false,
+      createdAt: notificationData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
+    // 1. Dual-write to Firestore
+    try {
+      await setDoc(doc(db, "notifications", notifId), payload, { merge: true });
+    } catch (fsErr) {
+      console.warn("Firestore saveNotificationAction note:", fsErr);
+    }
+
+    // 2. Dual-write to DynamoDB
+    let saved = payload;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        saved = await dynamoService.saveNotification(payload);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB saveNotification note:", dynamoErr);
+      }
+    }
+
+    return { success: true, data: saved };
+  } catch (error: any) {
+    console.error("saveNotificationAction error:", error);
+    return { success: false, error: error.message || "Failed to save notification" };
+  }
+}
+
+export async function fetchNotificationsAction(userId?: string) {
+  try {
+    const caller = await requireAuth();
+    const targetUserId = userId || caller.uid;
+
+    // Disallow reading other people's notifications unless staff/admin
+    if (targetUserId !== caller.uid && !["admin", "executive", "dean", "coordinator"].includes(caller.role || "")) {
+      return { success: false, data: [], error: "Forbidden: You can only view your own notifications" };
+    }
+
+    let dynamoData: any[] = [];
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        dynamoData = await dynamoService.listNotificationsByUserId(targetUserId);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB listNotificationsByUserId note:", dynamoErr);
+      }
+    }
+
+    let firestoreData: any[] = [];
+    try {
+      const notifsRef = collection(db, "notifications");
+      const q = query(notifsRef, where("userId", "==", targetUserId));
+      const snap = await getDocs(q);
+      firestoreData = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    } catch (fsErr) {
+      console.warn("Firestore fetchNotificationsAction note:", fsErr);
+    }
+
+    // Merge notifications by unique ID (preserving newest updates)
+    const map = new Map<string, any>();
+    for (const item of [...dynamoData, ...firestoreData]) {
+      const key = item.id || item.originalId;
+      if (!key) continue;
+      if (!map.has(key)) {
+        map.set(key, item);
+      } else {
+        const existing = map.get(key);
+        map.set(key, {
+          ...existing,
+          ...item,
+          isRead: existing.isRead || item.isRead,
+        });
+      }
+    }
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return { success: true, data: merged };
+  } catch (error: any) {
+    console.error("fetchNotificationsAction error:", error);
+    return { success: false, data: [], error: error.message || "Failed to fetch notifications" };
+  }
+}
+
+export async function markNotificationReadAction(notificationId: string, isRead: boolean = true) {
+  try {
+    await requireAuth();
+    const cleanId = notificationId.replace(/^NOTIFICATION#/i, "");
+
+    // 1. Update in Firestore
+    try {
+      await updateDoc(doc(db, "notifications", cleanId), {
+        isRead,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (fsErr) {
+      console.warn("Firestore markNotificationReadAction note:", fsErr);
+    }
+
+    // 2. Update in DynamoDB
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        await dynamoService.updateNotificationReadStatus(cleanId, isRead);
+      } catch (dynamoErr) {
+        console.warn("DynamoDB updateNotificationReadStatus note:", dynamoErr);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("markNotificationReadAction error:", error);
+    return { success: false, error: error.message || "Failed to mark notification as read" };
+  }
+}
