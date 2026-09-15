@@ -23,7 +23,7 @@ import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, si
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn, parseStudentCredentials } from '@/lib/utils';
 import { uploadImage } from '@/lib/cloudinary';
-import { submitStudentVerificationAction } from '@/app/actions/db';
+import { submitStudentVerificationAction, saveUserAction } from '@/app/actions/db';
 
 type UserRole = 'student' | 'hostel_manager';
 
@@ -331,8 +331,17 @@ export default function SignupPage() {
                 userData.managedHostelId = selectedManagerHostelId;
             }
 
-            // 4. Save to Firestore
+            // 4. Save to Firestore & DynamoDB
             await setDoc(doc(db, 'users', user.uid), userData);
+
+            try {
+                await saveUserAction({
+                    ...userData,
+                    id: user.uid,
+                });
+            } catch (dynamoErr) {
+                console.warn('Could not sync user profile to DynamoDB:', dynamoErr);
+            }
 
             // 5. If manager, link to hostel document
             if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
@@ -443,8 +452,17 @@ export default function SignupPage() {
                 profileImage: user.photoURL || '',
             };
 
-            // 4. Save to Firestore
+            // 4. Save to Firestore & DynamoDB
             await setDoc(doc(db, 'users', user.uid), userData);
+
+            try {
+                await saveUserAction({
+                    ...userData,
+                    id: user.uid,
+                });
+            } catch (dynamoErr) {
+                console.warn('Could not sync student user profile to DynamoDB:', dynamoErr);
+            }
 
             // 5. Submit verification to DynamoDB for Dean review queue
             try {
@@ -531,12 +549,13 @@ export default function SignupPage() {
 
             if (!userDocSnap.exists()) {
                 const autoParsedId = parseStudentCredentials(user.email || '');
-                await setDoc(userDocRef, {
+                const googleUserProfile = {
                     uid: user.uid,
+                    id: user.uid,
                     email: user.email,
                     institutionalEmail: user.email,
                     fullName: user.displayName || 'Student',
-                    role: 'student',
+                    role: 'student' as const,
                     createdAt: new Date().toISOString(),
                     profileImage: user.photoURL || '',
                     avatarUrl: user.photoURL || '',
@@ -545,7 +564,14 @@ export default function SignupPage() {
                     studentId: autoParsedId || '',
                     studentIndexNumber: autoParsedId || '',
                     isStudentIdVerified: !!autoParsedId,
-                });
+                };
+                await setDoc(userDocRef, googleUserProfile);
+
+                try {
+                    await saveUserAction(googleUserProfile as any);
+                } catch (dynamoErr) {
+                    console.warn('Could not sync Google signup user to DynamoDB:', dynamoErr);
+                }
             }
 
             toast({

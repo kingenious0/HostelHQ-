@@ -376,6 +376,7 @@ export default function ManagerDashboard() {
             const hostel = hostels.find((h) => h.id === reportHostelId);
             const hostelName = hostel?.name || 'Managed Hostel';
             const studentName = reportStudentName.trim();
+            const managerPhone = (hostel as any)?.phone || (hostel as any)?.contactPhone || (currentUser as any)?.phoneNumber || '';
 
             const res = await submitComplaintAction({
                 direction: 'manager_to_student',
@@ -391,6 +392,7 @@ export default function ManagerDashboard() {
                 hostelName,
                 managerId: currentUser.uid,
                 managerName: currentUser.displayName || 'Hostel Manager',
+                managerPhone,
                 roomNumber: reportRoomNumber.trim() || undefined,
                 createdAt: new Date().toISOString(),
             });

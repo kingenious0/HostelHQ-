@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarSeparator, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
-import { submitComplaintAction, completeVisitByStudentAction } from '@/app/actions/db';
+import { submitComplaintAction, completeVisitByStudentAction, updateUserContactAction } from '@/app/actions/db';
 import { getHostel, type ComplaintCategory } from '@/lib/data';
 import { cleanHostelId } from '@/lib/dynamodb-service';
 import {
@@ -41,7 +41,8 @@ import {
     ShieldCheck,
     ShieldAlert,
     ArrowRight,
-    Eye
+    Eye,
+    Phone,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { db, auth } from '@/lib/firebase';
@@ -115,6 +116,7 @@ export default function MyBookingsPage() {
     const [complaintCategory, setComplaintCategory] = useState<ComplaintCategory>('Sanitation & Water');
     const [complaintSubject, setComplaintSubject] = useState('');
     const [complaintDescription, setComplaintDescription] = useState('');
+    const [complaintStudentPhone, setComplaintStudentPhone] = useState('');
     const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
 
     // Active secured bookings (confirmed or active tenancies)
@@ -125,6 +127,9 @@ export default function MyBookingsPage() {
     }, [bookings]);
 
     const handleOpenComplaint = (booking?: EnhancedBooking | null) => {
+        const currentPhone = appUser?.phone || (appUser as any)?.phoneNumber || '';
+        setComplaintStudentPhone(currentPhone);
+
         if (booking) {
             setSelectedBookingId(booking.id);
             setComplaintHostelName(booking.hostelName && booking.hostelName !== 'Unknown Hostel' ? booking.hostelName : '');
@@ -190,12 +195,20 @@ export default function MyBookingsPage() {
             const studentUid = appUser?.uid || currentUser?.uid || 'anonymous';
             const studentName = appUser?.fullName || currentUser?.displayName || 'Student';
             const studentEmail = appUser?.email || currentUser?.email || '';
-            const studentPhone = appUser?.phone || '';
+            const sPhone = complaintStudentPhone.trim() || appUser?.phone || (appUser as any)?.phoneNumber || '';
 
             // Resolve manager details if available from selected booking
             const chosen = activeSecuredBookings.find((b: EnhancedBooking) => b.id === selectedBookingId);
             const managerId = chosen?.managerId || undefined;
             const managerName = chosen?.managerName || undefined;
+
+            // Backfill phone into student profile across Firestore and DynamoDB if provided
+            if (sPhone && studentUid && studentUid !== 'anonymous') {
+                updateUserContactAction(studentUid, {
+                    phone: sPhone,
+                    fullName: studentName,
+                }).catch((err) => console.warn('Could not sync student contact to profile:', err));
+            }
 
             const res = await submitComplaintAction({
                 direction: 'student_to_hostel',
@@ -206,7 +219,7 @@ export default function MyBookingsPage() {
                 studentId: studentUid,
                 studentName,
                 studentEmail,
-                studentPhone,
+                studentPhone: sPhone,
                 hostelId: complaintHostelId || `hostel_${Date.now()}`,
                 hostelName: complaintHostelName.trim(),
                 managerId,
@@ -808,6 +821,34 @@ export default function MyBookingsPage() {
                                                 className="h-10 rounded-xl"
                                             />
                                         </div>
+                                    </div>
+
+                                    {/* Student Contact Phone Number for SMS Dispatches */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="complaint-phone" className="text-xs font-semibold flex items-center gap-1.5">
+                                                <Phone className="h-3.5 w-3.5 text-primary" /> Contact Phone (Dean's SMS Summons & Updates)
+                                            </Label>
+                                            {complaintStudentPhone.trim() ? (
+                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
+                                                    <CheckCircle className="h-3 w-3" /> SMS Ready
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                                    Required for SMS summons
+                                                </span>
+                                            )}
+                                        </div>
+                                        <Input
+                                            id="complaint-phone"
+                                            placeholder="e.g. 0244123456 or 0501234567"
+                                            value={complaintStudentPhone}
+                                            onChange={(e) => setComplaintStudentPhone(e.target.value)}
+                                            className="h-10 rounded-xl"
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">
+                                            The Dean of Students office dispatches formal arbitration summons and case updates directly via SMS to this number.
+                                        </p>
                                     </div>
 
                                     <div className="space-y-1.5">

@@ -346,7 +346,38 @@ export async function fetchHostelOccupanciesAction(hostelIds?: string[]): Promis
 
 export async function fetchUserAction(userId: string) {
   try {
-    const user = await dynamoService.getUserById(userId);
+    let user: any = null;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        user = await dynamoService.getUserById(userId);
+      } catch (dErr) {
+        console.warn("DynamoDB getUserById note:", dErr);
+      }
+    }
+
+    // Fallback to Firestore users collection if DynamoDB missed or unconfigured
+    if (!user) {
+      try {
+        const userDoc = await getDoc(doc(db, "users", userId));
+        if (userDoc.exists()) {
+          const fsData = userDoc.data();
+          user = {
+            id: userDoc.id,
+            ...fsData,
+            fullName: fsData.fullName || fsData.displayName || "",
+            phone: fsData.phone || fsData.phoneNumber || "",
+            phoneNumber: fsData.phoneNumber || fsData.phone || "",
+          };
+          // Asynchronously backfill DynamoDB
+          if (dynamoCore.isDynamoConfigured()) {
+            dynamoService.saveUser(user).catch(() => {});
+          }
+        }
+      } catch (fsErr) {
+        console.warn("Firestore fetchUserAction fallback note:", fsErr);
+      }
+    }
+
     return { success: true, data: user };
   } catch (error: any) {
     console.error("fetchUserAction error:", error);
@@ -375,11 +406,83 @@ export async function saveUserAction(user: AppUser) {
     if (caller.role !== "admin" && user.role && user.role !== caller.role) {
       user.role = caller.role as any;
     }
-    const saved = await dynamoService.saveUser(user);
+
+    // 1. Dual-write to AWS DynamoDB
+    let saved = user;
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        saved = await dynamoService.saveUser(user);
+      } catch (dynErr) {
+        console.warn("DynamoDB saveUser note:", dynErr);
+      }
+    }
+
+    // 2. Dual-write to Firebase Firestore
+    try {
+      const cleanUser: any = { ...user };
+      if (!cleanUser.phone && cleanUser.phoneNumber) {
+        cleanUser.phone = cleanUser.phoneNumber;
+      }
+      if (!cleanUser.phoneNumber && cleanUser.phone) {
+        cleanUser.phoneNumber = cleanUser.phone;
+      }
+      cleanUser.updatedAt = new Date().toISOString();
+      await setDoc(doc(db, "users", user.id), cleanUser, { merge: true });
+    } catch (fsErr) {
+      console.warn("Firestore users dual-write note:", fsErr);
+    }
+
     return { success: true, data: saved };
   } catch (error: any) {
     console.error("saveUserAction error:", error);
     return { success: false, error: error.message || "Failed to save user" };
+  }
+}
+
+export async function updateUserContactAction(
+  userId: string,
+  contacts: { fullName?: string; phone?: string; phoneNumber?: string }
+) {
+  try {
+    const caller = await requireAuth();
+    const isStaffOrAdmin = ["admin", "dean", "coordinator"].includes(caller.role);
+    if (caller.uid !== userId && !isStaffOrAdmin) {
+      throw new Error("Unauthorized: You do not have permission to update contacts for this account.");
+    }
+
+    const phone = contacts.phone || contacts.phoneNumber || "";
+    const updates: Record<string, any> = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (contacts.fullName) updates.fullName = contacts.fullName;
+    if (phone) {
+      updates.phone = phone;
+      updates.phoneNumber = phone;
+    }
+
+    // 1. Dual-write to Firestore
+    try {
+      await setDoc(doc(db, "users", userId), updates, { merge: true });
+    } catch (fsErr) {
+      console.warn("Firestore updateUserContactAction note:", fsErr);
+    }
+
+    // 2. Dual-write to DynamoDB
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        const existing = await dynamoService.getUserById(userId);
+        if (existing) {
+          await dynamoService.saveUser({ ...existing, ...updates, id: userId });
+        }
+      } catch (dynErr) {
+        console.warn("DynamoDB updateUserContactAction note:", dynErr);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateUserContactAction error:", error);
+    return { success: false, error: error.message || "Failed to update contact details" };
   }
 }
 
@@ -996,10 +1099,99 @@ export async function submitComplaintAction(complaintData: any) {
   try {
     const caller = await requireAuth();
     const complaintId = complaintData.id || `complaint_${Date.now()}`;
+
+    // 1. Resolve Student contact details if missing
+    let studentPhone = complaintData.studentPhone || "";
+    let studentName = complaintData.studentName || "";
+    let studentEmail = complaintData.studentEmail || "";
+    const studentUid = complaintData.studentId || caller.uid;
+
+    if (!studentPhone || !studentName || !studentEmail) {
+      try {
+        const uDoc = await getDoc(doc(db, "users", studentUid));
+        if (uDoc.exists()) {
+          const uData = uDoc.data();
+          if (!studentPhone) studentPhone = uData.phone || uData.phoneNumber || uData.contactPhone || "";
+          if (!studentName) studentName = uData.fullName || uData.displayName || "";
+          if (!studentEmail) studentEmail = uData.email || "";
+        }
+      } catch (fsErr) {
+        console.warn("Could not lookup user in Firestore for complaint enrichment:", fsErr);
+      }
+
+      if (!studentPhone && dynamoCore.isDynamoConfigured()) {
+        try {
+          const dUser = await dynamoService.getUserById(studentUid);
+          if (dUser) {
+            if (!studentPhone) studentPhone = dUser.phone || (dUser as any).phoneNumber || "";
+            if (!studentName) studentName = dUser.fullName || "";
+            if (!studentEmail) studentEmail = dUser.email || "";
+          }
+        } catch (dynErr) {
+          console.warn("Could not lookup user in DynamoDB for complaint enrichment:", dynErr);
+        }
+      }
+    }
+
+    // 2. Resolve Manager contact details if missing
+    let managerPhone = complaintData.managerPhone || "";
+    let managerName = complaintData.managerName || "";
+    let managerId = complaintData.managerId || "";
+
+    if ((!managerPhone || !managerName) && complaintData.hostelId) {
+      const cleanHostelId = complaintData.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+      try {
+        const hDoc = await getDoc(doc(db, "hostels", cleanHostelId));
+        if (hDoc.exists()) {
+          const hData = hDoc.data();
+          if (!managerPhone) managerPhone = hData.phone || hData.contactPhone || "";
+          if (!managerId) managerId = hData.managerId || "";
+        }
+      } catch (_) {}
+
+      if (!managerPhone && dynamoCore.isDynamoConfigured()) {
+        try {
+          const dHostel = await dynamoService.getHostelById(cleanHostelId);
+          if (dHostel) {
+            if (!managerPhone) managerPhone = (dHostel as any).phone || (dHostel as any).contactPhone || "";
+            if (!managerId) managerId = dHostel.managerId || "";
+          }
+        } catch (_) {}
+      }
+
+      if (managerId && (!managerPhone || !managerName)) {
+        try {
+          const mDoc = await getDoc(doc(db, "users", managerId));
+          if (mDoc.exists()) {
+            const mData = mDoc.data();
+            if (!managerPhone) managerPhone = mData.phone || mData.phoneNumber || mData.contactPhone || "";
+            if (!managerName) managerName = mData.fullName || mData.displayName || "";
+          }
+        } catch (_) {}
+
+        if (!managerPhone && dynamoCore.isDynamoConfigured()) {
+          try {
+            const dMgr = await dynamoService.getUserById(managerId);
+            if (dMgr) {
+              if (!managerPhone) managerPhone = dMgr.phone || (dMgr as any).phoneNumber || "";
+              if (!managerName) managerName = dMgr.fullName || "";
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     const payload = {
       ...complaintData,
       id: complaintId,
-      submittedBy: caller.uid, // enforce authenticated caller as author
+      submittedBy: caller.uid,
+      studentId: studentUid,
+      studentName: studentName || complaintData.studentName || caller.displayName || "Student Complainant",
+      studentPhone: studentPhone || complaintData.studentPhone || "",
+      studentEmail: studentEmail || complaintData.studentEmail || caller.email || "",
+      managerId: managerId || complaintData.managerId || "",
+      managerName: managerName || complaintData.managerName || "Hostel Manager",
+      managerPhone: managerPhone || complaintData.managerPhone || "",
       status: complaintData.status || "Submitted",
       createdAt: complaintData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1026,6 +1218,99 @@ export async function submitComplaintAction(complaintData: any) {
   } catch (error: any) {
     console.error("submitComplaintAction error:", error);
     return { success: false, error: error.message || "Failed to submit complaint" };
+  }
+}
+
+export async function updateComplaintArbitrationAction({
+  complaintId,
+  hearingPayload,
+  studentPhone,
+  managerPhone,
+  studentName,
+  managerName,
+  studentId,
+  managerId,
+}: {
+  complaintId: string;
+  hearingPayload: any;
+  studentPhone?: string;
+  managerPhone?: string;
+  studentName?: string;
+  managerName?: string;
+  studentId?: string;
+  managerId?: string;
+}) {
+  try {
+    await requireRole(["dean", "coordinator", "admin"]);
+    const updates: Record<string, any> = {
+      status: "Under Review",
+      arbitrationHearing: hearingPayload,
+      updatedAt: new Date().toISOString(),
+    };
+    if (studentPhone) updates.studentPhone = studentPhone;
+    if (managerPhone) updates.managerPhone = managerPhone;
+    if (studentName) updates.studentName = studentName;
+    if (managerName) updates.managerName = managerName;
+
+    // 1. Dual-write updates to Firestore
+    try {
+      await updateDoc(doc(db, "complaints", complaintId), updates);
+    } catch (fsErr) {
+      console.warn("Firestore updateComplaintArbitrationAction note:", fsErr);
+    }
+
+    // 2. Dual-write updates to DynamoDB
+    if (dynamoCore.isDynamoConfigured()) {
+      try {
+        const key = dynamoService.formatKey.complaint(complaintId);
+        await dynamoCore.updateItem(key.id, key.entityType, updates);
+      } catch (dynErr) {
+        console.warn("DynamoDB updateComplaintArbitrationAction note:", dynErr);
+      }
+    }
+
+    // 3. If student had missing phone and studentId is present, backfill user profile
+    if (studentId && studentPhone) {
+      try {
+        await setDoc(
+          doc(db, "users", studentId),
+          { phone: studentPhone, phoneNumber: studentPhone, updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+      } catch (_) {}
+      if (dynamoCore.isDynamoConfigured()) {
+        try {
+          const sUser = await dynamoService.getUserById(studentId);
+          if (sUser && !sUser.phone) {
+            await dynamoService.saveUser({ ...sUser, phone: studentPhone } as any);
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 4. If manager had missing phone and managerId is present, backfill manager profile
+    if (managerId && managerPhone) {
+      try {
+        await setDoc(
+          doc(db, "users", managerId),
+          { phone: managerPhone, phoneNumber: managerPhone, updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+      } catch (_) {}
+      if (dynamoCore.isDynamoConfigured()) {
+        try {
+          const mUser = await dynamoService.getUserById(managerId);
+          if (mUser && !mUser.phone) {
+            await dynamoService.saveUser({ ...mUser, phone: managerPhone } as any);
+          }
+        } catch (_) {}
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("updateComplaintArbitrationAction error:", error);
+    return { success: false, error: error.message || "Failed to save arbitration hearing" };
   }
 }
 

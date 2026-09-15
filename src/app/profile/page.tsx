@@ -17,6 +17,7 @@ import { onAuthStateChanged, updatePassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { saveUserAction } from '@/app/actions/db';
 import {
   Loader2,
   UserCheck,
@@ -378,9 +379,19 @@ export default function ProfilePage() {
       const userDocRef = doc(db, "users", appUser.uid);
       const role = (appUser.role || 'student').toLowerCase().trim();
 
+      // Resolve contact phone from all possible profile fields
+      const contactNumber =
+        profileData.phone?.trim() ||
+        profileData.contactPhone?.trim() ||
+        profileData.phoneNumber?.trim() ||
+        '';
+
       // Base payload with common identity fields
       let cleanPayload: Record<string, any> = {
         fullName: profileData.fullName?.trim() || '',
+        phone: contactNumber,
+        phoneNumber: contactNumber,
+        contactPhone: contactNumber,
         nationality: profileData.nationality?.trim() || 'Ghanaian',
         profileImage: profileData.profileImage || '',
         avatarUrl: profileData.profileImage || '',
@@ -394,8 +405,6 @@ export default function ProfilePage() {
           businessName: profileData.businessName?.trim() || '',
           businessAddress: profileData.businessAddress?.trim() || profileData.address?.trim() || '',
           address: profileData.businessAddress?.trim() || profileData.address?.trim() || '',
-          contactPhone: profileData.contactPhone?.trim() || profileData.phone?.trim() || '',
-          phone: profileData.contactPhone?.trim() || profileData.phone?.trim() || '',
           isIdentityVerified: !!profileData.isIdentityVerified,
         };
         // Clean out student and institutional attributes so records remain clean
@@ -417,8 +426,6 @@ export default function ProfilePage() {
           department: profileData.directorate?.trim() || '',
           institutionalEmail: profileData.institutionalEmail?.trim() || appUser.email || '',
           officeExtension: profileData.officeExtension?.trim() || '',
-          contactPhone: profileData.officeExtension?.trim() || profileData.phone?.trim() || '',
-          phone: profileData.officeExtension?.trim() || profileData.phone?.trim() || '',
         };
         // Clean out student and residential attributes
         delete cleanPayload.studentId;
@@ -456,12 +463,26 @@ export default function ProfilePage() {
         }
       });
 
+      // 1. Update Firestore profile
       await updateDoc(userDocRef, cleanPayload);
+
+      // 2. Dual-write to AWS DynamoDB to keep records consistent across platforms
+      try {
+        await saveUserAction({
+          id: appUser.uid,
+          email: appUser.email || profileData.email || '',
+          role: (appUser.role || role) as any,
+          ...cleanPayload,
+        } as any);
+      } catch (dynamoErr) {
+        console.warn('Could not sync user profile to DynamoDB:', dynamoErr);
+      }
+
       setAppUser(prev => prev ? { ...prev, ...cleanPayload } as AppUser : null);
       setProfileData(prev => ({ ...prev, ...cleanPayload }));
       toast({
-        title: 'Profile changes saved!',
-        description: 'Your profile information and credentials have been securely updated.'
+        title: 'Profile changes saved! 💾',
+        description: 'Your profile information and credentials have been securely updated across databases.'
       });
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -1127,19 +1148,29 @@ export default function ProfilePage() {
                           </div>
                         </div>
 
-                        {/* Department & Nationality */}
+                        {/* Contact Phone & Nationality */}
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-1.5">
-                            <Label htmlFor="department" className="text-xs font-semibold text-foreground">
-                              Department & Faculty
-                            </Label>
-                            <Input
-                              id="department"
-                              className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
-                              placeholder="e.g. Department of IT Education, USTED"
-                              value={profileData.department || ''}
-                              onChange={(e) => setProfileData(p => ({ ...p, department: e.target.value }))}
-                            />
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="studentPhone" className="text-xs font-semibold text-foreground">
+                                Contact Phone Number (SMS & MoMo Linked)
+                              </Label>
+                              {profileData.phone && (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 font-semibold">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Active
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="studentPhone"
+                                className="pl-10 h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80 font-mono"
+                                placeholder="e.g. 0244123456"
+                                value={profileData.phone || profileData.phoneNumber || profileData.contactPhone || ''}
+                                onChange={(e) => setProfileData(p => ({ ...p, phone: e.target.value, phoneNumber: e.target.value, contactPhone: e.target.value }))}
+                              />
+                            </div>
                           </div>
 
                           <div className="space-y-1.5">
@@ -1154,6 +1185,20 @@ export default function ProfilePage() {
                               onChange={(e) => setProfileData(p => ({ ...p, nationality: e.target.value }))}
                             />
                           </div>
+                        </div>
+
+                        {/* Department & Faculty */}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="department" className="text-xs font-semibold text-foreground">
+                            Department & Faculty
+                          </Label>
+                          <Input
+                            id="department"
+                            className="h-11 sm:h-12 text-sm bg-background rounded-xl border-border/80"
+                            placeholder="e.g. Department of IT Education, USTED"
+                            value={profileData.department || ''}
+                            onChange={(e) => setProfileData(p => ({ ...p, department: e.target.value }))}
+                          />
                         </div>
 
                         {/* Gender & Campus Address */}

@@ -28,6 +28,9 @@ import {
   fetchStudentVerificationsAction,
   updateStudentVerificationStatusAction,
   fetchHostelsAction,
+  updateComplaintArbitrationAction,
+  fetchUserAction,
+  fetchHostelByIdAction,
 } from "@/app/actions/db";
 import type { Complaint, StudentVerification, ComplaintStatus, ComplaintDirection } from "@/lib/data";
 import { ComplaintDetailModal } from "@/components/dashboard/ComplaintDetailModal";
@@ -58,6 +61,7 @@ import {
   Unlock,
   Scale,
   Download,
+  Phone,
 } from "lucide-react";
 
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
@@ -91,6 +95,11 @@ export default function DeanDashboardPage() {
   const [hearingOfficers, setHearingOfficers] = useState("Dean of Students & SRC Welfare Committee");
   const [summonsNote, setSummonsNote] = useState("");
   const [isSchedulingHearing, setIsSchedulingHearing] = useState(false);
+  const [arbitrationStudentPhone, setArbitrationStudentPhone] = useState("");
+  const [arbitrationStudentName, setArbitrationStudentName] = useState("");
+  const [arbitrationManagerPhone, setArbitrationManagerPhone] = useState("");
+  const [arbitrationManagerName, setArbitrationManagerName] = useState("");
+  const [isResolvingContacts, setIsResolvingContacts] = useState(false);
 
   // Student Verifications State
   const [verifications, setVerifications] = useState<StudentVerification[]>([]);
@@ -112,7 +121,7 @@ export default function DeanDashboardPage() {
 
   // Role Authentication Guard
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    const unsub = onAuthStateChanged(auth, async (user: any) => {
       setCurrentUser(user);
       if (!user) {
         setLoadingAuth(false);
@@ -241,6 +250,95 @@ export default function DeanDashboardPage() {
     }
   };
 
+  // Open Arbitration Hearing Modal with Auto Contact Resolution
+  const openArbitrationModal = async (complaint: Complaint) => {
+    setComplaintForArbitration(complaint);
+    setHearingDate(new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]);
+    setArbitrationDialogOpen(true);
+    setIsResolvingContacts(true);
+
+    let sName = complaint.studentName || "";
+    let sPhone = complaint.studentPhone || "";
+    let mName = complaint.managerName || "";
+    let mPhone = complaint.managerPhone || "";
+
+    // Set initial values
+    setArbitrationStudentName(sName);
+    setArbitrationStudentPhone(sPhone);
+    setArbitrationManagerName(mName);
+    setArbitrationManagerPhone(mPhone);
+
+    try {
+      // 1. Resolve student phone and name if missing
+      const studentUid = complaint.studentId || (complaint as any).submittedBy;
+      if ((!sPhone || !sName) && studentUid) {
+        try {
+          const userSnap = await getDoc(doc(db, "users", studentUid));
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            if (!sPhone) sPhone = uData.phone || uData.phoneNumber || uData.contactPhone || "";
+            if (!sName) sName = uData.fullName || uData.displayName || "";
+          }
+        } catch (_) {}
+
+        if (!sPhone) {
+          const res = await fetchUserAction(studentUid);
+          if (res.success && res.data) {
+            if (!sPhone) sPhone = res.data.phone || (res.data as any).phoneNumber || "";
+            if (!sName) sName = res.data.fullName || "";
+          }
+        }
+      }
+
+      // 2. Resolve manager phone and name if missing
+      const matchedHostel = hostels.find(
+        (h) => h.id === complaint.hostelId || h.name === complaint.hostelName
+      );
+      if (!mPhone && matchedHostel) {
+        mPhone = matchedHostel.phone || matchedHostel.contactPhone || "";
+      }
+      let managerUid = complaint.managerId || matchedHostel?.managerId;
+
+      if (!managerUid && complaint.hostelId) {
+        const cleanHId = complaint.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+        const hRes = await fetchHostelByIdAction(cleanHId);
+        if (hRes.success && hRes.data) {
+          if (!mPhone) mPhone = (hRes.data as any).phone || (hRes.data as any).contactPhone || "";
+          managerUid = hRes.data.managerId;
+        }
+      }
+
+      if (managerUid && (!mPhone || !mName)) {
+        try {
+          const mSnap = await getDoc(doc(db, "users", managerUid));
+          if (mSnap.exists()) {
+            const mData = mSnap.data();
+            if (!mPhone) mPhone = mData.phone || mData.phoneNumber || mData.contactPhone || "";
+            if (!mName) mName = mData.fullName || mData.displayName || "";
+          }
+        } catch (_) {}
+
+        if (!mPhone) {
+          const mRes = await fetchUserAction(managerUid);
+          if (mRes.success && mRes.data) {
+            if (!mPhone) mPhone = mRes.data.phone || (mRes.data as any).phoneNumber || "";
+            if (!mName) mName = mRes.data.fullName || "";
+          }
+        }
+      }
+
+      // Update state with resolved contact details
+      setArbitrationStudentName(sName || "Student Complainant");
+      setArbitrationStudentPhone(sPhone);
+      setArbitrationManagerName(mName || "Hostel Manager");
+      setArbitrationManagerPhone(mPhone);
+    } catch (resolveErr) {
+      console.warn("Could not auto-resolve contact details:", resolveErr);
+    } finally {
+      setIsResolvingContacts(false);
+    }
+  };
+
   // Schedule Formal Arbitration Hearing & Automated Summons Dispatch
   const handleScheduleArbitration = async () => {
     if (!complaintForArbitration) return;
@@ -253,38 +351,42 @@ export default function DeanDashboardPage() {
       return;
     }
 
+    const sPhone = arbitrationStudentPhone.trim();
+    const mPhone = arbitrationManagerPhone.trim();
+
+    if (!sPhone && !mPhone) {
+      toast({
+        title: "Recipient Phone Required",
+        description: "Please enter at least one contact phone number (Student or Manager) to dispatch the summons SMS.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSchedulingHearing(true);
     try {
       const deanName = currentUser?.displayName || "Dean of Students Welfare Directorate";
-      const complaintRef = doc(db, "complaints", complaintForArbitration.id);
+      const hearingDateTime = `${hearingDate} at ${hearingTime}`;
 
-      // Dispatch Role-Specific FrogWigal SMS & Persistent In-App Notifications
+      // 1. Dispatch Role-Specific FrogWigal SMS & Persistent In-App Notifications
+      const studentId = complaintForArbitration.studentId || (complaintForArbitration as any).submittedBy || "";
       const matchedHostel = hostels.find(
         (h) => h.id === complaintForArbitration.hostelId || h.name === complaintForArbitration.hostelName
       );
-      const studentPhone = complaintForArbitration.studentPhone || "";
-      const studentId = complaintForArbitration.studentId || "";
-      const managerPhone =
-        complaintForArbitration.managerPhone ||
-        matchedHostel?.phone ||
-        matchedHostel?.contactPhone ||
-        "";
-      const managerId =
-        complaintForArbitration.managerId || matchedHostel?.managerId || "";
-      const hearingDateTime = `${hearingDate} at ${hearingTime}`;
+      const managerId = complaintForArbitration.managerId || matchedHostel?.managerId || "";
 
       try {
         await dispatchDeanSummons({
-          studentPhone,
+          studentPhone: sPhone,
           studentId,
-          managerPhone,
+          managerPhone: mPhone,
           managerId,
           hostelName: complaintForArbitration.hostelName,
           hearingDate: hearingDateTime,
           venue: hearingVenue,
         });
       } catch (summonsErr) {
-        console.warn("Automated summons dispatch note:", summonsErr);
+        console.warn("Automated summons dispatch error:", summonsErr);
       }
 
       const hearingPayload = {
@@ -298,12 +400,20 @@ export default function DeanDashboardPage() {
         scheduledBy: deanName,
         scheduledAt: new Date().toISOString(),
         smsDispatched: true,
+        studentPhoneConfirmed: sPhone,
+        managerPhoneConfirmed: mPhone,
       };
 
-      await updateDoc(complaintRef, {
-        status: "Under Review",
-        arbitrationHearing: hearingPayload,
-        updatedAt: new Date().toISOString(),
+      // 2. Dual-write to both Firestore & DynamoDB via Server Action
+      await updateComplaintArbitrationAction({
+        complaintId: complaintForArbitration.id,
+        hearingPayload,
+        studentPhone: sPhone,
+        managerPhone: mPhone,
+        studentName: arbitrationStudentName.trim(),
+        managerName: arbitrationManagerName.trim(),
+        studentId,
+        managerId,
       });
 
       setComplaints((prev) =>
@@ -312,15 +422,24 @@ export default function DeanDashboardPage() {
             ? {
                 ...c,
                 status: "Under Review",
+                studentPhone: sPhone || c.studentPhone,
+                managerPhone: mPhone || c.managerPhone,
+                studentName: arbitrationStudentName.trim() || c.studentName,
+                managerName: arbitrationManagerName.trim() || c.managerName,
                 arbitrationHearing: hearingPayload,
               }
             : c
         )
       );
 
+      const dispatchedList = [
+        sPhone ? `Student (${sPhone})` : null,
+        mPhone ? `Manager (${mPhone})` : null,
+      ].filter(Boolean).join(" and ");
+
       toast({
-        title: "Hearing Scheduled & Summons Dispatched!",
-        description: `Summons for ${hearingDate} at ${hearingTime} dispatched via FrogWigal SMS and persistent in-app notifications.`,
+        title: "Hearing Scheduled & Summons Dispatched! ⚖️",
+        description: `Summons dispatched via FrogWigal SMS to ${dispatchedList} for ${hearingDate} at ${hearingTime}.`,
       });
 
       setArbitrationDialogOpen(false);
@@ -880,11 +999,7 @@ export default function DeanDashboardPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => {
-                                      setComplaintForArbitration(complaint);
-                                      setHearingDate(new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]);
-                                      setArbitrationDialogOpen(true);
-                                    }}
+                                    onClick={() => openArbitrationModal(complaint)}
                                     className="h-8 text-xs font-medium text-primary hover:text-primary"
                                     title="Dispatch formal summons & schedule hearing"
                                   >
@@ -1006,11 +1121,7 @@ export default function DeanDashboardPage() {
                             <Button
                               size="default"
                               variant="outline"
-                              onClick={() => {
-                                setComplaintForArbitration(complaint);
-                                setHearingDate(new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0]);
-                                setArbitrationDialogOpen(true);
-                              }}
+                              onClick={() => openArbitrationModal(complaint)}
                               className="min-h-[44px] py-2.5 px-3 text-xs font-semibold rounded-xl text-primary hover:text-primary"
                             >
                               <Scale className="h-4 w-4 mr-1" /> Arbitrate
@@ -1332,6 +1443,79 @@ export default function DeanDashboardPage() {
                   />
                 </div>
 
+                {/* Recipient Phone Numbers for FrogWigal SMS Summons */}
+                <div className="rounded-lg border border-border/70 p-3 bg-muted/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-primary" /> Recipient SMS Dispatches & Contacts
+                    </span>
+                    {isResolvingContacts && (
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" /> Auto-resolving contacts...
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Student Contact */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-medium text-foreground">
+                          Student Phone (Complainant)
+                        </label>
+                        {arbitrationStudentPhone.trim() ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-emerald-600 border-emerald-500/30 bg-emerald-500/10">
+                            SMS Ready
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
+                            Required for SMS
+                          </Badge>
+                        )}
+                      </div>
+                      <Input
+                        value={arbitrationStudentPhone}
+                        onChange={(e) => setArbitrationStudentPhone(e.target.value)}
+                        placeholder="e.g. 0244123456"
+                        className="text-xs h-8 bg-background"
+                      />
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        Party: {arbitrationStudentName || complaintForArbitration.studentName || "Student"}
+                      </p>
+                    </div>
+
+                    {/* Manager Contact */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-medium text-foreground">
+                          Hostel Manager Phone (Respondent)
+                        </label>
+                        {arbitrationManagerPhone.trim() ? (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-emerald-600 border-emerald-500/30 bg-emerald-500/10">
+                            SMS Ready
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
+                            Required for SMS
+                          </Badge>
+                        )}
+                      </div>
+                      <Input
+                        value={arbitrationManagerPhone}
+                        onChange={(e) => setArbitrationManagerPhone(e.target.value)}
+                        placeholder="e.g. 0201234567"
+                        className="text-xs h-8 bg-background"
+                      />
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        Manager: {arbitrationManagerName || "Hostel Manager"} ({complaintForArbitration.hostelName})
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    * Phone numbers entered will be confirmed and permanently updated in Firestore & DynamoDB for future dispatches.
+                  </p>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground">Statutory Summons Notice (SMS Dispatch)</label>
                   <Textarea
@@ -1342,7 +1526,7 @@ export default function DeanDashboardPage() {
                     className="text-xs bg-background"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Notice will be dispatched via SMS gateway to {complaintForArbitration.studentPhone || "student"} and {complaintForArbitration.managerPhone || "hostel manager"}.
+                    Notice will be dispatched via SMS gateway to {arbitrationStudentPhone.trim() ? `student (${arbitrationStudentPhone.trim()})` : "student (no phone entered)"} and {arbitrationManagerPhone.trim() ? `manager (${arbitrationManagerPhone.trim()})` : "hostel manager (no phone entered)"}.
                   </p>
                 </div>
               </div>

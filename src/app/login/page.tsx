@@ -22,6 +22,7 @@ import { doc, getDoc, collection, getDocs, query, where, setDoc, limit } from 'f
 import { isPlatformAuthenticatorAvailable, base64ToArrayBuffer, arrayBufferToBase64 } from '@/lib/webauthn';
 import { cn, parseStudentCredentials } from '@/lib/utils';
 import { AppLoader } from '@/components/ui/app-loader';
+import { saveUserAction } from '@/app/actions/db';
 
 function LoginPageInner() {
     const [loginMethod, setLoginMethod] = useState<'password' | 'phone_otp'>('password');
@@ -114,19 +115,27 @@ function LoginPageInner() {
             let role = 'student';
             if (!userDocSnap.exists()) {
                 const autoParsedId = parseStudentCredentials(user.email || '');
-                await setDoc(userDocRef, {
+                const googleProfile = {
                     uid: user.uid,
+                    id: user.uid,
                     email: user.email,
                     institutionalEmail: user.email,
                     fullName: user.displayName || 'Student',
-                    role: 'student',
+                    role: 'student' as const,
                     createdAt: new Date().toISOString(),
                     profileImage: user.photoURL || '',
                     avatarUrl: user.photoURL || '',
                     studentId: autoParsedId || '',
                     studentIndexNumber: autoParsedId || '',
                     isStudentIdVerified: !!autoParsedId,
-                });
+                };
+                await setDoc(userDocRef, googleProfile);
+
+                try {
+                    await saveUserAction(googleProfile as any);
+                } catch (dynamoErr) {
+                    console.warn('Could not sync new Google user to DynamoDB:', dynamoErr);
+                }
             } else {
                 role = (userDocSnap.data() as any).role || 'student';
             }
@@ -471,7 +480,7 @@ function LoginPageInner() {
                         // Also inspect users/{uid}/passkeys subcollection
                         try {
                             const passkeysSnap = await getDocs(collection(db, 'users', foundUserId, 'passkeys'));
-                            passkeysSnap.forEach((d) => {
+                            passkeysSnap.forEach((d: any) => {
                                 const cId = d.data().credentialId || d.id;
                                 if (cId && !userCredentialIds.includes(cId)) {
                                     userCredentialIds.push(cId);
