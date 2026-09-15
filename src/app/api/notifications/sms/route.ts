@@ -28,15 +28,14 @@ export async function POST(req: NextRequest) {
       console.warn(
         `[FrogWigal SMS] Gateway delivery failed for ${formattedPhone}: ${result.error}`
       );
-      return NextResponse.json(
-        {
-          success: false,
-          gateway: "frogwigal",
-          formattedPhone,
-          error: result.error || "Failed to dispatch SMS via Wigal Frog gateway",
-        },
-        { status: 502 }
-      );
+      // Return 200 with success: false so client callers (and background notifications)
+      // do not throw unhandled 502 Bad Gateway network errors in the browser console
+      return NextResponse.json({
+        success: false,
+        gateway: "frogwigal",
+        formattedPhone,
+        error: result.error || "Failed to dispatch SMS via Wigal Frog gateway",
+      });
     }
 
     console.log(`[FrogWigal SMS] Successfully delivered SMS to ${formattedPhone}`);

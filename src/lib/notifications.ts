@@ -103,13 +103,17 @@ export async function sendSmsNotification({
 
     if (!res.ok) {
       const errorText = await res.text();
-      console.warn(`SMS endpoint warning: ${errorText}`);
+      console.warn(`[SMS Service Note]: ${errorText}`);
       return { success: false, error: errorText };
     }
 
-    return await res.json();
+    const data = await res.json();
+    if (!data.success) {
+      console.warn(`[SMS Gateway Note]: ${data.error || "Delivery pending or unconfirmed"}`);
+    }
+    return data;
   } catch (err: any) {
-    console.warn(`SMS dispatch encountered error: ${err.message}`);
+    console.warn(`SMS dispatch encountered notice: ${err.message}`);
     return { success: false, error: err.message };
   }
 }

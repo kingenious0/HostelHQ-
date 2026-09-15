@@ -1269,39 +1269,63 @@ export async function updateComplaintArbitrationAction({
       }
     }
 
-    // 3. If student had missing phone and studentId is present, backfill user profile
-    if (studentId && studentPhone) {
+    // 3. If studentId is present, persist confirmed phone and name to student profile
+    if (studentId && (studentPhone || studentName)) {
+      const studentProfileUpdates: Record<string, any> = {
+        updatedAt: new Date().toISOString(),
+      };
+      if (studentPhone) {
+        studentProfileUpdates.phone = studentPhone;
+        studentProfileUpdates.phoneNumber = studentPhone;
+      }
+      if (studentName) {
+        studentProfileUpdates.displayName = studentName;
+        studentProfileUpdates.fullName = studentName;
+      }
       try {
-        await setDoc(
-          doc(db, "users", studentId),
-          { phone: studentPhone, phoneNumber: studentPhone, updatedAt: new Date().toISOString() },
-          { merge: true }
-        );
+        await setDoc(doc(db, "users", studentId), studentProfileUpdates, { merge: true });
       } catch (_) {}
       if (dynamoCore.isDynamoConfigured()) {
         try {
           const sUser = await dynamoService.getUserById(studentId);
-          if (sUser && !sUser.phone) {
-            await dynamoService.saveUser({ ...sUser, phone: studentPhone } as any);
+          if (sUser) {
+            await dynamoService.saveUser({
+              ...sUser,
+              ...(studentPhone ? { phone: studentPhone, phoneNumber: studentPhone } : {}),
+              ...(studentName ? { displayName: studentName, fullName: studentName } : {}),
+              updatedAt: new Date().toISOString(),
+            } as any);
           }
         } catch (_) {}
       }
     }
 
-    // 4. If manager had missing phone and managerId is present, backfill manager profile
-    if (managerId && managerPhone) {
+    // 4. If managerId is present, persist confirmed phone and name to manager profile
+    if (managerId && (managerPhone || managerName)) {
+      const managerProfileUpdates: Record<string, any> = {
+        updatedAt: new Date().toISOString(),
+      };
+      if (managerPhone) {
+        managerProfileUpdates.phone = managerPhone;
+        managerProfileUpdates.phoneNumber = managerPhone;
+      }
+      if (managerName) {
+        managerProfileUpdates.displayName = managerName;
+        managerProfileUpdates.fullName = managerName;
+      }
       try {
-        await setDoc(
-          doc(db, "users", managerId),
-          { phone: managerPhone, phoneNumber: managerPhone, updatedAt: new Date().toISOString() },
-          { merge: true }
-        );
+        await setDoc(doc(db, "users", managerId), managerProfileUpdates, { merge: true });
       } catch (_) {}
       if (dynamoCore.isDynamoConfigured()) {
         try {
           const mUser = await dynamoService.getUserById(managerId);
-          if (mUser && !mUser.phone) {
-            await dynamoService.saveUser({ ...mUser, phone: managerPhone } as any);
+          if (mUser) {
+            await dynamoService.saveUser({
+              ...mUser,
+              ...(managerPhone ? { phone: managerPhone, phoneNumber: managerPhone } : {}),
+              ...(managerName ? { displayName: managerName, fullName: managerName } : {}),
+              updatedAt: new Date().toISOString(),
+            } as any);
           }
         } catch (_) {}
       }

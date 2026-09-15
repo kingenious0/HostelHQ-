@@ -15,39 +15,26 @@ const WIGAL_SENDER_ID =
   process.env.WIGAL_SENDER_ID || process.env.FROG_SMS_SENDER_ID || 'HostelHQ';
 
 /**
- * Robust DNS resolver that tries system DNS first, then fallbacks to Google DNS (8.8.8.8)
- * This bypasses ISP-level DNS blocking or propagation issues.
+ * Prioritize IPv4 resolution in Node.js dual-stack networking to prevent delays or timeouts
  */
-async function resolveWigalUrl(urlStr: string): Promise<string> {
-  const url = new URL(urlStr);
-  const hostname = url.hostname;
-
-  try {
-    // Try standard resolution first
-    const dns = await import('node:dns/promises');
-    try {
-      await dns.lookup(hostname);
-      return urlStr; // System found it, use original URL
-    } catch (e) {
-      console.warn(`DNS lookup failed for ${hostname}, attempting Google DNS fallback...`);
-
-      // Fallback: Using a specific Google DNS resolver
-      const resolver = new dns.Resolver();
-      resolver.setServers(['8.8.8.8', '1.1.1.1']);
-      const addresses = await resolver.resolve4(hostname);
-
-      if (addresses.length > 0) {
-        // We found the IP! Now we swap the hostname for the IP
-        // but tell fetch to ignore the SSL name mismatch (node-fetch/undici style)
-        url.hostname = addresses[0];
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-        return url.toString();
-      }
-    }
-  } catch (err) {
-    console.error('DNS Fallback failed:', err);
+try {
+  const dns = require('node:dns');
+  if (typeof dns?.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
   }
-  return urlStr; // Failure, return original and let fetch try one last time
+} catch {
+  // Safe fallback if running in environments where node:dns is not polyfilled
+}
+
+/**
+ * Normalizes Wigal base URL, trimming trailing slashes and inline comments from env vars
+ */
+export function getWigalBaseUrl(): string {
+  const rawUrl =
+    process.env.WIGAL_API_URL ||
+    process.env.FROG_SMS_API_URL ||
+    'https://frogapi.wigal.com.gh';
+  return rawUrl.replace(/#.*$/, '').trim().replace(/\/+$/, '');
 }
 
 export interface SendOTPResponse {
@@ -124,9 +111,8 @@ export async function generateAndSendOTP(
     const messageTemplate = options?.messageTemplate ||
       `Your HostelHQ verification code is: %OTPCODE%. This code expires in %EXPIRY% minutes.`;
 
-    // DNS Workaround: If the system can't find the host, we'll try to help it
-    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
-    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/otp/generate`);
+    const baseUrl = getWigalBaseUrl();
+    const finalUrl = `${baseUrl}/api/v3/sms/otp/generate`;
 
     const requestBody = {
       number: formattedPhone,
@@ -165,7 +151,7 @@ export async function generateAndSendOTP(
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
         return {
           success: false,
-          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+          error: 'SMS service gateway is temporarily unavailable. Please try again.',
         };
       }
 
@@ -260,8 +246,8 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
       number: formattedPhone,
     };
 
-    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
-    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/otp/verify`);
+    const baseUrl = getWigalBaseUrl();
+    const finalUrl = `${baseUrl}/api/v3/sms/otp/verify`;
 
     console.log('Wigal OTP Verify Request:', {
       url: finalUrl,
@@ -289,7 +275,7 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
         return {
           success: false,
-          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+          error: 'SMS service gateway is temporarily unavailable. Please try again.',
         };
       }
 
@@ -383,8 +369,8 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
       smstype: 'text',
     };
 
-    const baseUrl = process.env.WIGAL_API_URL || process.env.FROG_SMS_API_URL || 'https://frogapi.wigal.com.gh';
-    const finalUrl = await resolveWigalUrl(`${baseUrl}/api/v3/sms/send`);
+    const baseUrl = getWigalBaseUrl();
+    const finalUrl = `${baseUrl}/api/v3/sms/send`;
 
     console.log('Wigal SMS Send Request:', {
       url: finalUrl,
@@ -413,7 +399,7 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
         console.error('Wigal API returned HTML instead of JSON:', responseText.substring(0, 300));
         return {
           success: false,
-          error: 'SMS service returned an error. Please verify your Wigal API credentials are correct.',
+          error: 'SMS service gateway is temporarily unavailable. Please try again.',
         };
       }
 
