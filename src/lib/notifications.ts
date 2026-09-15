@@ -49,32 +49,15 @@ export function normalizePhoneNumber(phone: string): string {
   return cleaned;
 }
 
+import { playNotificationChime } from "@/utils/sound";
+export { playNotificationChime };
+
 /**
  * Lightweight, zero-dependency audio alert using Web Audio API
- * Plays a subtle D5 chime when a notification arrives
+ * Plays a pleasant rising two-note chime (E5 -> G5)
  */
 export function playNotificationSound(): void {
-  if (typeof window === "undefined") return;
-  try {
-    const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtxClass) return;
-    const audioCtx = new AudioCtxClass();
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
-    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.3);
-  } catch (e) {
-    console.warn("Audio Context blocked or unsupported", e);
-  }
+  playNotificationChime();
 }
 
 /**

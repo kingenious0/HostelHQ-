@@ -32,10 +32,15 @@ interface RootLayoutShellProps {
 
 import { MaintenanceGuard } from "@/components/maintenance-guard";
 import { ShortlistProvider } from "@/components/shortlist-context";
+import { useLiveNotifications } from "@/hooks/useLiveNotifications";
 
 export function RootLayoutShell({ children }: RootLayoutShellProps) {
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Real-time Firestore notification listener with Web Audio API chime & toast banner
+  useLiveNotifications(currentUserId);
 
   // Settings for visibility
   const isRoomDetailsPage = /^\/hostels\/[^\/]+\/rooms\/[^\/]+$/.test(pathname);
@@ -52,6 +57,7 @@ export function RootLayoutShell({ children }: RootLayoutShellProps) {
     import("firebase/auth").then(({ onIdTokenChanged }) => {
       unsubToken = onIdTokenChanged(auth, async (user: any) => {
         setIsLoggedIn(!!user);
+        setCurrentUserId(user?.uid || null);
         if (typeof document !== "undefined") {
           const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
           const secureFlag = isHttps ? "; Secure" : "";
