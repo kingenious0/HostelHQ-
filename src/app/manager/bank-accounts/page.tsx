@@ -765,7 +765,7 @@ export default function ManagerBankAccountsPage() {
             setAccountToDelete(null);
             toast({
                 title: 'Account Deleted',
-                description: 'The payment account has been removed from Firestore.',
+                description: 'The payment account has been successfully removed.',
             });
         } catch (error: any) {
             console.error('Error deleting account:', error);

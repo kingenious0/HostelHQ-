@@ -487,7 +487,7 @@ export default function ExecutiveDashboardPage() {
       console.error("Sanction update error:", err);
       toast({
         title: "Sanction Update Failed",
-        description: err.message || "Failed to update hostel sanction in database.",
+        description: err.message || "Failed to update hostel sanction.",
         variant: "destructive",
       });
     } finally {

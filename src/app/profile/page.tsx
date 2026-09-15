@@ -482,7 +482,7 @@ export default function ProfilePage() {
       setProfileData(prev => ({ ...prev, ...cleanPayload }));
       toast({
         title: 'Profile changes saved! 💾',
-        description: 'Your profile information and credentials have been securely updated across databases.'
+        description: 'Your profile information and credentials have been securely updated.'
       });
     } catch (error) {
       console.error('Error saving profile:', error);

@@ -1512,7 +1512,7 @@ export default function DeanDashboardPage() {
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    * Phone numbers entered will be confirmed and permanently updated in Firestore & DynamoDB for future dispatches.
+                    * Phone numbers entered will be saved to participant profiles for future official notices.
                   </p>
                 </div>
 
