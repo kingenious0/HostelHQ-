@@ -496,15 +496,33 @@ export async function sendRentCapBreachSMSAction(params: {
                 const hSnap = await adminDb.collection('hostels').doc(cleanId).get();
                 if (hSnap.exists) {
                     const hData = hSnap.data() || {};
-                    managerPhone = (hData.managerPhone || hData.contactPhone || '').replace(/[^0-9]/g, '');
-                    managerId = hData.managerId || '';
+                    managerPhone = (hData.managerPhone || hData.contactPhone || hData.phone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || hData.createdBy?.userId || '';
                 }
             } else {
                 const hSnap = await getDoc(doc(db, 'hostels', cleanId));
                 if (hSnap.exists()) {
                     const hData = hSnap.data() || {};
-                    managerPhone = (hData.managerPhone || hData.contactPhone || '').replace(/[^0-9]/g, '');
-                    managerId = hData.managerId || '';
+                    managerPhone = (hData.managerPhone || hData.contactPhone || hData.phone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || hData.createdBy?.userId || '';
+                }
+            }
+
+            // DynamoDB Fallback lookup if hostel was stored in DynamoDB
+            if (!managerPhone || !managerId) {
+                try {
+                    const { dynamoService } = await import('@/lib/dynamodb-service');
+                    const dynHostel = await dynamoService.getHostelById(cleanId);
+                    if (dynHostel) {
+                        if (!managerPhone) {
+                            managerPhone = ((dynHostel as any).managerPhone || (dynHostel as any).contactPhone || dynHostel.phone || '').replace(/[^0-9]/g, '');
+                        }
+                        if (!managerId) {
+                            managerId = (dynHostel as any).managerId || dynHostel.createdBy?.userId || '';
+                        }
+                    }
+                } catch (dErr) {
+                    console.warn('[SMS] DynamoDB hostel lookup note:', dErr);
                 }
             }
         }

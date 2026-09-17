@@ -1635,18 +1635,48 @@ export default function DeanDashboardPage() {
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Statutory Summons Notice (SMS Dispatch)</label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground">Custom Hearing Directive / Special Instructions (Optional)</label>
+                    <span className="text-[10px] text-muted-foreground">Appended to official summons</span>
+                  </div>
                   <Textarea
                     value={summonsNote}
                     onChange={(e) => setSummonsNote(e.target.value)}
-                    placeholder="You are formally summoned to appear before the Dean of Students Welfare Board on [Date] at [Time]..."
-                    rows={3}
+                    placeholder="e.g. Come with original tenancy receipt and payment proof. Both parties must report on time."
+                    rows={2}
                     className="text-xs bg-background"
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Notice will be dispatched via SMS gateway to {arbitrationStudentPhone.trim() ? `student (${arbitrationStudentPhone.trim()})` : "student (no phone entered)"} and {arbitrationManagerPhone.trim() ? `manager (${arbitrationManagerPhone.trim()})` : "hostel manager (no phone entered)"}.
                   </p>
+
+                  {/* Live SMS Preview */}
+                  <div className="space-y-2 pt-1">
+                    <div className="rounded-md border border-border/60 bg-muted/40 p-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Student SMS Preview</span>
+                        <Badge variant="outline" className="text-[9px] py-0 px-1 text-primary border-primary/30 bg-primary/5 font-mono">
+                          Complainant
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-foreground font-mono bg-background/80 p-2 rounded border border-border/40 leading-relaxed break-words">
+                        {`[HostelHQ] Dean of Students Notice: Your reported grievance regarding ${complaintForArbitration?.hostelName || "Hostel"} is scheduled for arbitration on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Mandatory attendance. Check student portal.`}
+                      </p>
+                    </div>
+
+                    <div className="rounded-md border border-border/60 bg-muted/40 p-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hostel Manager SMS Preview</span>
+                        <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-500/30 bg-amber-500/10 font-mono">
+                          Respondent
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-foreground font-mono bg-background/80 p-2 rounded border border-border/40 leading-relaxed break-words">
+                        {`[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${complaintForArbitration?.hostelName || "Hostel"} is scheduled on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Mandatory attendance to prevent immediate listing suspension.`}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

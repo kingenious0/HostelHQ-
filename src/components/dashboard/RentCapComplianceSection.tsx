@@ -213,24 +213,41 @@ export function RentCapComplianceSection({
 
       const suspensionReason = `Room tariff (GH₵${v.postedPrice.toLocaleString()}) exceeds approved cap (GH₵${v.statutoryCap.toLocaleString()})`;
 
-      // 1. Delist Room/Hostel in Firestore
-      await updateDoc(doc(db, "hostels", cleanId), {
-        status: "suspended_overpriced",
-        isPublished: false,
-        suspensionReason,
-        suspendedAt: new Date().toISOString(),
-        suspendedBy: callerName,
-      });
+      // 1. Delist Room/Hostel in Firestore using setDoc with merge: true so non-existent or legacy documents are safely updated
+      try {
+        await setDoc(
+          doc(db, "hostels", cleanId),
+          {
+            status: "suspended_overpriced",
+            isPublished: false,
+            suspensionReason,
+            suspendedAt: new Date().toISOString(),
+            suspendedBy: callerName,
+          },
+          { merge: true }
+        );
+      } catch (fsErr) {
+        console.warn("Firestore hostel suspension update warning:", fsErr);
+      }
 
       // 2. Delist Room/Hostel in DynamoDB
-      await updateHostelAction(cleanId, {
-        status: "suspended_overpriced" as any,
-        isPublished: false,
-        suspensionReason,
-      });
+      try {
+        await updateHostelAction(cleanId, {
+          status: "suspended_overpriced" as any,
+          isPublished: false,
+          suspensionReason,
+        });
+      } catch (dynErr) {
+        console.warn("DynamoDB hostel suspension update warning:", dynErr);
+      }
 
       // 3. In-App Manager Notification (dual-write to Firestore & DynamoDB)
-      const managerRecipientId = v.hostel.managerId || v.hostel.contactPhone || "";
+      const managerRecipientId =
+        v.hostel.managerId ||
+        v.hostel.createdBy?.userId ||
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        "";
       if (managerRecipientId) {
         try {
           await dispatchInAppNotification({
@@ -246,11 +263,17 @@ export function RentCapComplianceSection({
       }
 
       // 4. SMS Dispatch Trigger
+      const resolvedManagerPhone =
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        v.hostel.phone ||
+        (v.hostel as any).phoneNumber;
+
       try {
         await sendRentCapBreachSMSAction({
           hostelId: cleanId,
           hostelName: v.hostelName,
-          managerPhone: v.hostel.managerPhone || v.hostel.contactPhone,
+          managerPhone: resolvedManagerPhone,
           roomTypeName: v.roomTypeName,
           postedRate: v.postedPrice,
           statutoryCap: v.statutoryCap,
@@ -295,8 +318,8 @@ export function RentCapComplianceSection({
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Statutory Campus Limits Legend & Edit Trigger */}
+    <div className="space-y-6">
+      {/* Configuration Header & Statutory Thresholds */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border/60 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
@@ -313,7 +336,6 @@ export function RentCapComplianceSection({
 
         <Button
           size="sm"
-          variant="outline"
           onClick={() => {
             setFormOne(limits.oneInRoom);
             setFormTwo(limits.twoInRoom);
@@ -321,10 +343,10 @@ export function RentCapComplianceSection({
             setFormFour(limits.fourInRoom);
             setEditLimitsOpen(true);
           }}
-          className="h-8.5 text-xs font-semibold gap-1.5 shadow-xs border-primary/40 hover:border-primary text-primary"
+          className="h-9 px-4 text-xs font-semibold gap-2 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-150 hover:shadow-md active:scale-[0.98] border border-primary/20 rounded-lg group"
         >
-          <Sliders className="h-3.5 w-3.5" />
-          Edit Approved Limits
+          <Sliders className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-45" />
+          <span>Edit Approved Limits</span>
         </Button>
       </div>
 

@@ -1264,10 +1264,10 @@ export async function updateComplaintArbitrationAction({
       manager: { sent: false, error: undefined as string | undefined },
     };
 
+    const customNote = summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : "";
+
     if (cleanStudentPhone) {
-      const studentSms = summonsNote?.trim()
-        ? summonsNote.trim()
-        : `[HostelHQ] Dean of Students: Your reported dispute regarding ${cleanHostel} has been scheduled for hearing on ${cleanDate} at ${cleanVenue}. Check your dashboard.`;
+      const studentSms = `[HostelHQ] Dean of Students Notice: Your reported grievance regarding ${cleanHostel} is scheduled for arbitration on ${cleanDate} at ${cleanVenue}.${customNote} Mandatory attendance. Check student portal.`;
       try {
         console.log(`[Arbitration SMS] Sending summons to Student: ${cleanStudentPhone}`);
         const sRes = await sendSMS(cleanStudentPhone, studentSms, `SUMMONS_STU_${Date.now()}`);
@@ -1283,9 +1283,7 @@ export async function updateComplaintArbitrationAction({
     }
 
     if (cleanManagerPhone) {
-      const managerSms = summonsNote?.trim()
-        ? summonsNote.trim()
-        : `[HostelHQ] Dean of Students Notice: A formal grievance hearing regarding ${cleanHostel} is scheduled on ${cleanDate} at ${cleanVenue}. Mandatory attendance to avoid listing suspension.`;
+      const managerSms = `[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${cleanHostel} is scheduled on ${cleanDate} at ${cleanVenue}.${customNote} Mandatory attendance to prevent immediate listing suspension.`;
       try {
         console.log(`[Arbitration SMS] Sending summons to Manager: ${cleanManagerPhone}`);
         const mRes = await sendSMS(cleanManagerPhone, managerSms, `SUMMONS_MGR_${Date.now()}`);

@@ -533,23 +533,36 @@ export default function CoordinatorDashboardPage() {
       const suspensionReason = `Room tariff (GH₵${v.postedPrice.toLocaleString()}) exceeds approved cap (GH₵${v.statutoryCap.toLocaleString()})`;
 
       // 1. Delist Room/Hostel in Firestore
-      await updateDoc(hostelRef, {
-        status: "suspended_overpriced",
-        isPublished: false,
-        suspensionReason,
-        suspendedAt: new Date().toISOString(),
-        suspendedBy: coordName,
-      });
+      try {
+        await setDoc(hostelRef, {
+          status: "suspended_overpriced",
+          isPublished: false,
+          suspensionReason,
+          suspendedAt: new Date().toISOString(),
+          suspendedBy: coordName,
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn("Coordinator Firestore delist note:", fsErr);
+      }
 
       // 2. Delist in DynamoDB
-      await updateHostelAction(targetId, {
-        status: "suspended_overpriced" as any,
-        isPublished: false,
-        suspensionReason,
-      });
+      try {
+        await updateHostelAction(targetId, {
+          status: "suspended_overpriced" as any,
+          isPublished: false,
+          suspensionReason,
+        });
+      } catch (dynErr) {
+        console.warn("Coordinator DynamoDB delist note:", dynErr);
+      }
 
       // 3. In-App Manager Notification (dual-write to Firestore & DynamoDB)
-      const managerRecipientId = v.hostel.managerId || v.hostel.contactPhone || "";
+      const managerRecipientId =
+        v.hostel.managerId ||
+        v.hostel.createdBy?.userId ||
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        "";
       if (managerRecipientId) {
         try {
           await dispatchInAppNotification({
@@ -565,12 +578,18 @@ export default function CoordinatorDashboardPage() {
       }
 
       // 4. SMS Dispatch Trigger
+      const resolvedCoordManagerPhone =
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        v.hostel.phone ||
+        (v.hostel as any).phoneNumber;
+
       try {
         const { sendRentCapBreachSMSAction } = await import("@/app/actions/sms");
         await sendRentCapBreachSMSAction({
           hostelId: targetId,
           hostelName: v.hostelName,
-          managerPhone: v.hostel.managerPhone || v.hostel.contactPhone,
+          managerPhone: resolvedCoordManagerPhone,
           roomTypeName: v.roomTypeName,
           postedRate: v.postedPrice,
           statutoryCap: v.statutoryCap,
