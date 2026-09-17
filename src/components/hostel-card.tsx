@@ -108,6 +108,27 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   // Format distance
   const distanceText = hostel.distanceToUniversity || 'Near Campus';
 
+  // Live Occupancy & Bed Placement Calculation
+  const totalBeds = useMemo(() => {
+    if (hostel.totalBeds && Number(hostel.totalBeds) > 0) return Number(hostel.totalBeds);
+    if (roomTypes.length > 0) {
+      return roomTypes.reduce((acc, rt) => {
+        const cap = Number(rt.capacity || deriveCapacityFromName(rt.name) || 1);
+        const count = Number(rt.numberOfRooms || (rt.roomNumbers ? rt.roomNumbers.length : 1));
+        return acc + cap * count;
+      }, 0);
+    }
+    return 0;
+  }, [hostel.totalBeds, roomTypes]);
+
+  const activeStudentsHoused = Number(
+    hostel.activeStudentsHoused ??
+      hostel.occupiedBeds ??
+      roomTypes.reduce((acc, rt) => acc + (Number(rt.occupancy) || 0), 0)
+  );
+
+  const availableBeds = Math.max(0, totalBeds - activeStudentsHoused);
+
   return (
     <Card className="w-full overflow-hidden flex flex-col group rounded-3xl border border-border/70 bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
       {/* Image & Overlay Badges */}
@@ -261,6 +282,18 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
               </span>
             )}
           </div>
+
+          {/* Student-Facing Live Availability Feed */}
+          {totalBeds > 0 && (
+            <div className="mt-2 mb-1 flex items-center justify-between text-xs px-2.5 py-1.5 bg-blue-50/80 dark:bg-blue-950/40 rounded-xl border border-blue-100 dark:border-blue-900/50 shadow-2xs">
+              <span className="px-2 py-0.5 bg-blue-100/70 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-md font-medium text-[11px]">
+                👥 {activeStudentsHoused} Students Housed
+              </span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                {availableBeds} Beds Available
+              </span>
+            </div>
+          )}
         </div>
 
         <div>

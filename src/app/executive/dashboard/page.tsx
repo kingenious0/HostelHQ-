@@ -29,6 +29,7 @@ import { fetchExecutiveMetricsAction, fetchHostelsAction, updateHostelAction } f
 import type { Hostel } from "@/lib/data";
 import { isHostelRevoked, isHostelSanctioned } from "@/lib/sanctions";
 import { DownloadBriefingButton } from "@/components/executive-briefing/DownloadBriefingButton";
+import { ExecutiveHeader } from "@/components/ExecutiveHeader";
 import {
   Building2,
   Users,
@@ -130,9 +131,9 @@ const EMPTY_METRICS_DATA: ExecutiveMetricsData = {
   },
 };
 
-type ActiveExecutiveTab = "overview" | "compliance" | "sanctions" | "reports";
+export type ActiveExecutiveTab = "overview" | "compliance" | "sanctions" | "reports";
 
-export default function ExecutiveDashboardPage() {
+export default function ExecutiveDashboardPage({ initialTab }: { initialTab?: ActiveExecutiveTab } = {}) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -147,9 +148,31 @@ export default function ExecutiveDashboardPage() {
   const [loadingHostels, setLoadingHostels] = useState(true);
 
   // Layout & Navigation State
-  const [activeTab, setActiveTab] = useState<ActiveExecutiveTab>("overview");
+  const [activeTab, setActiveTab] = useState<ActiveExecutiveTab>(initialTab || "overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Synchronize with initialTab or URL search parameters
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    } else if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab") as ActiveExecutiveTab;
+      if (tabParam && ["overview", "compliance", "sanctions", "reports"].includes(tabParam)) {
+        setActiveTab(tabParam);
+      }
+    }
+  }, [initialTab]);
+
+  const handleTabSelect = (tab: ActiveExecutiveTab) => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url.toString());
+    }
+  };
 
   // Switchboard presentation mode (Table vs Cards on small screens)
   const [switchboardDisplay, setSwitchboardDisplay] = useState<"table" | "cards">("table");
@@ -730,7 +753,7 @@ export default function ExecutiveDashboardPage() {
               {/* Nav Item 1: Overview */}
               <button
                 type="button"
-                onClick={() => setActiveTab("overview")}
+                onClick={() => handleTabSelect("overview")}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === "overview"
                     ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
@@ -745,7 +768,7 @@ export default function ExecutiveDashboardPage() {
               {/* Nav Item 2: Compliance Audit */}
               <button
                 type="button"
-                onClick={() => setActiveTab("compliance")}
+                onClick={() => handleTabSelect("compliance")}
                 className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === "compliance"
                     ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
@@ -767,7 +790,7 @@ export default function ExecutiveDashboardPage() {
               {/* Nav Item 3: Sanctions Switchboard */}
               <button
                 type="button"
-                onClick={() => setActiveTab("sanctions")}
+                onClick={() => handleTabSelect("sanctions")}
                 className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === "sanctions"
                     ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
@@ -789,7 +812,7 @@ export default function ExecutiveDashboardPage() {
               {/* Nav Item 4: Executive Reports */}
               <button
                 type="button"
-                onClick={() => setActiveTab("reports")}
+                onClick={() => handleTabSelect("reports")}
                 className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${
                   activeTab === "reports"
                     ? "bg-[#922C42]/10 text-[#922C42] dark:bg-[#922C42]/20 dark:text-rose-300 font-semibold border-l-2 border-[#922C42]"
@@ -889,7 +912,7 @@ export default function ExecutiveDashboardPage() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab("overview");
+                handleTabSelect("overview");
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
@@ -905,7 +928,7 @@ export default function ExecutiveDashboardPage() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab("compliance");
+                handleTabSelect("compliance");
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
@@ -926,7 +949,7 @@ export default function ExecutiveDashboardPage() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab("sanctions");
+                handleTabSelect("sanctions");
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
@@ -949,7 +972,7 @@ export default function ExecutiveDashboardPage() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab("reports");
+                handleTabSelect("reports");
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all ${
@@ -960,9 +983,11 @@ export default function ExecutiveDashboardPage() {
             >
               <div className="flex items-center gap-3">
                 <FileText className="h-4.5 w-4.5" />
-                Reports
+                Reports &amp; Briefings
               </div>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">PDF</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                PDF/CSV
+              </span>
             </button>
 
             <div className="pt-4 px-1">
@@ -1004,276 +1029,145 @@ export default function ExecutiveDashboardPage() {
           Clean top header, generous spacing, TailAdmin card layouts
           ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header Bar */}
-        <header className="no-print sticky top-0 z-20 h-16 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Hamburger Button for Mobile Viewports */}
-            <Button
-              variant="outline"
-              size="icon"
-              className="md:hidden h-9 w-9 rounded-xl shrink-0 border-gray-200 dark:border-gray-800"
-              onClick={() => setMobileMenuOpen(true)}
-              title="Open Navigation Menu"
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
+        {/* Consolidated Streamlined Executive Header Toolbar */}
+        <ExecutiveHeader
+          activeTab={activeTab}
+          accreditationRate={accreditationRate}
+          loadingMetrics={loadingMetrics}
+          onRefresh={loadData}
+          onOpenBriefing={() => setBriefingOpen(true)}
+          onExportCSV={handleExportCSV}
+          briefingData={briefingData}
+          userInitials={userInitials}
+          userFullName={userFullName || currentUser?.displayName || undefined}
+          userRole={userRole}
+          isVC={isVC}
+          onSignOut={handleSignOut}
+          onOpenMobileNav={() => setMobileMenuOpen(true)}
+        />
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 font-medium truncate">
-                <span>Council</span>
-                <ChevronRight className="h-3 w-3 text-gray-400" />
-                <span className="font-semibold text-gray-900 dark:text-white capitalize truncate">{activeTab}</span>
-              </div>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-gray-900 dark:text-white truncate">
-                {activeTab === "overview" && "Executive Overview"}
-                {activeTab === "compliance" && "Statutory Compliance Audit"}
-                {activeTab === "sanctions" && "Sanctions Switchboard"}
-                {activeTab === "reports" && "Executive Reports"}
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Compliance Badge on Desktop */}
-            <Badge
-              variant="outline"
-              className="hidden lg:flex text-xs font-semibold px-3 py-1 rounded-xl border-emerald-200 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 items-center gap-2"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {accreditationRate}% Compliance
-            </Badge>
-
-            {/* Council Briefing CTA */}
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setBriefingOpen(true)}
-              className="h-9 px-3.5 text-xs font-semibold bg-[#922C42] text-white hover:bg-[#922C42]/90 shadow-xs gap-1.5 rounded-xl"
-            >
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Council Briefing</span>
-              <span className="sm:hidden">Briefing</span>
-            </Button>
-
-            {/* Direct A4 PDF Download */}
-            <div className="hidden xl:block">
-              <DownloadBriefingButton
-                data={briefingData}
-                variant="outline"
-                size="sm"
-                className="h-9 text-xs border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-              />
-            </div>
-
-            {/* Quick Export CSV */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCSV}
-              className="h-9 px-3 text-xs font-medium rounded-xl border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 gap-1.5 hidden sm:flex"
-              title="Download Council Briefing CSV"
-            >
-              <Download className="h-3.5 w-3.5 text-gray-500" />
-              <span>CSV</span>
-            </Button>
-
-            {/* Data Refresh Button */}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={loadData}
-              disabled={loadingMetrics}
-              className="h-9 w-9 rounded-xl border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0"
-              title="Refresh Live Data"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loadingMetrics ? "animate-spin text-[#922C42]" : "text-gray-500"}`} />
-            </Button>
-
-            {/* Interactive User Avatar Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative h-9 w-9 rounded-full p-0 border border-gray-200 dark:border-gray-800 hover:border-gray-300 focus-visible:ring-2 focus-visible:ring-gray-300 transition-all shrink-0 flex items-center justify-center cursor-pointer"
-                  aria-label="Executive profile menu"
-                >
-                  <div className="h-8 w-8 rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 flex items-center justify-center font-bold text-xs">
-                    {userInitials}
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-lg border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 z-50">
-                <DropdownMenuLabel className="font-normal p-2">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-bold text-gray-900 dark:text-white leading-none truncate">
-                      {userFullName || currentUser?.displayName || (isVC ? "Vice-Chancellor" : "Executive Council")}
-                    </p>
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700">
-                        {isVC ? "Vice-Chancellor" : userRole === "admin" ? "System Administrator" : "Executive Council"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-gray-500 font-mono truncate pt-0.5">
-                      {currentUser?.email || "executive@hostelhq.com"}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="my-1 border-gray-100 dark:border-gray-800" />
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/settings/profile"
-                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors w-full"
-                  >
-                    <UserIcon className="h-4 w-4 text-gray-500" />
-                    <span>Edit Profile &amp; Credentials</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/settings/profile?tab=security"
-                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors w-full"
-                  >
-                    <KeyRound className="h-4 w-4 text-gray-500" />
-                    <span>Security &amp; Passkeys</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 border-gray-100 dark:border-gray-800" />
-                <DropdownMenuItem
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors w-full"
-                >
-                  <LogOut className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Sign Out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
-
-        {/* Executive Content Surface with 24px-32px Grid Rhythm */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6 sm:space-y-8">
+        {/* Executive Content Surface - Responsive & Compact Vertical Rhythm */}
+        <main className="flex-1 px-4 sm:px-6 py-4 max-w-7xl w-full mx-auto space-y-5 sm:space-y-6">
           {/* =========================================================================
-              COMPONENT 1: TAILADMIN KPI CARDS (24px+ padding, 4→2→1 responsive grid)
-              ========================================================================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {/* Card 1: Registered Properties */}
-            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-700 dark:text-gray-200">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold gap-1 px-2 py-0.5 rounded-full shadow-none">
-                  <TrendingUp className="h-3 w-3" />
-                  {yoyGrowthText}
-                </Badge>
-              </div>
-
-              <div className="mt-4">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Registered Properties
-                </span>
-                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
-                  {totalRegisteredHostels}
-                </h3>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
-                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span className="truncate">
-                  <strong className="text-gray-900 dark:text-white font-semibold">{totalVerifiedHostels}</strong> accredited under charter
-                </span>
-              </div>
-            </div>
-
-            {/* Card 2: Verified Off-Campus Beds */}
-            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                  <Users className="h-5 w-5" />
-                </div>
-                <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
-                  {bedAuditRate}% Audited
-                </Badge>
-              </div>
-
-              <div className="mt-4">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Verified Off-Campus Beds
-                </span>
-                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
-                  {totalOffCampusBeds.toLocaleString()}
-                </h3>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
-                Summed room capacity across accredited hostels
-              </div>
-            </div>
-
-            {/* Card 3: Pending Accreditation Audits */}
-            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
-                  pendingAccreditationReviews > 0
-                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                }`}>
-                  {pendingAccreditationReviews > 0 ? "In Pipeline" : "Audits Cleared"}
-                </Badge>
-              </div>
-
-              <div className="mt-4">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Pending Accreditation Audits
-                </span>
-                <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
-                  {pendingAccreditationReviews}
-                </h3>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
-                Awaiting Coordinator desk verification
-              </div>
-            </div>
-
-            {/* Card 4: Active Statutory Sanctions */}
-            <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
-                  activeSanctionsCount > 0
-                    ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                }`}>
-                  {activeSanctionsCount > 0 ? "Enforcement" : "Zero Sanctions"}
-                </Badge>
-              </div>
-
-              <div className="mt-4">
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Active Statutory Sanctions
-                </span>
-                <h3 className="mt-1 font-bold text-rose-600 dark:text-rose-400 text-2xl lg:text-3xl tracking-tight">
-                  {activeSanctionsCount}
-                </h3>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
-                Properties under executive restriction
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================================
-              TAB CONTENT 1: OVERVIEW
+              TAB CONTENT 1: OVERVIEW (Macro Metric KPI Cards decoupled exclusively here)
               ========================================================================= */}
           {activeTab === "overview" && (
-            <div className="space-y-6 sm:space-y-8">
+            <div className="space-y-5 sm:space-y-6">
+              {/* COMPONENT 1: TAILADMIN KPI CARDS (Displayed exclusively on Overview) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+                {/* Card 1: Registered Properties */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-700 dark:text-gray-200">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-bold gap-1 px-2 py-0.5 rounded-full shadow-none">
+                      <TrendingUp className="h-3 w-3" />
+                      {yoyGrowthText}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Registered Properties
+                    </span>
+                    <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                      {totalRegisteredHostels}
+                    </h3>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="truncate">
+                      <strong className="text-gray-900 dark:text-white font-semibold">{totalVerifiedHostels}</strong> accredited under charter
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 2: Verified Off-Campus Beds */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none">
+                      {bedAuditRate}% Audited
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Verified Off-Campus Beds
+                    </span>
+                    <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                      {totalOffCampusBeds.toLocaleString()}
+                    </h3>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    Summed room capacity across accredited hostels
+                  </div>
+                </div>
+
+                {/* Card 3: Pending Accreditation Audits */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
+                      pendingAccreditationReviews > 0
+                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    }`}>
+                      {pendingAccreditationReviews > 0 ? "In Pipeline" : "Audits Cleared"}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Pending Accreditation Audits
+                    </span>
+                    <h3 className="mt-1 font-bold text-gray-900 text-2xl lg:text-3xl dark:text-white tracking-tight">
+                      {pendingAccreditationReviews}
+                    </h3>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    Awaiting Coordinator desk verification
+                  </div>
+                </div>
+
+                {/* Card 4: Active Statutory Sanctions */}
+                <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <Badge className={`text-[11px] font-bold px-2 py-0.5 rounded-full shadow-none ${
+                      activeSanctionsCount > 0
+                        ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    }`}>
+                      {activeSanctionsCount > 0 ? "Enforcement" : "Zero Sanctions"}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Active Statutory Sanctions
+                    </span>
+                    <h3 className="mt-1 font-bold text-rose-600 dark:text-rose-400 text-2xl lg:text-3xl tracking-tight">
+                      {activeSanctionsCount}
+                    </h3>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    Properties under executive restriction
+                  </div>
+                </div>
+              </div>
+
               {/* Room Category Inventory & Rental Benchmarks (Generous 24px padding) */}
               <div className="rounded-2xl border border-gray-200/90 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 md:p-6 shadow-xs space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-4">

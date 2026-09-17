@@ -39,25 +39,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('PDFShift API error:', response.status, errorText);
-
-      let parsedError: any = null;
-      try {
-        parsedError = JSON.parse(errorText);
-      } catch {}
-
-      const message = parsedError?.message || parsedError?.error || errorText || 'Failed to generate PDF via PDFShift';
-
-      return NextResponse.json(
-        {
-          error: 'PDF conversion failed',
-          details: message,
-          status: response.status,
-          missingKey: !apiKey,
-        },
-        { status: response.status >= 400 && response.status < 500 ? response.status : 502 }
-      );
+      console.warn('PDFShift API returned non-OK. Falling back to native live executive PDF generator.');
+      // Fallback seamlessly to the live executive PDF route
+      const { POST: generateReportPDF } = await import('@/app/api/reports/generate-pdf/route');
+      return await generateReportPDF(req);
     }
 
     const pdfBuffer = await response.arrayBuffer();

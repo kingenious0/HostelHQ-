@@ -67,6 +67,7 @@ import {
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
 import { getStatutoryTariffCeiling } from "@/lib/tariff-limits";
 import { exportToCSV } from "@/lib/exportUtils";
+import { fetchLiveHostelOccupancyMetrics } from "@/services/occupancyService";
 
 export default function DeanDashboardPage() {
   const router = useRouter();
@@ -106,8 +107,14 @@ export default function DeanDashboardPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
 
-  // Placements State
+  // Placements & Live Occupancy State
   const [hostels, setHostels] = useState<any[]>([]);
+  const [liveOccupancy, setLiveOccupancy] = useState<any>({
+    totalRegisteredBeds: 0,
+    totalOccupiedBeds: 0,
+    overallOccupancyRate: 0,
+    hostelDetails: [],
+  });
   const [loadingData, setLoadingData] = useState(true);
 
   // Universal Document Viewer state
@@ -165,10 +172,16 @@ export default function DeanDashboardPage() {
   const loadDashboardData = async () => {
     setLoadingData(true);
     try {
-      const [compRes, verifRes, hostelRes] = await Promise.all([
+      const [compRes, verifRes, hostelRes, occupancyData] = await Promise.all([
         fetchComplaintsAction(),
         fetchStudentVerificationsAction(),
         fetchHostelsAction(),
+        fetchLiveHostelOccupancyMetrics().catch(() => ({
+          totalRegisteredBeds: 0,
+          totalOccupiedBeds: 0,
+          overallOccupancyRate: 0,
+          hostelDetails: [],
+        })),
       ]);
 
       if (compRes.success && compRes.data) {
@@ -187,6 +200,10 @@ export default function DeanDashboardPage() {
         setHostels(hostelRes.data);
       } else {
         setHostels([]);
+      }
+
+      if (occupancyData) {
+        setLiveOccupancy(occupancyData);
       }
     } catch (err) {
       console.error("Failed to load dean data:", err);
@@ -735,7 +752,7 @@ export default function DeanDashboardPage() {
         </div>
 
         {/* Operational Metrics Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
           <Card className="border border-border/60 shadow-xs bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
@@ -785,6 +802,21 @@ export default function DeanDashboardPage() {
               </div>
               <div className="text-2xl font-bold text-foreground mt-2">{hostels.length}</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">Under official university zoning</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/60 shadow-xs bg-card col-span-2 md:col-span-1">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
+                <span>Live Student Occupancy</span>
+                <Users className="h-4 w-4 text-indigo-500" />
+              </div>
+              <div className="text-2xl font-bold text-foreground mt-2">
+                {liveOccupancy.totalOccupiedBeds} <span className="text-xs font-normal text-muted-foreground">/ {liveOccupancy.totalRegisteredBeds}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {liveOccupancy.overallOccupancyRate}% Total Capacity Housed
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -1224,12 +1256,23 @@ export default function DeanDashboardPage() {
           {/* TAB 3: PLACEMENTS OVERVIEW */}
           <TabsContent value="placements" className="space-y-4 pt-2">
             <Card className="border border-border/60 shadow-xs">
-              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-card rounded-t-xl">
+              <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-card rounded-t-xl">
                 <div>
                   <CardTitle className="text-base font-bold">Hostel Placements & Density</CardTitle>
                   <CardDescription className="text-xs text-muted-foreground">
-                    Bed allocation and residential capacity across accredited accommodations.
+                    Real-time bed allocation and active student occupancy across accredited accommodations.
                   </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/api/reports/generate-pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white text-xs font-semibold shadow-xs transition-all"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Executive Briefing (USTED PDF)</span>
+                  </a>
                 </div>
               </div>
 
@@ -1237,90 +1280,134 @@ export default function DeanDashboardPage() {
                 {/* Desktop Table View */}
                 <div className="hidden md:block overflow-x-auto">
                   <Table>
-                    <TableHeader className="bg-slate-50 border-b border-border/60">
+                    <TableHeader className="bg-slate-50 dark:bg-slate-900 border-b border-border/60">
                       <TableRow>
-                        <TableHead className="w-32">Status</TableHead>
+                        <TableHead className="w-28">Status</TableHead>
                         <TableHead>Hostel Name & Location</TableHead>
                         <TableHead>Campus Zone</TableHead>
-                        <TableHead>Room Inventory</TableHead>
+                        <TableHead>Students Housed</TableHead>
+                        <TableHead>Total Beds</TableHead>
+                        <TableHead>Live Occupancy</TableHead>
                         <TableHead className="text-right">Rating</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {hostels.map((h) => (
-                        <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
-                          <TableCell className="py-3">
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                h.availability === "Available"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : h.availability === "Limited"
-                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                  : "bg-rose-50 text-rose-700 border border-rose-200"
-                              }`}
-                            >
-                              {h.availability || "Available"}
-                            </span>
-                          </TableCell>
+                      {hostels.map((h) => {
+                        const cleanId = (h.originalId || h.id || "").replace(/^HOSTEL#/i, "").trim();
+                        const detail = liveOccupancy.hostelDetails?.find(
+                          (d: any) => d.id === cleanId || d.name?.toLowerCase() === h.name?.toLowerCase()
+                        );
+                        const housed = detail?.activeStudentsHoused ?? h.occupiedBeds ?? 0;
+                        const beds = detail?.totalBeds ?? h.totalBeds ?? 0;
+                        const rate = detail?.occupancyRate ?? (beds > 0 ? Math.round((housed / beds) * 100) : 0);
+                        const available = Math.max(0, beds - housed);
 
-                          <TableCell className="py-3">
-                            <p className="font-medium text-foreground text-sm">{h.name}</p>
-                            <p className="text-xs text-muted-foreground">{h.location}</p>
-                          </TableCell>
+                        return (
+                          <TableRow key={h.id} className="hover:bg-slate-50/80 transition-colors">
+                            <TableCell className="py-3">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  h.availability === "Available"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : h.availability === "Limited"
+                                    ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {h.availability || "Available"}
+                              </span>
+                            </TableCell>
 
-                          <TableCell className="py-3">
-                            <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
-                          </TableCell>
+                            <TableCell className="py-3">
+                              <p className="font-medium text-foreground text-sm">{h.name}</p>
+                              <p className="text-xs text-muted-foreground">{h.location}</p>
+                            </TableCell>
 
-                          <TableCell className="py-3">
-                            <div className="text-xs text-muted-foreground">
-                              {h.roomTypes && h.roomTypes.length > 0 ? (
-                                <span>{h.roomTypes.map((rt: any) => rt.name).join(", ")}</span>
-                              ) : (
-                                <span>Standard Inventory</span>
-                              )}
-                            </div>
-                          </TableCell>
+                            <TableCell className="py-3">
+                              <span className="text-xs font-medium text-foreground">{h.institution || "AAMUSTED"}</span>
+                            </TableCell>
 
-                          <TableCell className="py-3 text-right">
-                            <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
-                              <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
-                              <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            <TableCell className="py-3">
+                              <span className="inline-flex items-center gap-1 font-semibold text-blue-700 dark:text-blue-300 text-xs">
+                                👥 {housed} Housed
+                              </span>
+                            </TableCell>
+
+                            <TableCell className="py-3 text-xs font-medium text-foreground">
+                              {beds > 0 ? `${beds} Beds` : "Pending Spec"}
+                            </TableCell>
+
+                            <TableCell className="py-3">
+                              <div className="w-28 space-y-1">
+                                <div className="flex justify-between text-[10px] text-muted-foreground font-semibold">
+                                  <span>{rate}%</span>
+                                  <span>{available} Open</span>
+                                </div>
+                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      rate >= 100
+                                        ? "bg-rose-500"
+                                        : rate >= 80
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${Math.min(100, rate)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="py-3 text-right">
+                              <div className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                                <span className="text-amber-500">★</span> {h.rating ? h.rating.toFixed(1) : "4.5"}
+                                <span className="text-muted-foreground font-normal">({h.reviews?.length || 0})</span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
 
                 {/* Mobile Card Stack */}
                 <div className="block md:hidden divide-y divide-border/60">
-                  {hostels.map((h) => (
-                    <div key={h.id} className="p-4 space-y-2">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <p className="font-semibold text-foreground text-sm">{h.name}</p>
-                          <p className="text-xs text-muted-foreground">{h.location} • {h.institution || "AAMUSTED"}</p>
+                  {hostels.map((h) => {
+                    const cleanId = (h.originalId || h.id || "").replace(/^HOSTEL#/i, "").trim();
+                    const detail = liveOccupancy.hostelDetails?.find(
+                      (d: any) => d.id === cleanId || d.name?.toLowerCase() === h.name?.toLowerCase()
+                    );
+                    const housed = detail?.activeStudentsHoused ?? h.occupiedBeds ?? 0;
+                    const beds = detail?.totalBeds ?? h.totalBeds ?? 0;
+                    const rate = detail?.occupancyRate ?? (beds > 0 ? Math.round((housed / beds) * 100) : 0);
+
+                    return (
+                      <div key={h.id} className="p-4 space-y-2">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <p className="font-semibold text-foreground text-sm">{h.name}</p>
+                            <p className="text-xs text-muted-foreground">{h.location} • {h.institution || "AAMUSTED"}</p>
+                          </div>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              h.availability === "Available"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : h.availability === "Limited"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {h.availability || "Available"}
+                          </span>
                         </div>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            h.availability === "Available"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : h.availability === "Limited"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : "bg-rose-50 text-rose-700 border border-rose-200"
-                          }`}
-                        >
-                          {h.availability || "Available"}
-                        </span>
+                        <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
+                          <span className="font-semibold text-blue-700 dark:text-blue-300">👥 {housed} / {beds} Housed ({rate}%)</span>
+                          <span className="font-semibold text-foreground">★ {h.rating ? h.rating.toFixed(1) : "4.5"}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
-                        <span>{h.roomTypes?.length || 0} room type(s)</span>
-                        <span className="font-semibold text-foreground">★ {h.rating ? h.rating.toFixed(1) : "4.5"}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
