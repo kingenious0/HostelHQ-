@@ -266,6 +266,7 @@ export async function dispatchDeanSummons({
   hostelName,
   hearingDate,
   venue,
+  summonsNote,
 }: {
   studentPhone: string;
   studentId: string;
@@ -274,12 +275,17 @@ export async function dispatchDeanSummons({
   hostelName: string;
   hearingDate: string;
   venue: string;
+  summonsNote?: string;
 }): Promise<void> {
   // 1. Student Message
-  const studentSms = `[HostelHQ] Dean of Students: Your reported dispute regarding ${hostelName} has been scheduled for a meeting. Date: ${hearingDate}. Venue: ${venue}. Check your dashboard.`;
+  const studentSms =
+    summonsNote?.trim() ||
+    `[HostelHQ] Dean of Students: Your reported dispute regarding ${hostelName} has been scheduled for a meeting. Date: ${hearingDate}. Venue: ${venue}. Check your dashboard.`;
 
   // 2. Manager Message (with consequence warning)
-  const managerSms = `[HostelHQ] Dean of Students Notice: A formal student complaint has been logged against ${hostelName}. Mandatory meeting: ${hearingDate} at ${venue}. Failure to attend will lead to listing suspension.`;
+  const managerSms =
+    summonsNote?.trim() ||
+    `[HostelHQ] Dean of Students Notice: A formal student complaint has been logged against ${hostelName}. Mandatory meeting: ${hearingDate} at ${venue}. Failure to attend will lead to listing suspension.`;
 
   // Dispatch via FrogWigal SMS Gateway (concurrently)
   const smsPromises: Promise<any>[] = [];

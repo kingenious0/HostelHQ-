@@ -3,6 +3,7 @@
 import * as dynamoService from "@/lib/dynamodb-service";
 import * as dynamoCore from "@/lib/dynamodb";
 import type { Hostel, AppUser, Visit, Review, RoomType } from "@/lib/data";
+import { sendSMS } from "@/lib/wigal";
 import { db } from "@/lib/firebase";
 import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { requireAuth, requireRole, ACCREDITATION_AUTHORIZED_ROLES } from "@/lib/auth-guard";
@@ -1230,6 +1231,10 @@ export async function updateComplaintArbitrationAction({
   managerName,
   studentId,
   managerId,
+  hostelName,
+  venue,
+  hearingDate,
+  summonsNote,
 }: {
   complaintId: string;
   hearingPayload: any;
@@ -1239,12 +1244,73 @@ export async function updateComplaintArbitrationAction({
   managerName?: string;
   studentId?: string;
   managerId?: string;
+  hostelName?: string;
+  venue?: string;
+  hearingDate?: string;
+  summonsNote?: string;
 }) {
   try {
     await requireRole(["dean", "coordinator", "admin"]);
+
+    // 1. Dispatch SMS Summons server-side via Wigal FROG API
+    const cleanStudentPhone = studentPhone?.trim();
+    const cleanManagerPhone = managerPhone?.trim();
+    const cleanHostel = hostelName?.trim() || "Hostel";
+    const cleanDate = hearingDate?.trim() || `${hearingPayload?.date || ""} at ${hearingPayload?.time || ""}`.trim() || "as scheduled";
+    const cleanVenue = venue?.trim() || hearingPayload?.venue?.trim() || "Dean of Students Office";
+
+    const smsResults = {
+      student: { sent: false, error: undefined as string | undefined },
+      manager: { sent: false, error: undefined as string | undefined },
+    };
+
+    if (cleanStudentPhone) {
+      const studentSms = summonsNote?.trim()
+        ? summonsNote.trim()
+        : `[HostelHQ] Dean of Students: Your reported dispute regarding ${cleanHostel} has been scheduled for hearing on ${cleanDate} at ${cleanVenue}. Check your dashboard.`;
+      try {
+        console.log(`[Arbitration SMS] Sending summons to Student: ${cleanStudentPhone}`);
+        const sRes = await sendSMS(cleanStudentPhone, studentSms, `SUMMONS_STU_${Date.now()}`);
+        smsResults.student.sent = Boolean(sRes.success);
+        if (!sRes.success) {
+          smsResults.student.error = sRes.error || "Wigal gateway rejected message";
+          console.warn("[Arbitration SMS] Student delivery note:", sRes.error);
+        }
+      } catch (err: any) {
+        smsResults.student.error = err.message || "Network error";
+        console.error("[Arbitration SMS] Student send error:", err);
+      }
+    }
+
+    if (cleanManagerPhone) {
+      const managerSms = summonsNote?.trim()
+        ? summonsNote.trim()
+        : `[HostelHQ] Dean of Students Notice: A formal grievance hearing regarding ${cleanHostel} is scheduled on ${cleanDate} at ${cleanVenue}. Mandatory attendance to avoid listing suspension.`;
+      try {
+        console.log(`[Arbitration SMS] Sending summons to Manager: ${cleanManagerPhone}`);
+        const mRes = await sendSMS(cleanManagerPhone, managerSms, `SUMMONS_MGR_${Date.now()}`);
+        smsResults.manager.sent = Boolean(mRes.success);
+        if (!mRes.success) {
+          smsResults.manager.error = mRes.error || "Wigal gateway rejected message";
+          console.warn("[Arbitration SMS] Manager delivery note:", mRes.error);
+        }
+      } catch (err: any) {
+        smsResults.manager.error = err.message || "Network error";
+        console.error("[Arbitration SMS] Manager send error:", err);
+      }
+    }
+
+    const anySmsSent = smsResults.student.sent || smsResults.manager.sent;
+    const enrichedHearingPayload = {
+      ...hearingPayload,
+      smsDispatched: anySmsSent,
+      smsResults,
+      updatedAt: new Date().toISOString(),
+    };
+
     const updates: Record<string, any> = {
       status: "Under Review",
-      arbitrationHearing: hearingPayload,
+      arbitrationHearing: enrichedHearingPayload,
       updatedAt: new Date().toISOString(),
     };
     if (studentPhone) updates.studentPhone = studentPhone;
@@ -1252,14 +1318,14 @@ export async function updateComplaintArbitrationAction({
     if (studentName) updates.studentName = studentName;
     if (managerName) updates.managerName = managerName;
 
-    // 1. Dual-write updates to Firestore
+    // 2. Dual-write updates to Firestore
     try {
       await updateDoc(doc(db, "complaints", complaintId), updates);
     } catch (fsErr) {
       console.warn("Firestore updateComplaintArbitrationAction note:", fsErr);
     }
 
-    // 2. Dual-write updates to DynamoDB
+    // 3. Dual-write updates to DynamoDB
     if (dynamoCore.isDynamoConfigured()) {
       try {
         const key = dynamoService.formatKey.complaint(complaintId);
@@ -1269,7 +1335,52 @@ export async function updateComplaintArbitrationAction({
       }
     }
 
-    // 3. If studentId is present, persist confirmed phone and name to student profile
+    // 4. Dispatch Persistent In-App Notifications (Firestore + DynamoDB)
+    if (studentId) {
+      const sNotifId = `notif_stu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const sNotifPayload = {
+        id: sNotifId,
+        userId: studentId,
+        title: "Dean's Meeting Scheduled",
+        message: `A meeting regarding ${cleanHostel} has been scheduled on ${cleanDate} at ${cleanVenue}. Check your dashboard.`,
+        type: "dispute",
+        linkUrl: "/dashboard",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        await setDoc(doc(db, "notifications", sNotifId), sNotifPayload, { merge: true });
+        if (dynamoCore.isDynamoConfigured()) {
+          await dynamoService.saveNotification(sNotifPayload);
+        }
+      } catch (err) {
+        console.warn("In-app notification write error for student:", err);
+      }
+    }
+
+    if (managerId) {
+      const mNotifId = `notif_mgr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const mNotifPayload = {
+        id: mNotifId,
+        userId: managerId,
+        title: "Mandatory Dean's Notice: Complaint Hearing",
+        message: `A formal hearing regarding ${cleanHostel} has been scheduled on ${cleanDate} at ${cleanVenue}. Mandatory attendance to avoid listing suspension.`,
+        type: "dispute",
+        linkUrl: "/manager/dashboard",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        await setDoc(doc(db, "notifications", mNotifId), mNotifPayload, { merge: true });
+        if (dynamoCore.isDynamoConfigured()) {
+          await dynamoService.saveNotification(mNotifPayload);
+        }
+      } catch (err) {
+        console.warn("In-app notification write error for manager:", err);
+      }
+    }
+
+    // 5. If studentId is present, persist confirmed phone and name to student profile
     if (studentId && (studentPhone || studentName)) {
       const studentProfileUpdates: Record<string, any> = {
         updatedAt: new Date().toISOString(),
@@ -1300,7 +1411,7 @@ export async function updateComplaintArbitrationAction({
       }
     }
 
-    // 4. If managerId is present, persist confirmed phone and name to manager profile
+    // 6. If managerId is present, persist confirmed phone and name to manager profile
     if (managerId && (managerPhone || managerName)) {
       const managerProfileUpdates: Record<string, any> = {
         updatedAt: new Date().toISOString(),
@@ -1331,7 +1442,10 @@ export async function updateComplaintArbitrationAction({
       }
     }
 
-    return { success: true };
+    return {
+      success: true,
+      smsResults,
+    };
   } catch (error: any) {
     console.error("updateComplaintArbitrationAction error:", error);
     return { success: false, error: error.message || "Failed to save arbitration hearing" };

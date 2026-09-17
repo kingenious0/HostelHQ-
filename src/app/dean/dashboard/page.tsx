@@ -66,7 +66,6 @@ import {
 
 import { RentCapComplianceSection } from "@/components/dashboard/RentCapComplianceSection";
 import { getStatutoryTariffCeiling } from "@/lib/tariff-limits";
-import { dispatchDeanSummons } from "@/lib/notifications";
 import { exportToCSV } from "@/lib/exportUtils";
 
 export default function DeanDashboardPage() {
@@ -368,35 +367,23 @@ export default function DeanDashboardPage() {
       const deanName = currentUser?.displayName || "Dean of Students Welfare Directorate";
       const hearingDateTime = `${hearingDate} at ${hearingTime}`;
 
-      // 1. Dispatch Role-Specific FrogWigal SMS & Persistent In-App Notifications
+      // 1. Resolve student and manager IDs
       const studentId = complaintForArbitration.studentId || (complaintForArbitration as any).submittedBy || "";
       const matchedHostel = hostels.find(
         (h) => h.id === complaintForArbitration.hostelId || h.name === complaintForArbitration.hostelName
       );
       const managerId = complaintForArbitration.managerId || matchedHostel?.managerId || "";
 
-      try {
-        await dispatchDeanSummons({
-          studentPhone: sPhone,
-          studentId,
-          managerPhone: mPhone,
-          managerId,
-          hostelName: complaintForArbitration.hostelName,
-          hearingDate: hearingDateTime,
-          venue: hearingVenue,
-        });
-      } catch (summonsErr) {
-        console.warn("Automated summons dispatch error:", summonsErr);
-      }
+      const resolvedSummonsNote =
+        summonsNote.trim() ||
+        `You are formally summoned to appear before the Dean of Students Welfare & Arbitration Board on ${hearingDate} at ${hearingTime} regarding ${complaintForArbitration.subject}. Non-appearance may result in summary sanctions.`;
 
       const hearingPayload = {
         date: hearingDate,
         time: hearingTime,
         venue: hearingVenue,
         officers: hearingOfficers,
-        summonsNote:
-          summonsNote.trim() ||
-          `You are formally summoned to appear before the Dean of Students Welfare & Arbitration Board on ${hearingDate} at ${hearingTime} regarding ${complaintForArbitration.subject}. Non-appearance may result in summary sanctions.`,
+        summonsNote: resolvedSummonsNote,
         scheduledBy: deanName,
         scheduledAt: new Date().toISOString(),
         smsDispatched: true,
@@ -404,8 +391,8 @@ export default function DeanDashboardPage() {
         managerPhoneConfirmed: mPhone,
       };
 
-      // 2. Dual-write to both Firestore & DynamoDB via Server Action
-      await updateComplaintArbitrationAction({
+      // 2. Dispatch SMS, In-App Notifications & Dual-Write to Firestore & DynamoDB via Server Action
+      const result = await updateComplaintArbitrationAction({
         complaintId: complaintForArbitration.id,
         hearingPayload,
         studentPhone: sPhone,
@@ -414,7 +401,20 @@ export default function DeanDashboardPage() {
         managerName: arbitrationManagerName.trim(),
         studentId,
         managerId,
+        hostelName: complaintForArbitration.hostelName,
+        venue: hearingVenue,
+        hearingDate: hearingDateTime,
+        summonsNote: resolvedSummonsNote,
       });
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to schedule arbitration hearing.");
+      }
+
+      const smsResults = result.smsResults;
+      const anySmsSent = Boolean(smsResults?.student?.sent || smsResults?.manager?.sent);
+      const studentFailed = Boolean(sPhone && smsResults?.student && !smsResults.student.sent);
+      const managerFailed = Boolean(mPhone && smsResults?.manager && !smsResults.manager.sent);
 
       setComplaints((prev) =>
         prev.map((c) =>
@@ -426,21 +426,53 @@ export default function DeanDashboardPage() {
                 managerPhone: mPhone || c.managerPhone,
                 studentName: arbitrationStudentName.trim() || c.studentName,
                 managerName: arbitrationManagerName.trim() || c.managerName,
-                arbitrationHearing: hearingPayload,
+                arbitrationHearing: {
+                  ...hearingPayload,
+                  smsDispatched: anySmsSent,
+                  smsResults,
+                },
               }
             : c
         )
       );
 
-      const dispatchedList = [
-        sPhone ? `Student (${sPhone})` : null,
-        mPhone ? `Manager (${mPhone})` : null,
-      ].filter(Boolean).join(" and ");
+      if (anySmsSent) {
+        const sentRecipients = [
+          smsResults?.student?.sent ? `Student (${sPhone})` : null,
+          smsResults?.manager?.sent ? `Manager (${mPhone})` : null,
+        ]
+          .filter(Boolean)
+          .join(" and ");
 
-      toast({
-        title: "Hearing Scheduled & Summons Dispatched! ⚖️",
-        description: `Summons dispatched via FrogWigal SMS to ${dispatchedList} for ${hearingDate} at ${hearingTime}.`,
-      });
+        const failNotes = [
+          studentFailed ? `Student: ${smsResults?.student?.error}` : null,
+          managerFailed ? `Manager: ${smsResults?.manager?.error}` : null,
+        ]
+          .filter(Boolean)
+          .join("; ");
+
+        toast({
+          title: "Hearing Scheduled & Summons Dispatched! ⚖️",
+          description: `Summons dispatched via FrogWigal SMS to ${sentRecipients} for ${hearingDate} at ${hearingTime}.${
+            failNotes ? ` (Delivery warning: ${failNotes})` : ""
+          }`,
+        });
+      } else if (sPhone || mPhone) {
+        const failReason =
+          smsResults?.student?.error ||
+          smsResults?.manager?.error ||
+          "SMS gateway did not accept delivery";
+        toast({
+          title: "Hearing Scheduled (SMS Notice) ⚠️",
+          description: `Hearing was saved and in-app notifications posted, but SMS summons delivery failed: ${failReason}.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Hearing Scheduled! ⚖️",
+          description: `Arbitration hearing scheduled for ${hearingDate} at ${hearingTime}. In-app notices dispatched.`,
+        });
+      }
 
       setArbitrationDialogOpen(false);
       setComplaintForArbitration(null);

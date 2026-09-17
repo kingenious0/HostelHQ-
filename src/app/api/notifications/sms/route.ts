@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendSMS, formatPhoneNumber } from "@/lib/wigal";
 
+export const dynamic = "force-dynamic";
+
 export function normalizePhoneNumber(phone: string): string {
   if (!phone) return "";
   return formatPhoneNumber(phone);

@@ -7,12 +7,15 @@ import 'server-only';
  */
 
 // Support both legacy WIGAL_* and alternative FROG_SMS_* env variable names
-const WIGAL_API_KEY =
-  process.env.WIGAL_API_KEY || process.env.FROG_SMS_API_KEY;
-const WIGAL_USERNAME =
-  process.env.WIGAL_USERNAME || process.env.FROG_SMS_USERNAME;
-const WIGAL_SENDER_ID =
-  process.env.WIGAL_SENDER_ID || process.env.FROG_SMS_SENDER_ID || 'HostelHQ';
+export function getWigalCredentials() {
+  const apiKey =
+    process.env.WIGAL_API_KEY || process.env.FROG_SMS_API_KEY || '';
+  const username =
+    process.env.WIGAL_USERNAME || process.env.FROG_SMS_USERNAME || '';
+  const senderId =
+    process.env.WIGAL_SENDER_ID || process.env.FROG_SMS_SENDER_ID || 'HostelHQ';
+  return { apiKey, username, senderId };
+}
 
 /**
  * Prioritize IPv4 resolution in Node.js dual-stack networking to prevent delays or timeouts
@@ -61,8 +64,10 @@ export interface SendSMSResponse {
  * FROG API expects numbers without country code prefix (e.g., "0542709440" not "233542709440")
  */
 export function formatPhoneNumber(phone: string): string {
+  if (!phone) return '';
   // Remove all non-digit characters
   let cleaned = phone.replace(/\D/g, '');
+  if (!cleaned) return '';
 
   // Remove country code if present (233)
   if (cleaned.startsWith('233')) {
@@ -74,12 +79,11 @@ export function formatPhoneNumber(phone: string): string {
     cleaned = cleaned.substring(1);
   }
 
-  // Ensure it starts with 0 (Ghana format)
-  if (!cleaned.startsWith('0')) {
-    cleaned = '0' + cleaned;
-  }
+  // If empty after stripping zeros, return empty
+  if (!cleaned) return '';
 
-  return cleaned;
+  // Ensure it starts with 0 (Ghana format)
+  return '0' + cleaned;
 }
 
 /**
@@ -95,7 +99,8 @@ export async function generateAndSendOTP(
     messageTemplate?: string;
   }
 ): Promise<{ success: boolean; error?: string; message?: string }> {
-  if (!WIGAL_API_KEY || !WIGAL_USERNAME) {
+  const { apiKey, username, senderId } = getWigalCredentials();
+  if (!apiKey || !username) {
     console.error('WIGAL_API_KEY or WIGAL_USERNAME is not configured');
     return {
       success: false,
@@ -120,14 +125,14 @@ export async function generateAndSendOTP(
       length: length,
       messagetemplate: messageTemplate,
       type: type,
-      senderid: WIGAL_SENDER_ID,
+      senderid: senderId,
     };
 
     console.log('Wigal OTP Generate Request:', {
       url: finalUrl,
-      hasApiKey: !!WIGAL_API_KEY,
-      hasUsername: !!WIGAL_USERNAME,
-      senderId: WIGAL_SENDER_ID,
+      hasApiKey: !!apiKey,
+      hasUsername: !!username,
+      senderId: senderId,
       phone: formattedPhone,
     });
 
@@ -135,8 +140,8 @@ export async function generateAndSendOTP(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'API-KEY': WIGAL_API_KEY,
-        'USERNAME': WIGAL_USERNAME,
+        'API-KEY': apiKey,
+        'USERNAME': username,
       },
       body: JSON.stringify(requestBody),
     });
@@ -230,7 +235,8 @@ export async function generateAndSendOTP(
  * Uses the /api/v3/sms/otp/verify endpoint
  */
 export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<VerifyOTPResponse> {
-  if (!WIGAL_API_KEY || !WIGAL_USERNAME) {
+  const { apiKey, username } = getWigalCredentials();
+  if (!apiKey || !username) {
     console.error('WIGAL_API_KEY or WIGAL_USERNAME is not configured');
     return {
       success: false,
@@ -259,8 +265,8 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'API-KEY': WIGAL_API_KEY,
-        'USERNAME': WIGAL_USERNAME,
+        'API-KEY': apiKey,
+        'USERNAME': username,
       },
       body: JSON.stringify(requestBody),
     });
@@ -344,7 +350,8 @@ export async function verifyOTP(phoneNumber: string, otpCode: string): Promise<V
  * Uses the /api/v3/sms/send endpoint (General Messages)
  */
 export async function sendSMS(phoneNumber: string, message: string, msgId?: string): Promise<SendSMSResponse> {
-  if (!WIGAL_API_KEY || !WIGAL_USERNAME) {
+  const { apiKey, username, senderId } = getWigalCredentials();
+  if (!apiKey || !username) {
     console.error('WIGAL_API_KEY or WIGAL_USERNAME is not configured');
     return {
       success: false,
@@ -354,11 +361,18 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
 
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
+    if (!formattedPhone || formattedPhone.length < 10) {
+      return {
+        success: false,
+        error: `Invalid recipient phone number: "${phoneNumber}". Must be a valid phone number with at least 10 digits.`,
+      };
+    }
+
     // Generate a unique message ID if not provided
     const uniqueMsgId = msgId || `MSG${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
     const requestBody = {
-      senderid: WIGAL_SENDER_ID,
+      senderid: senderId,
       destinations: [
         {
           destination: formattedPhone,
@@ -375,7 +389,7 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
     console.log('Wigal SMS Send Request:', {
       url: finalUrl,
       phone: formattedPhone,
-      senderId: WIGAL_SENDER_ID,
+      senderId: senderId,
       messageLength: message.length,
     });
 
@@ -383,8 +397,8 @@ export async function sendSMS(phoneNumber: string, message: string, msgId?: stri
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'API-KEY': WIGAL_API_KEY,
-        'USERNAME': WIGAL_USERNAME,
+        'API-KEY': apiKey,
+        'USERNAME': username,
       },
       body: JSON.stringify(requestBody),
     });
