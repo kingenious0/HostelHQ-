@@ -33,7 +33,7 @@ import {
   getStatutoryTariffCeiling,
 } from "@/lib/tariff-limits";
 import { updateHostelAction } from "@/app/actions/db";
-import { sendRentCapBreachSMSAction } from "@/app/actions/sms";
+import { sendRentCapBreachSMSAction, sendRentCapReinstatedSMSAction } from "@/app/actions/sms";
 import {
   Scale,
   ShieldAlert,
@@ -89,6 +89,7 @@ export function RentCapComplianceSection({
 
   // Action Loading tracking by hostel ID
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
+  const [reinstatingId, setReinstatingId] = useState<string | null>(null);
 
   // Real-time listener for settings/tariff_limits
   useEffect(() => {
@@ -310,6 +311,109 @@ export function RentCapComplianceSection({
     }
   };
 
+  // Handle Reinstate / Unsuspend Listing action
+  const handleReinstateListing = async (v: TariffViolationItem) => {
+    const cleanId = v.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+    setReinstatingId(v.hostelId);
+
+    try {
+      const callerName =
+        currentUser?.displayName || (userRole === "dean" ? "Dean of Students" : "Housing Coordinator");
+
+      // 1. Reinstate in Firestore
+      try {
+        await setDoc(
+          doc(db, "hostels", cleanId),
+          {
+            status: "approved",
+            isPublished: true,
+            suspensionReason: null,
+            reinstatedAt: new Date().toISOString(),
+            reinstatedBy: callerName,
+          },
+          { merge: true }
+        );
+      } catch (fsErr) {
+        console.warn("Firestore hostel reinstatement update warning:", fsErr);
+      }
+
+      // 2. Reinstate in DynamoDB
+      try {
+        await updateHostelAction(cleanId, {
+          status: "approved" as any,
+          isPublished: true,
+          suspensionReason: "" as any,
+        });
+      } catch (dynErr) {
+        console.warn("DynamoDB hostel reinstatement update warning:", dynErr);
+      }
+
+      // 3. In-App Manager Notification
+      const managerRecipientId =
+        v.hostel.managerId ||
+        v.hostel.createdBy?.userId ||
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        "";
+      if (managerRecipientId) {
+        try {
+          await dispatchInAppNotification({
+            userId: managerRecipientId,
+            title: "Listing Reinstated: Back Online",
+            message: `Your listing for "${v.hostelName}" has been reinstated by the ${userRole === "dean" ? "Dean of Students" : "Housing Coordinator"}. It is once again published and visible to students.`,
+            type: "system",
+            linkUrl: "/manager/dashboard",
+          });
+        } catch (notifErr) {
+          console.warn("Could not insert in-app notification:", notifErr);
+        }
+      }
+
+      // 4. SMS Dispatch Trigger to Manager
+      const resolvedManagerPhone =
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        v.hostel.phone ||
+        (v.hostel as any).phoneNumber;
+
+      try {
+        await sendRentCapReinstatedSMSAction({
+          hostelId: cleanId,
+          hostelName: v.hostelName,
+          managerPhone: resolvedManagerPhone,
+        });
+      } catch (smsErr) {
+        console.warn("SMS dispatch warning:", smsErr);
+      }
+
+      // 5. Update local state
+      const updatedHostel: Hostel = {
+        ...v.hostel,
+        status: "approved" as any,
+        isPublished: true,
+        suspensionReason: "",
+      };
+
+      if (onHostelUpdated) {
+        onHostelUpdated(updatedHostel);
+      }
+
+      toast({
+        title: "Listing Reinstated & Published! ✅",
+        description: `"${v.hostelName}" has been reinstated and restored to student directory view.`,
+      });
+    } catch (err: any) {
+      console.error("Reinstatement error:", err);
+      toast({
+        title: "Action Failed",
+        description: err.message || "Failed to reinstate property listing.",
+        variant: "destructive",
+      });
+    } finally {
+      setReinstatingId(null);
+    }
+  };
+
   const statutoryCards = [
     { label: "1 in a Room (Single)", value: limits.oneInRoom, key: "1inRoom" },
     { label: "2 in a Room", value: limits.twoInRoom, key: "2inRoom" },
@@ -418,7 +522,7 @@ export function RentCapComplianceSection({
                 </TableHeader>
                 <TableBody>
                   {violations.map((v, idx) => {
-                    const isProcessing = suspendingId === v.hostelId;
+                    const isProcessing = suspendingId === v.hostelId || reinstatingId === v.hostelId;
                     const isSuspended = v.isSuspended || v.hostel.status === "suspended_overpriced";
 
                     return (
@@ -474,12 +578,22 @@ export function RentCapComplianceSection({
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled
-                              className="h-8 text-xs font-semibold border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 opacity-80 cursor-default"
-                              title="Listing is currently suspended and delisted from student search"
+                              onClick={() => handleReinstateListing(v)}
+                              disabled={isProcessing}
+                              className="h-8 text-xs font-semibold border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/40 shadow-xs transition-colors"
+                              title="Immediately reinstate property and restore visibility in student search"
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                              Suspended
+                              {reinstatingId === v.hostelId ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                  Reinstating...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                                  Reinstate Listing
+                                </>
+                              )}
                             </Button>
                           ) : (
                             <Button

@@ -582,3 +582,106 @@ export async function sendRentCapBreachSMSAction(params: {
     }
 }
 
+export async function sendRentCapReinstatedSMSAction(params: {
+    hostelId: string;
+    hostelName: string;
+    managerPhone?: string;
+}) {
+    try {
+        const caller = await requireRole(['coordinator', 'dean', 'admin']);
+        const { db } = await import('@/lib/firebase');
+        const { doc, getDoc, collection, addDoc } = await import('firebase/firestore');
+        const { adminDb, isFirebaseAdminConfigured } = await import('@/lib/firebase-admin');
+
+        let managerPhone = params.managerPhone ? params.managerPhone.replace(/[^0-9]/g, '') : '';
+        let managerId = '';
+
+        // 1. Resolve Manager Phone if not directly supplied
+        if (!managerPhone && params.hostelId) {
+            const cleanId = params.hostelId.replace(/^HOSTEL#/i, '').replace(/^PENDING_HOSTEL#/i, '').trim();
+            if (isFirebaseAdminConfigured()) {
+                const hSnap = await adminDb.collection('hostels').doc(cleanId).get();
+                if (hSnap.exists) {
+                    const hData = hSnap.data() || {};
+                    managerPhone = (hData.managerPhone || hData.contactPhone || hData.phone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || hData.createdBy?.userId || '';
+                }
+            } else {
+                const hSnap = await getDoc(doc(db, 'hostels', cleanId));
+                if (hSnap.exists()) {
+                    const hData = hSnap.data() || {};
+                    managerPhone = (hData.managerPhone || hData.contactPhone || hData.phone || '').replace(/[^0-9]/g, '');
+                    managerId = hData.managerId || hData.createdBy?.userId || '';
+                }
+            }
+
+            if (!managerPhone || !managerId) {
+                try {
+                    const { dynamoService } = await import('@/lib/dynamodb-service');
+                    const dynHostel = await dynamoService.getHostelById(cleanId);
+                    if (dynHostel) {
+                        if (!managerPhone) {
+                            managerPhone = ((dynHostel as any).managerPhone || (dynHostel as any).contactPhone || dynHostel.phone || '').replace(/[^0-9]/g, '');
+                        }
+                        if (!managerId) {
+                            managerId = (dynHostel as any).managerId || dynHostel.createdBy?.userId || '';
+                        }
+                    }
+                } catch (dErr) {
+                    console.warn('[SMS] DynamoDB hostel lookup note:', dErr);
+                }
+            }
+        }
+
+        if (!managerPhone && managerId) {
+            try {
+                const uSnap = await getDoc(doc(db, 'users', managerId));
+                if (uSnap.exists()) {
+                    const uData = uSnap.data() || {};
+                    managerPhone = (uData.phone || uData.phoneNumber || '').replace(/[^0-9]/g, '');
+                }
+            } catch (uErr) {
+                console.warn('[SMS] User phone lookup warning:', uErr);
+            }
+        }
+
+        if (!managerPhone) {
+            console.warn('[SMS] No verified manager phone found for hostel:', params.hostelName);
+            return { success: false, error: 'No manager phone number found for listing' };
+        }
+
+        const message = `[HostelHQ] Compliance Notice: Your listing for "${params.hostelName}" has been reinstated by the University Housing Directorate. It is now active and published in student search. Check manager portal: https://hostel-hq.vercel.app/manager/dashboard`;
+
+        const smsRes = await wigalSendSMS(managerPhone, message);
+
+        try {
+            const logEntry = {
+                type: 'rent_cap_reinstated',
+                hostelId: params.hostelId,
+                hostelName: params.hostelName,
+                managerPhone,
+                result: smsRes,
+                dispatchedBy: caller.fullName || caller.displayName || caller.uid,
+                createdAt: new Date().toISOString(),
+            };
+
+            if (isFirebaseAdminConfigured()) {
+                await adminDb.collection('sms_notifications').add(logEntry);
+            } else {
+                await addDoc(collection(db, 'sms_notifications'), logEntry);
+            }
+        } catch (logErr) {
+            console.warn('[SMS] Could not save rent cap reinstatement SMS log to Firestore:', logErr);
+        }
+
+        return {
+            success: Boolean(smsRes.success),
+            smsResult: smsRes,
+        };
+    } catch (error: any) {
+        console.error('Error in sendRentCapReinstatedSMSAction:', error);
+        return { success: false, error: error.message || 'Failed to dispatch reinstatement SMS' };
+    }
+}
+
+

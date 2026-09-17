@@ -1254,20 +1254,57 @@ export async function updateComplaintArbitrationAction({
 
     // 1. Dispatch SMS Summons server-side via Wigal FROG API
     const cleanStudentPhone = studentPhone?.trim();
-    const cleanManagerPhone = managerPhone?.trim();
+    let cleanManagerPhone = managerPhone?.trim();
     const cleanHostel = hostelName?.trim() || "Hostel";
     const cleanDate = hearingDate?.trim() || `${hearingPayload?.date || ""} at ${hearingPayload?.time || ""}`.trim() || "as scheduled";
     const cleanVenue = venue?.trim() || hearingPayload?.venue?.trim() || "Dean of Students Office";
+
+    // Server-side fallback resolution for manager phone if missing
+    if (!cleanManagerPhone) {
+      try {
+        const cSnap = await getDoc(doc(db, "complaints", complaintId));
+        if (cSnap.exists()) {
+          const cData = cSnap.data();
+          if (cData.managerPhone?.trim()) {
+            cleanManagerPhone = cData.managerPhone.trim();
+          } else if (cData.hostelId) {
+            const cleanHId = cData.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+            const hSnap = await getDoc(doc(db, "hostels", cleanHId));
+            if (hSnap.exists()) {
+              const hData = hSnap.data();
+              cleanManagerPhone = (
+                hData.phone ||
+                hData.contactPhone ||
+                hData.managerPhone ||
+                hData.contact ||
+                hData.createdBy?.phoneNumber ||
+                hData.createdBy?.phone ||
+                ""
+              ).trim();
+            }
+          }
+        }
+      } catch (resErr) {
+        console.warn("[Arbitration SMS] Could not auto-resolve manager phone server-side:", resErr);
+      }
+    }
 
     const smsResults = {
       student: { sent: false, error: undefined as string | undefined },
       manager: { sent: false, error: undefined as string | undefined },
     };
 
-    const customNote = summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : "";
+    // Filter out standard boilerplate text so custom directive never duplicates date/venue/subject
+    const isBoilerplate =
+      summonsNote?.includes("formally summoned to appear before") ||
+      summonsNote?.includes("Dean of Students Welfare") ||
+      summonsNote?.includes("Dean of Students Notice") ||
+      summonsNote?.includes("Scheduled formal dispute arbitration");
+    const cleanDirective = (!isBoilerplate && summonsNote?.trim()) ? summonsNote.trim() : "";
+    const customNote = cleanDirective ? ` Directive: "${cleanDirective}".` : "";
 
     if (cleanStudentPhone) {
-      const studentSms = `[HostelHQ] Dean of Students Notice: Your reported grievance regarding ${cleanHostel} is scheduled for arbitration on ${cleanDate} at ${cleanVenue}.${customNote} Mandatory attendance. Check student portal.`;
+      const studentSms = `[HostelHQ] Dean of Students Notice: Your grievance regarding ${cleanHostel} is scheduled for arbitration on ${cleanDate} at ${cleanVenue}.${customNote} Attendance is mandatory. Check student portal.`;
       try {
         console.log(`[Arbitration SMS] Sending summons to Student: ${cleanStudentPhone}`);
         const sRes = await sendSMS(cleanStudentPhone, studentSms, `SUMMONS_STU_${Date.now()}`);
@@ -1282,8 +1319,13 @@ export async function updateComplaintArbitrationAction({
       }
     }
 
+    // Insert a 600ms pacing gap between student and manager SMS to prevent rate-limiting or concurrency drops
+    if (cleanStudentPhone && cleanManagerPhone) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+
     if (cleanManagerPhone) {
-      const managerSms = `[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${cleanHostel} is scheduled on ${cleanDate} at ${cleanVenue}.${customNote} Mandatory attendance to prevent immediate listing suspension.`;
+      const managerSms = `[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${cleanHostel} is scheduled on ${cleanDate} at ${cleanVenue}.${customNote} Attendance is mandatory to avoid listing sanctions.`;
       try {
         console.log(`[Arbitration SMS] Sending summons to Manager: ${cleanManagerPhone}`);
         const mRes = await sendSMS(cleanManagerPhone, managerSms, `SUMMONS_MGR_${Date.now()}`);
@@ -1295,6 +1337,24 @@ export async function updateComplaintArbitrationAction({
       } catch (err: any) {
         smsResults.manager.error = err.message || "Network error";
         console.error("[Arbitration SMS] Manager send error:", err);
+      }
+    }
+
+    // Persist confirmed manager phone to hostel record in Firestore so future operations auto-populate
+    if (cleanManagerPhone) {
+      try {
+        const cSnap = await getDoc(doc(db, "complaints", complaintId));
+        const resolvedHostelId = cSnap.exists() ? cSnap.data().hostelId : null;
+        if (resolvedHostelId) {
+          const cleanHId = resolvedHostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+          await updateDoc(doc(db, "hostels", cleanHId), {
+            phone: cleanManagerPhone,
+            contactPhone: cleanManagerPhone,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      } catch (hErr) {
+        console.warn("[Arbitration SMS] Could not persist manager phone to hostel doc:", hErr);
       }
     }
 
@@ -1312,7 +1372,7 @@ export async function updateComplaintArbitrationAction({
       updatedAt: new Date().toISOString(),
     };
     if (studentPhone) updates.studentPhone = studentPhone;
-    if (managerPhone) updates.managerPhone = managerPhone;
+    if (cleanManagerPhone) updates.managerPhone = cleanManagerPhone;
     if (studentName) updates.studentName = studentName;
     if (managerName) updates.managerName = managerName;
 

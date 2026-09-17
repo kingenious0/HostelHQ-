@@ -308,18 +308,51 @@ export default function DeanDashboardPage() {
 
       // 2. Resolve manager phone and name if missing
       const matchedHostel = hostels.find(
-        (h) => h.id === complaint.hostelId || h.name === complaint.hostelName
+        (h) => h.id === complaint.hostelId || h.name?.toLowerCase() === complaint.hostelName?.toLowerCase()
       );
       if (!mPhone && matchedHostel) {
-        mPhone = matchedHostel.phone || matchedHostel.contactPhone || "";
+        mPhone =
+          matchedHostel.phone ||
+          matchedHostel.contactPhone ||
+          (matchedHostel as any).managerPhone ||
+          (matchedHostel as any).contact ||
+          matchedHostel.createdBy?.phoneNumber ||
+          matchedHostel.createdBy?.phone ||
+          "";
+        if (!mName) {
+          mName = matchedHostel.createdBy?.fullName || (matchedHostel as any).managerName || "";
+        }
       }
+
+      // Check other complaints for this same hostel that may have captured manager contact
+      if (!mPhone) {
+        const siblingComplaint = complaints.find(
+          (c) =>
+            c.id !== complaint.id &&
+            (c.hostelId === complaint.hostelId || c.hostelName?.toLowerCase() === complaint.hostelName?.toLowerCase()) &&
+            c.managerPhone
+        );
+        if (siblingComplaint?.managerPhone) {
+          mPhone = siblingComplaint.managerPhone;
+          if (!mName && siblingComplaint.managerName) mName = siblingComplaint.managerName;
+        }
+      }
+
       let managerUid = complaint.managerId || matchedHostel?.managerId;
 
       if (!managerUid && complaint.hostelId) {
         const cleanHId = complaint.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
         const hRes = await fetchHostelByIdAction(cleanHId);
         if (hRes.success && hRes.data) {
-          if (!mPhone) mPhone = (hRes.data as any).phone || (hRes.data as any).contactPhone || "";
+          if (!mPhone) {
+            mPhone =
+              (hRes.data as any).phone ||
+              (hRes.data as any).contactPhone ||
+              (hRes.data as any).managerPhone ||
+              (hRes.data as any).contact ||
+              (hRes.data as any).createdBy?.phoneNumber ||
+              "";
+          }
           managerUid = hRes.data.managerId;
         }
       }
@@ -391,9 +424,10 @@ export default function DeanDashboardPage() {
       );
       const managerId = complaintForArbitration.managerId || matchedHostel?.managerId || "";
 
+      const customDirective = summonsNote.trim();
       const resolvedSummonsNote =
-        summonsNote.trim() ||
-        `You are formally summoned to appear before the Dean of Students Welfare & Arbitration Board on ${hearingDate} at ${hearingTime} regarding ${complaintForArbitration.subject}. Non-appearance may result in summary sanctions.`;
+        customDirective ||
+        `Arbitration summons for grievance hearing on ${hearingDate} at ${hearingTime} regarding ${complaintForArbitration.subject}.`;
 
       const hearingPayload = {
         date: hearingDate,
@@ -421,7 +455,7 @@ export default function DeanDashboardPage() {
         hostelName: complaintForArbitration.hostelName,
         venue: hearingVenue,
         hearingDate: hearingDateTime,
-        summonsNote: resolvedSummonsNote,
+        summonsNote: customDirective,
       });
 
       if (!result?.success) {
@@ -432,6 +466,17 @@ export default function DeanDashboardPage() {
       const anySmsSent = Boolean(smsResults?.student?.sent || smsResults?.manager?.sent);
       const studentFailed = Boolean(sPhone && smsResults?.student && !smsResults.student.sent);
       const managerFailed = Boolean(mPhone && smsResults?.manager && !smsResults.manager.sent);
+
+      // Update hostel records in local state so phone is pre-populated for future operations
+      if (mPhone && complaintForArbitration.hostelId) {
+        setHostels((prev) =>
+          prev.map((h) =>
+            h.id === complaintForArbitration.hostelId || h.name?.toLowerCase() === complaintForArbitration.hostelName?.toLowerCase()
+              ? { ...h, phone: mPhone, contactPhone: mPhone }
+              : h
+          )
+        );
+      }
 
       setComplaints((prev) =>
         prev.map((c) =>
@@ -464,6 +509,7 @@ export default function DeanDashboardPage() {
         const failNotes = [
           studentFailed ? `Student: ${smsResults?.student?.error}` : null,
           managerFailed ? `Manager: ${smsResults?.manager?.error}` : null,
+          !mPhone ? "Manager phone was empty (Manager SMS skipped)" : null,
         ]
           .filter(Boolean)
           .join("; ");
@@ -471,7 +517,7 @@ export default function DeanDashboardPage() {
         toast({
           title: "Hearing Scheduled & Summons Dispatched! ⚖️",
           description: `Summons dispatched via FrogWigal SMS to ${sentRecipients} for ${hearingDate} at ${hearingTime}.${
-            failNotes ? ` (Delivery warning: ${failNotes})` : ""
+            failNotes ? ` (${failNotes})` : ""
           }`,
         });
       } else if (sPhone || mPhone) {
@@ -1623,11 +1669,19 @@ export default function DeanDashboardPage() {
                         value={arbitrationManagerPhone}
                         onChange={(e) => setArbitrationManagerPhone(e.target.value)}
                         placeholder="e.g. 0201234567"
-                        className="text-xs h-8 bg-background"
+                        className={`text-xs h-8 bg-background ${
+                          !arbitrationManagerPhone.trim() ? "border-amber-500/60 focus-visible:ring-amber-500" : ""
+                        }`}
                       />
                       <p className="text-[10px] text-muted-foreground truncate">
                         Manager: {arbitrationManagerName || "Hostel Manager"} ({complaintForArbitration.hostelName})
                       </p>
+                      {!arbitrationManagerPhone.trim() && (
+                        <div className="flex items-center gap-1.5 p-1.5 rounded bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-[10px]">
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>Enter manager phone so they receive official SMS summons.</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
@@ -1661,7 +1715,7 @@ export default function DeanDashboardPage() {
                         </Badge>
                       </div>
                       <p className="text-[11px] text-foreground font-mono bg-background/80 p-2 rounded border border-border/40 leading-relaxed break-words">
-                        {`[HostelHQ] Dean of Students Notice: Your reported grievance regarding ${complaintForArbitration?.hostelName || "Hostel"} is scheduled for arbitration on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Mandatory attendance. Check student portal.`}
+                        {`[HostelHQ] Dean of Students Notice: Your grievance regarding ${complaintForArbitration?.hostelName || "Hostel"} is scheduled for arbitration on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Attendance is mandatory. Check student portal.`}
                       </p>
                     </div>
 
@@ -1673,7 +1727,7 @@ export default function DeanDashboardPage() {
                         </Badge>
                       </div>
                       <p className="text-[11px] text-foreground font-mono bg-background/80 p-2 rounded border border-border/40 leading-relaxed break-words">
-                        {`[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${complaintForArbitration?.hostelName || "Hostel"} is scheduled on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Mandatory attendance to prevent immediate listing suspension.`}
+                        {`[HostelHQ] Dean of Students Summons: Formal grievance hearing for ${complaintForArbitration?.hostelName || "Hostel"} is scheduled on ${hearingDate || "[Date]"} at ${hearingTime || "[Time]"} at ${hearingVenue || "Dean of Students Office"}.${summonsNote?.trim() ? ` Directive: "${summonsNote.trim()}".` : ""} Attendance is mandatory to avoid listing sanctions.`}
                       </p>
                     </div>
                   </div>
