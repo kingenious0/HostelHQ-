@@ -167,6 +167,8 @@ export default function StudentRegisterPage() {
   const [documentType, setDocumentType] = useState<"student_id" | "admission_letter">("student_id");
   const [uploadedDocUrl, setUploadedDocUrl] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [verificationResult, setVerificationResult] = useState<{
     completed: boolean;
     status: "verified" | "pending";
@@ -182,9 +184,29 @@ export default function StudentRegisterPage() {
     return countryCode.replace(/\D/g, "") + cleaned;
   };
 
-  // Step 1 Validation -> Step 2
-  const handleProceedToAcademic = (e: React.FormEvent) => {
+  // Check email on blur proactively
+  const handleEmailBlur = async () => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    try {
+      const res = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+      if (data.exists && data.field === "email") {
+        setEmailError(data.message);
+      } else {
+        setEmailError("");
+      }
+    } catch (_) {}
+  };
+
+  // Step 1 Validation -> Step 2 (Checks existence before advancing)
+  const handleProceedToAcademic = async (e: React.FormEvent) => {
     e.preventDefault();
+    setEmailError("");
+
     if (!fullName.trim()) {
       toast({ title: "Full Name Required", description: "Please enter your full legal name.", variant: "destructive" });
       return;
@@ -203,11 +225,41 @@ export default function StudentRegisterPage() {
       return;
     }
 
+    // Proactive background verification check for duplicate email/phone before advancing
+    setIsCheckingAccount(true);
+    try {
+      const checkRes = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phoneNumber: getFormattedPhone(),
+        }),
+      });
+      const checkData = await checkRes.json();
+      if (checkData.exists) {
+        if (checkData.field === "email") {
+          setEmailError(checkData.message);
+        }
+        toast({
+          title: "Account Already Exists",
+          description: checkData.message,
+          variant: "destructive",
+        });
+        setIsCheckingAccount(false);
+        return;
+      }
+    } catch (checkErr) {
+      console.warn("[Register] Background pre-check note:", checkErr);
+    } finally {
+      setIsCheckingAccount(false);
+    }
+
     setStep(2);
   };
 
   // Step 2 Validation -> Step 3
-  const handleProceedToVerification = (e: React.FormEvent) => {
+  const handleProceedToVerification = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!faculty) {
       toast({ title: "Faculty Required", description: "Please select your academic faculty.", variant: "destructive" });
@@ -240,7 +292,7 @@ export default function StudentRegisterPage() {
       if (!fresherRegex.test(cleanId)) {
         toast({
           title: "Invalid Applicant Number",
-          description: "Fresher applicant number must be 7 to 12 alphanumeric characters (e.g. 10102596 or App-2026-4421).",
+          description: "Applicant voucher/serial number must be 7 to 12 characters (e.g. App-2026-042 or 10102596).",
           variant: "destructive",
         });
         return;
@@ -250,12 +302,30 @@ export default function StudentRegisterPage() {
       if (!continuingRegex.test(cleanId)) {
         toast({
           title: "Invalid Student Index Number",
-          description: "Continuing student index number must be 9 to 11 digits (e.g. 5230100452).",
+          description: "USTED continuing student index number must be 9 to 11 digits (e.g. 5230100452).",
           variant: "destructive",
         });
         return;
       }
     }
+
+    // Check if student ID is already registered
+    try {
+      const idCheckRes = await fetch("/api/auth/check-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentIdNumber: cleanId }),
+      });
+      const idCheckData = await idCheckRes.json();
+      if (idCheckData.exists && idCheckData.field === "studentIdNumber") {
+        toast({
+          title: "Student ID Already Registered",
+          description: idCheckData.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    } catch (_) {}
 
     // Default document type matching student category
     setDocumentType(isFresher ? "admission_letter" : "student_id");
@@ -499,11 +569,23 @@ export default function StudentRegisterPage() {
                         type="email"
                         placeholder="e.g. student@usted.edu.gh or personal@gmail.com"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="pl-9 h-10 text-xs rounded-xl"
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (emailError) setEmailError("");
+                        }}
+                        onBlur={handleEmailBlur}
+                        className={`pl-9 h-10 text-xs rounded-xl ${emailError ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""}`}
                         required
                       />
                     </div>
+                    {emailError && (
+                      <div className="flex items-center justify-between text-[11px] text-rose-600 font-semibold pt-0.5 px-1">
+                        <span>⚠️ {emailError}</span>
+                        <Link href="/login" className="underline font-bold text-rose-700 hover:text-rose-800 ml-2">
+                          Sign In
+                        </Link>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -551,10 +633,20 @@ export default function StudentRegisterPage() {
                   <div className="pt-2">
                     <Button
                       type="submit"
+                      disabled={isCheckingAccount}
                       className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5"
                     >
-                      <span>Continue to Academic Profile</span>
-                      <ArrowRight className="h-4 w-4" />
+                      {isCheckingAccount ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Checking account status...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Continue to Academic Profile</span>
+                          <ArrowRight className="h-4 w-4" />
+                        </>
+                      )}
                     </Button>
                   </div>
 

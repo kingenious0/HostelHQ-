@@ -43,6 +43,8 @@ export default function SignupPage() {
     const [programOfStudy, setProgramOfStudy] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(true);
+    const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+    const [emailExistsError, setEmailExistsError] = useState('');
 
     // Multi-stage flow: form -> otp -> document (student only) -> pending_confirmation
     type SignupStep = 'form' | 'otp' | 'document' | 'pending_confirmation';
@@ -116,6 +118,26 @@ export default function SignupPage() {
             cleaned = cleaned.substring(1);
         }
         return countryCode.replace(/\D/g, '') + cleaned;
+    };
+
+    // Proactively check if email exists on blur
+    const handleEmailBlur = async () => {
+        if (!email || !isValidEmail(email)) return;
+        try {
+            const res = await fetch('/api/auth/check-exists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.trim().toLowerCase() }),
+            });
+            const data = await res.json();
+            if (data.exists && data.field === 'email') {
+                setEmailExistsError(data.message || 'This email is already registered. Please sign in instead.');
+            } else {
+                setEmailExistsError('');
+            }
+        } catch {
+            // silent fallback
+        }
     };
 
     // Send OTP to user's phone
@@ -235,6 +257,37 @@ export default function SignupPage() {
                 toast({ title: 'Faculty Required', description: 'Please select your Faculty.', variant: 'destructive' });
                 return;
             }
+        }
+
+        // Proactively check if email, phone, or student ID is already registered before spending SMS credits on OTP
+        setIsCheckingAccount(true);
+        try {
+            const checkRes = await fetch('/api/auth/check-exists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    phoneNumber: getFormattedPhone(),
+                    studentIdNumber: selectedRole === 'student' ? studentIndexNumber.trim() : undefined,
+                }),
+            });
+            const checkData = await checkRes.json();
+            if (checkData.exists) {
+                setIsCheckingAccount(false);
+                if (checkData.field === 'email') {
+                    setEmailExistsError(checkData.message);
+                }
+                toast({
+                    title: 'Account Already Exists',
+                    description: checkData.message || 'An account with these credentials already exists. Please sign in.',
+                    variant: 'destructive',
+                });
+                return;
+            }
+        } catch (checkErr) {
+            console.warn('[Signup] Background check exists note:', checkErr);
+        } finally {
+            setIsCheckingAccount(false);
         }
 
         // Send OTP verification
@@ -757,9 +810,19 @@ export default function SignupPage() {
                                                     placeholder="e.g. kwame.mensah@gmail.com"
                                                     className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
                                                     value={email}
-                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    onChange={(e) => {
+                                                        setEmail(e.target.value);
+                                                        if (emailExistsError) setEmailExistsError('');
+                                                    }}
+                                                    onBlur={handleEmailBlur}
                                                 />
                                             </div>
+                                            {emailExistsError && (
+                                                <div className="flex items-center justify-between mt-1 text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-500/30">
+                                                    <span>{emailExistsError}</span>
+                                                    <Link href="/login" className="underline font-bold text-red-200 ml-2 shrink-0">Sign In</Link>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Ghana Phone Number */}
@@ -968,10 +1031,15 @@ export default function SignupPage() {
                                         {/* Submit Button */}
                                         <Button
                                             type="submit"
-                                            disabled={isSendingOtp || isGoogleSubmitting}
+                                            disabled={isSendingOtp || isGoogleSubmitting || isCheckingAccount}
                                             className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01] mt-2"
                                         >
-                                            {isSendingOtp ? (
+                                            {isCheckingAccount ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                    Checking Account Status...
+                                                </>
+                                            ) : isSendingOtp ? (
                                                 <>
                                                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                                                     Sending SMS Code...

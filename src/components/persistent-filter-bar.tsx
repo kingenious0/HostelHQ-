@@ -548,8 +548,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   </SheetTitle>
                 </SheetHeader>
 
-
-
+                <div className="space-y-5 py-2">
                   {/* Price Range */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-foreground">Price Range (GH₵/year)</label>
