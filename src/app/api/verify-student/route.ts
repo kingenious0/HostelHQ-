@@ -31,14 +31,9 @@ export async function POST(req: Request) {
     const isFresherBool = Boolean(isFresher);
 
     // 1. Structural Regex Format Check
-    // Continuing students: 9 to 11 pure numeric digits
-    // Freshers: 7 to 12 alphanumeric characters
-    const continuingRegex = /^\d{9,11}$/;
-    const fresherRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
-
-    const isValidFormat = isFresherBool
-      ? fresherRegex.test(cleanIdNumber)
-      : continuingRegex.test(cleanIdNumber);
+    // Universal format: 7 to 12 alphanumeric characters for all USTED students
+    const universalRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
+    const isValidFormat = universalRegex.test(cleanIdNumber);
 
     // 2. Anti-Fraud Duplicate Identifier Detection
     // Query existing verified student verifications or users
@@ -129,25 +124,23 @@ export async function POST(req: Request) {
 
       await setDoc(doc(db, 'studentVerifications', verifId), verifPayload, { merge: true });
 
-      // Dual-write to DynamoDB
+      // Dual-write to DynamoDB (Non-blocking fire-and-forget)
       if (dynamoCore.isDynamoConfigured()) {
-        try {
-          await dynamoService.saveStudentVerification(verifPayload);
-          await dynamoService.updateUser(userId, userUpdates);
-        } catch (dynErr) {
+        Promise.all([
+          dynamoService.saveStudentVerification(verifPayload),
+          dynamoService.updateUser(userId, userUpdates),
+        ]).catch((dynErr) => {
           console.warn('[Verify Engine] DynamoDB sync note:', dynErr);
-        }
+        });
       }
 
-      // Dispatch Approval SMS to student
+      // Dispatch Approval SMS to student (Non-blocking fire-and-forget)
       if (phoneNumber) {
-        try {
-          const idLabel = isFresherBool ? 'Applicant Number' : 'Index Number';
-          const smsMessage = `HOSTELHQ: USTED Student Verification Approved\n\nStudent Name: ${fullName || 'Student'}\n${idLabel}: ${cleanIdNumber}\nStatus: Verified\n\nYour account is active for instant booking. Explore approved hostels: https://hostel-hq.vercel.app/my-bookings`;
-          await sendSMS(phoneNumber, smsMessage);
-        } catch (smsErr) {
+        const idLabel = isFresherBool ? 'Applicant Number' : 'Index Number';
+        const smsMessage = `HOSTELHQ: USTED Student Verification Approved\n\nStudent Name: ${fullName || 'Student'}\n${idLabel}: ${cleanIdNumber}\nStatus: Verified\n\nYour account is active for instant booking. Explore approved hostels: https://hostel-hq.vercel.app/my-bookings`;
+        sendSMS(phoneNumber, smsMessage).catch((smsErr) => {
           console.warn('[Verify Engine] Approval SMS dispatch note:', smsErr);
-        }
+        });
       }
 
       return NextResponse.json({
@@ -160,7 +153,7 @@ export async function POST(req: Request) {
       // ⚠️ FLAGGED for Manual Dean/Admin Spot Inspection
       const flagReason = isDuplicate
         ? 'Duplicate student identifier detected across verified database.'
-        : `Identifier format failed USTED pattern requirements (${isFresherBool ? 'Fresher 7-12 characters' : 'Continuing 9-11 digits'}).`;
+        : `Identifier format failed USTED pattern requirements (7-12 characters required).`;
 
       const userUpdates = {
         verificationStatus: 'pending',
@@ -204,24 +197,22 @@ export async function POST(req: Request) {
 
       await setDoc(doc(db, 'studentVerifications', verifId), verifPayload, { merge: true });
 
-      // Dual-write to DynamoDB
+      // Dual-write to DynamoDB (Non-blocking)
       if (dynamoCore.isDynamoConfigured()) {
-        try {
-          await dynamoService.saveStudentVerification(verifPayload);
-          await dynamoService.updateUser(userId, userUpdates);
-        } catch (dynErr) {
+        Promise.all([
+          dynamoService.saveStudentVerification(verifPayload),
+          dynamoService.updateUser(userId, userUpdates),
+        ]).catch((dynErr) => {
           console.warn('[Verify Engine] DynamoDB exception queue note:', dynErr);
-        }
+        });
       }
 
-      // Notify student of pending manual review
+      // Notify student of pending review (Non-blocking)
       if (phoneNumber) {
-        try {
-          const smsMessage = `HostelHQ: Your registration and credentials have been received! The Dean of Students is reviewing your submission. You will receive an SMS once verified.`;
-          await sendSMS(phoneNumber, smsMessage);
-        } catch (smsErr) {
+        const smsMessage = `HostelHQ: Your registration and credentials have been received! The Dean of Students is reviewing your submission. You will receive an SMS once verified.`;
+        sendSMS(phoneNumber, smsMessage).catch((smsErr) => {
           console.warn('[Verify Engine] Flagged SMS dispatch note:', smsErr);
-        }
+        });
       }
 
       return NextResponse.json({
