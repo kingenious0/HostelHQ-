@@ -274,10 +274,10 @@ export default function StudentRegisterPage() {
           completed: true,
           status: "verified",
           autoApproved: true,
-          message: "Your USTED student status has been auto-verified! Your account is active and you have instant booking privileges.",
+          message: "Your USTED student status has been successfully verified! Your account is active and you have instant booking privileges.",
         });
         toast({
-          title: "Account Auto-Verified! 🎓",
+          title: "Account Verified! 🎓",
           description: "Welcome to HostelHQ! You can now browse and book university-approved rooms.",
         });
       } else {
@@ -374,7 +374,7 @@ export default function StudentRegisterPage() {
 
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-bold text-foreground">
-                      {verificationResult.autoApproved ? "Account Auto-Verified! 🎓" : "Credentials Queued for Review ⏳"}
+                      {verificationResult.autoApproved ? "Account Verified! 🎓" : "Credentials Queued for Review ⏳"}
                     </h3>
                     <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                       {verificationResult.message}
@@ -677,10 +677,10 @@ export default function StudentRegisterPage() {
                   <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-border/70 text-[11px] text-muted-foreground space-y-1">
                     <div className="flex items-center gap-1.5 font-bold text-foreground">
                       <ShieldCheck className="h-3.5 w-3.5 text-[#6B1D2F] dark:text-rose-400" />
-                      <span>USTED Verification Engine Guarantee</span>
+                      <span>USTED Institutional Verification Guarantee</span>
                     </div>
                     <p>
-                      Your document is analyzed by our automated rule engine. Upon validation, your student booking status is unlocked immediately without waiting for administrative queues.
+                      Your document is authenticated through our institutional verification system. Upon validation, your student booking status is unlocked immediately without waiting for administrative queues.
                     </p>
                   </div>
 

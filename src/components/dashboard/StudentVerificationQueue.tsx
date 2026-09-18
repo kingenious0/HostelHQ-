@@ -74,10 +74,10 @@ export function StudentVerificationQueue({
                         {item.status === "verified" && (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {(item as any).autoVerified ? "⚡ Auto-Verified" : "Verified"}
+                              {(item as any).autoVerified ? "Verified Student" : "Verified"}
                             </span>
                             <p className="text-[10px] text-muted-foreground">
-                              {(item as any).autoVerified ? "Rule Engine" : item.reviewedBy ? `By ${item.reviewedBy.split(" ")[0]}` : "Active"}
+                              {(item as any).autoVerified ? "Institutional Validation" : item.reviewedBy ? `By ${item.reviewedBy.split(" ")[0]}` : "Active"}
                             </p>
                           </div>
                         )}
@@ -224,7 +224,7 @@ export function StudentVerificationQueue({
                     )}
                     {item.status === "verified" && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {(item as any).autoVerified ? "⚡ Auto-Verified" : "Verified"}
+                        {(item as any).autoVerified ? "Verified Student" : "Verified"}
                       </span>
                     )}
                     {item.status === "rejected" && (

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Header } from "@/components/header";
 import { HostelCard } from "@/components/hostel-card";
 import { getHostels } from "@/lib/data";
-import { SearchForm } from "@/components/search-form";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { collection, getDocs } from "firebase/firestore";

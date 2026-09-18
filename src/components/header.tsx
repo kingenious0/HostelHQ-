@@ -1094,9 +1094,6 @@ export function Header() {
                     priority
                   />
                 </div>
-                <span className="hidden xl:block text-[9.5px] font-semibold text-muted-foreground uppercase tracking-tight -mt-0.5">
-                  USTED Official Accommodation
-                </span>
               </div>
             </Link>
           </div>

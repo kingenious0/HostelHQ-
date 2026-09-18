@@ -42,7 +42,6 @@ import {
   DoorOpen,
   Clock,
   Users,
-  Building,
   Check,
   Sparkles,
 } from "lucide-react";
@@ -53,7 +52,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
 
   // Local filter states initialized from URL
   const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [institution, setInstitution] = useState(searchParams.get("institution") || "");
   const [roomType, setRoomType] = useState(searchParams.get("roomType") || "");
   const [gender, setGender] = useState(searchParams.get("gender") || "");
   const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") || "");
@@ -65,7 +63,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
   // Sync state with URL when searchParams change
   useEffect(() => {
     setSearch(searchParams.get("search") || "");
-    setInstitution(searchParams.get("institution") || "");
     setRoomType(searchParams.get("roomType") || "");
     setGender(searchParams.get("gender") || "");
     setMinPrice(searchParams.get("minPrice") || "");
@@ -78,10 +75,10 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
       const params = new URLSearchParams(searchParams.toString());
       // Reset to page 1 on filter changes
       params.delete("page");
+      params.delete("institution");
 
       const combined = {
         search,
-        institution,
         roomType,
         gender,
         minPrice,
@@ -100,12 +97,11 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
 
       router.push(`/?${params.toString()}#all-hostels`, { scroll: false });
     },
-    [router, searchParams, search, institution, roomType, gender, minPrice, maxPrice, distance]
+    [router, searchParams, search, roomType, gender, minPrice, maxPrice, distance]
   );
 
   const clearAll = () => {
     setSearch("");
-    setInstitution("");
     setRoomType("");
     setGender("");
     setMinPrice("");
@@ -116,7 +112,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
 
   // Active filter count
   const activeCount = [
-    institution,
     roomType,
     gender,
     minPrice,
@@ -168,26 +163,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   </DialogHeader>
 
                   <div className="space-y-6 py-2">
-                    {/* Campus Selector */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-foreground">Campus / University</label>
-                      <Select
-                        value={institution || "ALL"}
-                        onValueChange={(val) => setInstitution(val === "ALL" ? "" : val)}
-                      >
-                        <SelectTrigger className="w-full h-11 rounded-xl text-xs">
-                          <SelectValue placeholder="Select Campus" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">All Campuses</SelectItem>
-                          <SelectItem value="KNUST KUMASI CAMPUS">KNUST Kumasi</SelectItem>
-                          <SelectItem value="A A M U S T E D">AAMUSTED</SelectItem>
-                          <SelectItem value="UNIVERSITY OF GHANA (UG)">University of Ghana (UG)</SelectItem>
-                          <SelectItem value="KUMASI TECHNICAL UNIVERSITY (KSTU)">KsTU</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     {/* Price Range */}
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-foreground">Price per Academic Year (GH₵)</label>
@@ -313,7 +288,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                       type="button"
                       onClick={() => {
                         updateFilters({
-                          institution,
                           roomType,
                           gender,
                           minPrice,
@@ -332,37 +306,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
 
               <div className="h-5 w-px bg-border/80 shrink-0 mx-0.5" />
 
-              {/* 2. Campus Quick Dropdown Pill */}
-              <div className="shrink-0">
-                <Select
-                  value={institution || "ALL"}
-                  onValueChange={(val) => {
-                    const next = val === "ALL" ? "" : val;
-                    setInstitution(next);
-                    updateFilters({ institution: next });
-                  }}
-                >
-                  <SelectTrigger
-                    className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
-                      institution
-                        ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                        : "bg-card border-border/80 text-foreground hover:border-foreground/30 hover:bg-accent/40"
-                    }`}
-                  >
-                    <Building className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                    <span className="truncate max-w-[130px]">
-                      {institution ? (institution === "KNUST KUMASI CAMPUS" ? "KNUST" : institution === "A A M U S T E D" ? "AAMUSTED" : institution === "UNIVERSITY OF GHANA (UG)" ? "UG Legon" : institution) : "All Campuses"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="rounded-2xl shadow-xl">
-                    <SelectItem value="ALL">All Campuses</SelectItem>
-                    <SelectItem value="KNUST KUMASI CAMPUS">KNUST Kumasi</SelectItem>
-                    <SelectItem value="A A M U S T E D">AAMUSTED</SelectItem>
-                    <SelectItem value="UNIVERSITY OF GHANA (UG)">UG Legon</SelectItem>
-                    <SelectItem value="KUMASI TECHNICAL UNIVERSITY (KSTU)">KsTU</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
 
               {/* 3. Price Filter Popover Pill */}
               <div className="shrink-0">
@@ -604,23 +548,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   </SheetTitle>
                 </SheetHeader>
 
-                <div className="space-y-5 py-2">
-                  {/* Campus / Institution */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Campus</label>
-                    <Select value={institution || "ALL"} onValueChange={(val) => setInstitution(val === "ALL" ? "" : val)}>
-                      <SelectTrigger className="w-full h-12 rounded-xl text-xs">
-                        <SelectValue placeholder="Select Campus" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All Campuses</SelectItem>
-                        <SelectItem value="KNUST KUMASI CAMPUS">KNUST Kumasi</SelectItem>
-                        <SelectItem value="A A M U S T E D">AAMUSTED</SelectItem>
-                        <SelectItem value="UNIVERSITY OF GHANA (UG)">University of Ghana</SelectItem>
-                        <SelectItem value="KUMASI TECHNICAL UNIVERSITY (KSTU)">KsTU</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+
 
                   {/* Price Range */}
                   <div className="space-y-2">
@@ -712,7 +640,6 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   <Button
                     onClick={() => {
                       updateFilters({
-                        institution,
                         roomType,
                         gender,
                         minPrice,
@@ -751,14 +678,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
               Active:
             </span>
 
-            {institution && (
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">
-                <span>Campus: {institution === "KNUST KUMASI CAMPUS" ? "KNUST" : institution === "A A M U S T E D" ? "AAMUSTED" : institution}</span>
-                <button type="button" onClick={() => updateFilters({ institution: "" })} className="hover:opacity-75">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
+
 
             {roomType && (
               <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">

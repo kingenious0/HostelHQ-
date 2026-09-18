@@ -1151,7 +1151,7 @@ export default function SignupPage() {
                                     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
                                         <ShieldCheck className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
                                         <span>
-                                            Your document is processed through our lightweight automated student verification rule engine for instant booking activation.
+                                            Your document is processed through our institutional student verification system for instant booking activation.
                                         </span>
                                     </div>
 
