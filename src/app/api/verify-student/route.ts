@@ -142,7 +142,8 @@ export async function POST(req: Request) {
       // Dispatch Approval SMS to student
       if (phoneNumber) {
         try {
-          const smsMessage = `🎉 HOSTELHQ: Congratulations ${fullName || 'Student'}! Your USTED student verification is approved. Your account is active and you can now browse and book university-approved hostels: https://hostel-hq.vercel.app/student/hostels`;
+          const idLabel = isFresherBool ? 'Applicant Number' : 'Index Number';
+          const smsMessage = `HOSTELHQ: USTED Student Verification Approved\n\nStudent Name: ${fullName || 'Student'}\n${idLabel}: ${cleanIdNumber}\nStatus: Verified\n\nYour account is active for instant booking. Explore approved hostels: https://hostel-hq.vercel.app/my-bookings`;
           await sendSMS(phoneNumber, smsMessage);
         } catch (smsErr) {
           console.warn('[Verify Engine] Approval SMS dispatch note:', smsErr);

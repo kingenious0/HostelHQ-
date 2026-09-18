@@ -172,6 +172,9 @@ export default function StudentRegisterPage() {
   // Verification & Status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStage, setScanStage] = useState<number>(0);
+  const [redirectCountdown, setRedirectCountdown] = useState<number>(3);
   const [emailError, setEmailError] = useState("");
   const [verificationResult, setVerificationResult] = useState<{
     completed: boolean;
@@ -184,6 +187,23 @@ export default function StudentRegisterPage() {
   const fullNameRef = useRef<HTMLInputElement>(null);
   const studentIdRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Auto-Redirect to /my-bookings when verified
+  useEffect(() => {
+    if (verificationResult?.autoApproved) {
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            router.push("/my-bookings");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [verificationResult, router]);
 
   useEffect(() => {
     if (step === 1) {
@@ -379,20 +399,24 @@ export default function StudentRegisterPage() {
     }
 
     setIsSubmitting(true);
+    setIsScanning(true);
+    setScanStage(1);
     const formattedPhone = getFormattedPhone();
 
     try {
-      // 1. Create Firebase Auth Account
+      // 1. Create Firebase Auth Account (Automatic session login via Firebase Auth)
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
       // 2. Initial User Record
       const initialUserDoc = {
         uid: user.uid,
+        id: user.uid,
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         phoneNumber: formattedPhone,
         phone: formattedPhone,
+        phoneVerified: true,
         role: "student",
         verificationStatus: "pending",
         isVerified: false,
@@ -409,6 +433,9 @@ export default function StudentRegisterPage() {
       };
 
       await setDoc(doc(db, "users", user.uid), initialUserDoc, { merge: true });
+
+      // Step 2 in Scan
+      setScanStage(2);
 
       // 3. Trigger Automated Student Verification Engine API
       const verifyRes = await fetch("/api/verify-student", {
@@ -431,6 +458,11 @@ export default function StudentRegisterPage() {
       const verifyData = await verifyRes.json();
 
       if (verifyRes.ok && verifyData.success && verifyData.status === "verified") {
+        setScanStage(3);
+        // Pause 700ms so student sees the 3rd checklist tick mark
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
+        setIsScanning(false);
         setVerificationResult({
           completed: true,
           status: "verified",
@@ -439,9 +471,10 @@ export default function StudentRegisterPage() {
         });
         toast({
           title: "Account Verified",
-          description: "Your student credentials are confirmed. You can now book university-approved hostels.",
+          description: "Your student credentials are confirmed. Redirecting to your dashboard...",
         });
       } else {
+        setIsScanning(false);
         setVerificationResult({
           completed: true,
           status: "pending",
@@ -454,6 +487,7 @@ export default function StudentRegisterPage() {
         });
       }
     } catch (err: any) {
+      setIsScanning(false);
       console.error("Registration error:", err);
       let errMsg = err.message || "Failed to create account. Please try again.";
       if (err.code === "auth/email-already-in-use") {
@@ -501,7 +535,7 @@ export default function StudentRegisterPage() {
           </div>
 
           {/* Minimal 3-Step Progress Stepper Bar */}
-          {!verificationResult && (
+          {!verificationResult && !isScanning && (
             <div className="space-y-2 mb-2">
               <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground px-1">
                 <span className={step === 1 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : step > 1 ? "text-emerald-600 font-semibold" : ""}>
@@ -530,15 +564,75 @@ export default function StudentRegisterPage() {
           {/* Wizard Card Body */}
           <Card className="border border-border/80 shadow-md rounded-3xl overflow-hidden">
             <CardContent className="p-4 sm:p-6">
-              {/* SUCCESS CONFIRMATION STATE */}
-              {verificationResult ? (
-                <div className="text-center py-6 space-y-4">
-                  <div className="h-16 w-16 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-500/30">
-                    <CheckCircle2 className="h-8 w-8" />
+              {/* 1. ANIMATED INSTITUTIONAL SCANNING OVERLAY */}
+              {isScanning ? (
+                <div className="py-8 px-2 text-center space-y-6">
+                  <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full border-2 border-[#6B1D2F]/20 animate-ping opacity-75" />
+                    <div className="h-16 w-16 rounded-full bg-[#6B1D2F]/10 border-2 border-[#6B1D2F] flex items-center justify-center text-[#6B1D2F] shadow-sm">
+                      <ShieldCheck className="h-8 w-8 animate-pulse text-[#6B1D2F]" />
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <h3 className="text-lg font-bold text-foreground">
+                    <h3 className="text-base font-bold text-foreground">
+                      Institutional Verification in Progress
+                    </h3>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                      Running automated checks through the USTED student registry.
+                    </p>
+                  </div>
+
+                  {/* Sequential Checklist Items */}
+                  <div className="max-w-sm mx-auto space-y-3 text-left text-xs bg-muted/40 p-4 rounded-2xl border border-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className={scanStage >= 1 ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                        Checking your student details...
+                      </span>
+                      {scanStage > 1 ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      ) : scanStage === 1 ? (
+                        <Loader2 className="h-4 w-4 text-[#6B1D2F] animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className={scanStage >= 2 ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                        Validating enrollment status...
+                      </span>
+                      {scanStage > 2 ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      ) : scanStage === 2 ? (
+                        <Loader2 className="h-4 w-4 text-[#6B1D2F] animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className={scanStage >= 3 ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                        Account activated for instant booking!
+                      </span>
+                      {scanStage >= 3 ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : verificationResult ? (
+                /* 2. SUCCESS CONFIRMATION STATE */
+                <div className="text-center py-6 space-y-5">
+                  {/* Large Emerald Badge */}
+                  <div className="h-20 w-20 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-500/40 shadow-md">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-xl font-extrabold text-foreground">
                       {verificationResult.autoApproved ? "Account Verified" : "Submission Received"}
                     </h3>
                     <p className="text-xs text-muted-foreground max-w-sm mx-auto">
@@ -546,37 +640,57 @@ export default function StudentRegisterPage() {
                     </p>
                   </div>
 
-                  <div className="p-3.5 bg-muted/40 rounded-2xl border border-border/60 text-xs space-y-1 text-left">
-                    <div className="flex justify-between">
+                  {/* Receipt / Profile Summary Box */}
+                  <div className="p-4 bg-muted/40 rounded-2xl border border-border/70 text-xs space-y-2 text-left shadow-sm">
+                    <div className="flex justify-between items-center pb-1.5 border-b border-border/50">
                       <span className="text-muted-foreground">Student Name:</span>
-                      <span className="font-semibold">{fullName}</span>
+                      <span className="font-bold text-foreground">{fullName}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center pb-1.5 border-b border-border/50">
                       <span className="text-muted-foreground">{isFresher ? "Applicant Number:" : "Index Number:"}</span>
-                      <span className="font-mono font-semibold">{studentIdNumber}</span>
+                      <span className="font-mono font-bold text-foreground">{studentIdNumber}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Status:</span>
-                      <span className="font-bold text-emerald-600 capitalize">{verificationResult.status}</span>
+                      <span className="font-extrabold text-emerald-600 capitalize text-sm">
+                        {verificationResult.status}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="pt-2 flex flex-col gap-2">
-                    <Button
-                      onClick={() => router.push("/student/hostels")}
-                      className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm"
-                    >
-                      <span>Explore Verified Hostels</span>
-                      <ArrowRight className="h-4 w-4 ml-1.5" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push("/login")}
-                      className="w-full h-10 text-xs rounded-xl"
-                    >
-                      Go to Student Login
-                    </Button>
-                  </div>
+                  {/* Direct Auto-Redirect to /my-bookings */}
+                  {verificationResult.autoApproved ? (
+                    <div className="pt-2 space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-xs font-semibold text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6B1D2F]" />
+                        <span>Redirecting to your student dashboard in {redirectCountdown}s...</span>
+                      </div>
+                      <Button
+                        onClick={() => router.push("/my-bookings")}
+                        className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5"
+                      >
+                        <span>Continue to My Bookings</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="pt-2 flex flex-col gap-2">
+                      <Button
+                        onClick={() => router.push("/student/hostels")}
+                        className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm"
+                      >
+                        <span>Explore Approved Hostels</span>
+                        <ArrowRight className="h-4 w-4 ml-1.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push("/login")}
+                        className="w-full h-10 text-xs rounded-xl"
+                      >
+                        Go to Student Login
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : step === 1 ? (
                 /* STEP 1: BASIC IDENTITY & CONTACT */
