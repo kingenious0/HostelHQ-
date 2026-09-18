@@ -735,7 +735,7 @@ export default function StudentRegisterPage() {
                       <span>USTED Institutional Verification Guarantee</span>
                     </div>
                     <p>
-                      Your document is authenticated through our institutional verification system. Upon validation, your student booking status is unlocked immediately without waiting for administrative queues.
+                      Authenticated securely via the USTED student registry for instant booking access.
                     </p>
                   </div>
 
