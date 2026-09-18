@@ -19,8 +19,15 @@ import { doc, setDoc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { 
   User, Mail, Phone, Lock, Eye, EyeOff, GraduationCap, 
-  ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Loader2, Sparkles
+  ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Loader2, Sparkles, RefreshCw
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export const facultyDepartments: Record<string, string[]> = {
   'Faculty of Applied Sciences and Mathematics Education (FASME)': [
@@ -182,6 +189,25 @@ export default function StudentRegisterPage() {
     autoApproved: boolean;
     message: string;
   } | null>(null);
+
+  // SMS OTP Verification State
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [otpCode, setOtpCode] = useState<string[]>(["", "", "", "", "", ""]);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [resendTimer, setResendTimer] = useState(60);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Countdown timer for OTP resend
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (showOtpDialog && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [showOtpDialog, resendTimer]);
 
   // Auto-Focus Refs
   const fullNameRef = useRef<HTMLInputElement>(null);
@@ -376,9 +402,43 @@ export default function StudentRegisterPage() {
     setStep(3);
   };
 
-  // Step 3 Submission & Automated Rule Engine Verification
-  const handleFinalSubmit = async (e: React.FormEvent) => {
+  // Handle single OTP digit change
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newOtp = [...otpCode];
+    newOtp[index] = value.substring(value.length - 1);
+    setOtpCode(newOtp);
+
+    // Auto-advance to next input
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pastedData) return;
+
+    const newOtp = [...otpCode];
+    for (let i = 0; i < pastedData.length; i++) {
+      newOtp[i] = pastedData[i];
+    }
+    setOtpCode(newOtp);
+
+    const nextIndex = Math.min(pastedData.length, 5);
+    otpInputRefs.current[nextIndex]?.focus();
+  };
+
+  // Step 3 Submission: Trigger SMS OTP verification
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     if (password.length < 6) {
       toast({
@@ -398,17 +458,85 @@ export default function StudentRegisterPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    setIsScanning(true);
-    setScanStage(1);
+    setIsSendingOtp(true);
     const formattedPhone = getFormattedPhone();
 
     try {
-      // 1. Create Firebase Auth Account (Automatic session login via Firebase Auth)
+      const response = await fetch("/api/sms/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: formattedPhone }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to send verification code");
+      }
+
+      toast({
+        title: "Verification Code Sent",
+        description: `A 6-digit code has been sent via SMS to +${formattedPhone}`,
+      });
+
+      setShowOtpDialog(true);
+      setResendTimer(60);
+      setOtpCode(["", "", "", "", "", ""]);
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 150);
+    } catch (error: any) {
+      console.error("Error sending OTP:", error);
+      toast({
+        title: "Failed to Send Code",
+        description: error.message || "Please check your phone number and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // Verify OTP & Execute Account Creation & Automated Institutional Verification
+  const handleVerifyOtpAndCreate = async () => {
+    const fullCode = otpCode.join("");
+    if (fullCode.length !== 6) {
+      toast({
+        title: "Invalid Code",
+        description: "Please enter all 6 digits of the verification code.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formattedPhone = getFormattedPhone();
+    setIsVerifyingOtp(true);
+
+    try {
+      // 1. Verify OTP with backend
+      const verifyRes = await fetch("/api/sms/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: formattedPhone,
+          otp: fullCode,
+        }),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.success) {
+        throw new Error(verifyData.error || "Invalid or expired verification code");
+      }
+
+      // Close OTP dialog and start the institutional scanning transition
+      setShowOtpDialog(false);
+      setIsScanning(true);
+      setScanStage(1);
+
+      // 2. Create Firebase Auth Account (Automatic session login via Firebase Auth)
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
-      // 2. Initial User Record
+      // 3. Initial User Record
       const initialUserDoc = {
         uid: user.uid,
         id: user.uid,
@@ -437,8 +565,8 @@ export default function StudentRegisterPage() {
       // Step 2 in Scan
       setScanStage(2);
 
-      // 3. Trigger Automated Student Verification Engine API
-      const verifyRes = await fetch("/api/verify-student", {
+      // 4. Trigger Automated Student Verification Engine API
+      const studentVerifyRes = await fetch("/api/verify-student", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -455,9 +583,9 @@ export default function StudentRegisterPage() {
         }),
       });
 
-      const verifyData = await verifyRes.json();
+      const studentVerifyData = await studentVerifyRes.json();
 
-      if (verifyRes.ok && verifyData.success && verifyData.status === "verified") {
+      if (studentVerifyRes.ok && studentVerifyData.success && studentVerifyData.status === "verified") {
         setScanStage(3);
         // Pause 700ms so student sees the 3rd checklist tick mark
         await new Promise((resolve) => setTimeout(resolve, 700));
@@ -488,18 +616,18 @@ export default function StudentRegisterPage() {
       }
     } catch (err: any) {
       setIsScanning(false);
-      console.error("Registration error:", err);
-      let errMsg = err.message || "Failed to create account. Please try again.";
+      console.error("Verification/Registration error:", err);
+      let errMsg = err.message || "Failed to verify code. Please try again.";
       if (err.code === "auth/email-already-in-use") {
         errMsg = "This email is already registered. Please sign in instead.";
       }
       toast({
-        title: "Registration Failed",
+        title: "Verification Failed",
         description: errMsg,
         variant: "destructive",
       });
     } finally {
-      setIsSubmitting(false);
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -979,7 +1107,7 @@ export default function StudentRegisterPage() {
                 </form>
               ) : (
                 /* STEP 3: ACCOUNT SECURITY & TERMS */
-                <form onSubmit={handleFinalSubmit} className="space-y-4">
+                <form onSubmit={handleSendOtp} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <h2 className="text-base font-bold text-foreground">Account Security</h2>
@@ -1077,13 +1205,13 @@ export default function StudentRegisterPage() {
                     </Button>
                     <Button
                       type="submit"
-                      disabled={isSubmitting || !termsAccepted}
+                      disabled={isSendingOtp || isSubmitting || !termsAccepted}
                       className="flex-1 h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
-                      {isSubmitting ? (
+                      {isSendingOtp ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Completing Registration...</span>
+                          <span>Sending SMS Code...</span>
                         </>
                       ) : (
                         <>
@@ -1098,6 +1226,97 @@ export default function StudentRegisterPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* 6-Digit SMS OTP Verification Dialog */}
+        <Dialog open={showOtpDialog} onOpenChange={setShowOtpDialog}>
+          <DialogContent className="sm:max-w-md p-6 rounded-2xl">
+            <DialogHeader className="space-y-2 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-[#6B1D2F]/10 flex items-center justify-center text-[#6B1D2F]">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <DialogTitle className="text-lg font-bold">SMS Phone Verification</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Enter the 6-digit verification code sent to{" "}
+                <span className="font-semibold text-foreground font-mono">+{getFormattedPhone()}</span>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              {/* 6-Digit Input Boxes */}
+              <div className="flex justify-center gap-2 sm:gap-2.5">
+                {otpCode.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    ref={(el) => {
+                      otpInputRefs.current[idx] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    onPaste={handleOtpPaste}
+                    className="w-10 h-12 sm:w-11 sm:h-12 text-center text-lg sm:text-xl font-bold rounded-xl border border-input bg-background focus:border-[#6B1D2F] focus:ring-2 focus:ring-[#6B1D2F]/20 outline-none transition-all"
+                  />
+                ))}
+              </div>
+
+              {/* Resend Action */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                <span>Didn&apos;t receive the code?</span>
+                <button
+                  type="button"
+                  onClick={() => handleSendOtp()}
+                  disabled={resendTimer > 0 || isSendingOtp}
+                  className="font-semibold text-[#6B1D2F] hover:underline disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {isSendingOtp ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
+                </button>
+              </div>
+
+              {/* Verification Button */}
+              <div className="pt-2 space-y-2">
+                <Button
+                  type="button"
+                  disabled={otpCode.join("").length !== 6 || isVerifyingOtp}
+                  onClick={handleVerifyOtpAndCreate}
+                  className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isVerifyingOtp ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Verifying & Completing Registration...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Verify Code & Complete</span>
+                    </>
+                  )}
+                </Button>
+
+                <button
+                  type="button"
+                  disabled={isVerifyingOtp}
+                  onClick={() => {
+                    setShowOtpDialog(false);
+                    setStep(1);
+                  }}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground font-medium py-1 transition-colors"
+                >
+                  Change Phone Number
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
