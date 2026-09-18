@@ -858,17 +858,32 @@ export function Header() {
               <SheetContent side="left" className="w-[300px] sm:w-[340px] p-0 flex flex-col max-h-screen">
                 <SheetHeader className="p-4 border-b border-border/40 bg-muted/20">
                   <SheetTitle className="flex items-center justify-between">
-                    <div className="relative h-10 w-[140px]">
-                      <Image
-                        src="/HostelHQ Web App Logo.png"
-                        alt="HostelHQ"
-                        fill
-                        sizes="140px"
-                        className="object-contain object-left"
-                        priority
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="relative h-9 w-9 shrink-0">
+                        <Image
+                          src="/usted logo.png"
+                          alt="USTED Crest"
+                          fill
+                          sizes="36px"
+                          className="object-contain"
+                          priority
+                        />
+                      </div>
+                      <div className="relative h-9 w-[130px]">
+                        <Image
+                          src="/HostelHQ Web App Logo.png"
+                          alt="HostelHQ"
+                          fill
+                          sizes="130px"
+                          className="object-contain object-left"
+                          priority
+                        />
+                      </div>
                     </div>
                   </SheetTitle>
+                  <p className="text-[10px] text-muted-foreground font-medium text-left">
+                    University of Skills Training and Entrepreneurial Development
+                  </p>
                   <SheetDescription className="sr-only">Mobile navigation and quick settings</SheetDescription>
 
                   {/* SECTION 1: User Mini-Profile Card */}
@@ -1056,16 +1071,32 @@ export function Header() {
                 </div>
               </SheetContent>
             </Sheet>
-            <Link href="/" className="flex items-center gap-1 sm:gap-2 shrink-1 min-w-0" aria-label="HostelHQ home">
-              <div className="relative h-10 w-[140px] sm:h-14 sm:w-[200px] md:h-16 md:w-[280px] lg:h-[72px] lg:w-[320px]">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 shrink-1 min-w-0 group" aria-label="HostelHQ home">
+              <div className="relative h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 shrink-0 transition-transform group-hover:scale-105">
                 <Image
-                  src="/HostelHQ Web App Logo.png"
-                  alt="HostelHQ"
+                  src="/usted logo.png"
+                  alt="USTED Crest"
                   fill
-                  sizes="(max-width: 640px) 140px, (max-width: 768px) 200px, (max-width: 1024px) 280px, 320px"
-                  className="object-contain object-left"
+                  sizes="(max-width: 640px) 40px, (max-width: 768px) 48px, 56px"
+                  className="object-contain"
                   priority
                 />
+              </div>
+              <div className="h-7 w-[1px] bg-border/70 hidden sm:block" />
+              <div className="flex flex-col">
+                <div className="relative h-9 w-[120px] sm:h-11 sm:w-[150px] md:h-13 md:w-[180px]">
+                  <Image
+                    src="/HostelHQ Web App Logo.png"
+                    alt="HostelHQ"
+                    fill
+                    sizes="(max-width: 640px) 120px, (max-width: 768px) 150px, 180px"
+                    className="object-contain object-left"
+                    priority
+                  />
+                </div>
+                <span className="hidden xl:block text-[9.5px] font-semibold text-muted-foreground uppercase tracking-tight -mt-0.5">
+                  USTED Official Accommodation
+                </span>
               </div>
             </Link>
           </div>

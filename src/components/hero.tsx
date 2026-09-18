@@ -23,23 +23,32 @@ export function Hero() {
 
       {/* Hero Content Container */}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-10 text-center flex flex-col items-center">
-        {/* Official University Trust Pill */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-950/60 px-4 py-1.5 text-xs font-bold text-emerald-300 backdrop-blur-md mb-5 shadow-sm">
-          <ShieldCheck className="h-4 w-4 text-emerald-400" />
-          <span>Official University Accommodation Platform</span>
+        {/* Official University Trust Pill with Crest */}
+        <div className="inline-flex items-center gap-2.5 rounded-full border border-amber-400/50 bg-slate-950/80 px-4 py-1.5 text-xs font-bold text-amber-300 backdrop-blur-md mb-5 shadow-lg">
+          <div className="relative h-5 w-5 shrink-0">
+            <Image
+              src="/usted logo.png"
+              alt="USTED Crest"
+              fill
+              sizes="20px"
+              className="object-contain"
+              priority
+            />
+          </div>
+          <span>University of Skills Training and Entrepreneurial Development (USTED)</span>
         </div>
 
         {/* Headline */}
         <h1 className="text-3xl sm:text-5xl lg:text-6xl font-headline font-extrabold tracking-tight text-white leading-[1.15] max-w-3xl mb-4">
           Find university-approved hostels.{" "}
-          <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-amber-400 via-amber-200 to-yellow-400 bg-clip-text text-transparent">
             Zero unauthorized fees.
           </span>
         </h1>
 
         {/* One-line Subtext */}
         <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed mb-6 max-w-2xl mx-auto font-normal">
-          Connect directly with registered hostel managers under the oversight of USTED — verified rooms, free in-person visits, and audited prices.
+          Connect directly with registered hostel managers under the official oversight of the University of Skills Training and Entrepreneurial Development (USTED) — verified rooms, free in-person visits, and statutory rent-cap protections.
         </p>
 
         {/* Single Primary CTA */}

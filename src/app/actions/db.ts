@@ -1648,9 +1648,24 @@ export async function updateStudentVerificationStatusAction(
     };
     if (reason) updates.rejectionReason = reason;
 
-    // Dual-write: Firestore
+    // Dual-write: Firestore studentVerifications
+    let studentUserId = "";
     try {
+      const vSnap = await getDoc(doc(db, "studentVerifications", verificationId));
+      if (vSnap.exists()) {
+        const vData = vSnap.data();
+        studentUserId = vData.userId || "";
+      }
       await updateDoc(doc(db, "studentVerifications", verificationId), updates);
+
+      // Sync status directly to the user profile
+      if (studentUserId) {
+        await updateDoc(doc(db, "users", studentUserId), {
+          verificationStatus: status,
+          isVerified: status === "verified",
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (fsErr) {
       console.warn("Firestore updateStudentVerificationStatus error:", fsErr);
     }
@@ -1660,6 +1675,12 @@ export async function updateStudentVerificationStatusAction(
     if (dynamoCore.isDynamoConfigured()) {
       try {
         data = await dynamoService.updateStudentVerificationStatus(verificationId, status, reason, reviewer);
+        if (studentUserId) {
+          await dynamoService.updateUser(studentUserId, {
+            verificationStatus: status,
+            isVerified: status === "verified",
+          });
+        }
       } catch (dynamoErr) {
         console.warn("DynamoDB updateStudentVerificationStatus error:", dynamoErr);
       }

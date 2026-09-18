@@ -60,31 +60,56 @@ export function StudentVerificationQueue({
                     <TableRow key={item.id} className="hover:bg-slate-50/80 transition-colors">
                       <TableCell className="py-3">
                         {item.status === "pending" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            Pending Review
-                          </span>
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                              Pending Review
+                            </span>
+                            {(item as any).flaggedException && (
+                              <span className="block text-[10px] text-rose-600 font-bold">
+                                ⚠️ Flagged Irregularity
+                              </span>
+                            )}
+                          </div>
                         )}
                         {item.status === "verified" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Verified
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {(item as any).autoVerified ? "⚡ Auto-Verified" : "Verified"}
+                            </span>
+                            <p className="text-[10px] text-muted-foreground">
+                              {(item as any).autoVerified ? "Rule Engine" : item.reviewedBy ? `By ${item.reviewedBy.split(" ")[0]}` : "Active"}
+                            </p>
+                          </div>
                         )}
                         {item.status === "rejected" && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                            Rejected
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                              Revoked / Fraud
+                            </span>
+                            {item.rejectionReason && (
+                              <p className="text-[10px] text-rose-600 max-w-[140px] truncate" title={item.rejectionReason}>
+                                {item.rejectionReason}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </TableCell>
 
                       <TableCell className="py-3">
                         <p className="font-medium text-foreground text-sm">{item.fullName}</p>
                         <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.studentIdNumber}</p>
+                        {item.phone && <p className="text-[11px] text-muted-foreground font-mono">{item.phone}</p>}
                       </TableCell>
 
                       <TableCell className="py-3">
                         <span className="text-xs text-foreground font-medium">
-                          {item.institution || "AAMUSTED"}
+                          {item.institution || "USTED"}
                         </span>
+                        {(item as any).departmentOrProgram && (
+                          <p className="text-[11px] text-muted-foreground truncate max-w-[150px]">
+                            {(item as any).departmentOrProgram}
+                          </p>
+                        )}
                       </TableCell>
 
                       <TableCell className="py-3">
@@ -148,10 +173,31 @@ export function StudentVerificationQueue({
                               Reject
                             </Button>
                           </div>
+                        ) : item.status === "verified" ? (
+                          <div className="flex justify-end items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onRejectClick(item)}
+                              disabled={actionLoading}
+                              className="h-7 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 font-semibold"
+                              title="Revoke access and delist fraudulent student credentials"
+                            >
+                              Revoke / Remove Fraud
+                            </Button>
+                          </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {item.reviewedAt ? `Reviewed ${new Date(item.reviewedAt).toLocaleDateString()}` : "Completed"}
-                          </span>
+                          <div className="flex justify-end items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onApprove(item.id)}
+                              disabled={actionLoading}
+                              className="h-7 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold"
+                            >
+                              Re-Approve
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
@@ -168,7 +214,7 @@ export function StudentVerificationQueue({
                     <div>
                       <p className="font-semibold text-foreground text-sm">{item.fullName}</p>
                       <p className="text-xs text-muted-foreground font-mono">
-                        {item.studentIdNumber} • {item.institution || "AAMUSTED"}
+                        {item.studentIdNumber} • {item.institution || "USTED"}
                       </p>
                     </div>
                     {item.status === "pending" && (
@@ -178,12 +224,12 @@ export function StudentVerificationQueue({
                     )}
                     {item.status === "verified" && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Verified
+                        {(item as any).autoVerified ? "⚡ Auto-Verified" : "Verified"}
                       </span>
                     )}
                     {item.status === "rejected" && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                        Rejected
+                        Revoked
                       </span>
                     )}
                   </div>
@@ -225,27 +271,49 @@ export function StudentVerificationQueue({
                     )}
                   </div>
 
-                  {item.status === "pending" && (
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                    {item.status === "pending" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onRejectClick(item)}
+                          disabled={actionLoading}
+                          className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => onApprove(item.id)}
+                          disabled={actionLoading}
+                          className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                        >
+                          Approve
+                        </Button>
+                      </>
+                    ) : item.status === "verified" ? (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => onRejectClick(item)}
                         disabled={actionLoading}
-                        className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                        className="h-7 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 font-semibold"
                       >
-                        Reject
+                        Revoke / Remove Fraud
                       </Button>
+                    ) : (
                       <Button
                         size="sm"
+                        variant="outline"
                         onClick={() => onApprove(item.id)}
                         disabled={actionLoading}
-                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                        className="h-7 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold"
                       >
-                        Approve
+                        Re-Approve
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

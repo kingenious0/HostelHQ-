@@ -67,7 +67,7 @@ export async function fetchLiveHostelOccupancyMetrics(): Promise<LiveOccupancyMe
   // 1. Fetch all registered hostels from Firestore
   try {
     const hostelsSnapshot = await getDocs(collection(db, "hostels"));
-    hostelsList = hostelsSnapshot.docs.map((doc) => ({
+    hostelsList = hostelsSnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
     }));
@@ -78,8 +78,8 @@ export async function fetchLiveHostelOccupancyMetrics(): Promise<LiveOccupancyMe
   // Fallback / merge with DynamoDB if available and Firestore was empty
   if (hostelsList.length === 0 && isDynamoConfigured()) {
     try {
-      const dynHostels = await scanEntities<any>("HOSTEL");
-      hostelsList = dynHostels.map((h) => ({
+      const dynHostels = await (scanEntities as any)("HOSTEL");
+      hostelsList = dynHostels.map((h: any) => ({
         id: (h.id || "").replace(/^HOSTEL#/i, ""),
         ...h,
       }));
@@ -93,7 +93,7 @@ export async function fetchLiveHostelOccupancyMetrics(): Promise<LiveOccupancyMe
 
   try {
     const bookingsSnapshot = await getDocs(collection(db, "bookings"));
-    bookingsSnapshot.forEach((doc) => {
+    bookingsSnapshot.forEach((doc: any) => {
       const data = doc.data();
       const status = (data.status || "").toLowerCase();
       // Only count active/confirmed/approved bookings
@@ -119,8 +119,8 @@ export async function fetchLiveHostelOccupancyMetrics(): Promise<LiveOccupancyMe
   // Also merge DynamoDB bookings if configured
   if (isDynamoConfigured()) {
     try {
-      const dynBookings = await scanEntities<any>("BOOKING");
-      dynBookings.forEach((b) => {
+      const dynBookings = await (scanEntities as any)("BOOKING");
+      dynBookings.forEach((b: any) => {
         const status = (b.status || "").toLowerCase();
         if (
           status === "confirmed" ||

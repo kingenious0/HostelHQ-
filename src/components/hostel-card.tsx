@@ -130,9 +130,128 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   const availableBeds = Math.max(0, totalBeds - activeStudentsHoused);
 
   return (
-    <Card className="w-full overflow-hidden flex flex-col group rounded-3xl border border-border/70 bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
-      {/* Image & Overlay Badges */}
-      <CardHeader className="p-0 relative">
+    <>
+      {/* Compact Responsive Mobile Card (< md / 768px) */}
+      <div className="md:hidden w-full flex items-center gap-3 p-3 rounded-2xl border border-border/70 bg-card hover:border-primary/40 shadow-xs transition-all relative overflow-hidden">
+        {/* Left Thumbnail (Fixed w-28 h-28) */}
+        <Link href={`/hostels/${cleanId}`} className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden bg-muted block">
+          <Image
+            src={validImages[0]}
+            alt={hostel.name}
+            fill
+            sizes="112px"
+            className="object-cover"
+          />
+          {/* Availability Badge Overlay */}
+          <div className="absolute bottom-1.5 left-1.5 z-10">
+            {isSoldOut ? (
+              <span className="bg-rose-600/95 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> Sold Out
+              </span>
+            ) : (
+              <span className={cn(
+                "text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase",
+                hostel.availability === 'Available' ? "bg-emerald-500/90 text-white" : "bg-amber-500/90 text-white"
+              )}>
+                {hostel.availability}
+              </span>
+            )}
+          </div>
+        </Link>
+
+        {/* Right Details */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch py-0.5">
+          <div>
+            {/* Accreditation / Sanction / Approval Badge & Shortlist */}
+            <div className="flex items-center justify-between gap-1 mb-1">
+              {isHostelRevoked(hostel) ? (
+                <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <Ban className="h-3 w-3" /> Revoked
+                </span>
+              ) : isHostelSanctioned(hostel) ? (
+                <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Sanctioned
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" /> USTED-Approved ✓
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleShortlist(hostel);
+                }}
+                className={cn(
+                  "h-6 w-6 rounded-full flex items-center justify-center text-[10px] transition-all",
+                  shortlisted ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                title={shortlisted ? "Remove from comparison" : "Shortlist to compare"}
+              >
+                {shortlisted ? <Check className="h-3 w-3" /> : <Scale className="h-3 w-3" />}
+              </button>
+            </div>
+
+            {/* Property Name */}
+            <Link href={`/hostels/${cleanId}`} className="block">
+              <h3 className="font-extrabold text-sm text-foreground leading-snug line-clamp-1 hover:text-primary transition-colors">
+                {hostel.name}
+              </h3>
+            </Link>
+
+            {/* Location */}
+            <div className="flex items-center text-[11px] text-muted-foreground mt-0.5 truncate">
+              <MapPin className="h-3 w-3 mr-1 shrink-0 text-muted-foreground/70" />
+              <span className="truncate">{hostel.location}</span>
+            </div>
+
+            {/* Verified beds count / Occupancy */}
+            <div className="mt-1 flex items-center gap-2 text-[10.5px]">
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                {availableBeds > 0 ? `${availableBeds} beds free` : "Full"}
+              </span>
+              <span className="text-muted-foreground/50">•</span>
+              <span className="text-muted-foreground truncate">
+                {hostel.gender || "Mixed"}
+              </span>
+            </div>
+          </div>
+
+          {/* Price & Compact Scout / Visit Button */}
+          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/40">
+            <div>
+              <span className="text-xs font-black text-foreground">
+                GH₵{displayPrice > 0 ? displayPrice.toLocaleString() : "Contact"}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-normal">/yr</span>
+            </div>
+
+            <Button
+              asChild
+              size="sm"
+              className={cn(
+                "h-7 px-2.5 text-[11px] font-bold rounded-lg shadow-2xs gap-1",
+                isSoldOut
+                  ? "bg-slate-800 text-white"
+                  : "bg-primary text-white hover:bg-primary/90"
+              )}
+            >
+              <Link href={`/hostels/${cleanId}`}>
+                {isSoldOut ? "View" : "Scout / Visit"}
+                {!isSoldOut && <ArrowRight className="h-2.5 w-2.5" />}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Rich Card (>= md / 768px) */}
+      <Card className="hidden md:flex w-full overflow-hidden flex-col group rounded-3xl border border-border/70 bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
+        {/* Image & Overlay Badges */}
+        <CardHeader className="p-0 relative">
         <div className="relative h-60 w-full overflow-hidden bg-muted">
           <Carousel autoPlay={false} className="h-full w-full">
             <CarouselContent className="h-full ml-0">
@@ -338,6 +457,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
           </div>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </>
   );
 }

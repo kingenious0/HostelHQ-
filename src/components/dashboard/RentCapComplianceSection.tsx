@@ -91,6 +91,166 @@ export function RentCapComplianceSection({
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
 
+  // Optimistic tracking for instantaneous reactive UI switchboard
+  const [optimisticStatusMap, setOptimisticStatusMap] = useState<Record<string, { status: string; isSuspended: boolean }>>({});
+
+  // Unified Atomic Sanction Switchboard Handler
+  const handleToggleHostelSanction = async (v: TariffViolationItem) => {
+    const cleanId = v.hostelId.replace(/^HOSTEL#/i, "").replace(/^PENDING_HOSTEL#/i, "").trim();
+    const currentOverride = optimisticStatusMap[v.hostelId];
+    const isCurrentlySuspended = currentOverride
+      ? currentOverride.isSuspended
+      : (v.isSuspended || v.status === "suspended_overpriced" || v.status === "suspended" || (v.hostel as any).isSuspended === true);
+
+    const nextStatus = isCurrentlySuspended ? "approved" : "suspended_overpriced";
+    const nextIsSuspended = !isCurrentlySuspended;
+    const isVisible = nextStatus === "approved";
+
+    // Immediate reactive optimistic UI update
+    setOptimisticStatusMap((prev) => ({
+      ...prev,
+      [v.hostelId]: { status: nextStatus, isSuspended: nextIsSuspended },
+    }));
+
+    if (nextIsSuspended) {
+      setSuspendingId(v.hostelId);
+    } else {
+      setReinstatingId(v.hostelId);
+    }
+
+    try {
+      const callerName =
+        currentUser?.displayName || (userRole === "dean" ? "Dean of Students" : "Housing Coordinator");
+      const suspensionReason = nextIsSuspended
+        ? `Room tariff (GH₵${v.postedPrice.toLocaleString()}) exceeds approved cap (GH₵${v.statutoryCap.toLocaleString()})`
+        : "";
+
+      // 1. Atomic Firestore mutation
+      await setDoc(
+        doc(db, "hostels", cleanId),
+        {
+          status: nextStatus,
+          isSuspended: nextIsSuspended,
+          isPublished: isVisible,
+          suspensionReason: nextIsSuspended ? suspensionReason : null,
+          suspendedAt: nextIsSuspended ? new Date().toISOString() : null,
+          reinstatedAt: isVisible ? new Date().toISOString() : null,
+          lastActionBy: "Dean of Students",
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      // 2. Atomic DynamoDB mutation
+      try {
+        await updateHostelAction(cleanId, {
+          status: nextStatus as any,
+          isSuspended: nextIsSuspended,
+          isPublished: isVisible,
+          suspensionReason: suspensionReason as any,
+          lastActionBy: "Dean of Students",
+        });
+      } catch (dynErr) {
+        console.warn("DynamoDB sanction update warning:", dynErr);
+      }
+
+      // 3. Manager notifications
+      const managerRecipientId =
+        v.hostel.managerId ||
+        v.hostel.createdBy?.userId ||
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        "";
+
+      const resolvedManagerPhone =
+        v.hostel.managerPhone ||
+        v.hostel.contactPhone ||
+        v.hostel.phone ||
+        (v.hostel as any).phoneNumber;
+
+      if (nextIsSuspended) {
+        if (managerRecipientId) {
+          try {
+            await dispatchInAppNotification({
+              userId: managerRecipientId,
+              title: "Listing Suspended: Rent Cap Exceeded",
+              message: `Your ${v.roomTypeName} rate of GH₵${v.postedPrice.toLocaleString()} at "${v.hostelName}" exceeds the campus ceiling of GH₵${v.statutoryCap.toLocaleString()}. Your listing is currently hidden from students. Lower your tariff to restore visibility.`,
+              type: "system",
+              linkUrl: "/manager/dashboard",
+            });
+          } catch (_) {}
+        }
+        try {
+          await sendRentCapBreachSMSAction({
+            hostelId: cleanId,
+            hostelName: v.hostelName,
+            managerPhone: resolvedManagerPhone,
+            roomTypeName: v.roomTypeName,
+            postedRate: v.postedPrice,
+            statutoryCap: v.statutoryCap,
+          });
+        } catch (_) {}
+
+        toast({
+          title: "Listing Suspended: Rent Cap Exceeded",
+          description: `"${v.hostelName}" has been delisted from the student directory. In-app and SMS notice dispatched to manager.`,
+        });
+      } else {
+        if (managerRecipientId) {
+          try {
+            await dispatchInAppNotification({
+              userId: managerRecipientId,
+              title: "Listing Reinstated: Back Online",
+              message: `Your listing for "${v.hostelName}" has been reinstated by the Dean of Students. It is once again live in the student directory.`,
+              type: "system",
+              linkUrl: "/manager/dashboard",
+            });
+          } catch (_) {}
+        }
+        try {
+          await sendRentCapReinstatedSMSAction({
+            hostelId: cleanId,
+            hostelName: v.hostelName,
+            managerPhone: resolvedManagerPhone,
+          });
+        } catch (_) {}
+
+        toast({
+          title: "Listing Reinstated & Published! ✅",
+          description: `"${v.hostelName}" has been reinstated and restored to the live student directory.`,
+        });
+      }
+
+      if (onHostelUpdated) {
+        onHostelUpdated({
+          ...v.hostel,
+          status: nextStatus as any,
+          isSuspended: nextIsSuspended,
+          isPublished: isVisible,
+          suspensionReason: suspensionReason as any,
+        });
+      }
+    } catch (err: any) {
+      console.error("Sanction switchboard mutation error:", err);
+      // Revert optimistic update
+      setOptimisticStatusMap((prev) => ({
+        ...prev,
+        [v.hostelId]: {
+          status: isCurrentlySuspended ? "suspended_overpriced" : "approved",
+          isSuspended: isCurrentlySuspended,
+        },
+      }));
+      toast({
+        title: "Action Failed",
+        description: err.message || "Failed to mutate property sanction status.",
+        variant: "destructive",
+      });
+    } finally {
+      setSuspendingId(null);
+      setReinstatingId(null);
+    }
+  };
+
   // Real-time listener for settings/tariff_limits
   useEffect(() => {
     const limitsDocRef = doc(db, "settings", "tariff_limits");
@@ -447,9 +607,9 @@ export function RentCapComplianceSection({
             setFormFour(limits.fourInRoom);
             setEditLimitsOpen(true);
           }}
-          className="h-9 px-4 text-xs font-semibold gap-2 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-150 hover:shadow-md active:scale-[0.98] border border-primary/20 rounded-lg group"
+          className="h-9 px-4 text-xs font-bold gap-2 shadow-md bg-primary hover:bg-primary/95 text-white transition-all duration-150 hover:shadow-lg active:scale-[0.98] border border-accent/40 rounded-xl group"
         >
-          <Sliders className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-45" />
+          <Sliders className="h-3.5 w-3.5 text-accent transition-transform duration-200 group-hover:rotate-45" />
           <span>Edit Approved Limits</span>
         </Button>
       </div>
@@ -523,7 +683,10 @@ export function RentCapComplianceSection({
                 <TableBody>
                   {violations.map((v, idx) => {
                     const isProcessing = suspendingId === v.hostelId || reinstatingId === v.hostelId;
-                    const isSuspended = v.isSuspended || v.hostel.status === "suspended_overpriced";
+                    const opt = optimisticStatusMap[v.hostelId];
+                    const isSuspended = opt
+                      ? opt.isSuspended
+                      : (v.isSuspended || v.hostel.status === "suspended_overpriced" || v.hostel.status === "suspended" || (v.hostel as any).isSuspended === true);
 
                     return (
                       <TableRow key={`${v.hostelId}-${idx}`} className="hover:bg-muted/30 transition-colors">
@@ -559,64 +722,47 @@ export function RentCapComplianceSection({
 
                         <TableCell className="py-3">
                           {isSuspended ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 shadow-2xs">
                               Suspended (Overpriced)
                             </span>
-                          ) : v.status === "approved" ? (
-                            <Badge variant="default" className="text-[10px]">
-                              Live Directory
-                            </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[10px]">
-                              Pending Filing
+                            <Badge variant="default" className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                              Live Directory
                             </Badge>
                           )}
                         </TableCell>
 
                         <TableCell className="py-3 text-right">
-                          {isSuspended ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleReinstateListing(v)}
-                              disabled={isProcessing}
-                              className="h-8 text-xs font-semibold border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/40 shadow-xs transition-colors"
-                              title="Immediately reinstate property and restore visibility in student search"
-                            >
-                              {reinstatingId === v.hostelId ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                  Reinstating...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                                  Reinstate Listing
-                                </>
-                              )}
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSuspendListing(v)}
-                              disabled={isProcessing}
-                              className="h-8 text-xs font-semibold border-rose-600 text-rose-700 hover:bg-rose-50 dark:border-rose-500 dark:text-rose-400 dark:hover:bg-rose-950/40 shadow-xs transition-colors"
-                              title="Immediately delist property from student view and dispatch manager in-app + SMS notices"
-                            >
-                              {isProcessing ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                  Suspending...
-                                </>
-                              ) : (
-                                <>
-                                  <ShieldAlert className="h-3.5 w-3.5 mr-1" />
-                                  Suspend Listing
-                                </>
-                              )}
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            variant={isSuspended ? "outline" : "destructive"}
+                            onClick={() => handleToggleHostelSanction(v)}
+                            disabled={isProcessing}
+                            className={cn(
+                              "h-8 text-xs font-bold transition-all shadow-xs",
+                              isSuspended
+                                ? "text-emerald-700 dark:text-emerald-300 border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20"
+                                : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/20"
+                            )}
+                            title={isSuspended ? "Reinstate listing to live directory" : "Suspend listing and issue manager notice"}
+                          >
+                            {isProcessing ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                <span>Processing...</span>
+                              </>
+                            ) : isSuspended ? (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                                <span>Reinstate Listing</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+                                <span>Suspend Listing</span>
+                              </>
+                            )}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

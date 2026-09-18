@@ -305,6 +305,7 @@ const hostelMatchesOptions = (hostel: Hostel, options: GetHostelsOptions) => {
   if (
     hostel.status === "suspended_overpriced" ||
     hostel.status === "suspended" ||
+    (hostel as any).isSuspended === true ||
     hostel.status === "revoked" ||
     hostel.status === "pending" ||
     hostel.status === "pending_review" ||

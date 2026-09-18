@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/header";
-import { HostelCard } from "@/components/hostel-card";
+import { PaginatedHostelDirectory } from "@/components/PaginatedHostelDirectory";
 import { fetchLiveHostelOccupancyMetrics } from "@/services/occupancyService";
 import { getHostels } from "@/lib/data";
 import { Users, Bed, Building2, Search, ArrowRight, ShieldCheck } from "lucide-react";
@@ -128,27 +128,8 @@ export default async function StudentHostelsPage({ searchParams }: StudentHostel
             </form>
           </div>
 
-          {/* Hostels Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredHostels.map((hostel) => (
-              <HostelCard key={hostel.id} hostel={hostel as any} />
-            ))}
-          </div>
-
-          {filteredHostels.length === 0 && (
-            <div className="text-center py-16 bg-muted/30 rounded-3xl border border-dashed border-border/80">
-              <p className="text-muted-foreground text-sm font-medium">
-                No accommodation matching your criteria was found.
-              </p>
-              <Link
-                href="/student/hostels"
-                className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-              >
-                <span>View all verified hostels</span>
-                <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-          )}
+          {/* Paginated Hostels Grid with Mobile Horizontal Scroll Filters & Pagination Bar */}
+          <PaginatedHostelDirectory hostels={filteredHostels as any} />
         </main>
       </div>
     </ShortlistProvider>

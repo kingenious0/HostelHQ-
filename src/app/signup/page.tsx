@@ -24,37 +24,10 @@ import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/fi
 import { cn, parseStudentCredentials } from '@/lib/utils';
 import { uploadImage } from '@/lib/cloudinary';
 import { submitStudentVerificationAction, saveUserAction } from '@/app/actions/db';
+import { DocumentUploader } from '@/components/DocumentUploader';
+import { facultyDepartments, facultyPrograms } from '@/app/student/register/page';
 
 type UserRole = 'student' | 'hostel_manager';
-
-const facultyDepartments: Record<string, string[]> = {
-    'Faculty of Technical Education (FTE)': [
-        'Department of Construction Technology and Management Education',
-        'Department of Wood Science and Technology Education',
-        'Department of Electrical and Electronics Technology Education',
-        'Department of Mechanical and Automotive Technology Education',
-        'Department of Civil Engineering',
-    ],
-    'Faculty of Vocational Education (FVE)': [
-        'Department of Catering & Hospitality Education',
-        'Department of Fashion & Textiles Design Education',
-    ],
-    'Faculty of Applied Sciences and Mathematics Education (FASME)': [
-        'Department of Information Technology Education',
-        'Department of Mathematics Education',
-    ],
-    'Faculty of Business Education (FBE)': [
-        'Department of Accounting Studies Education',
-        'Department of Management Education',
-        'Department of Economics Education',
-        'Department of Human Resource and Strategy',
-    ],
-    'Faculty of Education and Communication Sciences (FECS)': [
-        'Department of Languages Education',
-        'Department of Interdisciplinary Studies',
-        'Department of Educational Leadership',
-    ],
-};
 
 export default function SignupPage() {
     const [selectedRole, setSelectedRole] = useState<UserRole>('student');
@@ -64,8 +37,10 @@ export default function SignupPage() {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [countryCode, setCountryCode] = useState('+233');
     const [studentIndexNumber, setStudentIndexNumber] = useState('');
+    const [isFresher, setIsFresher] = useState(false);
     const [faculty, setFaculty] = useState('');
     const [department, setDepartment] = useState('');
+    const [programOfStudy, setProgramOfStudy] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(true);
 
@@ -214,6 +189,52 @@ export default function SignupPage() {
         if (selectedRole === 'hostel_manager' && !selectedManagerHostelId) {
             toast({ title: 'Hostel Assignment Required', description: 'Please select the hostel you manage.', variant: 'destructive' });
             return;
+        }
+
+        if (selectedRole === 'student') {
+            if (!studentIndexNumber.trim()) {
+                toast({
+                    title: 'Identifier Required',
+                    description: isFresher
+                        ? 'Please enter your Fresher Applicant / Serial Number.'
+                        : 'Please enter your Student Index Number.',
+                    variant: 'destructive',
+                });
+                return;
+            }
+
+            if (isFresher) {
+                if (!/^[a-zA-Z0-9\-_]{7,12}$/.test(studentIndexNumber.trim())) {
+                    toast({
+                        title: 'Invalid Applicant Number',
+                        description: 'Fresher applicant voucher/number must be 7 to 12 alphanumeric characters (e.g. App-2026-042 or 10102596).',
+                        variant: 'destructive',
+                    });
+                    return;
+                }
+                if (!programOfStudy) {
+                    toast({ title: 'Program Required', description: 'Please select your Program of Study.', variant: 'destructive' });
+                    return;
+                }
+            } else {
+                if (!/^\d{9,11}$/.test(studentIndexNumber.trim())) {
+                    toast({
+                        title: 'Invalid Index Number',
+                        description: 'Continuing student index number must be 9 to 11 digits (e.g. 5230100452).',
+                        variant: 'destructive',
+                    });
+                    return;
+                }
+                if (!department) {
+                    toast({ title: 'Department Required', description: 'Please select your academic department.', variant: 'destructive' });
+                    return;
+                }
+            }
+
+            if (!faculty) {
+                toast({ title: 'Faculty Required', description: 'Please select your Faculty.', variant: 'destructive' });
+                return;
+            }
         }
 
         // Send OTP verification
@@ -404,12 +425,12 @@ export default function SignupPage() {
         }
     };
 
-    // Submit student credentials to Cloudinary, Firebase Auth, Firestore, and DynamoDB
+    // Submit student credentials and trigger automated verification engine
     const handleSubmitStudentCredentials = async () => {
-        if (!documentFile) {
+        if (!submittedDocUrl) {
             toast({
-                title: 'Document Required',
-                description: 'Please select a photo of your Student ID Card or Admission Letter.',
+                title: 'Document Upload Required',
+                description: 'Please upload your Student ID Card or Admission Letter first before completing registration.',
                 variant: 'destructive',
             });
             return;
@@ -419,15 +440,11 @@ export default function SignupPage() {
         setIsSubmittingCredentials(true);
 
         try {
-            // 1. Upload document image to Cloudinary
-            const uploadedUrl = await uploadImage(documentFile);
-            setSubmittedDocUrl(uploadedUrl);
-
-            // 2. Create Firebase Auth account
+            // 1. Create Firebase Auth account
             const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
             const user = userCredential.user;
 
-            // 3. Build unified user profile with 'pending' verification status
+            // 2. Build student profile
             const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
             const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
             const userData: any = {
@@ -441,18 +458,19 @@ export default function SignupPage() {
                 role: 'student',
                 createdAt: new Date().toISOString(),
                 verificationStatus: 'pending',
-                verificationDocUrl: uploadedUrl,
+                verificationDocUrl: submittedDocUrl,
                 verificationDocType: documentType,
                 studentIndexNumber: finalStudentId,
                 studentId: finalStudentId,
-                isStudentIdVerified: !!autoParsedId,
+                isFresher,
                 faculty: faculty || '',
-                department: department || '',
+                department: isFresher ? '' : (department || ''),
+                programOfStudy: isFresher ? (programOfStudy || '') : '',
                 avatarUrl: user.photoURL || '',
                 profileImage: user.photoURL || '',
             };
 
-            // 4. Save to Firestore & DynamoDB
+            // 3. Save to Firestore & DynamoDB
             await setDoc(doc(db, 'users', user.uid), userData);
 
             try {
@@ -464,65 +482,60 @@ export default function SignupPage() {
                 console.warn('Could not sync student user profile to DynamoDB:', dynamoErr);
             }
 
-            // 5. Submit verification to DynamoDB for Dean review queue
+            // 4. Trigger Automated Verification Engine
+            let autoApproved = false;
             try {
-                await submitStudentVerificationAction({
-                    id: `verif_${user.uid}`,
-                    userId: user.uid,
-                    fullName: fullName.trim(),
-                    email: email.trim().toLowerCase(),
-                    phone: formattedPhone,
-                    studentIdNumber: studentIndexNumber.trim(),
-                    institution: 'USTED / AAMUSTED',
-                    studentIdCardUrl: documentType === 'student_id' ? uploadedUrl : '',
-                    admissionLetterUrl: documentType === 'admission_letter' ? uploadedUrl : '',
-                    status: 'pending',
-                    submittedAt: new Date().toISOString(),
+                const verifyRes = await fetch('/api/verify-student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.uid,
+                        fullName: fullName.trim(),
+                        email: email.trim().toLowerCase(),
+                        phone: formattedPhone,
+                        studentIdNumber: finalStudentId,
+                        isFresher,
+                        faculty,
+                        department: isFresher ? '' : department,
+                        programOfStudy: isFresher ? programOfStudy : '',
+                        documentUrl: submittedDocUrl,
+                        documentType,
+                    }),
                 });
-            } catch (dynamoErr) {
-                console.warn('Could not queue verification in DynamoDB:', dynamoErr);
+
+                const verifyData = await verifyRes.json();
+                if (verifyData.success && (verifyData.autoApproved || verifyData.data?.status === 'verified')) {
+                    autoApproved = true;
+                }
+            } catch (vErr) {
+                console.warn('Automated verification check failed, continuing in pending review mode:', vErr);
             }
 
-            // 6. Send alert SMS to System Admin
-            try {
-                fetch('/api/sms/send-notification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        phoneNumber: '+233597626090',
-                        message: `HostelHQ Alert: New student verification pending review for ${fullName.trim()} (${studentIndexNumber.trim()}, ${faculty || 'USTED'}). Review at /admin/dashboard.`,
-                    }),
-                }).catch(() => {});
-            } catch (_) {}
+            if (autoApproved) {
+                toast({
+                    title: 'Student Verified! 🎓',
+                    description: 'Your enrollment credentials have been verified. Welcome to HostelHQ!',
+                });
+                router.push('/my-bookings');
+                return;
+            }
 
-            // 7. Send confirmation SMS to Student
-            try {
-                fetch('/api/sms/send-notification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        phoneNumber: formattedPhone,
-                        message: `HostelHQ: Your registration and credentials have been received! The Administration is reviewing your submission. You will receive an SMS confirmation once verified.`,
-                    }),
-                }).catch(() => {});
-            } catch (_) {}
-
-            toast({
-                title: 'Credentials Submitted! 🎓',
-                description: 'Your account is under review by the Administration.',
-            });
-
-            // Immediately sign out so pending student does not have an active auth session
+            // 5. If not auto-approved (e.g. flagged for Dean review), sign out and show pending confirmation
             try {
                 await signOut(auth);
             } catch (signOutErr) {
                 console.warn('Sign out after signup warning:', signOutErr);
             }
 
+            toast({
+                title: 'Credentials Queued for Review ⏳',
+                description: 'Your account is under inspection by the Dean of Students administration.',
+            });
+
             setStep('pending_confirmation');
         } catch (error: any) {
             console.error('Credential submission error:', error);
-            let message = error.message || 'An error occurred while uploading credentials.';
+            let message = error.message || 'An error occurred while registering.';
             if (error.code === 'auth/email-already-in-use') {
                 message = 'This email is already registered. Please sign in instead.';
             }
@@ -773,57 +786,117 @@ export default function SignupPage() {
                                             </div>
                                         </div>
 
-                                        {/* Student Index Number */}
+                                        {/* Student Category & Academic Profile (Student Role) */}
                                         {selectedRole === 'student' && (
-                                            <div className="space-y-1.5">
-                                                <div className="flex items-center justify-between">
-                                                    <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                        Student Index / Reference Number
-                                                    </Label>
-                                                    <span className="text-[10px] text-accent font-semibold">Optional</span>
-                                                </div>
-                                                <div className="relative">
-                                                    <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                                    <Input
-                                                        id="indexNumber"
-                                                        type="text"
-                                                        placeholder="e.g. 5201040001"
-                                                        className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
-                                                        value={studentIndexNumber}
-                                                        onChange={(e) => setStudentIndexNumber(e.target.value)}
+                                            <div className="space-y-3.5 p-3.5 rounded-2xl bg-black/30 border border-white/10">
+                                                {/* Category Switcher: Fresher vs Continuing */}
+                                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10">
+                                                    <div className="space-y-0.5">
+                                                        <Label htmlFor="fresher-toggle" className="text-xs font-bold text-white cursor-pointer flex items-center gap-1.5">
+                                                            <span>🎓 I am a Fresher / Newly Admitted Student</span>
+                                                        </Label>
+                                                        <p className="text-[11px] text-slate-300">
+                                                            {isFresher
+                                                                ? "New admit: uses Applicant Voucher Number & Program of Study"
+                                                                : "Continuing student: uses Official Student Index Number & Department"}
+                                                        </p>
+                                                    </div>
+                                                    <Checkbox
+                                                        id="fresher-toggle"
+                                                        checked={isFresher}
+                                                        onCheckedChange={(checked) => {
+                                                            setIsFresher(checked === true);
+                                                            setDepartment('');
+                                                            setProgramOfStudy('');
+                                                        }}
+                                                        className="border-white/40 data-[state=checked]:bg-primary h-5 w-5 rounded-md"
                                                     />
                                                 </div>
-                                            </div>
-                                        )}
 
-                                        {/* Faculty & Department (Student Role) */}
-                                        {selectedRole === 'student' && (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                {/* Relabeled Identifier Field */}
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Faculty</Label>
-                                                    <Select value={faculty} onValueChange={(val) => { setFaculty(val); setDepartment(''); }}>
-                                                        <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                            <SelectValue placeholder="Select faculty" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {Object.keys(facultyDepartments).map((fac) => (
-                                                                <SelectItem key={fac} value={fac}>{fac}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                    <div className="flex items-center justify-between">
+                                                        <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                            Student Index / Applicant Number *
+                                                        </Label>
+                                                        <span className="text-[10px] text-amber-300 font-medium">
+                                                            {isFresher ? "7-12 Alphanumeric" : "9-11 Digits"}
+                                                        </span>
+                                                    </div>
+                                                    <div className="relative">
+                                                        <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                                        <Input
+                                                            id="indexNumber"
+                                                            required
+                                                            type="text"
+                                                            placeholder={isFresher ? "e.g. App-2026-042 or 10102596" : "e.g. 5230100452 or 5201040001"}
+                                                            className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                            value={studentIndexNumber}
+                                                            onChange={(e) => setStudentIndexNumber(e.target.value)}
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Department</Label>
-                                                    <Select value={department} onValueChange={setDepartment} disabled={!faculty}>
-                                                        <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                            <SelectValue placeholder="Select department" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {(facultyDepartments[faculty] || []).map((dept) => (
-                                                                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+
+                                                {/* Academic Selectors: Faculty + (Department or Program of Study) */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Faculty *</Label>
+                                                        <Select
+                                                            value={faculty}
+                                                            onValueChange={(val) => {
+                                                                setFaculty(val);
+                                                                setDepartment('');
+                                                                setProgramOfStudy('');
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                                <SelectValue placeholder="Select faculty" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {Object.keys(facultyDepartments).map((fac) => (
+                                                                    <SelectItem key={fac} value={fac}>{fac}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    {isFresher ? (
+                                                        <div className="space-y-1.5">
+                                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Program of Study *</Label>
+                                                            <Select
+                                                                value={programOfStudy}
+                                                                onValueChange={setProgramOfStudy}
+                                                                disabled={!faculty}
+                                                            >
+                                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                                    <SelectValue placeholder="Select program" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {((facultyPrograms as Record<string, string[]>)[faculty] || []).map((prog) => (
+                                                                        <SelectItem key={prog} value={prog}>{prog}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-1.5">
+                                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Department *</Label>
+                                                            <Select
+                                                                value={department}
+                                                                onValueChange={setDepartment}
+                                                                disabled={!faculty}
+                                                            >
+                                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                                    <SelectValue placeholder="Select department" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {((facultyDepartments as Record<string, string[]>)[faculty] || []).map((dept) => (
+                                                                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1054,61 +1127,31 @@ export default function SignupPage() {
                                         </div>
                                     </div>
 
-                                    {/* File Upload Box */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                                            Photo / Document Scan:
-                                        </Label>
-                                        {documentPreview ? (
-                                            <div className="relative rounded-2xl overflow-hidden border-2 border-primary/50 bg-black/60 p-2 text-center">
-                                                <img
-                                                    src={documentPreview}
-                                                    alt="Uploaded credential preview"
-                                                    className="w-full max-h-56 object-contain rounded-xl mx-auto"
-                                                />
-                                                <div className="mt-3 flex items-center justify-between px-2 pb-1">
-                                                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
-                                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                                                        {documentFile?.name || "Document Ready"}
-                                                    </span>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => { setDocumentFile(null); setDocumentPreview(null); }}
-                                                        className="text-xs text-red-300 hover:text-red-200 hover:bg-red-500/20 h-7 px-2"
-                                                    >
-                                                        <X className="h-3.5 w-3.5 mr-1" />
-                                                        Remove
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <label className="flex flex-col items-center justify-center border-2 border-dashed border-white/20 hover:border-primary/60 bg-black/30 hover:bg-black/40 rounded-2xl p-6 cursor-pointer transition-all group">
-                                                <div className="p-3 rounded-full bg-white/10 group-hover:bg-primary/20 text-slate-300 group-hover:text-primary transition-all mb-3">
-                                                    <UploadCloud className="h-7 w-7" />
-                                                </div>
-                                                <span className="text-sm font-bold text-white mb-1">
-                                                    Tap to select or take photo
-                                                </span>
-                                                <span className="text-xs text-slate-400 text-center max-w-xs">
-                                                    Supports JPEG, PNG, WebP or PDF. Ensure student name and index number are clearly visible.
-                                                </span>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*,.pdf"
-                                                    onChange={handleDocumentFileChange}
-                                                    className="hidden"
-                                                />
-                                            </label>
-                                        )}
+                                    {/* Automated Fast Document Attachment with Canvas Compression & 15s Timeout */}
+                                    <div className="space-y-3">
+                                        <DocumentUploader
+                                            label="Photo / Document Scan"
+                                            description="Supports JPEG, PNG, WebP (auto-compressed) or PDF. Ensure student name and index/applicant number are clearly legible."
+                                            onUploadSuccess={(url, file) => {
+                                                setSubmittedDocUrl(url);
+                                                setDocumentFile(file);
+                                                setDocumentPreview(URL.createObjectURL(file));
+                                            }}
+                                            onUploadError={(err) => {
+                                                toast({
+                                                    title: "Upload Failed",
+                                                    description: err || "Could not upload document. Please try again.",
+                                                    variant: "destructive",
+                                                });
+                                            }}
+                                        />
                                     </div>
 
                                     {/* Security & Privacy Notice */}
                                     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
                                         <ShieldCheck className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
                                         <span>
-                                            Your document is safely encrypted and accessed exclusively by the HostelHQ Administration to authenticate student enrollment.
+                                            Your document is processed through our lightweight automated student verification rule engine for instant booking activation.
                                         </span>
                                     </div>
 
@@ -1117,16 +1160,16 @@ export default function SignupPage() {
                                         <Button
                                             type="button"
                                             onClick={handleSubmitStudentCredentials}
-                                            disabled={isSubmittingCredentials || !documentFile}
+                                            disabled={isSubmittingCredentials || !submittedDocUrl}
                                             className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
                                         >
                                             {isSubmittingCredentials ? (
                                                 <>
                                                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Uploading & Submitting for Review...
+                                                    Verifying Document & Creating Account...
                                                 </>
                                             ) : (
-                                                'Submit Credentials & Complete Registration'
+                                                'Complete & Verify Account'
                                             )}
                                         </Button>
 
