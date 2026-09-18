@@ -110,8 +110,8 @@ export default async function Home({ searchParams }: HomeProps) {
           <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-8 sm:px-6 lg:px-10">
             <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
               <div>
-                <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-2">
-                  <ShieldCheck className="h-4 w-4" />
+                <div className="inline-flex items-center gap-1.5 bg-[#D4AF37]/15 text-[#9A7B1C] border border-[#D4AF37]/30 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-3">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#9A7B1C]" />
                   <span>{filteredHostels.length} Verified {filteredHostels.length === 1 ? "Hostel" : "Hostels"} Available</span>
                 </div>
                 <h2 className="text-2xl sm:text-4xl lg:text-5xl font-headline font-extrabold tracking-tight text-foreground">
@@ -146,7 +146,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                   Try clearing some filters or search for another campus area.
                 </p>
-                <Button asChild className="mt-5 rounded-2xl h-11 px-6 font-bold bg-primary text-white">
+                <Button asChild className="mt-5 rounded-xl h-11 px-6 font-bold bg-[#6B1D2F] hover:bg-[#521422] text-white">
                   <Link href="/#all-hostels">Reset All Filters</Link>
                 </Button>
               </div>
@@ -165,8 +165,8 @@ export default async function Home({ searchParams }: HomeProps) {
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold transition-all",
                       pageNumber === currentPage
-                        ? "bg-primary text-white shadow-md shadow-primary/20 scale-105"
-                        : "border border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                        ? "bg-[#6B1D2F] text-white shadow-md shadow-[#6B1D2F]/20 scale-105"
+                        : "border border-border bg-card text-muted-foreground hover:border-[#6B1D2F] hover:text-[#6B1D2F]"
                     )}
                   >
                     {pageNumber}
@@ -194,8 +194,8 @@ export default async function Home({ searchParams }: HomeProps) {
                 },
               ].map((item) => (
                 <div key={item.title} className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-2 mb-2">
-                    <CheckCircle2 className="h-4 w-4" />
+                  <p className="text-xs font-bold uppercase tracking-widest text-[#6B1D2F] flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-[#6B1D2F]" />
                     {item.title}
                   </p>
                   <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>

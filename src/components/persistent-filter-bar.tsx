@@ -140,14 +140,14 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                     size="sm"
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-bold gap-2 border transition-all ${
                       activeCount > 0
-                        ? "border-primary bg-primary/10 text-primary shadow-xs"
-                        : "border-border/80 bg-card hover:bg-accent/40 text-foreground hover:border-foreground/30"
+                        ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-card dark:text-gray-200 dark:border-border"
                     }`}
                   >
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                    <SlidersHorizontal className={`h-3.5 w-3.5 ${activeCount > 0 ? "text-white" : "text-[#6B1D2F]"}`} />
                     <span>All Filters</span>
                     {activeCount > 0 && (
-                      <Badge className="h-4 min-w-4 px-1.5 text-[10px] bg-primary text-white font-extrabold rounded-full">
+                      <Badge className="h-4 min-w-4 px-1.5 text-[10px] bg-white text-[#6B1D2F] font-extrabold rounded-full">
                         {activeCount}
                       </Badge>
                     )}
@@ -157,7 +157,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                 <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto rounded-3xl p-6 bg-background border-border">
                   <DialogHeader className="mb-2 text-left">
                     <DialogTitle className="text-xl font-headline font-extrabold text-foreground flex items-center gap-2">
-                      <SlidersHorizontal className="h-5 w-5 text-primary" />
+                      <SlidersHorizontal className="h-5 w-5 text-[#6B1D2F]" />
                       Filter & Refine Hostels
                     </DialogTitle>
                   </DialogHeader>
@@ -196,7 +196,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                               setMinPrice(preset.min);
                               setMaxPrice(preset.max);
                             }}
-                            className="text-[11px] px-3 py-1 rounded-lg bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground font-medium transition"
+                            className="text-[11px] px-3 py-1 rounded-lg bg-muted hover:bg-[#6B1D2F]/10 hover:text-[#6B1D2F] text-muted-foreground font-medium transition"
                           >
                             {preset.label}
                           </button>
@@ -215,7 +215,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                             onClick={() => setRoomType(roomType === type ? "" : type)}
                             className={`h-10 text-xs font-bold rounded-xl border transition-all ${
                               roomType === type
-                                ? "bg-primary text-white border-primary shadow-sm"
+                                ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm"
                                 : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
                             }`}
                           >
@@ -236,7 +236,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                             onClick={() => setGender(gender === g ? "" : g)}
                             className={`h-10 text-xs font-bold rounded-xl border transition-all ${
                               gender === g
-                                ? "bg-primary text-white border-primary shadow-sm"
+                                ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm"
                                 : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
                             }`}
                           >
@@ -261,7 +261,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                             onClick={() => setDistance(distance === d.val ? "" : d.val)}
                             className={`h-10 text-xs font-bold rounded-xl border transition-all ${
                               distance === d.val
-                                ? "bg-primary text-white border-primary shadow-sm"
+                                ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm"
                                 : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
                             }`}
                           >
@@ -296,7 +296,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                         });
                         setIsDesktopModalOpen(false);
                       }}
-                      className="flex-1 h-11 rounded-xl text-xs font-bold bg-primary text-white"
+                      className="flex-1 h-11 rounded-xl text-xs font-bold bg-[#6B1D2F] hover:bg-[#521422] text-white"
                     >
                       Show Results
                     </Button>
@@ -317,17 +317,17 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                       size="sm"
                       className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                         minPrice || maxPrice
-                          ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                          : "bg-card border-border/80 text-foreground hover:border-foreground/30 hover:bg-accent/40"
+                          ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
+                          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-card dark:text-gray-200 dark:border-border"
                       }`}
                     >
-                      <DollarSign className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      <DollarSign className={`h-3.5 w-3.5 shrink-0 ${minPrice || maxPrice ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
                       <span>
                         {minPrice || maxPrice
                           ? `GH₵${minPrice || "0"} - ${maxPrice ? `GH₵${maxPrice}` : "Any"}`
                           : "Price Range"}
                       </span>
-                      <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+                      <ChevronDown className={`h-3 w-3 ml-0.5 ${minPrice || maxPrice ? "text-white opacity-80" : "opacity-60"}`} />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-4 rounded-2xl shadow-xl bg-card border-border">
@@ -370,7 +370,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                               setMinPrice(preset.min);
                               setMaxPrice(preset.max);
                             }}
-                            className="text-[11px] px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground font-medium transition"
+                            className="text-[11px] px-2.5 py-1 rounded-lg bg-muted hover:bg-[#6B1D2F]/10 hover:text-[#6B1D2F] text-muted-foreground hover:text-foreground font-medium transition"
                           >
                             {preset.label}
                           </button>
@@ -391,7 +391,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                         </button>
                         <Button
                           size="sm"
-                          className="h-8 px-3 text-xs rounded-xl font-bold bg-primary text-white"
+                          className="h-8 px-3 text-xs rounded-xl font-bold bg-[#6B1D2F] hover:bg-[#521422] text-white"
                           onClick={() => updateFilters({ minPrice, maxPrice })}
                         >
                           Apply
@@ -415,11 +415,11 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   <SelectTrigger
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       roomType
-                        ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                        : "bg-card border-border/80 text-foreground hover:border-foreground/30 hover:bg-accent/40"
+                        ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-card dark:text-gray-200 dark:border-border"
                     }`}
                   >
-                    <DoorOpen className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    <DoorOpen className={`h-3.5 w-3.5 shrink-0 ${roomType ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
                     <span className="truncate max-w-[120px]">
                       {roomType || "Room Type"}
                     </span>
@@ -447,11 +447,11 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   <SelectTrigger
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       distance
-                        ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                        : "bg-card border-border/80 text-foreground hover:border-foreground/30 hover:bg-accent/40"
+                        ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-card dark:text-gray-200 dark:border-border"
                     }`}
                   >
-                    <Clock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    <Clock className={`h-3.5 w-3.5 shrink-0 ${distance ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
                     <span className="truncate max-w-[120px]">
                       {distance ? `≤ ${distance} mins` : "Distance"}
                     </span>
@@ -478,11 +478,11 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   <SelectTrigger
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       gender
-                        ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                        : "bg-card border-border/80 text-foreground hover:border-foreground/30 hover:bg-accent/40"
+                        ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-card dark:text-gray-200 dark:border-border"
                     }`}
                   >
-                    <Users className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                    <Users className={`h-3.5 w-3.5 shrink-0 ${gender ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
                     <span className="truncate max-w-[110px]">
                       {gender || "Gender"}
                     </span>
@@ -530,11 +530,11 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                   className="rounded-2xl h-11 px-4 text-xs font-bold gap-2 flex-1 justify-between bg-card border-border shadow-sm"
                 >
                   <span className="flex items-center gap-2">
-                    <SlidersHorizontal className="h-4 w-4 text-primary" />
+                    <SlidersHorizontal className="h-4 w-4 text-[#6B1D2F]" />
                     <span>Filters & Preferences</span>
                   </span>
                   {activeCount > 0 && (
-                    <Badge className="bg-primary text-white font-extrabold h-5 px-2 text-[10px] rounded-full">
+                    <Badge className="bg-[#6B1D2F] text-white font-extrabold h-5 px-2 text-[10px] rounded-full">
                       {activeCount}
                     </Badge>
                   )}
@@ -598,7 +598,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                           onClick={() => setGender(gender === g ? "" : g)}
                           className={`h-10 text-xs font-bold rounded-xl border transition-all ${
                             gender === g
-                              ? "bg-primary text-white border-primary shadow-sm"
+                              ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm"
                               : "bg-card text-muted-foreground border-border hover:text-foreground"
                           }`}
                         >
@@ -647,7 +647,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                       });
                       setIsMobileSheetOpen(false);
                     }}
-                    className="flex-1 h-12 rounded-2xl text-xs font-bold bg-primary text-white"
+                    className="flex-1 h-12 rounded-2xl text-xs font-bold bg-[#6B1D2F] hover:bg-[#521422] text-white"
                   >
                     Show Results
                   </Button>
@@ -673,14 +673,12 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
         {activeCount > 0 && (
           <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-border/40 overflow-x-auto pb-1 text-xs no-scrollbar">
             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground shrink-0 mr-1 flex items-center gap-1">
-              <Sparkles className="h-3 w-3 text-primary" />
+              <Sparkles className="h-3 w-3 text-[#6B1D2F]" />
               Active:
             </span>
 
-
-
             {roomType && (
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">
+              <span className="inline-flex items-center gap-1.5 bg-[#6B1D2F]/10 text-[#6B1D2F] px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-[#6B1D2F]/20">
                 <span>Room: {roomType}</span>
                 <button type="button" onClick={() => updateFilters({ roomType: "" })} className="hover:opacity-75">
                   <X className="h-3 w-3" />
@@ -689,7 +687,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
             )}
 
             {(minPrice || maxPrice) && (
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">
+              <span className="inline-flex items-center gap-1.5 bg-[#6B1D2F]/10 text-[#6B1D2F] px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-[#6B1D2F]/20">
                 <span>Price: GH₵{minPrice || "0"} - {maxPrice ? `GH₵${maxPrice}` : "Any"}</span>
                 <button type="button" onClick={() => updateFilters({ minPrice: "", maxPrice: "" })} className="hover:opacity-75">
                   <X className="h-3 w-3" />
@@ -698,7 +696,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
             )}
 
             {gender && (
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">
+              <span className="inline-flex items-center gap-1.5 bg-[#6B1D2F]/10 text-[#6B1D2F] px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-[#6B1D2F]/20">
                 <span>Gender: {gender}</span>
                 <button type="button" onClick={() => updateFilters({ gender: "" })} className="hover:opacity-75">
                   <X className="h-3 w-3" />
@@ -707,7 +705,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
             )}
 
             {distance && (
-              <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-primary/20">
+              <span className="inline-flex items-center gap-1.5 bg-[#6B1D2F]/10 text-[#6B1D2F] px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 border border-[#6B1D2F]/20">
                 <span>Distance: ≤ {distance} mins</span>
                 <button type="button" onClick={() => updateFilters({ distance: "" })} className="hover:opacity-75">
                   <X className="h-3 w-3" />

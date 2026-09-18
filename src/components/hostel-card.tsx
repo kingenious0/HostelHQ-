@@ -173,8 +173,8 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                   <AlertTriangle className="h-3 w-3" /> Sanctioned
                 </span>
               ) : (
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3" /> USTED-Approved ✓
+                <span className="text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-700" /> University Approved ✓
                 </span>
               )}
 
@@ -187,7 +187,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 }}
                 className={cn(
                   "h-6 w-6 rounded-full flex items-center justify-center text-[10px] transition-all",
-                  shortlisted ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
+                  shortlisted ? "bg-[#6B1D2F] text-white" : "bg-muted text-muted-foreground hover:text-foreground"
                 )}
                 title={shortlisted ? "Remove from comparison" : "Shortlist to compare"}
               >
@@ -197,7 +197,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
 
             {/* Property Name */}
             <Link href={`/hostels/${cleanId}`} className="block">
-              <h3 className="font-extrabold text-sm text-foreground leading-snug line-clamp-1 hover:text-primary transition-colors">
+              <h3 className="font-extrabold text-sm text-foreground leading-snug line-clamp-1 hover:text-[#6B1D2F] transition-colors">
                 {hostel.name}
               </h3>
             </Link>
@@ -233,14 +233,14 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
               asChild
               size="sm"
               className={cn(
-                "h-7 px-2.5 text-[11px] font-bold rounded-lg shadow-2xs gap-1",
+                "h-8 px-3 text-xs font-medium rounded-lg shadow-2xs gap-1 transition-colors",
                 isSoldOut
                   ? "bg-slate-800 text-white"
-                  : "bg-primary text-white hover:bg-primary/90"
+                  : "bg-[#6B1D2F] hover:bg-[#521422] text-white"
               )}
             >
               <Link href={`/hostels/${cleanId}`}>
-                {isSoldOut ? "View" : "Scout / Visit"}
+                {isSoldOut ? "View" : "View Details"}
                 {!isSoldOut && <ArrowRight className="h-2.5 w-2.5" />}
               </Link>
             </Button>
@@ -292,9 +292,9 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 Executive Sanction
               </Badge>
             ) : (
-              <Badge className="bg-emerald-600/95 hover:bg-emerald-600 text-white border-0 text-[10.5px] font-extrabold px-2.5 py-1 rounded-full shadow-md backdrop-blur-md flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                University-Approved ✓
+              <Badge className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-medium px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />
+                University Approved ✓
               </Badge>
             )}
 
@@ -309,7 +309,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
               className={cn(
                 "pointer-events-auto h-9 w-9 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-md",
                 shortlisted
-                  ? "bg-primary text-white scale-105 ring-2 ring-white"
+                  ? "bg-[#6B1D2F] text-white scale-105 ring-2 ring-white"
                   : "bg-black/50 text-white hover:bg-black/75 hover:scale-110"
               )}
               title={shortlisted ? "Remove from comparison" : "Add to shortlist to compare"}
@@ -364,15 +364,15 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
             )}
 
             {/* Student.com-style: "X mins from campus" with Clock icon */}
-            <div className="flex items-center text-[11px] font-bold text-primary tracking-wide">
-              <Clock className="h-3.5 w-3.5 mr-1 text-primary shrink-0" />
+            <div className="flex items-center text-[11px] font-bold text-[#6B1D2F] tracking-wide">
+              <Clock className="h-3.5 w-3.5 mr-1 text-[#6B1D2F] shrink-0" />
               <span className="truncate">{distanceText}</span>
             </div>
           </div>
 
           {/* Hostel Name */}
           <Link href={`/hostels/${cleanId}`} className="block">
-            <CardTitle className="text-xl font-headline font-extrabold text-foreground mb-1 leading-snug group-hover:text-primary transition-colors line-clamp-1">
+            <CardTitle className="text-xl font-headline font-extrabold text-foreground mb-1 leading-snug group-hover:text-[#6B1D2F] transition-colors line-clamp-1">
               {hostel.name}
             </CardTitle>
           </Link>
@@ -434,10 +434,10 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
               asChild
               size="sm"
               className={cn(
-                "rounded-xl h-10 px-4 font-bold text-xs shadow-sm gap-1 transition-all",
+                "rounded-lg px-4 py-2 font-medium text-xs shadow-sm gap-1 transition-colors",
                 isSoldOut
                   ? "bg-slate-800 hover:bg-slate-900 text-white border border-slate-700"
-                  : "bg-primary text-white hover:bg-primary/90"
+                  : "bg-[#6B1D2F] hover:bg-[#521422] text-white"
               )}
             >
               <Link href={`/hostels/${cleanId}`}>
