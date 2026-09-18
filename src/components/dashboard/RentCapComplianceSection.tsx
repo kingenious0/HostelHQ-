@@ -27,6 +27,7 @@ import { db } from "@/lib/firebase";
 import { doc, onSnapshot, setDoc, updateDoc, collection } from "firebase/firestore";
 import { dispatchInAppNotification } from "@/lib/notifications";
 import type { Hostel } from "@/lib/data";
+import { cn } from "@/lib/utils";
 import {
   TariffLimits,
   DEFAULT_TARIFF_LIMITS,
