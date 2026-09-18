@@ -852,38 +852,57 @@ export default function SignupPage() {
                                         {/* Student Category & Academic Profile (Student Role) */}
                                         {selectedRole === 'student' && (
                                             <div className="space-y-3.5 p-3.5 rounded-2xl bg-black/30 border border-white/10">
-                                                {/* Category Switcher: Fresher vs Continuing */}
-                                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10">
-                                                    <div className="space-y-0.5">
-                                                        <Label htmlFor="fresher-toggle" className="text-xs font-bold text-white cursor-pointer flex items-center gap-1.5">
-                                                            <span>🎓 I am a Fresher / Newly Admitted Student</span>
-                                                        </Label>
-                                                        <p className="text-[11px] text-slate-300">
-                                                            {isFresher
-                                                                ? "New admit: uses Applicant Voucher Number & Program of Study"
-                                                                : "Continuing student: uses Official Student Index Number & Department"}
-                                                        </p>
+                                                {/* Dual-Pill Student Status Selector */}
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                        Student Status *
+                                                    </Label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setIsFresher(false);
+                                                                setDepartment('');
+                                                                setProgramOfStudy('');
+                                                            }}
+                                                            className={cn(
+                                                                "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                                                                !isFresher
+                                                                    ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/30"
+                                                                    : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            <span>🎓</span>
+                                                            <span>Continuing Student</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setIsFresher(true);
+                                                                setDepartment('');
+                                                                setProgramOfStudy('');
+                                                            }}
+                                                            className={cn(
+                                                                "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                                                                isFresher
+                                                                    ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/30"
+                                                                    : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            <span>🎒</span>
+                                                            <span>Fresher / Newly Admitted</span>
+                                                        </button>
                                                     </div>
-                                                    <Checkbox
-                                                        id="fresher-toggle"
-                                                        checked={isFresher}
-                                                        onCheckedChange={(checked) => {
-                                                            setIsFresher(checked === true);
-                                                            setDepartment('');
-                                                            setProgramOfStudy('');
-                                                        }}
-                                                        className="border-white/40 data-[state=checked]:bg-primary h-5 w-5 rounded-md"
-                                                    />
                                                 </div>
 
                                                 {/* Relabeled Identifier Field */}
                                                 <div className="space-y-1.5">
                                                     <div className="flex items-center justify-between">
                                                         <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                            Student Index / Applicant Number *
+                                                            {isFresher ? "Applicant Number *" : "Student Index Number *"}
                                                         </Label>
                                                         <span className="text-[10px] text-amber-300 font-medium">
-                                                            {isFresher ? "7-12 Alphanumeric" : "9-11 Digits"}
+                                                            {isFresher ? "Found on your Admission Letter" : "9–11 Digits"}
                                                         </span>
                                                     </div>
                                                     <div className="relative">
@@ -893,7 +912,7 @@ export default function SignupPage() {
                                                             required
                                                             type="text"
                                                             placeholder={isFresher ? "e.g. App-2026-042 or 10102596" : "e.g. 5230100452 or 5201040001"}
-                                                            className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                            className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium font-mono"
                                                             value={studentIndexNumber}
                                                             onChange={(e) => setStudentIndexNumber(e.target.value)}
                                                         />

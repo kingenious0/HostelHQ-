@@ -63,8 +63,10 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Check Phone Number
-    if (phoneNumber && typeof phoneNumber === 'string' && phoneNumber.trim()) {
+    // 2. Check Phone Number (Sandbox Dev Bypass support)
+    const IS_DEV_MODE = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ALLOW_DUPLICATE_PHONE === "true";
+
+    if (!IS_DEV_MODE && phoneNumber && typeof phoneNumber === 'string' && phoneNumber.trim()) {
       const cleanPhone = phoneNumber.trim();
 
       // Check Firebase Admin Auth for phone if configured

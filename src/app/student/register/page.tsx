@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
+import { cn } from "@/lib/utils";
 import { 
   User, Mail, Phone, Lock, Eye, EyeOff, GraduationCap, 
   ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Loader2, Sparkles
@@ -146,26 +147,29 @@ export default function StudentRegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // 3-Step Wizard: 1 = Credentials, 2 = Academic Profile, 3 = Document Attachment
+  // 3-Step Wizard: 1 = Basic Identity & Contact, 2 = Academic Profile & Student Status, 3 = Account Security & Terms
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // Step 1: Account Credentials
+  // Step 1: Basic Identity & Contact
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+233");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
-  // Step 2: Academic Profile
+  // Step 2: Academic Profile & Student Status
   const [isFresher, setIsFresher] = useState(false);
   const [faculty, setFaculty] = useState("");
   const [departmentOrProgram, setDepartmentOrProgram] = useState("");
   const [studentIdNumber, setStudentIdNumber] = useState("");
-
-  // Step 3: Fast Document Attachment
   const [documentType, setDocumentType] = useState<"student_id" | "admission_letter">("student_id");
   const [uploadedDocUrl, setUploadedDocUrl] = useState<string>("");
+
+  // Step 3: Account Security & Terms
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(true);
+
+  // Verification & Status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
   const [emailError, setEmailError] = useState("");
@@ -175,6 +179,21 @@ export default function StudentRegisterPage() {
     autoApproved: boolean;
     message: string;
   } | null>(null);
+
+  // Auto-Focus Refs
+  const fullNameRef = useRef<HTMLInputElement>(null);
+  const studentIdRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (step === 1) {
+      setTimeout(() => fullNameRef.current?.focus(), 80);
+    } else if (step === 2) {
+      setTimeout(() => studentIdRef.current?.focus(), 80);
+    } else if (step === 3) {
+      setTimeout(() => passwordRef.current?.focus(), 80);
+    }
+  }, [step]);
 
   const getFormattedPhone = () => {
     let cleaned = phoneNumber.replace(/\D/g, "");
@@ -202,7 +221,7 @@ export default function StudentRegisterPage() {
     } catch (_) {}
   };
 
-  // Step 1 Validation -> Step 2 (Checks existence before advancing)
+  // Step 1 Validation -> Step 2
   const handleProceedToAcademic = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError("");
@@ -218,10 +237,6 @@ export default function StudentRegisterPage() {
     const cleanPhone = phoneNumber.replace(/\D/g, "");
     if (cleanPhone.length < 9 || cleanPhone.length > 10) {
       toast({ title: "Invalid Phone Number", description: "Please enter a valid Ghana phone number (9-10 digits).", variant: "destructive" });
-      return;
-    }
-    if (password.length < 6) {
-      toast({ title: "Password Too Short", description: "Password must be at least 6 characters.", variant: "destructive" });
       return;
     }
 
@@ -259,34 +274,22 @@ export default function StudentRegisterPage() {
   };
 
   // Step 2 Validation -> Step 3
-  const handleProceedToVerification = async (e: React.FormEvent) => {
+  const handleProceedToSecurity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!faculty) {
-      toast({ title: "Faculty Required", description: "Please select your academic faculty.", variant: "destructive" });
-      return;
-    }
-    if (!departmentOrProgram) {
-      toast({
-        title: isFresher ? "Program of Study Required" : "Department Required",
-        description: `Please select your ${isFresher ? "program of study" : "department"}.`,
-        variant: "destructive",
-      });
-      return;
-    }
 
     const cleanId = studentIdNumber.trim();
     if (!cleanId) {
       toast({
-        title: "Student Number Required",
-        description: `Please enter your ${isFresher ? "Applicant Serial/Voucher Number" : "Student Index Number"}.`,
+        title: isFresher ? "Applicant Number Required" : "Student Index Number Required",
+        description: isFresher
+          ? "Please enter your Applicant Number found on your admission letter."
+          : "Please enter your official 9–11 digit Student Index Number.",
         variant: "destructive",
       });
       return;
     }
 
-    // Validation rules:
-    // Continuing Students (Index Number): pure numeric, length 9 to 11 digits
-    // Freshers (Applicant Number): alphanumeric, length 7 to 12 characters
+    // Format validation: Continuing 9-11 digits, Fresher 7-12 chars
     if (isFresher) {
       const fresherRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
       if (!fresherRegex.test(cleanId)) {
@@ -309,6 +312,29 @@ export default function StudentRegisterPage() {
       }
     }
 
+    if (!faculty) {
+      toast({ title: "Faculty Required", description: "Please select your academic faculty.", variant: "destructive" });
+      return;
+    }
+
+    if (!departmentOrProgram) {
+      toast({
+        title: isFresher ? "Program of Study Required" : "Department Required",
+        description: `Please select your ${isFresher ? "Program of Study" : "Department"}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!uploadedDocUrl) {
+      toast({
+        title: "Document Required",
+        description: `Please attach your ${isFresher ? "Admission Letter" : "Student ID Card"} before proceeding.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check if student ID is already registered
     try {
       const idCheckRes = await fetch("/api/auth/check-exists", {
@@ -327,17 +353,26 @@ export default function StudentRegisterPage() {
       }
     } catch (_) {}
 
-    // Default document type matching student category
-    setDocumentType(isFresher ? "admission_letter" : "student_id");
     setStep(3);
   };
 
   // Step 3 Submission & Automated Rule Engine Verification
-  const handleFinalSubmit = async () => {
-    if (!uploadedDocUrl) {
+  const handleFinalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (password.length < 6) {
       toast({
-        title: "Document Required",
-        description: `Please attach your ${documentType === "student_id" ? "Student ID Card" : "Admission Letter"} to verify your student account.`,
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!termsAccepted) {
+      toast({
+        title: "Terms Required",
+        description: "Please accept the terms of service and privacy policy to continue.",
         variant: "destructive",
       });
       return;
@@ -351,7 +386,7 @@ export default function StudentRegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
-      // 2. Initial User Record set to 'pending' state
+      // 2. Initial User Record
       const initialUserDoc = {
         uid: user.uid,
         fullName: fullName.trim(),
@@ -363,7 +398,8 @@ export default function StudentRegisterPage() {
         isVerified: false,
         isFresher,
         faculty,
-        department: departmentOrProgram,
+        department: !isFresher ? departmentOrProgram : "",
+        programOfStudy: isFresher ? departmentOrProgram : "",
         studentIndexNumber: studentIdNumber.trim(),
         studentId: studentIdNumber.trim(),
         verificationDocUrl: uploadedDocUrl,
@@ -399,22 +435,22 @@ export default function StudentRegisterPage() {
           completed: true,
           status: "verified",
           autoApproved: true,
-          message: "Your USTED student status has been successfully verified! Your account is active and you have instant booking privileges.",
+          message: "Your USTED student status has been verified. Your account is active for booking.",
         });
         toast({
-          title: "Account Verified! 🎓",
-          description: "Welcome to HostelHQ! You can now browse and book university-approved rooms.",
+          title: "Account Verified",
+          description: "Your student credentials are confirmed. You can now book university-approved hostels.",
         });
       } else {
         setVerificationResult({
           completed: true,
           status: "pending",
           autoApproved: false,
-          message: "Your submission has been received and forwarded to the Dean of Students office for expedited review.",
+          message: "Your documents have been submitted for verification. You will receive an SMS confirmation once approved.",
         });
         toast({
-          title: "Registration Received ⏳",
-          description: "Your account is under Dean of Students inspection. You will receive an SMS confirmation once verified.",
+          title: "Registration Received",
+          description: "Your account credentials have been submitted for institutional verification.",
         });
       }
     } catch (err: any) {
@@ -441,7 +477,7 @@ export default function StudentRegisterPage() {
     <div className="min-h-screen bg-background flex flex-col text-foreground">
       <Header />
 
-      <main className="flex-1 flex flex-col justify-center items-center py-6 px-4 sm:px-6">
+      <main className="flex-1 flex flex-col justify-center items-center py-6 px-3 sm:px-6">
         <div className="w-full max-w-lg space-y-4">
           {/* Institutional Header with USTED Crest */}
           <div className="text-center space-y-2">
@@ -464,32 +500,36 @@ export default function StudentRegisterPage() {
             </p>
           </div>
 
-          {/* 3-Step Wizard Progress Bar */}
+          {/* Minimal 3-Step Progress Stepper Bar */}
           {!verificationResult && (
-            <div className="bg-card border border-border/70 p-3 rounded-2xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground">
+            <div className="space-y-2 mb-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground px-1">
                 <span className={step === 1 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : step > 1 ? "text-emerald-600 font-semibold" : ""}>
-                  1. Credentials
+                  1. Contact
                 </span>
                 <span className={step === 2 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : step > 2 ? "text-emerald-600 font-semibold" : ""}>
-                  2. Academic Profile
+                  2. Academic & Document
                 </span>
                 <span className={step === 3 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : ""}>
-                  3. Verification
+                  3. Security & Terms
                 </span>
               </div>
-              <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-[#6B1D2F] to-[#D4AF37] transition-all duration-300 rounded-full"
-                  style={{ width: `${(step / 3) * 100}%` }}
-                />
+              <div className="flex items-center justify-between gap-2 mb-4">
+                {[1, 2, 3].map((s) => (
+                  <div 
+                    key={s} 
+                    className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                      s <= step ? "bg-[#6B1D2F]" : "bg-gray-700/40"
+                    }`} 
+                  />
+                ))}
               </div>
             </div>
           )}
 
           {/* Wizard Card Body */}
           <Card className="border border-border/80 shadow-md rounded-3xl overflow-hidden">
-            <CardContent className="p-5 sm:p-7">
+            <CardContent className="p-4 sm:p-6">
               {/* SUCCESS CONFIRMATION STATE */}
               {verificationResult ? (
                 <div className="text-center py-6 space-y-4">
@@ -499,7 +539,7 @@ export default function StudentRegisterPage() {
 
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-bold text-foreground">
-                      {verificationResult.autoApproved ? "Account Verified! 🎓" : "Credentials Queued for Review ⏳"}
+                      {verificationResult.autoApproved ? "Account Verified" : "Submission Received"}
                     </h3>
                     <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                       {verificationResult.message}
@@ -539,18 +579,19 @@ export default function StudentRegisterPage() {
                   </div>
                 </div>
               ) : step === 1 ? (
-                /* STEP 1: ACCOUNT CREDENTIALS */
+                /* STEP 1: BASIC IDENTITY & CONTACT */
                 <form onSubmit={handleProceedToAcademic} className="space-y-3.5">
                   <div className="space-y-1">
-                    <h2 className="text-base font-bold text-foreground">Account Credentials</h2>
-                    <p className="text-xs text-muted-foreground">Enter your contact and security details.</p>
+                    <h2 className="text-base font-bold text-foreground">Basic Identity & Contact</h2>
+                    <p className="text-xs text-muted-foreground">Enter your contact details to begin registration.</p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Full Legal Name</Label>
+                    <Label className="text-xs font-semibold">Full Legal Name *</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
+                        ref={fullNameRef}
                         type="text"
                         placeholder="e.g. Kwame Mensah Boateng"
                         value={fullName}
@@ -562,7 +603,7 @@ export default function StudentRegisterPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Email Address</Label>
+                    <Label className="text-xs font-semibold">Email Address *</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -580,7 +621,7 @@ export default function StudentRegisterPage() {
                     </div>
                     {emailError && (
                       <div className="flex items-center justify-between text-[11px] text-rose-600 font-semibold pt-0.5 px-1">
-                        <span>⚠️ {emailError}</span>
+                        <span>{emailError}</span>
                         <Link href="/login" className="underline font-bold text-rose-700 hover:text-rose-800 ml-2">
                           Sign In
                         </Link>
@@ -589,7 +630,7 @@ export default function StudentRegisterPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Ghana Phone Number (SMS Alerts)</Label>
+                    <Label className="text-xs font-semibold">Phone Number (+233 GH) *</Label>
                     <div className="flex gap-2">
                       <span className="inline-flex items-center px-3 rounded-xl border border-input bg-muted/50 text-xs font-mono font-medium">
                         +233
@@ -608,28 +649,6 @@ export default function StudentRegisterPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        placeholder="At least 6 characters"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="pl-9 pr-9 h-10 text-xs rounded-xl"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="pt-2">
                     <Button
                       type="submit"
@@ -639,7 +658,7 @@ export default function StudentRegisterPage() {
                       {isCheckingAccount ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Checking account status...</span>
+                          <span>Checking details...</span>
                         </>
                       ) : (
                         <>
@@ -658,40 +677,91 @@ export default function StudentRegisterPage() {
                   </div>
                 </form>
               ) : step === 2 ? (
-                /* STEP 2: ACADEMIC PROFILE */
-                <form onSubmit={handleProceedToVerification} className="space-y-3.5">
-                  <div className="space-y-1">
-                    <h2 className="text-base font-bold text-foreground">Academic Profile</h2>
-                    <p className="text-xs text-muted-foreground">Specify your USTED enrollment status and department.</p>
+                /* STEP 2: ACADEMIC PROFILE & STUDENT STATUS */
+                <form onSubmit={handleProceedToSecurity} className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <h2 className="text-base font-bold text-foreground">Academic Profile</h2>
+                      <p className="text-xs text-muted-foreground">Specify your USTED status and attach proof.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium transition-colors"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back
+                    </button>
                   </div>
 
-                  {/* Fresher vs Continuing Student Segmented Toggle */}
-                  <div className="p-3 bg-muted/40 rounded-2xl border border-border/80 space-y-2">
-                    <div className="flex items-center gap-2.5">
-                      <Checkbox
-                        id="fresherToggle"
-                        checked={isFresher}
-                        onCheckedChange={(c) => {
-                          const val = Boolean(c);
-                          setIsFresher(val);
-                          setDepartmentOrProgram(""); // reset dependent selection
+                  {/* Dual-Pill Student Status Selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-foreground">Student Status *</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFresher(false);
+                          setDepartmentOrProgram("");
+                          setDocumentType("student_id");
                         }}
-                        className="h-4 w-4 rounded"
-                      />
-                      <label htmlFor="fresherToggle" className="text-xs font-bold text-foreground cursor-pointer">
-                        I am a Fresher / Newly Admitted Student
-                      </label>
+                        className={cn(
+                          "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                          !isFresher
+                            ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm ring-2 ring-[#6B1D2F]/20"
+                            : "bg-muted/40 text-muted-foreground border-border hover:text-foreground hover:bg-muted/70"
+                        )}
+                      >
+                        <span>🎓</span>
+                        <span>Continuing Student</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFresher(true);
+                          setDepartmentOrProgram("");
+                          setDocumentType("admission_letter");
+                        }}
+                        className={cn(
+                          "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                          isFresher
+                            ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm ring-2 ring-[#6B1D2F]/20"
+                            : "bg-muted/40 text-muted-foreground border-border hover:text-foreground hover:bg-muted/70"
+                        )}
+                      >
+                        <span>🎒</span>
+                        <span>Fresher / Newly Admitted</span>
+                      </button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground pl-6">
-                      {isFresher
-                        ? "Select your admitted program of study and enter your applicant serial number."
-                        : "Continuing students must select their academic department and enter their 9-11 digit index number."}
-                    </p>
+                  </div>
+
+                  {/* Identifier Field */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">
+                        {isFresher ? "Applicant Number *" : "Student Index Number *"}
+                      </Label>
+                      <span className="text-[10px] text-muted-foreground">
+                        {isFresher ? "Found on your Admission Letter" : "9–11 Digits"}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <GraduationCap className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        ref={studentIdRef}
+                        type="text"
+                        placeholder={isFresher ? "e.g. 10102596 or App-2026-042" : "e.g. 5230100452"}
+                        value={studentIdNumber}
+                        onChange={(e) => setStudentIdNumber(e.target.value)}
+                        className="pl-9 h-10 text-xs font-mono rounded-xl"
+                        required
+                      />
+                    </div>
                   </div>
 
                   {/* Dropdown 1: Faculty */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Faculty</Label>
+                    <Label className="text-xs font-semibold">Faculty *</Label>
                     <Select
                       value={faculty}
                       onValueChange={(val) => {
@@ -700,7 +770,7 @@ export default function StudentRegisterPage() {
                       }}
                     >
                       <SelectTrigger className="h-10 text-xs rounded-xl">
-                        <SelectValue placeholder="Select your faculty" />
+                        <SelectValue placeholder="Select faculty" />
                       </SelectTrigger>
                       <SelectContent>
                         {Object.keys(facultyDepartments).map((fac) => (
@@ -715,7 +785,7 @@ export default function StudentRegisterPage() {
                   {/* Dropdown 2: Dynamic Department vs Program */}
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold">
-                      {isFresher ? "Program of Study" : "Academic Department"}
+                      {isFresher ? "Program of Study *" : "Academic Department *"}
                     </Label>
                     <Select
                       value={departmentOrProgram}
@@ -728,8 +798,8 @@ export default function StudentRegisterPage() {
                             !faculty
                               ? "Select a faculty first"
                               : isFresher
-                              ? "Select your program of study"
-                              : "Select your department"
+                              ? "Select program of study"
+                              : "Select department"
                           }
                         />
                       </SelectTrigger>
@@ -743,30 +813,37 @@ export default function StudentRegisterPage() {
                     </Select>
                   </div>
 
-                  {/* Relabeled Student Number Field */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Student Index / Applicant Number
-                    </Label>
-                    <div className="relative">
-                      <GraduationCap className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder={isFresher ? "e.g. 10102596 or App-2026-XXXX" : "e.g. 5230100452"}
-                        value={studentIdNumber}
-                        onChange={(e) => setStudentIdNumber(e.target.value)}
-                        className="pl-9 h-10 text-xs font-mono rounded-xl"
-                        required
-                      />
+                  {/* Document Upload */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">
+                        {isFresher ? "Admission Letter Document *" : "Student ID Card Document *"}
+                      </Label>
+                      <span className="text-[11px] text-muted-foreground">
+                        {isFresher ? "PDF or photo" : "Front of ID card"}
+                      </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {isFresher
-                        ? "7-12 characters matching your USTED admission voucher."
-                        : "9-11 digits matching your official university student ID."}
-                    </p>
+                    <DocumentUploader
+                      documentType={documentType}
+                      onDocumentTypeChange={setDocumentType}
+                      onUploadSuccess={(url) => {
+                        setUploadedDocUrl(url);
+                        toast({
+                          title: "Document Attached",
+                          description: "File uploaded and ready for verification.",
+                        });
+                      }}
+                      onError={(err) => {
+                        toast({
+                          title: "Upload Notice",
+                          description: err,
+                          variant: "destructive",
+                        });
+                      }}
+                    />
                   </div>
 
-                  {/* Bottom Pinned Navigation */}
+                  {/* Navigation Buttons */}
                   <div className="pt-2 flex items-center gap-2">
                     <Button
                       type="button"
@@ -781,57 +858,98 @@ export default function StudentRegisterPage() {
                       type="submit"
                       className="flex-1 h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5"
                     >
-                      <span>Continue to Verification</span>
+                      <span>Continue to Security & Verification</span>
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </form>
               ) : (
-                /* STEP 3: FAST DOCUMENT ATTACHMENT */
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-base font-bold text-foreground">Attach Verification Document</h2>
-                      <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                        Automated Verification
-                      </span>
+                /* STEP 3: ACCOUNT SECURITY & TERMS */
+                <form onSubmit={handleFinalSubmit} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <h2 className="text-base font-bold text-foreground">Account Security</h2>
+                      <p className="text-xs text-muted-foreground">Set your account password to complete registration.</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Attach your {isFresher ? "Admission Letter" : "Student ID Card"} to instantly verify your account and unlock booking access.
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => setStep(2)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium transition-colors"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Password *</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        ref={passwordRef}
+                        type={showPassword ? "text" : "password"}
+                        placeholder="At least 6 characters"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-9 pr-9 h-10 text-xs rounded-xl"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Use at least 6 characters.
                     </p>
                   </div>
 
-                  <DocumentUploader
-                    documentType={documentType}
-                    onDocumentTypeChange={setDocumentType}
-                    onUploadSuccess={(url) => {
-                      setUploadedDocUrl(url);
-                      toast({
-                        title: "Document Uploaded Successfully 📎",
-                        description: "File compressed and ready for automated approval.",
-                      });
-                    }}
-                    onError={(err) => {
-                      toast({
-                        title: "Upload Notice",
-                        description: err,
-                        variant: "destructive",
-                      });
-                    }}
-                  />
-
-                  {/* Anti-Fraud Notice */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-border/70 text-[11px] text-muted-foreground space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-foreground">
-                      <ShieldCheck className="h-3.5 w-3.5 text-[#6B1D2F] dark:text-rose-400" />
-                      <span>USTED Institutional Verification Guarantee</span>
+                  {/* Summary of Student Account */}
+                  <div className="p-3 bg-muted/40 rounded-2xl border border-border/70 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Name:</span>
+                      <span className="font-semibold">{fullName}</span>
                     </div>
-                    <p>
-                      Authenticated securely via the USTED student registry for instant booking access.
-                    </p>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span className="font-semibold">{isFresher ? "Fresher / Newly Admitted" : "Continuing Student"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{isFresher ? "Applicant No:" : "Index No:"}</span>
+                      <span className="font-mono font-semibold">{studentIdNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Document:</span>
+                      <span className="text-emerald-600 font-semibold">Attached</span>
+                    </div>
                   </div>
 
-                  {/* Pinned Action Controls */}
+                  {/* Terms & Conditions Checkbox */}
+                  <div className="flex items-start space-x-2 pt-1">
+                    <Checkbox
+                      id="terms"
+                      checked={termsAccepted}
+                      onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor="terms" className="text-xs text-muted-foreground leading-snug cursor-pointer">
+                      I accept the{" "}
+                      <Link href="/terms" className="text-[#6B1D2F] font-semibold hover:underline">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/privacy" className="text-[#6B1D2F] font-semibold hover:underline">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </label>
+                  </div>
+
+                  {/* Action Controls */}
                   <div className="pt-2 flex items-center gap-2">
                     <Button
                       type="button"
@@ -844,25 +962,24 @@ export default function StudentRegisterPage() {
                       Back
                     </Button>
                     <Button
-                      type="button"
-                      disabled={isSubmitting || !uploadedDocUrl}
-                      onClick={handleFinalSubmit}
+                      type="submit"
+                      disabled={isSubmitting || !termsAccepted}
                       className="flex-1 h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       {isSubmitting ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Verifying & Creating Account...</span>
+                          <span>Completing Registration...</span>
                         </>
                       ) : (
                         <>
-                          <Sparkles className="h-4 w-4 text-[#D4AF37]" />
-                          <span>Complete & Verify Account</span>
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Verify Phone & Complete Registration</span>
                         </>
                       )}
                     </Button>
                   </div>
-                </div>
+                </form>
               )}
             </CardContent>
           </Card>
