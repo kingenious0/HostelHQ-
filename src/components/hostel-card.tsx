@@ -132,7 +132,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   return (
     <>
       {/* Compact Responsive Mobile Card (< md / 768px) */}
-      <div className="md:hidden w-full flex items-center gap-3 p-3 rounded-2xl border border-border/70 bg-card hover:border-primary/40 shadow-xs transition-all relative overflow-hidden">
+      <div className="md:hidden w-full flex items-center gap-3 p-3 rounded-xl border border-stone-200/70 bg-white shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all relative overflow-hidden">
         {/* Left Thumbnail (Fixed w-28 h-28) */}
         <Link href={`/hostels/${cleanId}`} className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden bg-muted block">
           <Image
@@ -249,7 +249,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
       </div>
 
       {/* Desktop Rich Card (>= md / 768px) */}
-      <Card className="hidden md:flex w-full overflow-hidden flex-col group rounded-3xl border border-border/70 bg-card hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
+      <Card className="hidden md:flex w-full overflow-hidden flex-col group rounded-xl border border-stone-200/70 bg-white shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all duration-300">
         {/* Image & Overlay Badges */}
         <CardHeader className="p-0 relative">
         <div className="relative h-60 w-full overflow-hidden bg-muted">

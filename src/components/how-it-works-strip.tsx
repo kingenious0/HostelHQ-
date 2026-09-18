@@ -18,7 +18,7 @@ export function HowItWorksStrip() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
         {/* Step 1 */}
-        <div className="flex items-start gap-4 p-5 rounded-xl bg-white dark:bg-card border border-gray-200 dark:border-gray-800 hover:border-[#6B1D2F]/40 hover:shadow-md transition-all">
+        <div className="flex items-start gap-4 p-5 rounded-xl bg-white border border-stone-200/70 shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all">
           <div className="h-10 w-10 rounded-lg bg-[#6B1D2F] text-white font-bold shadow-sm flex items-center justify-center shrink-0 text-base">
             1
           </div>
@@ -34,7 +34,7 @@ export function HowItWorksStrip() {
         </div>
 
         {/* Step 2 */}
-        <div className="flex items-start gap-4 p-5 rounded-xl bg-white dark:bg-card border border-gray-200 dark:border-gray-800 hover:border-[#6B1D2F]/40 hover:shadow-md transition-all">
+        <div className="flex items-start gap-4 p-5 rounded-xl bg-white border border-stone-200/70 shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all">
           <div className="h-10 w-10 rounded-lg bg-[#6B1D2F] text-white font-bold shadow-sm flex items-center justify-center shrink-0 text-base">
             2
           </div>
@@ -50,7 +50,7 @@ export function HowItWorksStrip() {
         </div>
 
         {/* Step 3 */}
-        <div className="flex items-start gap-4 p-5 rounded-xl bg-white dark:bg-card border border-gray-200 dark:border-gray-800 hover:border-[#6B1D2F]/40 hover:shadow-md transition-all">
+        <div className="flex items-start gap-4 p-5 rounded-xl bg-white border border-stone-200/70 shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all">
           <div className="h-10 w-10 rounded-lg bg-[#6B1D2F] text-white font-bold shadow-sm flex items-center justify-center shrink-0 text-base">
             3
           </div>

@@ -94,12 +94,17 @@ export default async function Home({ searchParams }: HomeProps) {
     <ShortlistProvider>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <Header />
-        <main className="flex-1 bg-background pb-24">
+        <main className="flex-1 bg-[#FAF7F5] pb-24">
           {/* Simplified Student.com-style Hero with Integrated Search */}
           <Hero />
 
           {/* Dedicated 3-Step 'How It Works' Section */}
           <HowItWorksStrip />
+
+          {/* Clean Section Transition (Divider) */}
+          <div className="container mx-auto px-4 sm:px-6 lg:px-10">
+            <div className="w-full border-t border-stone-200/60 my-10" />
+          </div>
 
           {/* HousingAnywhere-style Persistent Filter Bar */}
           <section className="mt-4">
@@ -140,7 +145,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center max-w-lg mx-auto my-8">
+              <div className="rounded-xl border border-dashed border-stone-300 bg-white p-12 text-center max-w-lg mx-auto my-8 shadow-sm">
                 <Building className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                 <h3 className="text-xl font-headline font-bold text-foreground">No hostels match your filters</h3>
                 <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
@@ -166,7 +171,7 @@ export default async function Home({ searchParams }: HomeProps) {
                       "flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold transition-all",
                       pageNumber === currentPage
                         ? "bg-[#6B1D2F] text-white shadow-md shadow-[#6B1D2F]/20 scale-105"
-                        : "border border-border bg-card text-muted-foreground hover:border-[#6B1D2F] hover:text-[#6B1D2F]"
+                        : "border border-stone-200/80 bg-white text-muted-foreground hover:border-[#6B1D2F] hover:text-[#6B1D2F]"
                     )}
                   >
                     {pageNumber}
@@ -193,7 +198,7 @@ export default async function Home({ searchParams }: HomeProps) {
                   description: "Legally backed agreements and direct escalation channels to the Dean of Students.",
                 },
               ].map((item) => (
-                <div key={item.title} className="rounded-3xl border border-border/80 bg-card p-6 shadow-sm">
+                <div key={item.title} className="rounded-xl border border-stone-200/70 bg-white p-6 shadow-sm hover:shadow-md transition-all">
                   <p className="text-xs font-bold uppercase tracking-widest text-[#6B1D2F] flex items-center gap-2 mb-2">
                     <CheckCircle2 className="h-4 w-4 text-[#6B1D2F]" />
                     {item.title}
@@ -205,7 +210,7 @@ export default async function Home({ searchParams }: HomeProps) {
           </section>
 
           {/* Trusted Partners / Infrastructure */}
-          <section className="bg-muted/20 border-t border-border/40 overflow-hidden py-12">
+          <section className="border-t border-stone-200/60 overflow-hidden py-12">
             <div className="container mx-auto px-4 text-center">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.25em] mb-8">
                 Secured With Trusted Infrastructure
