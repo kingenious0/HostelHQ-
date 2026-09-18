@@ -335,27 +335,15 @@ export default function StudentRegisterPage() {
       return;
     }
 
-    // Format validation: Continuing 9-11 digits, Fresher 7-12 chars
-    if (isFresher) {
-      const fresherRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
-      if (!fresherRegex.test(cleanId)) {
-        toast({
-          title: "Invalid Applicant Number",
-          description: "Applicant voucher/serial number must be 7 to 12 characters (e.g. App-2026-042 or 10102596).",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else {
-      const continuingRegex = /^\d{9,11}$/;
-      if (!continuingRegex.test(cleanId)) {
-        toast({
-          title: "Invalid Student Index Number",
-          description: "USTED continuing student index number must be 9 to 11 digits (e.g. 5230100452).",
-          variant: "destructive",
-        });
-        return;
-      }
+    // Universal alphanumeric/numeric string between 7 and 12 characters
+    const universalIdRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
+    if (!universalIdRegex.test(cleanId)) {
+      toast({
+        title: "Invalid Identifier Format",
+        description: `${isFresher ? "Applicant" : "Student Index"} number must be between 7 and 12 alphanumeric characters (e.g. 52XXXXXXXX or 10XXXXXX).`,
+        variant: "destructive",
+      });
+      return;
     }
 
     if (!faculty) {
@@ -367,15 +355,6 @@ export default function StudentRegisterPage() {
       toast({
         title: isFresher ? "Program of Study Required" : "Department Required",
         description: `Please select your ${isFresher ? "Program of Study" : "Department"}.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!uploadedDocUrl) {
-      toast({
-        title: "Document Required",
-        description: `Please attach your ${isFresher ? "Admission Letter" : "Student ID Card"} before proceeding.`,
         variant: "destructive",
       });
       return;
@@ -440,10 +419,19 @@ export default function StudentRegisterPage() {
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    if (password.length < 6) {
+    if (!uploadedDocUrl) {
+      toast({
+        title: "Verification Document Required",
+        description: "Please attach your Student ID Card or Admission Letter to proceed.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 8) {
       toast({
         title: "Password Too Short",
-        description: "Password must be at least 6 characters.",
+        description: "Password must be at least 8 characters long.",
         variant: "destructive",
       });
       return;
@@ -667,13 +655,13 @@ export default function StudentRegisterPage() {
             <div className="space-y-2 mb-2">
               <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground px-1">
                 <span className={step === 1 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : step > 1 ? "text-emerald-600 font-semibold" : ""}>
-                  1. Contact
+                  1. Account Credentials
                 </span>
                 <span className={step === 2 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : step > 2 ? "text-emerald-600 font-semibold" : ""}>
-                  2. Academic & Document
+                  2. Academic Profile
                 </span>
                 <span className={step === 3 ? "text-[#6B1D2F] dark:text-rose-400 font-extrabold" : ""}>
-                  3. Security & Terms
+                  3. Verification & Security
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2 mb-4">
@@ -1055,16 +1043,53 @@ export default function StudentRegisterPage() {
                     </Select>
                   </div>
 
-                  {/* Document Upload */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold text-foreground">
-                        {isFresher ? "Admission Letter Document *" : "Student ID Card Document *"}
-                      </Label>
-                      <span className="text-[11px] text-muted-foreground">
-                        {isFresher ? "PDF or photo" : "Front of ID card"}
-                      </span>
+                    {/* Navigation Buttons */}
+                    <div className="pt-2 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setStep(1)}
+                        className="h-11 px-4 text-xs font-semibold rounded-xl"
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-1" />
+                        Back
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="flex-1 h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5"
+                      >
+                        <span>Continue to Document Upload</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
                     </div>
+                  </form>
+              ) : (
+                /* STEP 3: VERIFICATION DOCUMENT & ACCOUNT SECURITY */
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <h2 className="text-base font-bold text-foreground">Verification & Security</h2>
+                      <p className="text-xs text-muted-foreground">Upload your identification and set your account password.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || isSendingOtp}
+                      onClick={() => setStep(2)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium transition-colors"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back
+                    </button>
+                  </div>
+
+                  {/* Universal Non-Rigid Document Upload Dropzone */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-foreground">
+                      Upload Verification Document (Student ID Card OR Admission Letter) *
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Upload your official USTED Student ID Card (front) OR your official University Admission Letter (PDF or clear photo). Continuing students who have misplaced their ID cards may upload their Admission Letter.
+                    </p>
                     <DocumentUploader
                       documentType={documentType}
                       onDocumentTypeChange={setDocumentType}
@@ -1085,45 +1110,6 @@ export default function StudentRegisterPage() {
                     />
                   </div>
 
-                  {/* Navigation Buttons */}
-                  <div className="pt-2 flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setStep(1)}
-                      className="h-11 px-4 text-xs font-semibold rounded-xl"
-                    >
-                      <ArrowLeft className="h-4 w-4 mr-1" />
-                      Back
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="flex-1 h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-sm flex items-center justify-center gap-1.5"
-                    >
-                      <span>Continue to Security & Verification</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                /* STEP 3: ACCOUNT SECURITY & TERMS */
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <h2 className="text-base font-bold text-foreground">Account Security</h2>
-                      <p className="text-xs text-muted-foreground">Set your account password to complete registration.</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => setStep(2)}
-                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium transition-colors"
-                    >
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      Back
-                    </button>
-                  </div>
-
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold">Password *</Label>
                     <div className="relative">
@@ -1131,7 +1117,8 @@ export default function StudentRegisterPage() {
                       <Input
                         ref={passwordRef}
                         type={showPassword ? "text" : "password"}
-                        placeholder="At least 6 characters"
+                        placeholder="At least 8 characters"
+                        minLength={8}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-9 pr-9 h-10 text-xs rounded-xl"
@@ -1146,7 +1133,7 @@ export default function StudentRegisterPage() {
                       </button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Use at least 6 characters.
+                      Use at least 8 characters.
                     </p>
                   </div>
 

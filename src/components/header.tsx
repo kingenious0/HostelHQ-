@@ -858,7 +858,7 @@ export function Header() {
               <SheetContent side="left" className="w-[300px] sm:w-[340px] p-0 flex flex-col max-h-screen">
                 <SheetHeader className="p-4 border-b border-border/40 bg-muted/20">
                   <SheetTitle className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <Link href="/" className="flex items-center">
                       <div className="relative h-9 w-9 shrink-0">
                         <Image
                           src="/usted logo.png"
@@ -869,21 +869,12 @@ export function Header() {
                           priority
                         />
                       </div>
-                      <div className="relative h-9 w-[130px]">
-                        <Image
-                          src="/HostelHQ Web App Logo.png"
-                          alt="HostelHQ"
-                          fill
-                          sizes="130px"
-                          className="object-contain object-left"
-                          priority
-                        />
-                      </div>
-                    </div>
+                      <span className="h-6 border-r border-gray-300 dark:border-gray-700 mx-2.5 inline-block" />
+                      <span className="text-xl font-bold tracking-tight text-[#6B1D2F]">
+                        HostelHQ
+                      </span>
+                    </Link>
                   </SheetTitle>
-                  <p className="text-[10px] text-muted-foreground font-medium text-left">
-                    University of Skills Training and Entrepreneurial Development
-                  </p>
                   <SheetDescription className="sr-only">Mobile navigation and quick settings</SheetDescription>
 
                   {/* SECTION 1: User Mini-Profile Card */}
@@ -1071,30 +1062,21 @@ export function Header() {
                 </div>
               </SheetContent>
             </Sheet>
-            <Link href="/" className="flex items-center gap-2 sm:gap-3 shrink-1 min-w-0 group" aria-label="HostelHQ home">
-              <div className="relative h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 shrink-0 transition-transform group-hover:scale-105">
+            <Link href="/" className="flex items-center shrink-0 group" aria-label="HostelHQ home">
+              <div className="relative h-9 w-9 shrink-0 transition-transform group-hover:scale-105">
                 <Image
                   src="/usted logo.png"
                   alt="USTED Crest"
                   fill
-                  sizes="(max-width: 640px) 40px, (max-width: 768px) 48px, 56px"
+                  sizes="36px"
                   className="object-contain"
                   priority
                 />
               </div>
-              <div className="h-7 w-[1px] bg-border/70 hidden sm:block" />
-              <div className="flex flex-col">
-                <div className="relative h-9 w-[120px] sm:h-11 sm:w-[150px] md:h-13 md:w-[180px]">
-                  <Image
-                    src="/HostelHQ Web App Logo.png"
-                    alt="HostelHQ"
-                    fill
-                    sizes="(max-width: 640px) 120px, (max-width: 768px) 150px, 180px"
-                    className="object-contain object-left"
-                    priority
-                  />
-                </div>
-              </div>
+              <span className="h-6 border-r border-gray-300 dark:border-gray-700 mx-2.5 inline-block" />
+              <span className="text-xl font-bold tracking-tight text-[#6B1D2F] select-none">
+                HostelHQ
+              </span>
             </Link>
           </div>
           <nav className="hidden flex-1 items-center justify-center gap-6 md:flex">

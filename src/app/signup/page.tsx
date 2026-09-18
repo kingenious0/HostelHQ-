@@ -12,18 +12,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
-    Loader2, User, KeyRound, Mail, GraduationCap, UserCheck, Building, Phone, 
-    Eye, EyeOff, ShieldCheck, ArrowLeft, RefreshCw, UploadCloud, FileText, 
-    CheckCircle2, Clock, ShieldAlert, AlertCircle, Camera, Check, X, ArrowRight 
+    Loader2, User, KeyRound, Mail, GraduationCap, Building, Phone, 
+    Eye, EyeOff, ShieldCheck, ArrowLeft, RefreshCw, FileText, 
+    CheckCircle2, Clock, ShieldAlert, ArrowRight, Lock, Check
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, setDoc, collection, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import { cn, parseStudentCredentials } from '@/lib/utils';
-import { uploadImage } from '@/lib/cloudinary';
-import { submitStudentVerificationAction, saveUserAction } from '@/app/actions/db';
+import { saveUserAction } from '@/app/actions/db';
 import { DocumentUploader } from '@/components/DocumentUploader';
 import { facultyDepartments, facultyPrograms } from '@/app/student/register/page';
 
@@ -31,36 +37,52 @@ type UserRole = 'student' | 'hostel_manager';
 
 export default function SignupPage() {
     const [selectedRole, setSelectedRole] = useState<UserRole>('student');
+    
+    // 3-Step Wizard for Student: 1 = Account Credentials, 2 = Academic Profile, 3 = Verification & Security
+    const [studentStep, setStudentStep] = useState<1 | 2 | 3>(1);
+
+    // Step 1: Account Credentials
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [countryCode, setCountryCode] = useState('+233');
-    const [studentIndexNumber, setStudentIndexNumber] = useState('');
+
+    // Step 2: Academic Profile
     const [isFresher, setIsFresher] = useState(false);
+    const [studentIndexNumber, setStudentIndexNumber] = useState('');
     const [faculty, setFaculty] = useState('');
     const [department, setDepartment] = useState('');
     const [programOfStudy, setProgramOfStudy] = useState('');
+
+    // Step 3: Verification Document & Account Security
+    const [documentType, setDocumentType] = useState<'student_id' | 'admission_letter'>('student_id');
+    const [uploadedDocUrl, setUploadedDocUrl] = useState<string>('');
+    const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(true);
+
+    // Validation & pre-check states
     const [isCheckingAccount, setIsCheckingAccount] = useState(false);
     const [emailExistsError, setEmailExistsError] = useState('');
 
-    // Multi-stage flow: form -> otp -> document (student only) -> pending_confirmation
-    type SignupStep = 'form' | 'otp' | 'document' | 'pending_confirmation';
-    const [step, setStep] = useState<SignupStep>('form');
+    // Verification Scan & Completion States
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanStage, setScanStage] = useState<number>(0);
+    const [redirectCountdown, setRedirectCountdown] = useState<number>(3);
+    const [verificationResult, setVerificationResult] = useState<{
+        completed: boolean;
+        status: 'verified' | 'pending';
+        autoApproved: boolean;
+        message: string;
+    } | null>(null);
+
+    // SMS OTP Verification State
+    const [showOtpDialog, setShowOtpDialog] = useState(false);
     const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
     const [resendTimer, setResendTimer] = useState(60);
     const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-    // Document Upload State (for Students)
-    const [documentFile, setDocumentFile] = useState<File | null>(null);
-    const [documentPreview, setDocumentPreview] = useState<string | null>(null);
-    const [documentType, setDocumentType] = useState<'student_id' | 'admission_letter'>('student_id');
-    const [isSubmittingCredentials, setIsSubmittingCredentials] = useState(false);
-    const [submittedDocUrl, setSubmittedDocUrl] = useState<string>('');
 
     // Manager specific state
     const [managerHostels, setManagerHostels] = useState<{ id: string; name?: string; location?: string; managerId?: string }[]>([]);
@@ -72,16 +94,51 @@ export default function SignupPage() {
     const { toast } = useToast();
     const router = useRouter();
 
+    // Auto-Focus Refs
+    const fullNameRef = useRef<HTMLInputElement>(null);
+    const studentIdRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
+
     // Countdown timer for OTP resend
     useEffect(() => {
         let interval: NodeJS.Timeout;
-        if (step === 'otp' && resendTimer > 0) {
+        if (showOtpDialog && resendTimer > 0) {
             interval = setInterval(() => {
                 setResendTimer((prev) => prev - 1);
             }, 1000);
         }
         return () => clearInterval(interval);
-    }, [step, resendTimer]);
+    }, [showOtpDialog, resendTimer]);
+
+    // Auto-Redirect to /my-bookings when student is verified
+    useEffect(() => {
+        if (verificationResult?.autoApproved) {
+            const timer = setInterval(() => {
+                setRedirectCountdown((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(timer);
+                        router.push('/my-bookings');
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+            return () => clearInterval(timer);
+        }
+    }, [verificationResult, router]);
+
+    // Focus on step transition
+    useEffect(() => {
+        if (selectedRole === 'student') {
+            if (studentStep === 1) {
+                setTimeout(() => fullNameRef.current?.focus(), 80);
+            } else if (studentStep === 2) {
+                setTimeout(() => studentIdRef.current?.focus(), 80);
+            } else if (studentStep === 3) {
+                setTimeout(() => passwordRef.current?.focus(), 80);
+            }
+        }
+    }, [studentStep, selectedRole]);
 
     // Load available hostels for manager signup
     useEffect(() => {
@@ -140,48 +197,10 @@ export default function SignupPage() {
         }
     };
 
-    // Send OTP to user's phone
-    const sendOtp = async () => {
-        const formattedPhone = getFormattedPhone();
-        setIsSendingOtp(true);
-        try {
-            const response = await fetch('/api/sms/send-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: formattedPhone }),
-            });
-
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.error || 'Failed to send verification code');
-            }
-
-            toast({
-                title: 'Verification Code Sent',
-                description: `A 6-digit code has been sent to +${formattedPhone}`,
-            });
-
-            setStep('otp');
-            setResendTimer(60);
-            setOtpCode(['', '', '', '', '', '']);
-            setTimeout(() => {
-                otpInputRefs.current[0]?.focus();
-            }, 100);
-        } catch (error: any) {
-            console.error('Error sending OTP:', error);
-            toast({
-                title: 'Failed to Send Code',
-                description: error.message || 'Please check your phone number and try again.',
-                variant: 'destructive',
-            });
-        } finally {
-            setIsSendingOtp(false);
-        }
-    };
-
-    // Triggered when form is submitted
-    const handleInitialSubmit = async (e: React.FormEvent) => {
+    // Step 1 Validation -> Proceed to Step 2
+    const handleProceedToAcademic = async (e: React.FormEvent) => {
         e.preventDefault();
+        setEmailExistsError('');
 
         if (!fullName.trim()) {
             toast({ title: 'Full Name Required', description: 'Please enter your full name.', variant: 'destructive' });
@@ -198,68 +217,7 @@ export default function SignupPage() {
             return;
         }
 
-        if (password.length < 6) {
-            toast({ title: 'Weak Password', description: 'Password must be at least 6 characters.', variant: 'destructive' });
-            return;
-        }
-
-        if (!termsAccepted) {
-            toast({ title: 'Terms Required', description: 'Please accept the terms of service.', variant: 'destructive' });
-            return;
-        }
-
-        if (selectedRole === 'hostel_manager' && !selectedManagerHostelId) {
-            toast({ title: 'Hostel Assignment Required', description: 'Please select the hostel you manage.', variant: 'destructive' });
-            return;
-        }
-
-        if (selectedRole === 'student') {
-            if (!studentIndexNumber.trim()) {
-                toast({
-                    title: 'Identifier Required',
-                    description: isFresher
-                        ? 'Please enter your Fresher Applicant / Serial Number.'
-                        : 'Please enter your Student Index Number.',
-                    variant: 'destructive',
-                });
-                return;
-            }
-
-            if (isFresher) {
-                if (!/^[a-zA-Z0-9\-_]{7,12}$/.test(studentIndexNumber.trim())) {
-                    toast({
-                        title: 'Invalid Applicant Number',
-                        description: 'Fresher applicant voucher/number must be 7 to 12 alphanumeric characters (e.g. App-2026-042 or 10102596).',
-                        variant: 'destructive',
-                    });
-                    return;
-                }
-                if (!programOfStudy) {
-                    toast({ title: 'Program Required', description: 'Please select your Program of Study.', variant: 'destructive' });
-                    return;
-                }
-            } else {
-                if (!/^\d{9,11}$/.test(studentIndexNumber.trim())) {
-                    toast({
-                        title: 'Invalid Index Number',
-                        description: 'Continuing student index number must be 9 to 11 digits (e.g. 5230100452).',
-                        variant: 'destructive',
-                    });
-                    return;
-                }
-                if (!department) {
-                    toast({ title: 'Department Required', description: 'Please select your academic department.', variant: 'destructive' });
-                    return;
-                }
-            }
-
-            if (!faculty) {
-                toast({ title: 'Faculty Required', description: 'Please select your Faculty.', variant: 'destructive' });
-                return;
-            }
-        }
-
-        // Proactively check if email, phone, or student ID is already registered before spending SMS credits on OTP
+        // Proactive background verification check for duplicate email/phone before advancing
         setIsCheckingAccount(true);
         try {
             const checkRes = await fetch('/api/auth/check-exists', {
@@ -268,7 +226,6 @@ export default function SignupPage() {
                 body: JSON.stringify({
                     email: email.trim().toLowerCase(),
                     phoneNumber: getFormattedPhone(),
-                    studentIdNumber: selectedRole === 'student' ? studentIndexNumber.trim() : undefined,
                 }),
             });
             const checkData = await checkRes.json();
@@ -290,19 +247,214 @@ export default function SignupPage() {
             setIsCheckingAccount(false);
         }
 
-        // Send OTP verification
+        setStudentStep(2);
+    };
+
+    // Step 2 Validation -> Proceed to Step 3
+    const handleProceedToVerification = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const cleanId = studentIndexNumber.trim();
+        if (!cleanId) {
+            toast({
+                title: 'Identifier Required',
+                description: isFresher
+                    ? 'Please enter your Applicant Number found on your admission letter.'
+                    : 'Please enter your Student Index Number.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        // Universal alphanumeric/numeric string between 7 and 12 characters
+        const universalIdRegex = /^[a-zA-Z0-9\-_]{7,12}$/;
+        if (!universalIdRegex.test(cleanId)) {
+            toast({
+                title: 'Invalid Identifier Format',
+                description: `${isFresher ? 'Applicant' : 'Student Index'} number must be between 7 and 12 alphanumeric characters (e.g. 52XXXXXXXX or 10XXXXXX).`,
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        if (!faculty) {
+            toast({ title: 'Faculty Required', description: 'Please select your Faculty.', variant: 'destructive' });
+            return;
+        }
+
+        if (isFresher && !programOfStudy) {
+            toast({ title: 'Program Required', description: 'Please select your Program of Study.', variant: 'destructive' });
+            return;
+        }
+
+        if (!isFresher && !department) {
+            toast({ title: 'Department Required', description: 'Please select your academic Department.', variant: 'destructive' });
+            return;
+        }
+
+        // Check if student ID is already registered
+        try {
+            const idCheckRes = await fetch('/api/auth/check-exists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentIdNumber: cleanId }),
+            });
+            const idCheckData = await idCheckRes.json();
+            if (idCheckData.exists && idCheckData.field === 'studentIdNumber') {
+                toast({
+                    title: 'Student ID Already Registered',
+                    description: idCheckData.message,
+                    variant: 'destructive',
+                });
+                return;
+            }
+        } catch (_) {}
+
+        setStudentStep(3);
+    };
+
+    // Trigger SMS OTP send
+    const sendOtp = async () => {
+        const formattedPhone = getFormattedPhone();
+        setIsSendingOtp(true);
+        try {
+            const response = await fetch('/api/sms/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: formattedPhone }),
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to send verification code');
+            }
+
+            toast({
+                title: 'Verification Code Sent',
+                description: `A 6-digit code has been sent via SMS to +${formattedPhone}`,
+            });
+
+            setShowOtpDialog(true);
+            setResendTimer(60);
+            setOtpCode(['', '', '', '', '', '']);
+            setTimeout(() => {
+                otpInputRefs.current[0]?.focus();
+            }, 150);
+        } catch (error: any) {
+            console.error('Error sending OTP:', error);
+            toast({
+                title: 'Failed to Send Code',
+                description: error.message || 'Please check your phone number and try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSendingOtp(false);
+        }
+    };
+
+    // Step 3 Submission for Student: Send OTP
+    const handleStudentStep3Submit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!uploadedDocUrl) {
+            toast({
+                title: 'Verification Document Required',
+                description: 'Please upload your Student ID Card or Admission Letter to proceed.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        if (password.length < 8) {
+            toast({
+                title: 'Password Too Short',
+                description: 'Password must be at least 8 characters long.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        if (!termsAccepted) {
+            toast({
+                title: 'Terms Required',
+                description: 'Please accept the Terms of Service and Privacy Policy to continue.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        await sendOtp();
+    };
+
+    // Submission for Hostel Manager
+    const handleManagerSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!fullName.trim()) {
+            toast({ title: 'Full Name Required', description: 'Please enter your full name.', variant: 'destructive' });
+            return;
+        }
+
+        if (!email.trim() || !isValidEmail(email)) {
+            toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
+            return;
+        }
+
+        if (!phoneNumber || !isValidPhoneNumber(phoneNumber)) {
+            toast({ title: 'Invalid Phone Number', description: 'Please enter a valid Ghana phone number.', variant: 'destructive' });
+            return;
+        }
+
+        if (!selectedManagerHostelId) {
+            toast({ title: 'Hostel Assignment Required', description: 'Please select the hostel property you manage.', variant: 'destructive' });
+            return;
+        }
+
+        if (password.length < 8) {
+            toast({ title: 'Weak Password', description: 'Password must be at least 8 characters.', variant: 'destructive' });
+            return;
+        }
+
+        if (!termsAccepted) {
+            toast({ title: 'Terms Required', description: 'Please accept the terms of service.', variant: 'destructive' });
+            return;
+        }
+
+        setIsCheckingAccount(true);
+        try {
+            const checkRes = await fetch('/api/auth/check-exists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    phoneNumber: getFormattedPhone(),
+                }),
+            });
+            const checkData = await checkRes.json();
+            if (checkData.exists) {
+                setIsCheckingAccount(false);
+                if (checkData.field === 'email') setEmailExistsError(checkData.message);
+                toast({
+                    title: 'Account Already Exists',
+                    description: checkData.message,
+                    variant: 'destructive',
+                });
+                return;
+            }
+        } catch (_) {} finally {
+            setIsCheckingAccount(false);
+        }
+
         await sendOtp();
     };
 
     // Handle single OTP digit change
     const handleOtpChange = (index: number, value: string) => {
         if (!/^\d*$/.test(value)) return;
-
         const newOtp = [...otpCode];
         newOtp[index] = value.substring(value.length - 1);
         setOtpCode(newOtp);
 
-        // Auto-advance to next input
         if (value && index < 5) {
             otpInputRefs.current[index + 1]?.focus();
         }
@@ -329,8 +481,8 @@ export default function SignupPage() {
         otpInputRefs.current[nextIndex]?.focus();
     };
 
-    // Verify OTP & Create Account
-    const handleVerifyAndCreateAccount = async () => {
+    // Verify OTP & Complete Account Creation
+    const handleVerifyOtpAndCreate = async () => {
         const fullCode = otpCode.join('');
         if (fullCode.length !== 6) {
             toast({ title: 'Invalid Code', description: 'Please enter all 6 digits of the verification code.', variant: 'destructive' });
@@ -356,189 +508,61 @@ export default function SignupPage() {
                 throw new Error(verifyData.error || 'Invalid or expired verification code');
             }
 
-            // If student, advance to document upload step instead of auto-activating account
+            setShowOtpDialog(false);
+
             if (selectedRole === 'student') {
-                setIsVerifyingOtp(false);
-                toast({
-                    title: 'Phone Verified! 📱',
-                    description: 'Now please upload your Student ID Card or Admission Letter for account verification.',
-                });
-                setStep('document');
-                return;
-            }
+                // Trigger animated scanning transition
+                setIsScanning(true);
+                setScanStage(1);
 
-            // 2. Create Firebase Auth account for Manager
-            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-            const user = userCredential.user;
+                // 2. Create Firebase Auth account
+                const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+                const user = userCredential.user;
 
-            // 3. Build unified user profile
-            const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
-            const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
-            const userData: any = {
-                uid: user.uid,
-                email: email.trim().toLowerCase(),
-                institutionalEmail: email.trim().toLowerCase(),
-                fullName: fullName.trim(),
-                phone: formattedPhone,
-                phoneNumber: formattedPhone,
-                phoneVerified: true,
-                role: selectedRole,
-                createdAt: new Date().toISOString(),
-                verificationStatus: 'verified',
-                avatarUrl: user.photoURL || '',
-                profileImage: user.photoURL || '',
-            };
-
-            if ((selectedRole as string) === 'student') {
-                if (finalStudentId) {
-                    userData.studentIndexNumber = finalStudentId;
-                    userData.studentId = finalStudentId;
-                    if (autoParsedId) {
-                        userData.isStudentIdVerified = true;
-                    }
-                }
-                if (faculty) userData.faculty = faculty;
-                if (department) userData.department = department;
-            }
-
-            if ((selectedRole as string) === 'hostel_manager' && selectedManagerHostelId) {
-                userData.managedHostelId = selectedManagerHostelId;
-            }
-
-            // 4. Save to Firestore & DynamoDB
-            await setDoc(doc(db, 'users', user.uid), userData);
-
-            try {
-                await saveUserAction({
-                    ...userData,
+                // 3. Build student profile
+                const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
+                const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
+                const studentUserData: any = {
+                    uid: user.uid,
                     id: user.uid,
-                });
-            } catch (dynamoErr) {
-                console.warn('Could not sync user profile to DynamoDB:', dynamoErr);
-            }
+                    email: email.trim().toLowerCase(),
+                    institutionalEmail: email.trim().toLowerCase(),
+                    fullName: fullName.trim(),
+                    phone: formattedPhone,
+                    phoneNumber: formattedPhone,
+                    phoneVerified: true,
+                    role: 'student',
+                    createdAt: new Date().toISOString(),
+                    verificationStatus: 'pending',
+                    isVerified: false,
+                    isFresher,
+                    faculty: faculty || '',
+                    department: isFresher ? '' : (department || ''),
+                    programOfStudy: isFresher ? (programOfStudy || '') : '',
+                    studentIndexNumber: finalStudentId,
+                    studentId: finalStudentId,
+                    verificationDocUrl: uploadedDocUrl,
+                    verificationDocType: documentType,
+                    avatarUrl: user.photoURL || '',
+                    profileImage: user.photoURL || '',
+                    institution: 'University of Skills Training and Entrepreneurial Development (USTED)',
+                };
 
-            // 5. If manager, link to hostel document
-            if (selectedRole === 'hostel_manager' && selectedManagerHostelId) {
+                await setDoc(doc(db, 'users', user.uid), studentUserData, { merge: true });
+
                 try {
-                    await updateDoc(doc(db, 'hostels', selectedManagerHostelId), {
-                        managerId: user.uid,
+                    await saveUserAction({
+                        ...studentUserData,
+                        id: user.uid,
                     });
-                } catch (assignErr) {
-                    console.error('Error assigning manager to hostel:', assignErr);
+                } catch (dynamoErr) {
+                    console.warn('DynamoDB sync note:', dynamoErr);
                 }
-            }
 
-            // 6. Send welcome SMS notification
-            try {
-                const welcomeMsg = `Welcome to HostelHQ, ${fullName}! Your ${selectedRole} account is verified and active. Log in anytime with ${email}.`;
-                fetch('/api/sms/send-notification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phoneNumber: formattedPhone, message: welcomeMsg }),
-                }).catch(() => {});
-            } catch (_) {}
+                setScanStage(2);
 
-            toast({
-                title: 'Phone Verified & Account Created!',
-                description: 'Welcome to HostelHQ!',
-            });
-
-            // Redirect based on role
-            if (selectedRole === 'hostel_manager') {
-                router.push('/manager/dashboard');
-            } else {
-                router.push('/my-bookings');
-            }
-        } catch (error: any) {
-            console.error('Verification error:', error);
-            let message = error.message || 'An error occurred during verification.';
-            if (error.code === 'auth/email-already-in-use') {
-                message = 'This email is already registered. Please sign in instead.';
-            }
-            toast({
-                title: 'Verification Failed',
-                description: message,
-                variant: 'destructive',
-            });
-        } finally {
-            setIsVerifyingOtp(false);
-        }
-    };
-
-    // Handle student file selection
-    const handleDocumentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setDocumentFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setDocumentPreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    // Submit student credentials and trigger automated verification engine
-    const handleSubmitStudentCredentials = async () => {
-        if (!submittedDocUrl) {
-            toast({
-                title: 'Document Upload Required',
-                description: 'Please upload your Student ID Card or Admission Letter first before completing registration.',
-                variant: 'destructive',
-            });
-            return;
-        }
-
-        const formattedPhone = getFormattedPhone();
-        setIsSubmittingCredentials(true);
-
-        try {
-            // 1. Create Firebase Auth account
-            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-            const user = userCredential.user;
-
-            // 2. Build student profile
-            const autoParsedId = parseStudentCredentials(email.trim().toLowerCase());
-            const finalStudentId = studentIndexNumber.trim() || autoParsedId || '';
-            const userData: any = {
-                uid: user.uid,
-                email: email.trim().toLowerCase(),
-                institutionalEmail: email.trim().toLowerCase(),
-                fullName: fullName.trim(),
-                phone: formattedPhone,
-                phoneNumber: formattedPhone,
-                phoneVerified: true,
-                role: 'student',
-                createdAt: new Date().toISOString(),
-                verificationStatus: 'pending',
-                verificationDocUrl: submittedDocUrl,
-                verificationDocType: documentType,
-                studentIndexNumber: finalStudentId,
-                studentId: finalStudentId,
-                isFresher,
-                faculty: faculty || '',
-                department: isFresher ? '' : (department || ''),
-                programOfStudy: isFresher ? (programOfStudy || '') : '',
-                avatarUrl: user.photoURL || '',
-                profileImage: user.photoURL || '',
-            };
-
-            // 3. Save to Firestore & DynamoDB
-            await setDoc(doc(db, 'users', user.uid), userData);
-
-            try {
-                await saveUserAction({
-                    ...userData,
-                    id: user.uid,
-                });
-            } catch (dynamoErr) {
-                console.warn('Could not sync student user profile to DynamoDB:', dynamoErr);
-            }
-
-            // 4. Trigger Automated Verification Engine
-            let autoApproved = false;
-            try {
-                const verifyRes = await fetch('/api/verify-student', {
+                // 4. Trigger Automated Verification Engine
+                const verifyStudentRes = await fetch('/api/verify-student', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -551,110 +575,95 @@ export default function SignupPage() {
                         faculty,
                         department: isFresher ? '' : department,
                         programOfStudy: isFresher ? programOfStudy : '',
-                        documentUrl: submittedDocUrl,
+                        documentUrl: uploadedDocUrl,
                         documentType,
                     }),
                 });
 
-                const verifyData = await verifyRes.json();
-                if (verifyData.success && (verifyData.autoApproved || verifyData.data?.status === 'verified')) {
-                    autoApproved = true;
+                const studentVerifyData = await verifyStudentRes.json();
+
+                if (verifyStudentRes.ok && studentVerifyData.success && (studentVerifyData.autoApproved || studentVerifyData.data?.status === 'verified')) {
+                    setScanStage(3);
+                    await new Promise((resolve) => setTimeout(resolve, 700));
+
+                    setIsScanning(false);
+                    setVerificationResult({
+                        completed: true,
+                        status: 'verified',
+                        autoApproved: true,
+                        message: 'Your USTED student status has been verified. Your account is active for booking.',
+                    });
+                    toast({
+                        title: 'Account Verified',
+                        description: 'Your enrollment credentials are confirmed. Redirecting to your dashboard...',
+                    });
+                } else {
+                    setIsScanning(false);
+                    setVerificationResult({
+                        completed: true,
+                        status: 'pending',
+                        autoApproved: false,
+                        message: 'Your documents have been submitted for verification. You will receive an SMS confirmation once approved.',
+                    });
+                    toast({
+                        title: 'Registration Received',
+                        description: 'Your account credentials have been submitted for institutional verification.',
+                    });
                 }
-            } catch (vErr) {
-                console.warn('Automated verification check failed, continuing in pending review mode:', vErr);
-            }
+            } else {
+                // MANAGER REGISTRATION FLOW
+                const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+                const user = userCredential.user;
 
-            if (autoApproved) {
+                const managerUserData: any = {
+                    uid: user.uid,
+                    id: user.uid,
+                    email: email.trim().toLowerCase(),
+                    fullName: fullName.trim(),
+                    phone: formattedPhone,
+                    phoneNumber: formattedPhone,
+                    phoneVerified: true,
+                    role: 'hostel_manager',
+                    createdAt: new Date().toISOString(),
+                    verificationStatus: 'verified',
+                    managedHostelId: selectedManagerHostelId,
+                };
+
+                await setDoc(doc(db, 'users', user.uid), managerUserData);
+
+                try {
+                    await saveUserAction({ ...managerUserData, id: user.uid });
+                } catch (_) {}
+
+                if (selectedManagerHostelId) {
+                    try {
+                        await updateDoc(doc(db, 'hostels', selectedManagerHostelId), {
+                            managerId: user.uid,
+                        });
+                    } catch (_) {}
+                }
+
                 toast({
-                    title: 'Student Verified! 🎓',
-                    description: 'Your enrollment credentials have been verified. Welcome to HostelHQ!',
+                    title: 'Manager Account Created',
+                    description: 'Welcome to HostelHQ Manager Portal!',
                 });
-                router.push('/my-bookings');
-                return;
+
+                router.push('/manager/dashboard');
             }
-
-            // 5. If not auto-approved (e.g. flagged for Dean review), sign out and show pending confirmation
-            try {
-                await signOut(auth);
-            } catch (signOutErr) {
-                console.warn('Sign out after signup warning:', signOutErr);
-            }
-
-            toast({
-                title: 'Credentials Queued for Review ⏳',
-                description: 'Your account is under inspection by the Dean of Students administration.',
-            });
-
-            setStep('pending_confirmation');
         } catch (error: any) {
-            console.error('Credential submission error:', error);
-            let message = error.message || 'An error occurred while registering.';
+            setIsScanning(false);
+            console.error('Verification error:', error);
+            let message = error.message || 'An error occurred during verification.';
             if (error.code === 'auth/email-already-in-use') {
                 message = 'This email is already registered. Please sign in instead.';
             }
             toast({
-                title: 'Submission Failed',
+                title: 'Verification Failed',
                 description: message,
                 variant: 'destructive',
             });
         } finally {
-            setIsSubmittingCredentials(false);
-        }
-    };
-
-    // Google Single Sign-On for Student Signup
-    const handleGoogleSignup = async () => {
-        setIsGoogleSubmitting(true);
-        try {
-            const provider = new GoogleAuthProvider();
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (!userDocSnap.exists()) {
-                const autoParsedId = parseStudentCredentials(user.email || '');
-                const googleUserProfile = {
-                    uid: user.uid,
-                    id: user.uid,
-                    email: user.email,
-                    institutionalEmail: user.email,
-                    fullName: user.displayName || 'Student',
-                    role: 'student' as const,
-                    createdAt: new Date().toISOString(),
-                    profileImage: user.photoURL || '',
-                    avatarUrl: user.photoURL || '',
-                    authProvider: 'google',
-                    verificationStatus: 'verified_email',
-                    studentId: autoParsedId || '',
-                    studentIndexNumber: autoParsedId || '',
-                    isStudentIdVerified: !!autoParsedId,
-                };
-                await setDoc(userDocRef, googleUserProfile);
-
-                try {
-                    await saveUserAction(googleUserProfile as any);
-                } catch (dynamoErr) {
-                    console.warn('Could not sync Google signup user to DynamoDB:', dynamoErr);
-                }
-            }
-
-            toast({
-                title: 'Account Created Successfully',
-                description: `Welcome to HostelHQ, ${user.displayName || 'Student'}!`,
-            });
-
-            router.push('/my-bookings');
-        } catch (error: any) {
-            console.error('Google signup error:', error);
-            toast({
-                title: 'Google Sign-Up Failed',
-                description: error.message || 'Could not complete Google Sign-Up.',
-                variant: 'destructive',
-            });
-        } finally {
-            setIsGoogleSubmitting(false);
+            setIsVerifyingOtp(false);
         }
     };
 
@@ -673,704 +682,887 @@ export default function SignupPage() {
         },
     ];
 
+    const currentPrograms = (facultyPrograms as Record<string, string[]>)[faculty] || [];
+    const currentDepartments = (facultyDepartments as Record<string, string[]>)[faculty] || [];
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="relative flex-1 bg-slate-900 flex items-center justify-center py-12 px-4">
+            <main className="relative flex-1 bg-slate-900 flex items-center justify-center py-10 px-4">
                 <div className="absolute inset-0">
                     <Image
                         src="https://images.pexels.com/photos/3755761/pexels-photo-3755761.jpeg?auto=compress&cs=tinysrgb&w=2000"
                         alt="Campus hostel background"
                         fill
                         priority
-                        className="object-cover brightness-[0.45]"
+                        className="object-cover brightness-[0.35]"
                     />
                 </div>
 
                 <div className="relative z-10 w-full max-w-xl">
                     <Card className="border border-white/15 bg-white/10 text-slate-50 shadow-[0_18px_45px_rgba(15,23,42,0.7)] backdrop-blur-xl rounded-[2.5rem] overflow-hidden">
                         
-                        {step === 'form' ? (
-                            <>
-                                <CardHeader className="text-center pt-8 pb-4">
-                                    <CardTitle className="text-3xl font-headline font-extrabold tracking-tight text-white">Create Your Account</CardTitle>
-                                    <CardDescription className="text-slate-200/80 text-sm mt-1">
-                                        Safe, verified student accommodation across Ghana
-                                    </CardDescription>
-                                </CardHeader>
+                        {/* Institutional Badge & Card Header */}
+                        <CardHeader className="text-center pt-8 pb-3 px-6 sm:px-10">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#6B1D2F]/20 border border-[#6B1D2F]/40 text-rose-300 text-xs font-semibold mx-auto mb-2">
+                                <div className="relative h-4 w-4 shrink-0">
+                                    <Image
+                                        src="/usted logo.png"
+                                        alt="USTED Crest"
+                                        fill
+                                        className="object-contain"
+                                    />
+                                </div>
+                                <span>University of Skills Training and Entrepreneurial Development</span>
+                            </div>
+                            <CardTitle className="text-2xl sm:text-3xl font-headline font-extrabold tracking-tight text-white">
+                                {selectedRole === 'student' ? 'Student Registration' : 'Manager Registration'}
+                            </CardTitle>
+                            <CardDescription className="text-slate-200/80 text-xs sm:text-sm mt-1">
+                                Safe, verified student accommodation under official USTED oversight
+                            </CardDescription>
+                        </CardHeader>
 
-                                <CardContent className="space-y-6 px-6 sm:px-10">
-                                    {/* Role Switcher */}
+                        <CardContent className="space-y-5 px-6 sm:px-10 pb-8">
+                            {/* Role Switcher (Hidden during verification scan or completion) */}
+                            {!isScanning && !verificationResult && (
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                                        I am joining as:
+                                    </Label>
+                                    <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/40 border border-white/10">
+                                        {roles.map((r) => (
+                                            <button
+                                                key={r.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedRole(r.id);
+                                                    setStudentStep(1);
+                                                }}
+                                                className={cn(
+                                                    "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200 text-center relative",
+                                                    selectedRole === r.id
+                                                        ? "bg-[#6B1D2F] text-white shadow-lg font-bold"
+                                                        : "text-slate-300 hover:text-white hover:bg-white/5 font-medium"
+                                                )}
+                                            >
+                                                <div className="mb-1">{r.icon}</div>
+                                                <span className="text-xs">{r.title}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 1. ANIMATED INSTITUTIONAL SCANNING OVERLAY */}
+                            {isScanning ? (
+                                <div className="py-8 px-2 text-center space-y-6">
+                                    <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+                                        <div className="absolute inset-0 rounded-full border-2 border-[#6B1D2F]/40 animate-ping opacity-75" />
+                                        <div className="h-16 w-16 rounded-full bg-[#6B1D2F]/20 border-2 border-[#6B1D2F] flex items-center justify-center text-rose-300 shadow-sm">
+                                            <ShieldCheck className="h-8 w-8 animate-pulse text-[#6B1D2F]" />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <h3 className="text-base font-bold text-white">
+                                            Institutional Verification in Progress
+                                        </h3>
+                                        <p className="text-xs text-slate-300 max-w-xs mx-auto">
+                                            Running automated checks through the USTED student registry.
+                                        </p>
+                                    </div>
+
+                                    <div className="max-w-sm mx-auto space-y-3 text-left text-xs bg-black/40 p-4 rounded-2xl border border-white/10">
+                                        <div className="flex items-center justify-between">
+                                            <span className={scanStage >= 1 ? "text-white font-semibold" : "text-slate-400"}>
+                                                Checking your student details...
+                                            </span>
+                                            {scanStage > 1 ? (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                                            ) : scanStage === 1 ? (
+                                                <Loader2 className="h-4 w-4 text-[#6B1D2F] animate-spin shrink-0" />
+                                            ) : (
+                                                <div className="h-2 w-2 rounded-full bg-white/20" />
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center justify-between">
+                                            <span className={scanStage >= 2 ? "text-white font-semibold" : "text-slate-400"}>
+                                                Validating enrollment status...
+                                            </span>
+                                            {scanStage > 2 ? (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                                            ) : scanStage === 2 ? (
+                                                <Loader2 className="h-4 w-4 text-[#6B1D2F] animate-spin shrink-0" />
+                                            ) : (
+                                                <div className="h-2 w-2 rounded-full bg-white/20" />
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center justify-between">
+                                            <span className={scanStage >= 3 ? "text-white font-semibold" : "text-slate-400"}>
+                                                Account activated for instant booking!
+                                            </span>
+                                            {scanStage >= 3 ? (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                                            ) : (
+                                                <div className="h-2 w-2 rounded-full bg-white/20" />
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : verificationResult ? (
+                                /* 2. SUCCESS CONFIRMATION STATE */
+                                <div className="text-center py-6 space-y-5">
+                                    <div className="h-20 w-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-500/40 shadow-md">
+                                        <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <h3 className="text-xl font-extrabold text-white">
+                                            {verificationResult.autoApproved ? "Account Verified" : "Submission Received"}
+                                        </h3>
+                                        <p className="text-xs text-slate-300 max-w-sm mx-auto">
+                                            {verificationResult.message}
+                                        </p>
+                                    </div>
+
+                                    <div className="p-4 bg-black/40 rounded-2xl border border-white/15 text-xs space-y-2 text-left shadow-sm">
+                                        <div className="flex justify-between items-center pb-1.5 border-b border-white/10">
+                                            <span className="text-slate-400">Student Name:</span>
+                                            <span className="font-bold text-white">{fullName}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center pb-1.5 border-b border-white/10">
+                                            <span className="text-slate-400">{isFresher ? "Applicant Number:" : "Index Number:"}</span>
+                                            <span className="font-mono font-bold text-white">{studentIndexNumber}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-slate-400">Status:</span>
+                                            <span className="font-extrabold text-emerald-400 capitalize text-sm">
+                                                {verificationResult.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {verificationResult.autoApproved ? (
+                                        <div className="pt-2 space-y-3">
+                                            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-300">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-400" />
+                                                <span>Redirecting to your student dashboard in {redirectCountdown}s...</span>
+                                            </div>
+                                            <Button
+                                                onClick={() => router.push('/my-bookings')}
+                                                className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-lg flex items-center justify-center gap-1.5"
+                                            >
+                                                <span>Continue to My Bookings</span>
+                                                <ArrowRight className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="pt-2 flex flex-col gap-2">
+                                            <Button
+                                                onClick={() => router.push('/student/hostels')}
+                                                className="w-full h-11 text-xs font-bold rounded-xl bg-[#6B1D2F] hover:bg-[#6B1D2F]/90 text-white shadow-lg"
+                                            >
+                                                <span>Explore Approved Hostels</span>
+                                                <ArrowRight className="h-4 w-4 ml-1.5" />
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => router.push('/login')}
+                                                className="w-full h-10 text-xs rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10"
+                                            >
+                                                Go to Student Login
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : selectedRole === 'student' ? (
+                                /* 3. STUDENT 3-STEP PROGRESSIVE WIZARD */
+                                <div className="space-y-5">
+                                    {/* Top Progress Stepper Indicator */}
                                     <div className="space-y-2">
-                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                                            I am joining as:
-                                        </Label>
-                                        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/40 border border-white/10">
-                                            {roles.map((r) => (
-                                                <button
-                                                    key={r.id}
-                                                    type="button"
-                                                    onClick={() => setSelectedRole(r.id)}
-                                                    className={cn(
-                                                        "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-200 text-center relative",
-                                                        selectedRole === r.id
-                                                            ? "bg-primary text-white shadow-lg font-bold"
-                                                            : "text-slate-300 hover:text-white hover:bg-white/5 font-medium"
-                                                    )}
-                                                >
-                                                    <div className="mb-1">{r.icon}</div>
-                                                    <span className="text-xs">{r.title}</span>
-                                                </button>
+                                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 px-1">
+                                            <span className={studentStep === 1 ? "text-rose-300 font-extrabold" : studentStep > 1 ? "text-emerald-400 font-semibold" : ""}>
+                                                1. Account Credentials
+                                            </span>
+                                            <span className={studentStep === 2 ? "text-rose-300 font-extrabold" : studentStep > 2 ? "text-emerald-400 font-semibold" : ""}>
+                                                2. Academic Profile
+                                            </span>
+                                            <span className={studentStep === 3 ? "text-rose-300 font-extrabold" : ""}>
+                                                3. Verification & Security
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2">
+                                            {[1, 2, 3].map((s) => (
+                                                <div 
+                                                    key={s} 
+                                                    className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                                                        s <= studentStep ? "bg-[#6B1D2F]" : "bg-white/15"
+                                                    }`} 
+                                                />
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Google Sign-In Button for Students - Coming Soon */}
-                                    {selectedRole === 'student' && (
-                                        <div className="space-y-3">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => {
-                                                    toast({
-                                                        title: "Google Sign-Up Coming Soon",
-                                                        description: "Google SSO is currently in preview. Please sign up using your email or phone number.",
-                                                    });
-                                                }}
-                                                className="w-full h-12 rounded-xl bg-white/95 hover:bg-white text-slate-800 border-white/20 font-semibold shadow-sm flex items-center justify-between px-4 transition-all duration-200 cursor-not-allowed opacity-90 hover:opacity-100"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
-                                                        <path
-                                                            fill="#4285F4"
-                                                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                                                        />
-                                                        <path
-                                                            fill="#34A853"
-                                                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                                                        />
-                                                        <path
-                                                            fill="#FBBC05"
-                                                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                                                        />
-                                                        <path
-                                                            fill="#EA4335"
-                                                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                                                        />
-                                                    </svg>
-                                                    <span>Sign up with Google</span>
-                                                </div>
-                                                <Badge variant="secondary" className="text-[10px] font-semibold bg-slate-200/90 text-slate-700 py-0.5 px-2 rounded-lg pointer-events-none">
-                                                    Coming Soon
-                                                </Badge>
-                                            </Button>
-
-                                            <div className="relative flex items-center justify-center my-3">
-                                                <div className="border-t border-white/15 w-full" />
-                                                <span className="bg-slate-900/80 px-3 text-xs uppercase tracking-wider text-slate-300 backdrop-blur-md">
-                                                    or
-                                                </span>
-                                                <div className="border-t border-white/15 w-full" />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Main Signup Form */}
-                                    <form onSubmit={handleInitialSubmit} className="space-y-4">
-                                        {/* Full Name */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                Full Name *
-                                            </Label>
-                                            <div className="relative">
-                                                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                                <Input
-                                                    id="fullName"
-                                                    required
-                                                    type="text"
-                                                    placeholder="e.g. Kwame Mensah"
-                                                    className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
-                                                    value={fullName}
-                                                    onChange={(e) => setFullName(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Personal Email */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                Email Address *
-                                            </Label>
-                                            <div className="relative">
-                                                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                                <Input
-                                                    id="email"
-                                                    required
-                                                    type="email"
-                                                    placeholder="e.g. kwame.mensah@gmail.com"
-                                                    className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
-                                                    value={email}
-                                                    onChange={(e) => {
-                                                        setEmail(e.target.value);
-                                                        if (emailExistsError) setEmailExistsError('');
-                                                    }}
-                                                    onBlur={handleEmailBlur}
-                                                />
-                                            </div>
-                                            {emailExistsError && (
-                                                <div className="flex items-center justify-between mt-1 text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-500/30">
-                                                    <span>{emailExistsError}</span>
-                                                    <Link href="/login" className="underline font-bold text-red-200 ml-2 shrink-0">Sign In</Link>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Ghana Phone Number */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                Phone Number (SMS Verification) *
-                                            </Label>
-                                            <div className="flex gap-2">
-                                                <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
-                                                    +233 🇬🇭
-                                                </div>
-                                                <div className="relative flex-1">
-                                                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                    {/* STEP 1: ACCOUNT CREDENTIALS */}
+                                    {studentStep === 1 && (
+                                        <form onSubmit={handleProceedToAcademic} className="space-y-4">
+                                            {/* Full Name */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="fullName" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Full Name *
+                                                </Label>
+                                                <div className="relative">
+                                                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                                     <Input
-                                                        id="phone"
+                                                        id="fullName"
+                                                        ref={fullNameRef}
                                                         required
-                                                        type="tel"
-                                                        placeholder="e.g. 0244123456"
+                                                        type="text"
+                                                        placeholder="e.g. Kwame Mensah"
                                                         className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
-                                                        value={phoneNumber}
-                                                        onChange={(e) => setPhoneNumber(e.target.value)}
+                                                        value={fullName}
+                                                        onChange={(e) => setFullName(e.target.value)}
                                                     />
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        {/* Student Category & Academic Profile (Student Role) */}
-                                        {selectedRole === 'student' && (
-                                            <div className="space-y-3.5 p-3.5 rounded-2xl bg-black/30 border border-white/10">
-                                                {/* Dual-Pill Student Status Selector */}
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                        Student Status *
-                                                    </Label>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setIsFresher(false);
-                                                                setDepartment('');
-                                                                setProgramOfStudy('');
-                                                            }}
-                                                            className={cn(
-                                                                "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
-                                                                !isFresher
-                                                                    ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/30"
-                                                                    : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
-                                                            )}
-                                                        >
-                                                            <span>🎓</span>
-                                                            <span>Continuing Student</span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setIsFresher(true);
-                                                                setDepartment('');
-                                                                setProgramOfStudy('');
-                                                            }}
-                                                            className={cn(
-                                                                "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
-                                                                isFresher
-                                                                    ? "bg-primary text-white border-primary shadow-sm ring-2 ring-primary/30"
-                                                                    : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
-                                                            )}
-                                                        >
-                                                            <span>🎒</span>
-                                                            <span>Fresher / Newly Admitted</span>
-                                                        </button>
-                                                    </div>
+                                            {/* Email Address */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Email Address *
+                                                </Label>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                    <Input
+                                                        id="email"
+                                                        required
+                                                        type="email"
+                                                        placeholder="e.g. student@gmail.com"
+                                                        className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                        value={email}
+                                                        onChange={(e) => {
+                                                            setEmail(e.target.value);
+                                                            if (emailExistsError) setEmailExistsError('');
+                                                        }}
+                                                        onBlur={handleEmailBlur}
+                                                    />
                                                 </div>
-
-                                                {/* Relabeled Identifier Field */}
-                                                <div className="space-y-1.5">
-                                                    <div className="flex items-center justify-between">
-                                                        <Label htmlFor="indexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                            {isFresher ? "Applicant Number *" : "Student Index Number *"}
-                                                        </Label>
-                                                        <span className="text-[10px] text-amber-300 font-medium">
-                                                            {isFresher ? "Found on your Admission Letter" : "9–11 Digits"}
-                                                        </span>
+                                                {emailExistsError && (
+                                                    <div className="flex items-center justify-between mt-1 text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-500/30">
+                                                        <span>{emailExistsError}</span>
+                                                        <Link href="/login" className="underline font-bold text-red-200 ml-2 shrink-0">Sign In</Link>
                                                     </div>
-                                                    <div className="relative">
-                                                        <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                                                )}
+                                            </div>
+
+                                            {/* Phone Number */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Phone Number (+233 GH) *
+                                                </Label>
+                                                <div className="flex gap-2">
+                                                    <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
+                                                        +233 🇬🇭
+                                                    </div>
+                                                    <div className="relative flex-1">
+                                                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                                         <Input
-                                                            id="indexNumber"
+                                                            id="phone"
                                                             required
-                                                            type="text"
-                                                            placeholder={isFresher ? "e.g. App-2026-042 or 10102596" : "e.g. 5230100452 or 5201040001"}
+                                                            type="tel"
+                                                            placeholder="0244123456"
                                                             className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium font-mono"
-                                                            value={studentIndexNumber}
-                                                            onChange={(e) => setStudentIndexNumber(e.target.value)}
+                                                            value={phoneNumber}
+                                                            onChange={(e) => setPhoneNumber(e.target.value)}
                                                         />
                                                     </div>
                                                 </div>
+                                            </div>
 
-                                                {/* Academic Selectors: Faculty + (Department or Program of Study) */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <Button
+                                                type="submit"
+                                                disabled={isCheckingAccount}
+                                                className="w-full h-12 rounded-xl bg-[#6B1D2F] text-white font-bold hover:bg-[#6B1D2F]/90 shadow-xl transition-all duration-200 hover:scale-[1.01] mt-2 flex items-center justify-center gap-2"
+                                            >
+                                                {isCheckingAccount ? (
+                                                    <>
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        <span>Checking details...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span>Continue to Academic Profile</span>
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </form>
+                                    )}
+
+                                    {/* STEP 2: ACADEMIC PROFILE & STUDENT STATUS */}
+                                    {studentStep === 2 && (
+                                        <form onSubmit={handleProceedToVerification} className="space-y-4">
+                                            {/* Status Selector (Two Scannable, Tap-Friendly Pills) */}
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Student Status *
+                                                </Label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsFresher(false);
+                                                            setDepartment('');
+                                                            setProgramOfStudy('');
+                                                            setDocumentType('student_id');
+                                                        }}
+                                                        className={cn(
+                                                            "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                                                            !isFresher
+                                                                ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm ring-2 ring-[#6B1D2F]/30"
+                                                                : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
+                                                        )}
+                                                    >
+                                                        <span>🎓</span>
+                                                        <span>Continuing Student</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setIsFresher(true);
+                                                            setDepartment('');
+                                                            setProgramOfStudy('');
+                                                            setDocumentType('admission_letter');
+                                                        }}
+                                                        className={cn(
+                                                            "h-11 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5",
+                                                            isFresher
+                                                                ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-sm ring-2 ring-[#6B1D2F]/30"
+                                                                : "bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10"
+                                                        )}
+                                                    >
+                                                        <span>🎒</span>
+                                                        <span>Fresher / Newly Admitted</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Flexible Identifier Input */}
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="studentIndexNumber" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                        Student Index / Applicant Number *
+                                                    </Label>
+                                                    <span className="text-[10px] text-amber-300 font-medium">
+                                                        {isFresher ? "Found on Admission Letter" : "7–12 Characters"}
+                                                    </span>
+                                                </div>
+                                                <div className="relative">
+                                                    <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                    <Input
+                                                        id="studentIndexNumber"
+                                                        ref={studentIdRef}
+                                                        required
+                                                        type="text"
+                                                        placeholder="e.g. 52XXXXXXXX or 10XXXXXX"
+                                                        className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium font-mono"
+                                                        value={studentIndexNumber}
+                                                        onChange={(e) => setStudentIndexNumber(e.target.value)}
+                                                    />
+                                                </div>
+                                                <p className="text-[11px] text-slate-400">
+                                                    Enter your official Student Index Number or Admission Applicant Number.
+                                                </p>
+                                            </div>
+
+                                            {/* Dynamic Academic Dropdowns */}
+                                            <div className="space-y-3">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                        Faculty *
+                                                    </Label>
+                                                    <Select
+                                                        value={faculty}
+                                                        onValueChange={(val) => {
+                                                            setFaculty(val);
+                                                            setDepartment('');
+                                                            setProgramOfStudy('');
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                            <SelectValue placeholder="Select faculty" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {Object.keys(facultyDepartments).map((fac) => (
+                                                                <SelectItem key={fac} value={fac}>{fac}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+
+                                                {/* Dropdown 2: Dynamic Context Based on Pill Selection */}
+                                                {isFresher ? (
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Faculty *</Label>
+                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                            Program of Study *
+                                                        </Label>
                                                         <Select
-                                                            value={faculty}
-                                                            onValueChange={(val) => {
-                                                                setFaculty(val);
-                                                                setDepartment('');
-                                                                setProgramOfStudy('');
-                                                            }}
+                                                            value={programOfStudy}
+                                                            onValueChange={setProgramOfStudy}
+                                                            disabled={!faculty}
                                                         >
                                                             <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                                <SelectValue placeholder="Select faculty" />
+                                                                <SelectValue placeholder={!faculty ? "Select faculty first" : "Select program of study"} />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {Object.keys(facultyDepartments).map((fac) => (
-                                                                    <SelectItem key={fac} value={fac}>{fac}</SelectItem>
+                                                                {currentPrograms.map((prog) => (
+                                                                    <SelectItem key={prog} value={prog}>{prog}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
-
-                                                    {isFresher ? (
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Program of Study *</Label>
-                                                            <Select
-                                                                value={programOfStudy}
-                                                                onValueChange={setProgramOfStudy}
-                                                                disabled={!faculty}
-                                                            >
-                                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                                    <SelectValue placeholder="Select program" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {((facultyPrograms as Record<string, string[]>)[faculty] || []).map((prog) => (
-                                                                        <SelectItem key={prog} value={prog}>{prog}</SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-1.5">
-                                                            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">Department *</Label>
-                                                            <Select
-                                                                value={department}
-                                                                onValueChange={setDepartment}
-                                                                disabled={!faculty}
-                                                            >
-                                                                <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                                    <SelectValue placeholder="Select department" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {((facultyDepartments as Record<string, string[]>)[faculty] || []).map((dept) => (
-                                                                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                ) : (
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                            Department *
+                                                        </Label>
+                                                        <Select
+                                                            value={department}
+                                                            onValueChange={setDepartment}
+                                                            disabled={!faculty}
+                                                        >
+                                                            <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                                <SelectValue placeholder={!faculty ? "Select faculty first" : "Select department"} />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {currentDepartments.map((dept) => (
+                                                                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
 
-                                        {/* Manager Hostel Assignment (Hostel Manager Role) */}
-                                        {selectedRole === 'hostel_manager' && (
+                                            {/* Actions */}
+                                            <div className="flex gap-2 pt-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setStudentStep(1)}
+                                                    className="h-12 px-4 rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10 text-xs font-semibold"
+                                                >
+                                                    <ArrowLeft className="h-4 w-4 mr-1" />
+                                                    Back
+                                                </Button>
+                                                <Button
+                                                    type="submit"
+                                                    className="flex-1 h-12 rounded-xl bg-[#6B1D2F] text-white font-bold hover:bg-[#6B1D2F]/90 shadow-xl transition-all duration-200 flex items-center justify-center gap-2"
+                                                >
+                                                    <span>Continue to Document Upload</span>
+                                                    <ArrowRight className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {/* STEP 3: VERIFICATION DOCUMENT & ACCOUNT SECURITY */}
+                                    {studentStep === 3 && (
+                                        <form onSubmit={handleStudentStep3Submit} className="space-y-4">
+                                            {/* Universal, Non-Rigid Document Upload Dropzone */}
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                    Managed Hostel Property *
+                                                    Upload Verification Document (Student ID Card OR Admission Letter) *
                                                 </Label>
-                                                <Select value={selectedManagerHostelId} onValueChange={setSelectedManagerHostelId}>
-                                                    <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                        <SelectValue placeholder={loadingManagerHostels ? "Loading hostels..." : "Select your hostel property"} />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {managerHostels.map((h) => (
-                                                            <SelectItem key={h.id} value={h.id}>
-                                                                {h.name || 'Unnamed Hostel'} ({h.location || 'Campus area'})
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-
-                                        {/* Password */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                                Password *
-                                            </Label>
-                                            <div className="relative">
-                                                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                                                <Input
-                                                    id="password"
-                                                    required
-                                                    type={showPassword ? 'text' : 'password'}
-                                                    placeholder="At least 6 characters"
-                                                    className="pl-11 pr-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
-                                                    value={password}
-                                                    onChange={(e) => setPassword(e.target.value)}
+                                                <p className="text-[11px] text-slate-300/90 leading-relaxed">
+                                                    Upload your official USTED Student ID Card (front) OR your official University Admission Letter (PDF or clear photo). Continuing students who have misplaced their ID cards may upload their Admission Letter.
+                                                </p>
+                                                <DocumentUploader
+                                                    documentType={documentType}
+                                                    onDocumentTypeChange={setDocumentType}
+                                                    onUploadSuccess={(url) => {
+                                                        setUploadedDocUrl(url);
+                                                        toast({
+                                                            title: "Document Attached",
+                                                            description: "File uploaded and ready for verification.",
+                                                        });
+                                                    }}
+                                                    onError={(err) => {
+                                                        toast({
+                                                            title: "Upload Failed",
+                                                            description: err || "Could not upload document.",
+                                                            variant: "destructive",
+                                                        });
+                                                    }}
                                                 />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowPassword(!showPassword)}
-                                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                >
-                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                </button>
                                             </div>
-                                        </div>
 
-                                        {/* Terms & Conditions */}
-                                        <div className="flex items-center space-x-2 pt-1">
-                                            <Checkbox
-                                                id="terms"
-                                                checked={termsAccepted}
-                                                onCheckedChange={(checked) => setTermsAccepted(checked === true)}
-                                                className="border-white/40 data-[state=checked]:bg-primary"
-                                            />
-                                            <label htmlFor="terms" className="text-xs text-slate-300 cursor-pointer">
-                                                I agree to the{' '}
-                                                <Link href="/terms" className="text-primary font-semibold hover:underline">
-                                                    Terms of Service
-                                                </Link>{' '}
-                                                and Privacy Policy.
-                                            </label>
-                                        </div>
+                                            {/* Password Field */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                                    Password *
+                                                </Label>
+                                                <div className="relative">
+                                                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                    <Input
+                                                        id="password"
+                                                        ref={passwordRef}
+                                                        required
+                                                        type={showPassword ? 'text' : 'password'}
+                                                        minLength={8}
+                                                        placeholder="At least 8 characters"
+                                                        className="pl-11 pr-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                        value={password}
+                                                        onChange={(e) => setPassword(e.target.value)}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                    >
+                                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                    </button>
+                                                </div>
+                                                <p className="text-[11px] text-slate-400">Must be at least 8 characters long.</p>
+                                            </div>
 
-                                        {/* Submit Button */}
-                                        <Button
-                                            type="submit"
-                                            disabled={isSendingOtp || isGoogleSubmitting || isCheckingAccount}
-                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01] mt-2"
-                                        >
-                                            {isCheckingAccount ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Checking Account Status...
-                                                </>
-                                            ) : isSendingOtp ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Sending SMS Code...
-                                                </>
-                                            ) : (
-                                                `Verify Phone & Sign Up`
-                                            )}
-                                        </Button>
-                                    </form>
-                                </CardContent>
+                                            {/* Summary Pill Box */}
+                                            <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 text-xs space-y-1.5">
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Student:</span>
+                                                    <span className="font-semibold text-white">{fullName}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Status:</span>
+                                                    <span className="font-semibold text-white">{isFresher ? "Fresher / Newly Admitted" : "Continuing Student"}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">{isFresher ? "Applicant No:" : "Index No:"}</span>
+                                                    <span className="font-mono font-semibold text-white">{studentIndexNumber}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">Document:</span>
+                                                    <span className={uploadedDocUrl ? "text-emerald-400 font-semibold" : "text-amber-300 font-semibold"}>
+                                                        {uploadedDocUrl ? "Attached ✓" : "Pending Upload"}
+                                                    </span>
+                                                </div>
+                                            </div>
 
-                                <CardFooter className="flex flex-col gap-2 px-6 sm:px-10 pb-8 pt-0">
-                                    <p className="text-center text-xs text-slate-300/90">
-                                        Already have an account?{' '}
-                                        <Link href="/login" className="text-primary font-bold hover:underline">
-                                            Sign In here
-                                        </Link>
-                                    </p>
-                                </CardFooter>
-                            </>
-                        ) : step === 'otp' ? (
-                            /* OTP Verification Step */
-                            <>
-                                <CardHeader className="text-center pt-8 pb-4">
-                                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 border border-primary/30 text-primary">
-                                        <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                                    </div>
-                                    <CardTitle className="text-2xl font-headline font-extrabold tracking-tight text-white">Verify Your Phone Number</CardTitle>
-                                    <CardDescription className="text-slate-200/80 text-sm mt-1">
-                                        Enter the 6-digit verification code sent via SMS to <span className="font-semibold text-white">+{getFormattedPhone()}</span>
-                                    </CardDescription>
-                                </CardHeader>
+                                            {/* Compliance Checkbox */}
+                                            <div className="flex items-center space-x-2 pt-1">
+                                                <Checkbox
+                                                    id="terms"
+                                                    checked={termsAccepted}
+                                                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                                                    className="border-white/40 data-[state=checked]:bg-[#6B1D2F]"
+                                                />
+                                                <label htmlFor="terms" className="text-xs text-slate-300 cursor-pointer">
+                                                    I agree to the{' '}
+                                                    <Link href="/terms" className="text-rose-300 font-semibold hover:underline">
+                                                        Terms of Service
+                                                    </Link>{' '}
+                                                    and Privacy Policy.
+                                                </label>
+                                            </div>
 
-                                <CardContent className="space-y-6 px-6 sm:px-10">
-                                    {/* 6-Digit OTP Inputs */}
-                                    <div className="flex justify-center gap-2 sm:gap-3 py-2">
-                                        {otpCode.map((digit, idx) => (
-                                            <input
-                                                key={idx}
-                                                ref={(el) => { otpInputRefs.current[idx] = el; }}
+                                            {/* Actions */}
+                                            <div className="flex gap-2 pt-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setStudentStep(2)}
+                                                    className="h-12 px-4 rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10 text-xs font-semibold"
+                                                >
+                                                    <ArrowLeft className="h-4 w-4 mr-1" />
+                                                    Back
+                                                </Button>
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isSendingOtp || !uploadedDocUrl || !termsAccepted}
+                                                    className="flex-1 h-12 rounded-xl bg-[#6B1D2F] text-white font-bold hover:bg-[#6B1D2F]/90 shadow-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    {isSendingOtp ? (
+                                                        <>
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                            <span>Sending SMS Code...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <ShieldCheck className="h-4 w-4" />
+                                                            <span>Verify Phone & Complete Registration</span>
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </form>
+                                    )}
+                                </div>
+                            ) : (
+                                /* 4. HOSTEL MANAGER REGISTRATION FORM */
+                                <form onSubmit={handleManagerSubmit} className="space-y-4">
+                                    {/* Full Name */}
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="mgrFullName" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Full Name *
+                                        </Label>
+                                        <div className="relative">
+                                            <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                            <Input
+                                                id="mgrFullName"
+                                                required
                                                 type="text"
-                                                inputMode="numeric"
-                                                maxLength={1}
-                                                value={digit}
-                                                onChange={(e) => handleOtpChange(idx, e.target.value)}
-                                                onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                                                onPaste={handleOtpPaste}
-                                                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold bg-white text-slate-900 rounded-xl border border-white/20 shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-150"
+                                                placeholder="e.g. Kwame Mensah"
+                                                className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                value={fullName}
+                                                onChange={(e) => setFullName(e.target.value)}
                                             />
-                                        ))}
+                                        </div>
                                     </div>
 
-                                    {/* Resend Code Section */}
-                                    <div className="flex items-center justify-between text-xs text-slate-300 px-1">
-                                        <span>Didn't receive code?</span>
-                                        {resendTimer > 0 ? (
-                                            <span className="text-slate-400 font-medium">Resend in {resendTimer}s</span>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={sendOtp}
-                                                disabled={isSendingOtp}
-                                                className="text-primary font-bold hover:underline flex items-center gap-1"
-                                            >
-                                                <RefreshCw className={cn("h-3.5 w-3.5", isSendingOtp && "animate-spin")} />
-                                                Resend Code
-                                            </button>
+                                    {/* Email Address */}
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="mgrEmail" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Email Address *
+                                        </Label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                            <Input
+                                                id="mgrEmail"
+                                                required
+                                                type="email"
+                                                placeholder="e.g. manager@gmail.com"
+                                                className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                value={email}
+                                                onChange={(e) => {
+                                                    setEmail(e.target.value);
+                                                    if (emailExistsError) setEmailExistsError('');
+                                                }}
+                                                onBlur={handleEmailBlur}
+                                            />
+                                        </div>
+                                        {emailExistsError && (
+                                            <div className="flex items-center justify-between mt-1 text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-500/30">
+                                                <span>{emailExistsError}</span>
+                                                <Link href="/login" className="underline font-bold text-red-200 ml-2 shrink-0">Sign In</Link>
+                                            </div>
                                         )}
                                     </div>
 
-                                    {/* Action Buttons */}
-                                    <div className="space-y-3 pt-2">
-                                        <Button
-                                            type="button"
-                                            onClick={handleVerifyAndCreateAccount}
-                                            disabled={isVerifyingOtp || otpCode.join('').length !== 6}
-                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
-                                        >
-                                            {isVerifyingOtp ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Verifying Code...
-                                                </>
-                                            ) : selectedRole === 'student' ? (
-                                                'Verify Phone & Continue to Document Upload'
-                                            ) : (
-                                                'Verify Code & Complete Sign Up'
-                                            )}
-                                        </Button>
-
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            onClick={() => setStep('form')}
-                                            disabled={isVerifyingOtp}
-                                            className="w-full text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold gap-1.5"
-                                        >
-                                            <ArrowLeft className="h-4 w-4" />
-                                            Back to edit details
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </>
-                        ) : step === 'document' ? (
-                            /* Step 3: Student Document Upload */
-                            <>
-                                <CardHeader className="text-center pt-8 pb-4">
-                                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 border border-primary/30 text-primary shadow-inner">
-                                        <GraduationCap className="h-7 w-7 text-primary" />
-                                    </div>
-                                    <Badge className="mx-auto mb-2 bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs font-semibold">
-                                        Step 2 of 2: University Verification
-                                    </Badge>
-                                    <CardTitle className="text-2xl font-headline font-extrabold tracking-tight text-white">Upload Student Credentials</CardTitle>
-                                    <CardDescription className="text-slate-200/80 text-xs sm:text-sm mt-1 max-w-md mx-auto">
-                                        USTED requires all platform users to verify their student status to ensure secure direct hostel access.
-                                    </CardDescription>
-                                </CardHeader>
-
-                                <CardContent className="space-y-6 px-6 sm:px-10">
-                                    {/* Document Type Selector */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                                            Select Document to Upload:
+                                    {/* Phone Number */}
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="mgrPhone" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Phone Number (+233 GH) *
                                         </Label>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="flex gap-2">
+                                            <div className="w-24 shrink-0 flex items-center justify-center rounded-xl bg-white/10 border border-white/20 text-sm font-semibold text-white">
+                                                +233 🇬🇭
+                                            </div>
+                                            <div className="relative flex-1">
+                                                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <Input
+                                                    id="mgrPhone"
+                                                    required
+                                                    type="tel"
+                                                    placeholder="0244123456"
+                                                    className="pl-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium font-mono"
+                                                    value={phoneNumber}
+                                                    onChange={(e) => setPhoneNumber(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Managed Hostel Property */}
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Managed Hostel Property *
+                                        </Label>
+                                        <Select value={selectedManagerHostelId} onValueChange={setSelectedManagerHostelId}>
+                                            <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
+                                                <SelectValue placeholder={loadingManagerHostels ? "Loading hostels..." : "Select your hostel property"} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {managerHostels.map((h) => (
+                                                    <SelectItem key={h.id} value={h.id}>
+                                                        {h.name || 'Unnamed Hostel'} ({h.location || 'Campus area'})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Password */}
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="mgrPassword" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                                            Password *
+                                        </Label>
+                                        <div className="relative">
+                                            <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                            <Input
+                                                id="mgrPassword"
+                                                required
+                                                type={showPassword ? 'text' : 'password'}
+                                                minLength={8}
+                                                placeholder="At least 8 characters"
+                                                className="pl-11 pr-11 h-11 bg-white/95 text-slate-900 placeholder:text-slate-500 rounded-xl border-white/20 font-medium"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                            />
                                             <button
                                                 type="button"
-                                                onClick={() => setDocumentType('student_id')}
-                                                className={cn(
-                                                    "flex items-center justify-center gap-2 p-3.5 rounded-xl border text-xs font-bold transition-all",
-                                                    documentType === 'student_id'
-                                                        ? "bg-primary text-white border-primary shadow-lg shadow-primary/25"
-                                                        : "bg-black/30 border-white/10 text-slate-300 hover:bg-white/5"
-                                                )}
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                                             >
-                                                <FileText className="h-4 w-4" />
-                                                Student ID Card
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setDocumentType('admission_letter')}
-                                                className={cn(
-                                                    "flex items-center justify-center gap-2 p-3.5 rounded-xl border text-xs font-bold transition-all",
-                                                    documentType === 'admission_letter'
-                                                        ? "bg-primary text-white border-primary shadow-lg shadow-primary/25"
-                                                        : "bg-black/30 border-white/10 text-slate-300 hover:bg-white/5"
-                                                )}
-                                            >
-                                                <FileText className="h-4 w-4" />
-                                                Admission Letter
+                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                             </button>
                                         </div>
                                     </div>
 
-                                    {/* Automated Fast Document Attachment with Canvas Compression & 15s Timeout */}
-                                    <div className="space-y-3">
-                                        <DocumentUploader
-                                            label="Photo / Document Scan"
-                                            description="Supports JPEG, PNG, WebP (auto-compressed) or PDF. Ensure student name and index/applicant number are clearly legible."
-                                            onUploadSuccess={(url, file) => {
-                                                setSubmittedDocUrl(url);
-                                                setDocumentFile(file);
-                                                setDocumentPreview(URL.createObjectURL(file));
-                                            }}
-                                            onUploadError={(err) => {
-                                                toast({
-                                                    title: "Upload Failed",
-                                                    description: err || "Could not upload document. Please try again.",
-                                                    variant: "destructive",
-                                                });
-                                            }}
+                                    {/* Terms */}
+                                    <div className="flex items-center space-x-2 pt-1">
+                                        <Checkbox
+                                            id="mgrTerms"
+                                            checked={termsAccepted}
+                                            onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                                            className="border-white/40 data-[state=checked]:bg-[#6B1D2F]"
                                         />
+                                        <label htmlFor="mgrTerms" className="text-xs text-slate-300 cursor-pointer">
+                                            I agree to the{' '}
+                                            <Link href="/terms" className="text-rose-300 font-semibold hover:underline">
+                                                Terms of Service
+                                            </Link>{' '}
+                                            and Privacy Policy.
+                                        </label>
                                     </div>
 
-                                    {/* Security & Privacy Notice */}
-                                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200">
-                                        <ShieldCheck className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
-                                        <span>
-                                            Authenticated securely via the USTED student registry for instant booking access.
-                                        </span>
-                                    </div>
+                                    {/* Submit */}
+                                    <Button
+                                        type="submit"
+                                        disabled={isSendingOtp || isCheckingAccount}
+                                        className="w-full h-12 rounded-xl bg-[#6B1D2F] text-white font-bold hover:bg-[#6B1D2F]/90 shadow-xl transition-all duration-200 hover:scale-[1.01] mt-2 flex items-center justify-center gap-2"
+                                    >
+                                        {isCheckingAccount ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Checking account...</span>
+                                            </>
+                                        ) : isSendingOtp ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Sending SMS Code...</span>
+                                            </>
+                                        ) : (
+                                            'Verify Phone & Complete Registration'
+                                        )}
+                                    </Button>
+                                </form>
+                            )}
+                        </CardContent>
 
-                                    {/* Action Buttons */}
-                                    <div className="space-y-3 pt-2">
-                                        <Button
-                                            type="button"
-                                            onClick={handleSubmitStudentCredentials}
-                                            disabled={isSubmittingCredentials || !submittedDocUrl}
-                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
-                                        >
-                                            {isSubmittingCredentials ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                    Verifying Document & Creating Account...
-                                                </>
-                                            ) : (
-                                                'Complete & Verify Account'
-                                            )}
-                                        </Button>
-
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            onClick={() => setStep('otp')}
-                                            disabled={isSubmittingCredentials}
-                                            className="w-full text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold gap-1.5"
-                                        >
-                                            <ArrowLeft className="h-4 w-4" />
-                                            Back to phone verification
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </>
-                        ) : (
-                            /* Step 4: Pending Review Confirmation Screen */
-                            <>
-                                <CardHeader className="text-center pt-8 pb-4">
-                                    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-500/20 border border-amber-500/40 text-amber-400 shadow-xl shadow-amber-500/10">
-                                        <Clock className="h-8 w-8 text-amber-400 animate-pulse" />
-                                    </div>
-                                    <Badge className="mx-auto mb-2 bg-amber-500/20 text-amber-300 border-amber-500/30 text-xs font-semibold px-3 py-1">
-                                        Status: Under Review
-                                    </Badge>
-                                    <CardTitle className="text-2xl sm:text-3xl font-headline font-extrabold tracking-tight text-white">
-                                        Registration Submitted!
-                                    </CardTitle>
-                                    <CardDescription className="text-slate-200/90 text-sm mt-1.5 max-w-md mx-auto">
-                                        Thank you, <span className="font-semibold text-white">{fullName}</span>. Your student profile and admission documents are now queued for review by the HostelHQ Administration.
-                                    </CardDescription>
-                                </CardHeader>
-
-                                <CardContent className="space-y-5 px-6 sm:px-10">
-                                    {/* Application Summary Box */}
-                                    <div className="p-4 rounded-2xl bg-black/40 border border-white/15 space-y-3">
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Student Index Number:</span>
-                                            <span className="font-mono font-bold text-white">{studentIndexNumber || "N/A"}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Faculty:</span>
-                                            <span className="font-medium text-slate-200 text-right">{faculty || "USTED Main"}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Registered Phone:</span>
-                                            <span className="font-mono text-slate-200">+{getFormattedPhone()}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-slate-400">Reviewing Authority:</span>
-                                            <span className="text-primary font-semibold">HostelHQ Administration</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs pt-2 border-t border-white/10">
-                                            <span className="text-slate-400">Expected Approval:</span>
-                                            <span className="font-semibold text-emerald-400">Within 24 Hours</span>
-                                        </div>
-                                    </div>
-
-                                    {/* What Happens Next Explainer */}
-                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
-                                        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                                            <ShieldAlert className="h-4 w-4 text-amber-400" />
-                                            What Happens Next:
-                                        </h4>
-                                        <ul className="text-xs text-slate-300/90 space-y-1.5 pl-1">
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-primary font-bold">1.</span>
-                                                <span>The administration cross-references your uploaded document with the institutional student register.</span>
-                                            </li>
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-primary font-bold">2.</span>
-                                                <span>You will receive an SMS confirmation as soon as your credentials are confirmed.</span>
-                                            </li>
-                                            <li className="flex items-start gap-2">
-                                                <span className="text-primary font-bold">3.</span>
-                                                <span>Once approved, you will unlock full Verified Student privileges to schedule in-person tours and book rooms directly.</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    {/* Navigation Actions */}
-                                    <div className="space-y-3 pt-2">
-                                        <Button
-                                            type="button"
-                                            onClick={async () => {
-                                                try { await signOut(auth); } catch (_) {}
-                                                router.push('/#all-hostels');
-                                            }}
-                                            className="w-full h-12 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 shadow-xl shadow-primary/30 transition-all duration-200 hover:scale-[1.01]"
-                                        >
-                                            Browse Hostels in Preview Mode
-                                            <ArrowRight className="ml-2 h-4 w-4" />
-                                        </Button>
-
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={async () => {
-                                                try { await signOut(auth); } catch (_) {}
-                                                router.push('/login');
-                                            }}
-                                            className="w-full h-11 rounded-xl bg-white/5 border-white/20 text-white hover:bg-white/10 font-semibold text-xs"
-                                        >
-                                            Return to Sign In
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </>
+                        {!isScanning && !verificationResult && (
+                            <CardFooter className="flex flex-col gap-2 px-6 sm:px-10 pb-8 pt-0">
+                                <p className="text-center text-xs text-slate-300/90">
+                                    Already have an account?{' '}
+                                    <Link href="/login" className="text-rose-300 font-bold hover:underline">
+                                        Sign In here
+                                    </Link>
+                                </p>
+                            </CardFooter>
                         )}
-
                     </Card>
                 </div>
             </main>
+
+            {/* 6-Digit SMS OTP Verification Dialog */}
+            <Dialog open={showOtpDialog} onOpenChange={setShowOtpDialog}>
+                <DialogContent className="sm:max-w-md p-6 rounded-3xl bg-slate-900 border border-white/20 text-white">
+                    <DialogHeader className="space-y-2 text-center">
+                        <div className="mx-auto w-12 h-12 rounded-2xl bg-[#6B1D2F]/30 border border-[#6B1D2F]/50 flex items-center justify-center text-rose-300">
+                            <ShieldCheck className="w-6 h-6" />
+                        </div>
+                        <DialogTitle className="text-lg font-bold text-white">SMS Phone Verification</DialogTitle>
+                        <DialogDescription className="text-xs text-slate-300">
+                            Enter the 6-digit verification code sent to{' '}
+                            <span className="font-semibold text-white font-mono">+{getFormattedPhone()}</span>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 pt-2">
+                        {/* 6-Digit Input Boxes */}
+                        <div className="flex justify-center gap-2 sm:gap-2.5">
+                            {otpCode.map((digit, idx) => (
+                                <input
+                                    key={idx}
+                                    ref={(el) => {
+                                        otpInputRefs.current[idx] = el;
+                                    }}
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={1}
+                                    value={digit}
+                                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                                    onPaste={handleOtpPaste}
+                                    className="w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-2xl font-bold rounded-xl border border-white/20 bg-black/50 text-white focus:border-[#6B1D2F] focus:ring-2 focus:ring-[#6B1D2F]/30 outline-none transition-all"
+                                />
+                            ))}
+                        </div>
+
+                        {/* Resend Code Section */}
+                        <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                            <span>Didn't receive code?</span>
+                            {resendTimer > 0 ? (
+                                <span className="font-medium text-slate-400">Resend in {resendTimer}s</span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={sendOtp}
+                                    disabled={isSendingOtp}
+                                    className="text-rose-300 font-bold hover:underline flex items-center gap-1"
+                                >
+                                    <RefreshCw className={cn("h-3 w-3", isSendingOtp && "animate-spin")} />
+                                    Resend Code
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="space-y-2 pt-2">
+                            <Button
+                                type="button"
+                                onClick={handleVerifyOtpAndCreate}
+                                disabled={isVerifyingOtp || otpCode.join('').length !== 6}
+                                className="w-full h-11 rounded-xl bg-[#6B1D2F] text-white font-bold hover:bg-[#6B1D2F]/90 shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                                {isVerifyingOtp ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>Verifying Code...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Check className="h-4 w-4" />
+                                        <span>Verify & Complete Registration</span>
+                                    </>
+                                )}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setShowOtpDialog(false)}
+                                disabled={isVerifyingOtp}
+                                className="w-full h-9 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-white/10"
+                            >
+                                Edit details
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
