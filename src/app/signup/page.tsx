@@ -79,14 +79,10 @@ export default function SignupPage() {
     const [showOtpDialog, setShowOtpDialog] = useState(false);
     const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
     const [isSendingOtp, setIsSendingOtp] = useState(false);
+    const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
     const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
     const [resendTimer, setResendTimer] = useState(60);
     const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-    // Manager specific state
-    const [managerHostels, setManagerHostels] = useState<{ id: string; name?: string; location?: string; managerId?: string }[]>([]);
-    const [loadingManagerHostels, setLoadingManagerHostels] = useState(false);
-    const [selectedManagerHostelId, setSelectedManagerHostelId] = useState('');
 
     const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
@@ -138,26 +134,6 @@ export default function SignupPage() {
             }
         }
     }, [studentStep, selectedRole]);
-
-    // Load available hostels for manager signup
-    useEffect(() => {
-        if (selectedRole === 'hostel_manager') {
-            const loadHostels = async () => {
-                setLoadingManagerHostels(true);
-                try {
-                    const snap = await getDocs(collection(db, 'hostels'));
-                    const list = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
-                    const filtered = list.filter((h: any) => !h.managerId);
-                    setManagerHostels(filtered);
-                } catch (err) {
-                    console.error('Error loading hostels:', err);
-                } finally {
-                    setLoadingManagerHostels(false);
-                }
-            };
-            loadHostels();
-        }
-    }, [selectedRole]);
 
     const isValidEmail = (email: string): boolean => {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -351,6 +327,52 @@ export default function SignupPage() {
         }
     };
 
+    // Trigger Resend Email OTP send
+    const sendEmailOtp = async () => {
+        if (!email.trim() || !isValidEmail(email)) {
+            toast({
+                title: 'Invalid Email',
+                description: 'Please enter a valid email address to receive your verification code.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        const formattedPhone = getFormattedPhone();
+        setIsSendingEmailOtp(true);
+        try {
+            const response = await fetch('/api/auth/send-email-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    phoneNumber: formattedPhone,
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to send verification email');
+            }
+
+            toast({
+                title: 'Verification Code Sent to Email',
+                description: `A 6-digit code has been sent to ${email.trim().toLowerCase()}`,
+            });
+
+            setResendTimer(60);
+        } catch (error: any) {
+            console.error('Error sending email OTP:', error);
+            toast({
+                title: 'Failed to Send Email Code',
+                description: error.message || 'Please check your email address and try again.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSendingEmailOtp(false);
+        }
+    };
+
     // Step 3 Submission for Student: Send OTP
     const handleStudentStep3Submit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -401,11 +423,6 @@ export default function SignupPage() {
 
         if (!phoneNumber || !isValidPhoneNumber(phoneNumber)) {
             toast({ title: 'Invalid Phone Number', description: 'Please enter a valid Ghana phone number.', variant: 'destructive' });
-            return;
-        }
-
-        if (!selectedManagerHostelId) {
-            toast({ title: 'Hostel Assignment Required', description: 'Please select the hostel property you manage.', variant: 'destructive' });
             return;
         }
 
@@ -631,18 +648,9 @@ export default function SignupPage() {
                     role: 'hostel_manager',
                     createdAt: new Date().toISOString(),
                     verificationStatus: 'verified',
-                    managedHostelId: selectedManagerHostelId,
                 };
 
                 await setDoc(doc(db, 'users', user.uid), managerUserData, { merge: true });
-
-                if (selectedManagerHostelId) {
-                    try {
-                        await updateDoc(doc(db, 'hostels', selectedManagerHostelId), {
-                            managerId: user.uid,
-                        });
-                    } catch (_) {}
-                }
 
                 toast({
                     title: 'Manager Account Created',
@@ -1376,25 +1384,6 @@ export default function SignupPage() {
                                         </div>
                                     </div>
 
-                                    {/* Managed Hostel Property */}
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-semibold uppercase tracking-wider text-slate-200">
-                                            Managed Hostel Property *
-                                        </Label>
-                                        <Select value={selectedManagerHostelId} onValueChange={setSelectedManagerHostelId}>
-                                            <SelectTrigger className="h-11 bg-white/95 text-slate-900 rounded-xl border-white/20 font-medium">
-                                                <SelectValue placeholder={loadingManagerHostels ? "Loading hostels..." : "Select your hostel property"} />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {managerHostels.map((h) => (
-                                                    <SelectItem key={h.id} value={h.id}>
-                                                        {h.name || 'Unnamed Hostel'} ({h.location || 'Campus area'})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
                                     {/* Password */}
                                     <div className="space-y-1.5">
                                         <Label htmlFor="mgrPassword" className="text-xs font-semibold uppercase tracking-wider text-slate-200">
@@ -1529,6 +1518,28 @@ export default function SignupPage() {
                                     Resend Code
                                 </button>
                             )}
+                        </div>
+
+                        {/* Email Fallback Option */}
+                        <div className="pt-1">
+                            <button
+                                type="button"
+                                disabled={isSendingEmailOtp}
+                                onClick={sendEmailOtp}
+                                className="w-full text-center text-xs font-semibold text-rose-300 hover:text-rose-200 py-1.5 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            >
+                                {isSendingEmailOtp ? (
+                                    <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        <span>Sending code to email...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Mail className="h-3.5 w-3.5" />
+                                        <span>Haven&apos;t received SMS? Send code to your email instead</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
 
                         {/* Action Buttons */}

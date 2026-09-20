@@ -194,6 +194,7 @@ export default function StudentRegisterPage() {
   const [showOtpDialog, setShowOtpDialog] = useState(false);
   const [otpCode, setOtpCode] = useState<string[]>(["", "", "", "", "", ""]);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -481,6 +482,53 @@ export default function StudentRegisterPage() {
       });
     } finally {
       setIsSendingOtp(false);
+    }
+  };
+
+  // Fallback: Send OTP via Resend Email
+  const handleSendEmailOtp = async () => {
+    if (!email || !email.includes('@')) {
+      toast({
+        title: "Email Required",
+        description: "A valid email address is required to receive your verification code.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingEmailOtp(true);
+    const formattedPhone = getFormattedPhone();
+
+    try {
+      const response = await fetch("/api/auth/send-email-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phoneNumber: formattedPhone,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to send email verification code");
+      }
+
+      toast({
+        title: "Code Sent to Email",
+        description: `We've sent a 6-digit verification code to ${email.trim().toLowerCase()}.`,
+      });
+
+      setResendTimer(60);
+    } catch (error: any) {
+      console.error("Error sending email OTP:", error);
+      toast({
+        title: "Failed to Send Email Code",
+        description: error.message || "Please check your email and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmailOtp(false);
     }
   };
 
@@ -1277,6 +1325,28 @@ export default function StudentRegisterPage() {
                     <RefreshCw className="h-3 w-3" />
                   )}
                   {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
+                </button>
+              </div>
+
+              {/* Email Fallback Option */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  disabled={isSendingEmailOtp}
+                  onClick={handleSendEmailOtp}
+                  className="w-full text-center text-xs font-semibold text-[#6B1D2F] hover:text-[#521422] dark:text-rose-400 dark:hover:text-rose-300 py-1.5 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSendingEmailOtp ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Sending code to your email...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-3.5 w-3.5" />
+                      <span>Haven&apos;t received SMS? Send code to your email instead</span>
+                    </>
+                  )}
                 </button>
               </div>
 

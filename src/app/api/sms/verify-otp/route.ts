@@ -18,9 +18,6 @@ export async function POST(req: NextRequest) {
 
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
-    // 🔧 DEVELOPMENT MODE: Check for dev OTP ONLY in localhost (NODE_ENV === 'development')
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    
     const otpCollection = collection(db, 'otpVerifications');
     const otpQuery = query(
       otpCollection,
@@ -31,30 +28,26 @@ export async function POST(req: NextRequest) {
 
     let isVerified = false;
 
-    if (isDevelopment) {
-      console.log('🔧 DEVELOPMENT MODE: Verifying OTP');
-      console.log('📱 Phone:', formattedPhone);
-      console.log('🔑 Entered OTP:', otp);
-      
-      const devOtpDoc = otpDocs.docs.find((doc: any) => doc.data().isDev === true);
-      
-      if (devOtpDoc) {
-        const storedOtp = devOtpDoc.data().otp;
-        if (otp === storedOtp || otp === '123456') {
-          await updateDoc(devOtpDoc.ref, {
-            verified: true,
-            verifiedAt: Timestamp.now(),
-          });
-          isVerified = true;
-        } else {
-          return NextResponse.json(
-            { success: false, error: 'Invalid OTP. Use 123456 in dev mode.' },
-            { status: 400 }
-          );
-        }
-      } else if (otp === '123456') {
-        isVerified = true;
-      }
+    // Check for stored OTP records in Firestore (sent via Email, Dev mode, etc.)
+    const matchingOtpDoc = otpDocs.docs.find((doc: any) => {
+      const data = doc.data();
+      const expiresAt = data.expiresAt?.toDate?.() || (data.expiresAt ? new Date(data.expiresAt) : null);
+      const isNotExpired = !expiresAt || expiresAt > new Date();
+      return isNotExpired && (data.otp === otp || (data.isDev && otp === '123456'));
+    });
+
+    if (matchingOtpDoc) {
+      await updateDoc(matchingOtpDoc.ref, {
+        verified: true,
+        verifiedAt: Timestamp.now(),
+      });
+      isVerified = true;
+    }
+
+    // 🔧 DEVELOPMENT MODE: Fallback for dev OTP in localhost (NODE_ENV === 'development')
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    if (!isVerified && isDevelopment && otp === '123456') {
+      isVerified = true;
     }
 
     if (!isVerified) {
@@ -70,7 +63,7 @@ export async function POST(req: NextRequest) {
       isVerified = true;
     }
 
-    // Update all unverified records for this phone number
+    // Update remaining unverified records for this phone number
     const updatePromises = otpDocs.docs.map((doc: any) => 
       updateDoc(doc.ref, {
         verified: true,

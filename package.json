@@ -82,6 +82,7 @@
     "react-hook-form": "^7.54.2",
     "react-map-gl": "^7.1.7",
     "recharts": "^2.15.1",
+    "resend": "^6.28.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "yet-another-react-lightbox": "^3.32.2",

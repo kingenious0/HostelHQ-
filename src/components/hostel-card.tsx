@@ -132,7 +132,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   return (
     <>
       {/* Compact Responsive Mobile Card (< md / 768px) */}
-      <div className="md:hidden w-full flex items-center gap-3 p-3 rounded-xl border border-stone-200/70 bg-white shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all relative overflow-hidden">
+      <div className="md:hidden w-full flex items-center gap-3 p-3 bg-white dark:bg-[#1A1215] border border-stone-200/70 dark:border-stone-800 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all relative overflow-hidden">
         {/* Left Thumbnail (Fixed w-28 h-28) */}
         <Link href={`/hostels/${cleanId}`} className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden bg-muted block">
           <Image
@@ -173,8 +173,8 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                   <AlertTriangle className="h-3 w-3" /> Sanctioned
                 </span>
               ) : (
-                <span className="text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3 text-emerald-700" /> University Approved ✓
+                <span className="text-xs font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-700 dark:text-emerald-400" /> University Approved ✓
                 </span>
               )}
 
@@ -197,36 +197,36 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
 
             {/* Property Name */}
             <Link href={`/hostels/${cleanId}`} className="block">
-              <h3 className="font-extrabold text-sm text-foreground leading-snug line-clamp-1 hover:text-[#6B1D2F] transition-colors">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug line-clamp-1 hover:text-[#6B1D2F] dark:hover:text-amber-400 transition-colors">
                 {hostel.name}
               </h3>
             </Link>
 
             {/* Location */}
-            <div className="flex items-center text-[11px] text-muted-foreground mt-0.5 truncate">
-              <MapPin className="h-3 w-3 mr-1 shrink-0 text-muted-foreground/70" />
+            <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+              <MapPin className="h-3 w-3 mr-1 shrink-0 text-gray-400 dark:text-gray-500" />
               <span className="truncate">{hostel.location}</span>
             </div>
 
             {/* Verified beds count / Occupancy */}
-            <div className="mt-1 flex items-center gap-2 text-[10.5px]">
+            <div className="mt-1 flex items-center gap-2 text-xs">
               <span className="font-medium text-emerald-600 dark:text-emerald-400">
                 {availableBeds > 0 ? `${availableBeds} beds free` : "Full"}
               </span>
-              <span className="text-muted-foreground/50">•</span>
-              <span className="text-muted-foreground truncate">
+              <span className="text-gray-400 dark:text-gray-600">•</span>
+              <span className="text-gray-500 dark:text-gray-400 text-xs truncate">
                 {hostel.gender || "Mixed"}
               </span>
             </div>
           </div>
 
           {/* Price & Compact Scout / Visit Button */}
-          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/40">
+          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-stone-200/70 dark:border-stone-800">
             <div>
-              <span className="text-xs font-black text-foreground">
+              <span className="text-xs text-gray-900 dark:text-amber-400 font-bold">
                 GH₵{displayPrice > 0 ? displayPrice.toLocaleString() : "Contact"}
               </span>
-              <span className="text-[10px] text-muted-foreground font-normal">/yr</span>
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-normal">/yr</span>
             </div>
 
             <Button
@@ -249,7 +249,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
       </div>
 
       {/* Desktop Rich Card (>= md / 768px) */}
-      <Card className="hidden md:flex w-full overflow-hidden flex-col group rounded-xl border border-stone-200/70 bg-white shadow-sm hover:shadow-md hover:border-[#6B1D2F]/40 transition-all duration-300">
+      <Card className="hidden md:flex w-full overflow-hidden flex-col group bg-white dark:bg-[#1A1215] border border-stone-200/70 dark:border-stone-800 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all duration-300">
         {/* Image & Overlay Badges */}
         <CardHeader className="p-0 relative">
         <div className="relative h-60 w-full overflow-hidden bg-muted">
@@ -292,8 +292,8 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 Executive Sanction
               </Badge>
             ) : (
-              <Badge className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-medium px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />
+              <Badge className="bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 text-xs font-medium px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                 University Approved ✓
               </Badge>
             )}
@@ -352,51 +352,51 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
           <div className="flex items-center justify-between gap-2 mb-2 text-xs">
             {/* PRD Bug Fix: replace 0.0 with "No reviews yet" */}
             {hostel.rating > 0 && (hostel.numberOfReviews ?? 0) > 0 ? (
-              <div className="inline-flex items-center gap-1 font-bold text-foreground">
+              <div className="inline-flex items-center gap-1 font-bold text-gray-900 dark:text-gray-100">
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                 <span>{hostel.rating.toFixed(1)}</span>
-                <span className="text-muted-foreground font-normal">({hostel.numberOfReviews})</span>
+                <span className="text-gray-500 dark:text-gray-400 font-normal">({hostel.numberOfReviews})</span>
               </div>
             ) : (
-              <span className="text-[11px] font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-stone-100 dark:bg-stone-800/80 px-2 py-0.5 rounded-full">
                 No reviews yet
               </span>
             )}
 
             {/* Student.com-style: "X mins from campus" with Clock icon */}
-            <div className="flex items-center text-[11px] font-bold text-[#6B1D2F] tracking-wide">
-              <Clock className="h-3.5 w-3.5 mr-1 text-[#6B1D2F] shrink-0" />
+            <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 font-bold tracking-wide">
+              <Clock className="h-3.5 w-3.5 mr-1 text-[#6B1D2F] dark:text-rose-400 shrink-0" />
               <span className="truncate">{distanceText}</span>
             </div>
           </div>
 
           {/* Hostel Name */}
           <Link href={`/hostels/${cleanId}`} className="block">
-            <CardTitle className="text-xl font-headline font-extrabold text-foreground mb-1 leading-snug group-hover:text-[#6B1D2F] transition-colors line-clamp-1">
+            <CardTitle className="text-xl font-headline font-bold text-gray-900 dark:text-gray-100 mb-1 leading-snug group-hover:text-[#6B1D2F] dark:group-hover:text-amber-400 transition-colors line-clamp-1">
               {hostel.name}
             </CardTitle>
           </Link>
 
           {/* Location */}
-          <div className="flex items-center text-xs text-muted-foreground mb-3">
-            <MapPin className="h-3.5 w-3.5 mr-1 text-muted-foreground/70 shrink-0" />
+          <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-3">
+            <MapPin className="h-3.5 w-3.5 mr-1 text-gray-400 dark:text-gray-500 shrink-0" />
             <span className="truncate">{hostel.location}</span>
           </div>
 
           {/* Gender and Room Types Tag */}
           <div className="flex flex-wrap items-center gap-1.5 mb-4">
-            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md border-border/80 text-foreground">
+            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md border-0 bg-stone-100 dark:bg-stone-800/80 text-gray-700 dark:text-gray-300">
               <Users className="h-2.5 w-2.5 mr-1" />
               {hostel.gender || "Mixed"} Students
             </Badge>
 
             {roomTypes.slice(0, 2).map((rt, i) => (
-              <span key={i} className="text-[10px] font-medium bg-muted/60 text-muted-foreground px-2 py-0.5 rounded-md border border-border/40">
+              <span key={i} className="text-[10px] font-medium bg-stone-100 dark:bg-stone-800/80 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-md">
                 {rt.name}
               </span>
             ))}
             {roomTypes.length > 2 && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
                 +{roomTypes.length - 2} more
               </span>
             )}
@@ -416,18 +416,18 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
         </div>
 
         <div>
-          <Separator className="my-3 opacity-60" />
+          <Separator className="my-3 opacity-60 dark:border-stone-800" />
 
           {/* Price & CTA */}
           <div className="flex items-baseline justify-between pt-1">
             <div>
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+              <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">
                 From
               </span>
-              <span className="text-xl font-extrabold text-foreground tracking-tight">
+              <span className="text-xl text-gray-900 dark:text-amber-400 font-bold tracking-tight">
                 GH₵{displayPrice > 0 ? displayPrice.toLocaleString() : "Contact"}
               </span>
-              <span className="text-[11px] text-muted-foreground font-normal"> / year</span>
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-normal"> / year</span>
             </div>
 
             <Button
