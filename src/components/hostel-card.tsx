@@ -132,7 +132,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
   return (
     <>
       {/* Compact Responsive Mobile Card (< md / 768px) */}
-      <div className="md:hidden w-full flex items-center gap-3 p-3 bg-white dark:bg-[#1A1215] border border-stone-200/70 dark:border-stone-800 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all relative overflow-hidden">
+      <div className="md:hidden w-full flex items-center gap-3 p-3 bg-white dark:bg-[#160B0E] border border-stone-200/70 dark:border-[#6B1D2F]/20 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all relative overflow-hidden">
         {/* Left Thumbnail (Fixed w-28 h-28) */}
         <Link href={`/hostels/${cleanId}`} className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden bg-muted block">
           <Image
@@ -221,7 +221,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
           </div>
 
           {/* Price & Compact Scout / Visit Button */}
-          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-stone-200/70 dark:border-stone-800">
+          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-stone-200/70 dark:border-[#6B1D2F]/20">
             <div>
               <span className="text-xs text-gray-900 dark:text-amber-400 font-bold">
                 GH₵{displayPrice > 0 ? displayPrice.toLocaleString() : "Contact"}
@@ -249,7 +249,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
       </div>
 
       {/* Desktop Rich Card (>= md / 768px) */}
-      <Card className="hidden md:flex w-full overflow-hidden flex-col group bg-white dark:bg-[#1A1215] border border-stone-200/70 dark:border-stone-800 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all duration-300">
+      <Card className="hidden md:flex w-full overflow-hidden flex-col group bg-white dark:bg-[#160B0E] border border-stone-200/70 dark:border-[#6B1D2F]/20 shadow-sm rounded-xl hover:shadow-md hover:border-[#6B1D2F]/40 transition-all duration-300">
         {/* Image & Overlay Badges */}
         <CardHeader className="p-0 relative">
         <div className="relative h-60 w-full overflow-hidden bg-muted">
@@ -358,7 +358,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
                 <span className="text-gray-500 dark:text-gray-400 font-normal">({hostel.numberOfReviews})</span>
               </div>
             ) : (
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 bg-stone-100 dark:bg-stone-800/80 px-2 py-0.5 rounded-full">
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-stone-300 bg-stone-100 dark:bg-[#251217] px-2 py-0.5 rounded-full">
                 No reviews yet
               </span>
             )}
@@ -385,13 +385,13 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
 
           {/* Gender and Room Types Tag */}
           <div className="flex flex-wrap items-center gap-1.5 mb-4">
-            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md border-0 bg-stone-100 dark:bg-stone-800/80 text-gray-700 dark:text-gray-300">
+            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md border-0 bg-stone-100 dark:bg-[#251217] text-gray-700 dark:text-stone-300">
               <Users className="h-2.5 w-2.5 mr-1" />
               {hostel.gender || "Mixed"} Students
             </Badge>
 
             {roomTypes.slice(0, 2).map((rt, i) => (
-              <span key={i} className="text-[10px] font-medium bg-stone-100 dark:bg-stone-800/80 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-md">
+              <span key={i} className="text-[10px] font-medium bg-stone-100 dark:bg-[#251217] text-gray-700 dark:text-stone-300 px-2 py-0.5 rounded-md">
                 {rt.name}
               </span>
             ))}
@@ -416,7 +416,7 @@ export function HostelCard({ hostel, selectedRoomType }: HostelCardProps) {
         </div>
 
         <div>
-          <Separator className="my-3 opacity-60 dark:border-stone-800" />
+          <Separator className="my-3 opacity-60 dark:border-[#6B1D2F]/20" />
 
           {/* Price & CTA */}
           <div className="flex items-baseline justify-between pt-1">

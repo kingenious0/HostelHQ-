@@ -94,7 +94,7 @@ export default async function Home({ searchParams }: HomeProps) {
     <ShortlistProvider>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <Header />
-        <main className="flex-1 bg-[#FAF7F5] pb-24">
+        <main className="flex-1 bg-[#FAF7F5] dark:bg-[#0D0507] text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200 pb-24">
           {/* Simplified Student.com-style Hero with Integrated Search */}
           <Hero />
 
@@ -103,7 +103,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
           {/* Clean Section Transition (Divider) */}
           <div className="container mx-auto px-4 sm:px-6 lg:px-10">
-            <div className="w-full border-t border-stone-200/60 my-10" />
+            <div className="w-full border-t border-stone-200/60 dark:border-stone-800 my-10" />
           </div>
 
           {/* HousingAnywhere-style Persistent Filter Bar */}
@@ -115,8 +115,8 @@ export default async function Home({ searchParams }: HomeProps) {
           <section id="all-hostels" className="container mx-auto px-4 pb-16 pt-8 sm:px-6 lg:px-10">
             <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
               <div>
-                <div className="inline-flex items-center gap-1.5 bg-[#D4AF37]/15 text-[#9A7B1C] border border-[#D4AF37]/30 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-3">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#9A7B1C]" />
+                <div className="inline-flex items-center gap-1.5 bg-[#D4AF37]/15 dark:bg-[#D4AF37]/10 text-[#9A7B1C] dark:text-[#D4AF37] border border-[#D4AF37]/30 dark:border-[#D4AF37]/30 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-3">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#9A7B1C] dark:text-[#D4AF37]" />
                   <span>{filteredHostels.length} Verified {filteredHostels.length === 1 ? "Hostel" : "Hostels"} Available</span>
                 </div>
                 <h2 className="text-2xl sm:text-4xl lg:text-5xl font-headline font-extrabold tracking-tight text-foreground">
@@ -145,7 +145,7 @@ export default async function Home({ searchParams }: HomeProps) {
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-stone-300 bg-white p-12 text-center max-w-lg mx-auto my-8 shadow-sm">
+              <div className="rounded-xl border border-dashed border-stone-300 dark:border-stone-800 bg-white dark:bg-[#160B0E] p-12 text-center max-w-lg mx-auto my-8 shadow-sm">
                 <Building className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                 <h3 className="text-xl font-headline font-bold text-foreground">No hostels match your filters</h3>
                 <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
@@ -171,7 +171,7 @@ export default async function Home({ searchParams }: HomeProps) {
                       "flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold transition-all",
                       pageNumber === currentPage
                         ? "bg-[#6B1D2F] text-white shadow-md shadow-[#6B1D2F]/20 scale-105"
-                        : "border border-stone-200/80 bg-white text-muted-foreground hover:border-[#6B1D2F] hover:text-[#6B1D2F]"
+                        : "border border-stone-200/80 dark:border-stone-800 bg-white dark:bg-[#160B0E] text-muted-foreground dark:text-gray-300 hover:border-[#6B1D2F] hover:text-[#6B1D2F]"
                     )}
                   >
                     {pageNumber}
@@ -198,19 +198,19 @@ export default async function Home({ searchParams }: HomeProps) {
                   description: "Legally backed agreements and direct escalation channels to the Dean of Students.",
                 },
               ].map((item) => (
-                <div key={item.title} className="rounded-xl border border-stone-200/70 bg-white p-6 shadow-sm hover:shadow-md transition-all">
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#6B1D2F] flex items-center gap-2 mb-2">
-                    <CheckCircle2 className="h-4 w-4 text-[#6B1D2F]" />
+                <div key={item.title} className="bg-white dark:bg-[#160B0E] border border-stone-200/70 dark:border-[#6B1D2F]/20 text-gray-800 dark:text-gray-300 rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
+                  <p className="text-xs font-bold uppercase tracking-widest text-[#6B1D2F] dark:text-rose-400 flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-[#6B1D2F] dark:text-rose-400" />
                     {item.title}
                   </p>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                  <p className="text-sm text-muted-foreground dark:text-gray-400 leading-relaxed">{item.description}</p>
                 </div>
               ))}
             </div>
           </section>
 
           {/* Trusted Partners / Infrastructure */}
-          <section className="border-t border-stone-200/60 overflow-hidden py-12">
+          <section className="border-t border-stone-200/60 dark:border-stone-800 overflow-hidden py-12">
             <div className="container mx-auto px-4 text-center">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.25em] mb-8">
                 Secured With Trusted Infrastructure

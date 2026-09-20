@@ -121,7 +121,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
   ].filter(Boolean).length;
 
   return (
-    <div className="sticky top-16 z-30 w-full bg-[#FAF7F5]/90 backdrop-blur-xl border-y border-stone-200/60 py-2.5 transition-all duration-300 shadow-xs">
+    <div className="sticky top-16 z-30 w-full bg-[#FAF7F5]/90 dark:bg-[#0D0507]/90 backdrop-blur-xl border-y border-stone-200/60 dark:border-stone-800 py-2.5 transition-all duration-300 shadow-xs">
       <div className="container mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex items-center justify-between gap-3">
           
@@ -141,7 +141,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-bold gap-2 border transition-all ${
                       activeCount > 0
                         ? "bg-[#6B1D2F] text-white border-[#6B1D2F] shadow-xs"
-                        : "bg-white text-gray-700 border-stone-200/70 hover:bg-stone-50"
+                        : "bg-white dark:bg-[#160B0E] text-gray-700 dark:text-gray-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-[#251217]"
                     }`}
                   >
                     <SlidersHorizontal className={`h-3.5 w-3.5 ${activeCount > 0 ? "text-white" : "text-[#6B1D2F]"}`} />
@@ -318,7 +318,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                       className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                         minPrice || maxPrice
                           ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
-                          : "bg-white text-gray-700 border-stone-200/70 hover:bg-stone-50"
+                          : "bg-white dark:bg-[#160B0E] text-gray-700 dark:text-gray-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-[#251217]"
                       }`}
                     >
                       <DollarSign className={`h-3.5 w-3.5 shrink-0 ${minPrice || maxPrice ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
@@ -416,7 +416,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       roomType
                         ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
-                        : "bg-white text-gray-700 border-stone-200/70 hover:bg-stone-50"
+                        : "bg-white dark:bg-[#160B0E] text-gray-700 dark:text-gray-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-[#251217]"
                     }`}
                   >
                     <DoorOpen className={`h-3.5 w-3.5 shrink-0 ${roomType ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
@@ -448,7 +448,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       distance
                         ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
-                        : "bg-white text-gray-700 border-stone-200/70 hover:bg-stone-50"
+                        : "bg-white dark:bg-[#160B0E] text-gray-700 dark:text-gray-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-[#251217]"
                     }`}
                   >
                     <Clock className={`h-3.5 w-3.5 shrink-0 ${distance ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
@@ -479,7 +479,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
                     className={`!w-auto shrink-0 h-9.5 rounded-full px-3.5 text-xs font-semibold gap-1.5 border transition-all ${
                       gender
                         ? "bg-[#6B1D2F] text-white border-[#6B1D2F] font-bold shadow-xs"
-                        : "bg-white text-gray-700 border-stone-200/70 hover:bg-stone-50"
+                        : "bg-white dark:bg-[#160B0E] text-gray-700 dark:text-gray-300 border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-[#251217]"
                     }`}
                   >
                     <Users className={`h-3.5 w-3.5 shrink-0 ${gender ? "text-white opacity-90" : "text-[#6B1D2F] opacity-80"}`} />
@@ -512,8 +512,8 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
               )}
 
               {typeof totalCount === "number" && (
-                <div className="text-xs font-bold text-muted-foreground bg-white px-3 py-1.5 rounded-full border border-stone-200/60 shrink-0 shadow-2xs">
-                  <span className="text-foreground font-extrabold">{totalCount}</span> {totalCount === 1 ? "Hostel" : "Hostels"}
+                <div className="text-xs font-bold text-muted-foreground dark:text-gray-400 bg-white dark:bg-[#160B0E] px-3 py-1.5 rounded-full border border-stone-200/60 dark:border-stone-800 shrink-0 shadow-2xs">
+                  <span className="text-foreground dark:text-white font-extrabold">{totalCount}</span> {totalCount === 1 ? "Hostel" : "Hostels"}
                 </div>
               )}
             </div>
@@ -527,7 +527,7 @@ export function PersistentFilterBar({ totalCount }: { totalCount?: number }) {
               <SheetTrigger asChild>
                 <Button
                   variant="outline"
-                  className="rounded-xl h-11 px-4 text-xs font-bold gap-2 flex-1 justify-between bg-white border-stone-200/70 shadow-sm hover:shadow-md transition-all"
+                  className="rounded-xl h-11 px-4 text-xs font-bold gap-2 flex-1 justify-between bg-white dark:bg-[#160B0E] border-stone-200/70 dark:border-stone-800 text-gray-700 dark:text-gray-300 shadow-sm hover:shadow-md transition-all"
                 >
                   <span className="flex items-center gap-2">
                     <SlidersHorizontal className="h-4 w-4 text-[#6B1D2F]" />
